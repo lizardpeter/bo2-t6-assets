@@ -1,0 +1,56 @@
+{
+  "stage": "18D raw XAnimParts proof",
+  "authority": "raw expanded common_mp XFile; no OpenAssetTools executable",
+  "expanded_stream_sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+  "expanded_stream_bytes": 206493911,
+  "xanim_asset_count": 4233,
+  "inline_name_fixed_records": 2423,
+  "directly_walkable_inline_records": 1957,
+  "complex_delta_records_deferred": 466,
+  "exact_end_equals_next_inline_start": 1820,
+  "exact_walk_overlaps_next_inline_start": 0,
+  "struct_sizes_pc32_raw_proven": {
+    "XAnimParts": 104,
+    "XAnimNotifyInfo": 8,
+    "XAnimDeltaPart_fixed": 12
+  },
+  "part_type_all_name_count_rule": "boneCount[9], not sum(boneCount)",
+  "mp7": {
+    "base_viewmodel_records": 23,
+    "all_walk_exact": true,
+    "consecutive_boundaries_exact": true
+  },
+  "reload_canary": {
+    "raw_struct_offset": 18001446,
+    "numframes": 86,
+    "framerate": 30.0,
+    "boneCount": [6, 0, 37, 0, 33, 12, 1, 55, 8, 76],
+    "bone_track_name_count": 76,
+    "notify_count": 17,
+    "next_raw_offset": 18019033,
+    "gap": 0,
+    "serialized_sha256": "371936182a1a71a25d391da7d6a224aabea2d5d0aeae1fdfaed414dbc67b373a",
+    "segment_sha256": {
+      "name": "c64766c8dfea4c0bc6c18d529a32580a558b90065dc69ab5101b3a27350c14a9",
+      "names": "e35962059a4f51cbf9e1a8c5a3eebe187f1731c1f6e1f500d4d2762dfc6e3e9a",
+      "notify": "339ac3340051fd9871f59f566dbcade415f4eb664bbfd8375372d007ab7d613e",
+      "dataByte": "a93d5c9d8b6889d22081670d3a67d27b4aa67e2497782069576ec9b0562f5ef3",
+      "dataShort": "861d5cec7332c1e304dd5977e0aa8811dbd886c1887326ad003c30f52d4a1b5a",
+      "dataInt": "aa9f257994a3c0755631209ebb09f15086cdb342c33e4137a01d569b4281c535",
+      "randomDataShort": "c9dc4877a0091d14fea5eda54797eb7ddf1fa7cdb604212fd31fd0dc16ae88b4",
+      "randomDataByte": "7dfdeaf8bdd401ef4711c45221f15da13e4cb576f5e94945282d6133e8e3283f"
+    },
+    "first_20_bones": ["j_gun", "tag_gasmask", "j_reload", "tag_grip_off", "j_mms_flip", "tag_bullet", "j_shoulder_le", "j_shoulder_ri", "tag_camera", "tag_weapon", "j_elbow_le", "j_elbow_ri", "j_sleave_reshape_top_ri_1", "j_sleave_reshape_top_ri_2", "j_sleave_reshape_top_ri_3", "j_strap_a", "j_wrist_le", "j_wrist_ri", "j_wristtwist_le", "j_wristtwist_ri"],
+    "notifies": [
+      ["sndnt#fly_mp7_start", 0.0], ["sndnt#fly_reload_cloth_med", 0.011627906933426857], ["sndnt#fly_reload_cloth_sm", 0.13953489065170288], ["sndnt#fly_mp7_mag_out", 0.151162788271904], ["rmbnt#reload_clipout", 0.1744185984134674], ["sndnt#fly_reload_cloth_med", 0.1744185984134674], ["sndnt#fly_reload_cloth_sm", 0.3139534890651703], ["sndnt#fly_reload_cloth_sm", 0.3720930218696594], ["sndnt#fly_reload_cloth_sm", 0.5116279125213623], ["sndnt#fly_reload_cloth_sm", 0.604651153087616], ["sndnt#fly_mp7_mag_in", 0.6627907156944275], ["sndnt#fly_reload_cloth_sm", 0.6860465407371521], ["sndnt#fly_reload_cloth_med", 0.6976743936538696], ["rmbnt#reload_clipin", 0.7441860437393188], ["sndnt#fly_reload_cloth_med", 0.8023256063461304], ["sndnt#fly_reload_cloth_sm", 0.9069767594337463], ["end", 1.0]
+    ]
+  },
+  "proof_boundary": {
+    "not_yet_claimed": [
+      "all 4233 XAnimParts names (packed-name records remain)",
+      "complex XAnimDeltaPart trans/quat payload decoding",
+      "final quaternion/translation curve reconstruction for all animations"
+    ],
+    "next": "recover packed-name XAnimParts identity and independently decode complex delta-track variable unions"
+  }
+}
