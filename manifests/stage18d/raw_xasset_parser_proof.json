@@ -1,0 +1,89 @@
+{
+  "stage": "18D raw parser bootstrap",
+  "authority": "raw T6 fastfile data; no OpenAssetTools executable used",
+  "source_fastfiles": {
+    "common_mp.ff": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+    "common_patch_mp.ff": "95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9",
+    "patch_mp.ff": "459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e"
+  },
+  "expanded_streams": {
+    "common_mp": {
+      "bytes": 206493911,
+      "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+      "script_strings": 1189,
+      "asset_count": 6082,
+      "asset_type_counts": {
+        "WEAPON": 172,
+        "ATTACHMENT": 49,
+        "WEAPON_CAMO": 47,
+        "VEHICLEDEF": 10,
+        "TRACER": 22,
+        "XMODEL": 481,
+        "XANIMPARTS": 4233,
+        "MATERIAL": 352,
+        "FX": 393,
+        "IMAGE": 18,
+        "TECHNIQUE_SET": 145,
+        "RAWFILE": 100,
+        "SCRIPTPARSETREE": 30
+      }
+    },
+    "common_patch_mp": {
+      "bytes": 3119037,
+      "sha256": "486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c",
+      "script_strings": 196,
+      "asset_count": 3533,
+      "asset_type_counts": {
+        "WEAPON": 81,
+        "ATTACHMENT": 52,
+        "WEAPON_CAMO": 48,
+        "TRACER": 14,
+        "XMODEL": 269,
+        "XANIMPARTS": 2905,
+        "FX": 82,
+        "TECHNIQUE_SET": 53,
+        "RAWFILE": 27
+      }
+    },
+    "patch_mp": {
+      "bytes": 14713756,
+      "sha256": "1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9",
+      "script_strings": 237,
+      "asset_count": 1764,
+      "asset_type_counts": {
+        "WEAPON": 1,
+        "ATTACHMENT": 1,
+        "WEAPON_CAMO": 1,
+        "TRACER": 1,
+        "XMODEL": 46,
+        "XANIMPARTS": 10,
+        "MATERIAL": 664,
+        "IMAGE": 48,
+        "FX": 34,
+        "RAWFILE": 458,
+        "SCRIPTPARSETREE": 273
+      }
+    }
+  },
+  "format_proof": {
+    "pointer_bits": 32,
+    "offset_block_bit_count": 3,
+    "block_shift": 29,
+    "offset_mask": "0x1FFFFFFF",
+    "ptr_following": "0xFFFFFFFF",
+    "ptr_insert": "0xFFFFFFFE",
+    "xfile_blocks": ["TEMP", "RUNTIME_VIRTUAL", "RUNTIME_PHYSICAL", "DELAY_VIRTUAL", "DELAY_PHYSICAL", "VIRTUAL", "PHYSICAL", "STREAMER_RESERVE"],
+    "weapon_variant_def_pc32_fixed_size": 716,
+    "physical_stream_alignment": "XBlock destination alignment consumes no serialized source bytes"
+  },
+  "common_mp_player_root_proof": {
+    "requested_player_facing_rows": 55,
+    "exact_inline_weapon_variant_records": 54,
+    "unresolved": ["peacekeeper_mp"],
+    "exact_common_mp_roots": [
+      "hamr_mp", "qcw05_mp", "mp7_mp", "smaw_mp", "qbb95_mp", "sig556_mp", "vector_mp", "bouncingbetty_mp", "pdw57_mp", "evoskorpion_mp", "insas_mp", "proximity_grenade_mp", "saritch_mp", "xm8_mp", "riotshield_mp", "an94_mp", "hk416_mp", "svu_mp", "type95_mp", "fnp45_mp", "scar_mp", "as50_mp", "mk48_mp", "lsat_mp", "sa58_mp", "tar21_mp", "ballista_mp", "dsr50_mp", "fiveseven_mp", "kard_mp", "judge_mp", "beretta93r_mp", "saiga12_mp", "870mcs_mp", "srm1216_mp", "ksg_mp", "usrpg_mp", "fhj18_mp", "crossbow_mp", "knife_held_mp", "knife_ballistic_mp", "hatchet_mp", "frag_grenade_mp", "sticky_grenade_mp", "claymore_mp", "pda_hack_mp", "satchel_charge_mp", "trophy_system_mp", "tactical_insertion_mp", "willy_pete_mp", "flash_grenade_mp", "emp_grenade_mp", "sensor_grenade_mp", "concussion_grenade_mp"
+    ]
+  },
+  "peacekeeper_boundary": "patch_mp contains exactly one top-level WEAPON XAsset and extensive Peacekeeper evidence, but the literal string peacekeeper_mp is absent. Exact serialized WeaponVariantDef.szInternalName remains intentionally unclaimed until resolved by raw pointer/body parsing.",
+  "next": "Resolve WeaponVariantDef member graphs and recursively map WeaponDef -> attachment/attachmentUnique -> XModel/XAnim -> Material/Image -> FX/Tracer/Camo using raw block offsets and layer precedence common_mp -> common_patch_mp -> patch_mp."
+}
