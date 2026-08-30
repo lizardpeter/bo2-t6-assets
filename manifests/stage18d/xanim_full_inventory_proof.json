@@ -1,0 +1,60 @@
+{
+  "stage": "18D full raw XAnim inventory proof",
+  "authority": "expanded retail common_mp XFile bytes; no OpenAssetTools executable or exported animation data",
+  "expanded_stream_sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+  "xasset_xanim_count": 4233,
+  "raw_structural_xanim_count": 4233,
+  "count_closes_exactly": true,
+  "pc32_xanimparts_fixed_bytes": 104,
+  "inline_name_records": 2677,
+  "packed_name_records": 1556,
+  "previous_scanner_split": {
+    "inline": 2423,
+    "assumed_packed": 1810
+  },
+  "classification_correction": {
+    "additional_proven_inline": 254,
+    "corresponding_reduction_in_packed": 254,
+    "reason": "old scanner imposed arbitrary boneCount[9] <= 100 and notifyCount <= 32 filters"
+  },
+  "framerate_counts": {
+    "30.0": 4202,
+    "24.0": 31
+  },
+  "asset_type_counts": {
+    "2": 778,
+    "1": 3447,
+    "6": 8
+  },
+  "delta_flag_counts": {
+    "1": 778,
+    "0": 3455
+  },
+  "max_numframes": 1009,
+  "max_bone_scriptstring_count": 111,
+  "max_notify_count": 34,
+  "records_with_bone_count_over_100": 130,
+  "records_with_notify_count_over_32": 2,
+  "end_hits_another_recovered_xanim_start": 4079,
+  "overlaps_next_recovered_xanim": 0,
+  "packed_name_pointer_unique_count": 1556,
+  "delta_records_fully_walked": 466,
+  "delta_failures": 0,
+  "raw_validated_delta_serialization": {
+    "XAnimDeltaPart_fixed_bytes": 12,
+    "XAnimPartTrans_constant_bytes": 16,
+    "XAnimPartTrans_keyed": "32 + (size+1)*indexWidth, then keyed frame bytes when frames pointer is FOLLOWING",
+    "XAnimDeltaPartQuat2_constant_bytes": 8,
+    "XAnimDeltaPartQuat_constant_bytes": 12,
+    "index_width": "1 byte when numframes < 256, else 2 bytes"
+  },
+  "alias_pointer_canary": {
+    "pointer": "0xA24CB877",
+    "resolved_name": "viewmodel_lsat_grip_reload_empty",
+    "proof": "consecutive VIRTUAL pointer deltas 25,25,33,... equal the exact serialized lengths of the corresponding inline LSAT-grip animation strings; pointer also occurs in later WAU animation tables and a packed XAnim name field"
+  },
+  "proof_boundary": {
+    "proven": "full 4,233-record structural inventory; inline names; packed name pointers; exact child boundaries; raw quantized delta tracks for the 466 formerly deferred records",
+    "not_yet_claimed": "all 1,556 packed pointer-to-string names; float-space delta dequantization/quaternion normalization formula"
+  }
+}
