@@ -1,0 +1,112 @@
+{
+  "format": "t6-xanimparts-zombies-672-semantic-sweep-v1",
+  "normalizer": "tools/t6_xanim_normalize_v1.py",
+  "walker": "tools/t6_xanim_serialized_walker.py",
+  "result": "672 consecutive retail AI XAnimParts decode semantically with exact source chaining and zero unread flat-pool entries",
+  "maps": [
+    {
+      "map": "zm_prison",
+      "expandedBytes": 344067743,
+      "expandedSha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487",
+      "xassetRange": [560,895],
+      "xassetCount": 336,
+      "sourceStart": 30836475,
+      "sourceEnd": 40436898,
+      "sourceBytes": 9600423,
+      "firstName": "ai_zombie_idle_v1_delta",
+      "lastName": "ai_zombie_acid_stun_e",
+      "boneTracks": 28227,
+      "notifies": 1091,
+      "maxBoneCount": {"count":113,"animation":"ai_zombie_ceiling_emerge_01"},
+      "maxNumFrames": {"count":617,"animation":"ai_zombie_inert_circle_v1"},
+      "quaternionTrackTypes": {
+        "NO_QUAT":555,
+        "HALF_QUAT":158,
+        "FULL_QUAT":22715,
+        "HALF_QUAT_NO_SIZE":508,
+        "FULL_QUAT_NO_SIZE":4291
+      },
+      "translationTrackTypes": {
+        "SMALL_TRANS":3537,
+        "FULL_TRANS":1044,
+        "TRANS_NO_SIZE":2589,
+        "NO_TRANS":21057
+      },
+      "deltaTracks": {
+        "dynamicTranslation":253,
+        "smallDynamicTranslation":15,
+        "constantTranslation":35,
+        "dynamicQuat2":80,
+        "constantQuat2":28
+      },
+      "tracksUsingTopLevelLongIndexPool":487,
+      "assetsWithRandomDataInt":0,
+      "allSourceEndpointsChainExactly":true,
+      "allFlatPoolsExhausted":true,
+      "failures":0
+    },
+    {
+      "map": "zm_tomb",
+      "expandedBytes": 359627377,
+      "expandedSha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219",
+      "xassetRange": [562,897],
+      "xassetCount": 336,
+      "sourceStart": 34168670,
+      "sourceEnd": 42223687,
+      "sourceBytes": 8055017,
+      "firstName": "ai_zombie_idle_v1_delta",
+      "lastName": "ai_zombie_grabbed_by_mech",
+      "boneTracks": 28239,
+      "notifies": 1031,
+      "maxBoneCount": {"count":108,"animation":"ai_zombie_idle_v1_delta"},
+      "maxNumFrames": {"count":393,"animation":"ai_zombie_crawl_sprint_1"},
+      "quaternionTrackTypes": {
+        "NO_QUAT":586,
+        "HALF_QUAT":172,
+        "FULL_QUAT":23163,
+        "HALF_QUAT_NO_SIZE":408,
+        "FULL_QUAT_NO_SIZE":3910
+      },
+      "translationTrackTypes": {
+        "SMALL_TRANS":3366,
+        "FULL_TRANS":1098,
+        "TRANS_NO_SIZE":2474,
+        "NO_TRANS":21301
+      },
+      "deltaTracks": {
+        "dynamicTranslation":268,
+        "smallDynamicTranslation":14,
+        "constantTranslation":36,
+        "dynamicQuat2":73,
+        "constantQuat2":48
+      },
+      "tracksUsingTopLevelLongIndexPool":62,
+      "assetsWithRandomDataInt":0,
+      "allSourceEndpointsChainExactly":true,
+      "allFlatPoolsExhausted":true,
+      "failures":0
+    }
+  ],
+  "combined": {
+    "animations":672,
+    "boneTracks":56466,
+    "notifies":2122,
+    "serializedSourceBytes":17655440,
+    "tracksUsingTopLevelLongIndexPool":549,
+    "dynamicDeltaTranslations":521,
+    "smallDynamicDeltaTranslations":29,
+    "constantDeltaTranslations":71,
+    "dynamicQuat2Deltas":153,
+    "constantQuat2Deltas":76,
+    "allFiveQuaternionBoneTrackCategoriesCovered":true,
+    "allFourTranslationBoneTrackCategoriesCovered":true,
+    "allFlatPoolsExhausted":true,
+    "allWalkerBlockersEmpty":true,
+    "failures":0
+  },
+  "fixtureLimitation": {
+    "constantFullQuatDeltaFound":false,
+    "searchScope":"2,930 XAnim candidates participating in exact back-to-back XAnim chains across zm_prison and zm_tomb",
+    "policy":"keep 12-byte constant full-quat source branch marked struct-derived until a retail fixture is found"
+  }
+}
