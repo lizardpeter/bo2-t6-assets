@@ -1,0 +1,87 @@
+{
+  "format": "t6-xmodel-collision-normalized-regression-v1",
+  "normalizer": "tools/t6_xmodel_collision_normalize_v1.py",
+  "normalizerSha256": "d68b3db8a89e3f8fba29f871f56f5dff179e8a110031ae7d6f063479af3e53c1",
+  "normalizerGitBlob": "4230b04e3fb6f11de0e96da81bcf925edf466707",
+  "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+  "determinism": {
+    "asset64SecondGenerationSha256": "729dcb655e0ad44f19992db74a6104933d3d2d72d0a638e89d6fddf1c023b45d",
+    "matchesFirst": true
+  },
+  "fixtures": [
+    {
+      "xassetIndex": 64,
+      "name": "nt_2020_dish_mug",
+      "fixedStart": 3731903,
+      "serializedEnd": 3756309,
+      "serializedBytes": 24406,
+      "serializedSha256": "5546d1a54b7a25146c1ffa1cff0a028c609854d752d2a041270bb434a8845829",
+      "normalizedBytes": 149105,
+      "normalizedSha256": "729dcb655e0ad44f19992db74a6104933d3d2d72d0a638e89d6fddf1c023b45d",
+      "numBones": 1,
+      "numSurfs": 3,
+      "numCollSurfs": 1,
+      "numCollmaps": 1,
+      "renderVertexCount": 476,
+      "renderTriCount": 486,
+      "xmodelCollisionTriCount": 64,
+      "boneCollisionCount": 1,
+      "physPreset": "beer_bottle01",
+      "clipMapPlacementCount": 18,
+      "unresolved": []
+    },
+    {
+      "xassetIndex": 67,
+      "name": "mlv/nt_shelf_modern",
+      "fixedStart": 4091869,
+      "serializedEnd": 4144992,
+      "serializedBytes": 53123,
+      "serializedSha256": "ee80d014f98cb1e5a16beddb131d6d9603c0bc9aad901de3d2157128c15315f1",
+      "normalizedBytes": 313057,
+      "normalizedSha256": "3b6bcb521df72a3404f935590a71cd391e532837983fffa141f783404d1598e2",
+      "numBones": 1,
+      "numSurfs": 4,
+      "numCollSurfs": 1,
+      "numCollmaps": 0,
+      "renderVertexCount": 1276,
+      "renderTriCount": 1062,
+      "xmodelCollisionTriCount": 32,
+      "boneCollisionCount": 1,
+      "physPreset": null,
+      "clipMapPlacementCount": 2,
+      "unresolved": []
+    },
+    {
+      "xassetIndex": 273,
+      "name": "dest_nt_nuked_female_02_d0",
+      "fixedStart": 26256479,
+      "serializedEnd": 26757920,
+      "serializedBytes": 501441,
+      "serializedSha256": "3a3c14d26acdbb8181e0a77467a4ec0a49c8ac0b0970f90ec548c9a433ddfb6b",
+      "normalizedBytes": 3097313,
+      "normalizedSha256": "9d030cec22199008999ef951735a10af70ec5da81aef15df86ee6b4994cf31f7",
+      "numBones": 4,
+      "numSurfs": 10,
+      "numCollSurfs": 4,
+      "numCollmaps": 0,
+      "renderVertexCount": 10790,
+      "renderTriCount": 15755,
+      "xmodelCollisionTriCount": 195,
+      "boneCollisionCount": 4,
+      "physPreset": null,
+      "clipMapPlacementCount": 1,
+      "unresolved": []
+    }
+  ],
+  "sourceStrideRules": {
+    "XSurfaceTri16": {
+      "nativeDestinationAlignment": 16,
+      "serializedRecordBytes": 6
+    },
+    "PhysGeomInfo16": {
+      "nativeDestinationAlignment": 16,
+      "serializedRecordBytes": 68
+    }
+  },
+  "conclusion": "Three materially different retail Nuketown XModels normalize without collision omissions or source-walk blockers. Asset64 additionally exercises inline PhysPreset and Collmap/PhysGeom/BrushWrapper; asset273 exercises four bones, non-root transforms, ten surfaces and four XModel collision surfaces."
+}
