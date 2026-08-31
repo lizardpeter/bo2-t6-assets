@@ -102,12 +102,14 @@ class XModelWalker(AssetDispatchWalker):
         blend_count = blend_counts[0] + 3 * blend_counts[1] + 5 * blend_counts[2] + 7 * blend_counts[3]
         tension_count = sum(blend_counts)
 
+        # XSurface serializer reorder: vertInfo -> verts0 -> vertList -> triIndices.
         if is_inline(verts_blend_ptr):
             self.take(blend_count * 2, f'{label}.vertInfo.vertsBlend',
                       meta={'count': blend_count, 'recordBytes': 2})
         if is_inline(tension_ptr):
             self.take(tension_count * 4, f'{label}.vertInfo.tensionData',
                       meta={'count': tension_count, 'recordBytes': 4})
+
         if not (flags & 1) and is_inline(verts0_ptr):
             self.take(vert_count * GFX_PACKED_VERTEX_SIZE, f'{label}.verts0',
                       meta={'count': vert_count, 'recordBytes': GFX_PACKED_VERTEX_SIZE})
@@ -137,12 +139,21 @@ class XModelWalker(AssetDispatchWalker):
                             'nativeDestinationAlignment': 16})
 
         return {
-            'index': index, 'tileMode': tile_mode, 'vertListCount': vert_list_count,
-            'flags': flags, 'vertCount': vert_count, 'triCount': tri_count,
-            'baseVertIndex': base_vert_index, 'triIndicesPointer': ptr_kind(tri_indices_ptr),
-            'vertInfo': {'vertCount': blend_counts, 'vertsBlendPointer': ptr_kind(verts_blend_ptr),
-                         'tensionDataPointer': ptr_kind(tension_ptr)},
-            'verts0Pointer': ptr_kind(verts0_ptr), 'vertListPointer': ptr_kind(vert_list_ptr),
+            'index': index,
+            'tileMode': tile_mode,
+            'vertListCount': vert_list_count,
+            'flags': flags,
+            'vertCount': vert_count,
+            'triCount': tri_count,
+            'baseVertIndex': base_vert_index,
+            'triIndicesPointer': ptr_kind(tri_indices_ptr),
+            'vertInfo': {
+                'vertCount': blend_counts,
+                'vertsBlendPointer': ptr_kind(verts_blend_ptr),
+                'tensionDataPointer': ptr_kind(tension_ptr),
+            },
+            'verts0Pointer': ptr_kind(verts0_ptr),
+            'vertListPointer': ptr_kind(vert_list_ptr),
             'rigidVertLists': trees,
         }
 
@@ -156,6 +167,7 @@ class XModelWalker(AssetDispatchWalker):
         numverts = self.u32at(base, 84)
         verts_ptr = self.u32at(base, 88)
         planes_ptr = self.u32at(base, 92)
+
         if is_inline(sides_ptr):
             a, _ = self.take(numsides * CBRUSHSIDE_SIZE, f'{label}.sides.fixed',
                              meta={'count': numsides, 'recordBytes': CBRUSHSIDE_SIZE})
@@ -164,12 +176,18 @@ class XModelWalker(AssetDispatchWalker):
                 if is_inline(plane_ptr):
                     self.take(CPLANE_SIZE, f'{label}.sides[{i}].plane')
         if is_inline(verts_ptr):
-            self.take(numverts * VEC3_SIZE, f'{label}.verts', meta={'count': numverts, 'recordBytes': VEC3_SIZE})
+            self.take(numverts * VEC3_SIZE, f'{label}.verts',
+                      meta={'count': numverts, 'recordBytes': VEC3_SIZE})
         if is_inline(planes_ptr):
-            self.take(numsides * CPLANE_SIZE, f'{label}.planes', meta={'count': numsides, 'recordBytes': CPLANE_SIZE})
-        return {'mins': mins, 'maxs': maxs, 'contents': contents, 'numSides': numsides,
-                'sidesPointer': ptr_kind(sides_ptr), 'numVerts': numverts,
-                'vertsPointer': ptr_kind(verts_ptr), 'planesPointer': ptr_kind(planes_ptr)}
+            self.take(numsides * CPLANE_SIZE, f'{label}.planes',
+                      meta={'count': numsides, 'recordBytes': CPLANE_SIZE})
+
+        return {
+            'mins': mins, 'maxs': maxs, 'contents': contents,
+            'numSides': numsides, 'sidesPointer': ptr_kind(sides_ptr),
+            'numVerts': numverts, 'vertsPointer': ptr_kind(verts_ptr),
+            'planesPointer': ptr_kind(planes_ptr),
+        }
 
     def walk_phys_geom_list(self, label: str) -> dict:
         base, _ = self.take(PHYS_GEOM_LIST_SIZE, f'{label}.fixed')
@@ -184,17 +202,28 @@ class XModelWalker(AssetDispatchWalker):
             for i in range(count):
                 b = a + i * PHYS_GEOM_INFO_SOURCE_SIZE
                 brush_ptr = self.u32at(b, 0)
-                row = {'index': i, 'brushPointer': ptr_kind(brush_ptr), 'type': self.i32at(b, 4),
-                       'orientation': [self._finite3(b + 8 + 12 * k) for k in range(3)],
-                       'offset': self._finite3(b + 44), 'halfLengths': self._finite3(b + 56)}
+                typ = self.i32at(b, 4)
+                row = {
+                    'index': i,
+                    'brushPointer': ptr_kind(brush_ptr),
+                    'type': typ,
+                    'orientation': [self._finite3(b + 8 + 12 * k) for k in range(3)],
+                    'offset': self._finite3(b + 44),
+                    'halfLengths': self._finite3(b + 56),
+                }
                 if is_inline(brush_ptr):
                     row['brush'] = self.walk_brush_wrapper(f'{label}.geoms[{i}].brush')
                 geoms.append(row)
         return {'count': count, 'geomsPointer': ptr_kind(geoms_ptr), 'contents': contents, 'geoms': geoms}
 
     def walk_phys_constraints_asset(self, label: str) -> None:
-        self.blockers.append({'kind': 'inline_PhysConstraints_dispatch_not_yet_retail_closed',
-                              'field': label, 'fixedRecordBytesExpected': PHYS_CONSTRAINTS_SIZE})
+        # Fixed size/strings are known, but the nested material-pointer behavior
+        # has not yet been retail-boundary validated for this asset class.
+        self.blockers.append({
+            'kind': 'inline_PhysConstraints_dispatch_not_yet_retail_closed',
+            'field': label,
+            'fixedRecordBytesExpected': PHYS_CONSTRAINTS_SIZE,
+        })
 
     def external_asset_ref(self, field, ptr, owner_index=None, asset_type=None):
         if not is_inline(ptr):
@@ -207,70 +236,184 @@ class XModelWalker(AssetDispatchWalker):
         fixed_start = self.pos
         base, _ = self.take(XMODEL_SIZE, 'XModel.fixed')
         name_ptr = self.u32at(base, 0)
-        num_bones, num_root_bones, num_surfs, lod_ramp_type = self.data[base:base+4+4][4:8]
+        num_bones = self.data[base + 4]
+        num_root_bones = self.data[base + 5]
+        num_surfs = self.data[base + 6]
+        lod_ramp_type = self.data[base + 7]
         if num_root_bones > num_bones:
             raise WalkError(f'XModel: numRootBones {num_root_bones} > numBones {num_bones}')
         non_root = num_bones - num_root_bones
-        bone_names_ptr, parent_list_ptr, quats_ptr, trans_ptr, part_class_ptr, base_mat_ptr, surfs_ptr, material_handles_ptr = [self.u32at(base, o) for o in (8,12,16,20,24,28,32,36)]
+
+        bone_names_ptr = self.u32at(base, 8)
+        parent_list_ptr = self.u32at(base, 12)
+        quats_ptr = self.u32at(base, 16)
+        trans_ptr = self.u32at(base, 20)
+        part_class_ptr = self.u32at(base, 24)
+        base_mat_ptr = self.u32at(base, 28)
+        surfs_ptr = self.u32at(base, 32)
+        material_handles_ptr = self.u32at(base, 36)
         coll_surfs_ptr = self.u32at(base, 152)
         num_coll_surfs = self._nonnegative(self.i32at(base, 156), 'numCollSurfs')
         contents = self.i32at(base, 160)
         bone_info_ptr = self.u32at(base, 164)
         radius = struct.unpack_from('<f', self.data, base + 168)[0]
-        mins, maxs = self._finite3(base + 172), self._finite3(base + 184)
-        num_lods, coll_lod = self.u16at(base, 196), self.i16at(base, 198)
+        mins = self._finite3(base + 172)
+        maxs = self._finite3(base + 184)
+        num_lods = self.u16at(base, 196)
+        coll_lod = self.i16at(base, 198)
         himip_ptr = self.u32at(base, 200)
-        mem_usage, flags, bad = self.i32at(base, 204), self.u32at(base, 208), self.data[base + 212]
-        phys_preset_ptr, num_collmaps, collmaps_ptr, phys_constraints_ptr = self.u32at(base,216), self.data[base+220], self.u32at(base,224), self.u32at(base,228)
+        mem_usage = self.i32at(base, 204)
+        flags = self.u32at(base, 208)
+        bad = self.data[base + 212]
+        phys_preset_ptr = self.u32at(base, 216)
+        num_collmaps = self.data[base + 220]
+        collmaps_ptr = self.u32at(base, 224)
+        phys_constraints_ptr = self.u32at(base, 228)
 
         name = self.walk_string_ptr(name_ptr, 'XModel.name')
-        if is_inline(bone_names_ptr): self.take(num_bones*2, 'XModel.boneNames', meta={'count':num_bones,'recordBytes':2})
-        if is_inline(parent_list_ptr): self.take(non_root, 'XModel.parentList', meta={'count':non_root,'recordBytes':1})
-        if is_inline(quats_ptr): self.take(non_root*XMODEL_QUAT_SIZE, 'XModel.quats', meta={'count':non_root,'recordBytes':XMODEL_QUAT_SIZE})
-        if is_inline(trans_ptr): self.take(non_root*16, 'XModel.trans', meta={'count':non_root*4,'recordBytes':4})
-        if is_inline(part_class_ptr): self.take(num_bones, 'XModel.partClassification', meta={'count':num_bones,'recordBytes':1})
-        if is_inline(base_mat_ptr): self.take(num_bones*DOBJ_ANIM_MAT_SIZE, 'XModel.baseMat', meta={'count':num_bones,'recordBytes':DOBJ_ANIM_MAT_SIZE})
-        surfaces=[]
+        if is_inline(bone_names_ptr):
+            self.take(num_bones * 2, 'XModel.boneNames', meta={'count': num_bones, 'recordBytes': 2})
+        if is_inline(parent_list_ptr):
+            self.take(non_root, 'XModel.parentList', meta={'count': non_root, 'recordBytes': 1})
+        if is_inline(quats_ptr):
+            self.take(non_root * XMODEL_QUAT_SIZE, 'XModel.quats', meta={'count': non_root, 'recordBytes': XMODEL_QUAT_SIZE})
+        if is_inline(trans_ptr):
+            self.take(non_root * 16, 'XModel.trans', meta={'count': non_root * 4, 'recordBytes': 4})
+        if is_inline(part_class_ptr):
+            self.take(num_bones, 'XModel.partClassification', meta={'count': num_bones, 'recordBytes': 1})
+        if is_inline(base_mat_ptr):
+            self.take(num_bones * DOBJ_ANIM_MAT_SIZE, 'XModel.baseMat', meta={'count': num_bones, 'recordBytes': DOBJ_ANIM_MAT_SIZE})
+
+        surfaces = []
         if is_inline(surfs_ptr):
-            a,_=self.take(num_surfs*XSURFACE_SIZE,'XModel.surfs.fixed',meta={'count':num_surfs,'recordBytes':XSURFACE_SIZE})
-            for i in range(num_surfs): surfaces.append(self.walk_xsurface(a+i*XSURFACE_SIZE,i))
-        material_handles=[]
-        if is_inline(material_handles_ptr):
-            a,_=self.take(num_surfs*4,'XModel.materialHandles.fixed',meta={'count':num_surfs,'recordBytes':4})
+            a, _ = self.take(num_surfs * XSURFACE_SIZE, 'XModel.surfs.fixed',
+                             meta={'count': num_surfs, 'recordBytes': XSURFACE_SIZE})
             for i in range(num_surfs):
-                p=self.u32at(a+i*4,0); material_handles.append(ptr_kind(p)); self.external_asset_ref(f'XModel.materialHandles[{i}]',p,i,asset_type='Material')
-        coll_surfs=[]
+                surfaces.append(self.walk_xsurface(a + i * XSURFACE_SIZE, i))
+
+        material_handles = []
+        if is_inline(material_handles_ptr):
+            a, _ = self.take(num_surfs * 4, 'XModel.materialHandles.fixed',
+                             meta={'count': num_surfs, 'recordBytes': 4})
+            for i in range(num_surfs):
+                p = self.u32at(a + i * 4, 0)
+                material_handles.append(ptr_kind(p))
+                self.external_asset_ref(f'XModel.materialHandles[{i}]', p, i, asset_type='Material')
+
+        coll_surfs = []
         if is_inline(coll_surfs_ptr):
-            a,_=self.take(num_coll_surfs*XMODEL_COLL_SURF_SIZE,'XModel.collSurfs.fixed',meta={'count':num_coll_surfs,'recordBytes':XMODEL_COLL_SURF_SIZE})
+            a, _ = self.take(num_coll_surfs * XMODEL_COLL_SURF_SIZE, 'XModel.collSurfs.fixed',
+                             meta={'count': num_coll_surfs, 'recordBytes': XMODEL_COLL_SURF_SIZE})
             for i in range(num_coll_surfs):
-                b=a+i*XMODEL_COLL_SURF_SIZE; tp=self.u32at(b,0); n=self._nonnegative(self.i32at(b,4),f'collSurfs[{i}].numCollTris')
-                row={'index':i,'collTrisPointer':ptr_kind(tp),'numCollTris':n,'mins':self._finite3(b+8),'maxs':self._finite3(b+20),'boneIdx':self.i32at(b,32),'contents':self.i32at(b,36),'surfFlags':self.i32at(b,40)}
-                if is_inline(tp): self.take(n*XMODEL_COLL_TRI_SIZE,f'XModel.collSurfs[{i}].collTris',meta={'count':n,'recordBytes':XMODEL_COLL_TRI_SIZE})
+                b = a + i * XMODEL_COLL_SURF_SIZE
+                tris_ptr = self.u32at(b, 0)
+                ntris = self._nonnegative(self.i32at(b, 4), f'collSurfs[{i}].numCollTris')
+                row = {
+                    'index': i,
+                    'collTrisPointer': ptr_kind(tris_ptr),
+                    'numCollTris': ntris,
+                    'mins': self._finite3(b + 8),
+                    'maxs': self._finite3(b + 20),
+                    'boneIdx': self.i32at(b, 32),
+                    'contents': self.i32at(b, 36),
+                    'surfFlags': self.i32at(b, 40),
+                }
+                if is_inline(tris_ptr):
+                    self.take(ntris * XMODEL_COLL_TRI_SIZE, f'XModel.collSurfs[{i}].collTris',
+                              meta={'count': ntris, 'recordBytes': XMODEL_COLL_TRI_SIZE})
                 coll_surfs.append(row)
-        if is_inline(bone_info_ptr): self.take(num_bones*XBONE_INFO_SIZE,'XModel.boneInfo',meta={'count':num_bones,'recordBytes':XBONE_INFO_SIZE})
-        if is_inline(himip_ptr): self.take(num_surfs*4,'XModel.himipInvSqRadii',meta={'count':num_surfs,'recordBytes':4})
-        self.external_asset_ref('XModel.physPreset',phys_preset_ptr,asset_type='PhysPreset')
-        collmaps=[]
+
+        if is_inline(bone_info_ptr):
+            self.take(num_bones * XBONE_INFO_SIZE, 'XModel.boneInfo',
+                      meta={'count': num_bones, 'recordBytes': XBONE_INFO_SIZE})
+        if is_inline(himip_ptr):
+            self.take(num_surfs * 4, 'XModel.himipInvSqRadii',
+                      meta={'count': num_surfs, 'recordBytes': 4})
+
+        self.external_asset_ref('XModel.physPreset', phys_preset_ptr, asset_type='PhysPreset')
+
+        collmaps = []
         if is_inline(collmaps_ptr):
-            a,_=self.take(num_collmaps*COLLMAP_SIZE,'XModel.collmaps.fixed',meta={'count':num_collmaps,'recordBytes':COLLMAP_SIZE})
+            a, _ = self.take(num_collmaps * COLLMAP_SIZE, 'XModel.collmaps.fixed',
+                             meta={'count': num_collmaps, 'recordBytes': COLLMAP_SIZE})
             for i in range(num_collmaps):
-                gp=self.u32at(a+i*COLLMAP_SIZE,0); row={'index':i,'geomListPointer':ptr_kind(gp)}
-                if is_inline(gp): row['geomList']=self.walk_phys_geom_list(f'XModel.collmaps[{i}].geomList')
+                gp = self.u32at(a + i * COLLMAP_SIZE, 0)
+                row = {'index': i, 'geomListPointer': ptr_kind(gp)}
+                if is_inline(gp):
+                    row['geomList'] = self.walk_phys_geom_list(f'XModel.collmaps[{i}].geomList')
                 collmaps.append(row)
-        self.external_asset_ref('XModel.physConstraints',phys_constraints_ptr,asset_type='PhysConstraints')
-        return {'format':'t6-xmodel-serialized-walk-v1','assetFixedStart':fixed_start,'assetSerializedEnd':self.pos,'assetSerializedBytes':self.pos-fixed_start,'assetSerializedSha256':hashlib.sha256(self.data[fixed_start:self.pos]).hexdigest(),'xmodel':{'name':name,'namePointer':ptr_kind(name_ptr),'numBones':num_bones,'numRootBones':num_root_bones,'numSurfs':num_surfs,'lodRampType':lod_ramp_type,'numLods':num_lods,'collLod':coll_lod,'numCollSurfs':num_coll_surfs,'contents':contents,'radius':radius,'mins':mins,'maxs':maxs,'memUsage':mem_usage,'flags':flags,'bad':bool(bad),'numCollmaps':num_collmaps,'physPresetPointer':ptr_kind(phys_preset_ptr),'physConstraintsPointer':ptr_kind(phys_constraints_ptr),'surfaces':surfaces,'materialHandles':material_handles,'collisionSurfaces':coll_surfs,'collmaps':collmaps},'sections':self.sections,'details':self.details,'blockers':self.blockers,'sourceStrideRules':{'XSurfaceTri16':{'serializedRecordBytes':XSURFACE_TRI_SOURCE_SIZE,'nativeDestinationAlignment':16},'PhysGeomInfo16':{'serializedRecordBytes':PHYS_GEOM_INFO_SOURCE_SIZE,'nativeDestinationAlignment':16},'sourceAlignmentPaddingBytes':0}}
+
+        self.external_asset_ref('XModel.physConstraints', phys_constraints_ptr, asset_type='PhysConstraints')
+
+        result = {
+            'format': 't6-xmodel-serialized-walk-v1',
+            'assetFixedStart': fixed_start,
+            'assetSerializedEnd': self.pos,
+            'assetSerializedBytes': self.pos - fixed_start,
+            'assetSerializedSha256': hashlib.sha256(self.data[fixed_start:self.pos]).hexdigest(),
+            'xmodel': {
+                'name': name,
+                'namePointer': ptr_kind(name_ptr),
+                'numBones': num_bones,
+                'numRootBones': num_root_bones,
+                'numSurfs': num_surfs,
+                'lodRampType': lod_ramp_type,
+                'numLods': num_lods,
+                'collLod': coll_lod,
+                'numCollSurfs': num_coll_surfs,
+                'contents': contents,
+                'radius': radius,
+                'mins': mins,
+                'maxs': maxs,
+                'memUsage': mem_usage,
+                'flags': flags,
+                'bad': bool(bad),
+                'numCollmaps': num_collmaps,
+                'physPresetPointer': ptr_kind(phys_preset_ptr),
+                'physConstraintsPointer': ptr_kind(phys_constraints_ptr),
+                'surfaces': surfaces,
+                'materialHandles': material_handles,
+                'collisionSurfaces': coll_surfs,
+                'collmaps': collmaps,
+            },
+            'sections': self.sections,
+            'details': self.details,
+            'blockers': self.blockers,
+            'sourceStrideRules': {
+                'XSurfaceTri16': {'serializedRecordBytes': XSURFACE_TRI_SOURCE_SIZE, 'nativeDestinationAlignment': 16},
+                'PhysGeomInfo16': {'serializedRecordBytes': PHYS_GEOM_INFO_SOURCE_SIZE, 'nativeDestinationAlignment': 16},
+                'sourceAlignmentPaddingBytes': 0,
+            },
+        }
+        return result
 
 
 def main() -> int:
-    ap=argparse.ArgumentParser(); ap.add_argument('expanded',type=Path); ap.add_argument('--asset-start',type=lambda x:int(x,0),required=True); ap.add_argument('--expect-end',type=lambda x:int(x,0)); ap.add_argument('--out',type=Path); args=ap.parse_args()
-    data=args.expanded.read_bytes(); result=XModelWalker(data,args.asset_start).walk_xmodel(); result['expandedBytes']=len(data); result['expandedSha256']=hashlib.sha256(data).hexdigest()
+    ap = argparse.ArgumentParser()
+    ap.add_argument('expanded', type=Path, help='decrypted/decompressed T6 XFile byte stream')
+    ap.add_argument('--asset-start', type=lambda x: int(x, 0), required=True)
+    ap.add_argument('--expect-end', type=lambda x: int(x, 0))
+    ap.add_argument('--out', type=Path)
+    args = ap.parse_args()
+    data = args.expanded.read_bytes()
+    result = XModelWalker(data, args.asset_start).walk_xmodel()
+    result['expandedBytes'] = len(data)
+    result['expandedSha256'] = hashlib.sha256(data).hexdigest()
     if args.expect_end is not None:
-        result['expectedEnd']=args.expect_end; result['expectedEndMatches']=result['assetSerializedEnd']==args.expect_end
-        if not result['expectedEndMatches']: raise SystemExit(f"walk ended at {result['assetSerializedEnd']}, expected {args.expect_end}; blockers={result['blockers']}")
-    text=json.dumps(result,indent=2)
-    if args.out: args.out.parent.mkdir(parents=True,exist_ok=True); args.out.write_text(text+'\n',encoding='utf-8')
-    else: print(text)
-    if result['blockers']: raise SystemExit(f"walk completed with blockers: {result['blockers']}")
+        result['expectedEnd'] = args.expect_end
+        result['expectedEndMatches'] = result['assetSerializedEnd'] == args.expect_end
+        if not result['expectedEndMatches']:
+            raise SystemExit(f"walk ended at {result['assetSerializedEnd']}, expected {args.expect_end}; blockers={result['blockers']}")
+    text = json.dumps(result, indent=2)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text + '\n', encoding='utf-8')
+    else:
+        print(text)
+    if result['blockers']:
+        raise SystemExit(f"walk completed with blockers: {result['blockers']}")
     return 0
 
-if __name__=='__main__': raise SystemExit(main())
+
+if __name__ == '__main__':
+    raise SystemExit(main())
