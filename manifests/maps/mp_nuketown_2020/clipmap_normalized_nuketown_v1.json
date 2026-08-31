@@ -1,0 +1,116 @@
+{
+  "allChecksPass": true,
+  "assetIndex": 629,
+  "checks": {
+    "aabbChildRangesInBounds": true,
+    "aabbLeafPartitionIndicesInBounds": true,
+    "aabbMaterialIndicesInBounds": true,
+    "aabbTreeCountMatches": true,
+    "leafBrushNodeCountMatches": true,
+    "partitionCountMatches": true,
+    "partitionTriangleRangesInBounds": true,
+    "partitionUindRangesInBounds": true,
+    "walkerSerializedEndMatchesRetailOracle": true
+  },
+  "counts": {
+    "aabbTreeCount": 19322,
+    "clusterBytes": 184,
+    "dynEntCount": [
+      387,
+      0,
+      131,
+      0
+    ],
+    "leafbrushNodesCount": 12115,
+    "max_ropes": 32,
+    "nuinds": 50224,
+    "numBrushSides": 38928,
+    "numBrushVerts": 79670,
+    "numBrushes": 9284,
+    "numClusters": 1,
+    "numLeafBrushes": 24563,
+    "numLeafs": 2938,
+    "numMaterials": 704,
+    "numNodes": 2753,
+    "numStaticModels": 1712,
+    "numSubModels": 184,
+    "num_constraints": 0,
+    "partitionCount": 7411,
+    "planeCount": 15197,
+    "triCount": 37480,
+    "vertCount": 26150
+  },
+  "decoded": {
+    "aabbTrees": 19322,
+    "brushSides": 38928,
+    "brushVertices": 79670,
+    "brushes": 9284,
+    "bspLeaves": 2938,
+    "bspNodes": 2753,
+    "dynEntDefs": 387,
+    "inlineLeafBrushNodeArrays": 8682,
+    "leafBrushNodes": 12115,
+    "materials": 704,
+    "partitions": 7411,
+    "subModels": 184,
+    "terrainTriangles": 37480,
+    "terrainVertices": 26150,
+    "uinds": 50224
+  },
+  "format": "t6-clipmap-normalized-proof-v1",
+  "input": {
+    "clipMapFixedStart": 87882673,
+    "clipMapSerializedBytes": 4531472,
+    "clipMapSerializedEnd": 92414145,
+    "clipMapSerializedSha256": "5f275dbae3110a5f402405be9a3f69baa674f816832e8f736b0167dadd5270f0",
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "layoutEvidence": {
+    "CollisionAabbTree": "vec3 origin; uint16 materialIndex; uint16 childCount; vec3 halfSize; union(firstChildIndex, partitionIndex)",
+    "CollisionPartition": "char triCount; int firstTri; int nuinds; int fuind",
+    "cLeafBrushNode_s": "char axis; int16 leafBrushCount; int contents; union(LeafBrush* brushes, {float dist; float range; uint16 childOffset[2]})",
+    "cbrushside_t": "cplane_s* plane; int cflags; int sflags",
+    "upstream": "Laupetin/OpenAssetTools src/Common/Game/T6/T6_Assets.h",
+    "upstreamBlobSha": "422087ef74968f468806c9cf4a543815b2d8db9c"
+  },
+  "map": "mp_nuketown_2020",
+  "normalizationStatus": {
+    "constraintFieldsExpanded": false,
+    "decodedOwnedSections": [
+      "materials",
+      "brushSides",
+      "leafBrushNodes",
+      "brushVertices",
+      "uinds",
+      "brushes",
+      "bspNodes",
+      "bspLeaves",
+      "terrain",
+      "partitions",
+      "aabbTrees",
+      "subModels",
+      "dynEntDefs",
+      "mapEnts"
+    ],
+    "losslessRawSectionDigestsPreserved": true,
+    "partitionAabbFieldsExpanded": true,
+    "planePoolResolved": false,
+    "unexpandedOwnedSections": [
+      "clipMap.staticModelList"
+    ],
+    "unresolvedCrossAssetDependencies": [
+      "clipMap.info.leafbrushes",
+      "clipMap.info.planes"
+    ]
+  },
+  "normalizedArtifact": {
+    "bytes": 24992256,
+    "deterministicSecondPassSha256": "c63a257a5d798add495829848755518e081fbeec342f94d9380b5a4c2e75fb9f",
+    "notCommittedBecauseGeneratedLargeArtifact": true,
+    "sha256": "c63a257a5d798add495829848755518e081fbeec342f94d9380b5a4c2e75fb9f"
+  },
+  "normalizer": {
+    "path": "tools/t6_clipmap_normalize_v1.py",
+    "sha256": "d33c6872bfae0bac0e7e770da74a4ea716f099d26325b1be3f83d96d422ea4f7"
+  }
+}
