@@ -1,0 +1,61 @@
+{
+  "format": "t6-xmodel-serialized-walker-regression-v1",
+  "walker": "tools/t6_xmodel_serialized_walker.py",
+  "walkerSha256": "ec5eae07f6fdc1b83502fa63c50c351b8775aec28072887558c3e7134022e9b4",
+  "walkerGitBlobSha": "582f52e591add06fd9100b1749e6b98f2a39a104",
+  "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+  "fixtures": [
+    {
+      "xassetIndex": 64,
+      "name": "nt_2020_dish_mug",
+      "fixedStart": 3731903,
+      "serializedEnd": 3756309,
+      "serializedBytes": 24406,
+      "serializedSha256": "5546d1a54b7a25146c1ffa1cff0a028c609854d752d2a041270bb434a8845829",
+      "nextBoundary": {"xassetIndex": 65, "type": "XMODEL", "name": "p_pent_coffeemug", "independentlyNamedByPriorRetailProof": true},
+      "shape": {"numBones": 1, "numRootBones": 1, "numSurfs": 3, "surfaceVerts": [253,141,82], "surfaceTris": [288,134,64], "numCollSurfs": 1, "collTris": [64], "numCollmaps": 1},
+      "blockers": 0
+    },
+    {
+      "xassetIndex": 65,
+      "name": "p_pent_coffeemug",
+      "fixedStart": 3756309,
+      "serializedEnd": 3758996,
+      "serializedBytes": 2687,
+      "serializedSha256": "c3988007fdffd0c7b260553aa759005108bd6e86ed05a170a8a4fe231a3248ae",
+      "nextBoundary": {"xassetIndex": 66, "type": "TECHNIQUE_SET", "fixedStart": 3758996, "fixedHeaderNamePointer": "FOLLOWING", "worldVertFormat": 0, "inlineName": "mlv_lit_sm_r0c0s0_e85j2e99"},
+      "shape": {"numBones": 1, "numRootBones": 1, "numSurfs": 4, "surfaceVerts": [253,141,82,17], "surfaceTris": [288,134,64,12], "numCollSurfs": 1, "collTris": [12], "numCollmaps": 1},
+      "blockers": 0
+    },
+    {
+      "xassetIndex": 67,
+      "name": "mlv/nt_shelf_modern",
+      "fixedStart": 4091869,
+      "serializedEnd": 4144992,
+      "serializedBytes": 53123,
+      "serializedSha256": "ee80d014f98cb1e5a16beddb131d6d9603c0bc9aad901de3d2157128c15315f1",
+      "nextBoundary": {"xassetIndex": 68, "type": "XMODEL", "name": "nt_2020_bedroom_stand", "fixedStart": 4144992, "independentlyNamedByPriorRetailProof": true},
+      "shape": {"numBones": 1, "numRootBones": 1, "numSurfs": 4, "surfaceVerts": [607,394,213,62], "surfaceTris": [564,318,148,32], "numCollSurfs": 1, "collTris": [32], "numCollmaps": 0},
+      "blockers": 0
+    },
+    {
+      "xassetIndex": 273,
+      "resolvedIdentity": "dest_nt_nuked_female_02_d0",
+      "namePointerKind": "packed",
+      "fixedStart": 26256479,
+      "serializedEnd": 26757920,
+      "serializedBytes": 501441,
+      "serializedSha256": "3a3c14d26acdbb8181e0a77467a4ec0a49c8ac0b0970f90ec548c9a433ddfb6b",
+      "nextBoundary": {"xassetIndex": 274, "type": "XMODEL", "resolvedIdentity": "dest_nt_nuked_female_03_d0", "fixedStart": 26757920},
+      "shape": {"numBones": 4, "numRootBones": 1, "nonRootBones": 3, "numSurfs": 10, "numCollSurfs": 4, "collTris": [72,28,46,49], "numCollmaps": 0},
+      "branchesNewlyExercised": ["parentList", "quats", "trans", "multi-bone baseMat", "multiple rigid lists", "multiple collision surfaces"],
+      "blockers": 0
+    }
+  ],
+  "sourceStrideProofs": {
+    "XSurfaceTri16": {"nativeDestinationAlignment": 16, "serializedSourceRecordBytes": 6},
+    "PhysGeomInfo16": {"nativeDestinationAlignment": 16, "serializedSourceRecordBytes": 68},
+    "sourceAlignmentPaddingBytes": 0
+  },
+  "conclusion": "One generalized structure-driven XModel walker reproduces exact retail source boundaries across collmap/PhysPreset, no-collmap, and multi-bone/multi-collision-surface fixtures with zero blockers."
+}
