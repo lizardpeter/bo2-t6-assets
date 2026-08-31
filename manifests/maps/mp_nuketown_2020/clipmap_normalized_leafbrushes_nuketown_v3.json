@@ -1,0 +1,95 @@
+{
+  "format": "t6-clipmap-normalized-leafbrush-proof-v3",
+  "map": "mp_nuketown_2020",
+  "assetIndex": 629,
+  "input": {
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+    "clipMapFixedStart": 87882673,
+    "clipMapSerializedEnd": 92414145,
+    "clipMapSerializedSha256": "5f275dbae3110a5f402405be9a3f69baa674f816832e8f736b0167dadd5270f0"
+  },
+  "leafBrushPool": {
+    "pointer": {
+      "raw": 2759815633,
+      "rawHex": "0xA47F71D1",
+      "kind": "packed",
+      "block": 5,
+      "blockName": "VIRTUAL",
+      "offset": 75461072
+    },
+    "count": 24563,
+    "logicalRange": {
+      "start": 75461072,
+      "end": 75510198,
+      "bytes": 49126
+    },
+    "owner": {
+      "assetType": "clipMap_t",
+      "scope": "same asset reusable allocation",
+      "construction": "prefix of serialized cLeafBrushNode_s::data.leaf.brushes arrays",
+      "brushSidesLogicalBase": 74751636,
+      "brushSidesLogicalEnd": 75218772,
+      "leafBrushNodesLogicalBase": 75218772,
+      "leafBrushNodesLogicalEnd": 75461072,
+      "derivedLeafBrushLogicalBase": 75461072,
+      "ownershipProof": "packed leafbrush base equals brush-side pool end plus exact leafBrushNodes fixed bytes"
+    },
+    "serializedSource": {
+      "start": 88607362,
+      "end": 88656488,
+      "bytes": 49126,
+      "sha256": "20a30ef4f98ac06fb638b84d4770f5ea93822f0bfe58b807633294d5b17ee98a",
+      "recordSize": 2,
+      "sourceSequenceTotalStart": 88607362,
+      "sourceSequenceTotalEnd": 88656894,
+      "sourceSequenceTotalBytes": 49532,
+      "sourceSequenceArrayCount": 8682,
+      "prefixEndsOnNodeArrayBoundary": true
+    },
+    "allocationProof": {
+      "brushSideReferenceCount": 8476,
+      "allBrushSideReferencesPackedVirtualInPool": true,
+      "inlineLeafBrushArrayCount": 8682,
+      "inlineLeafBrushRefCount": 24766,
+      "inlineLeafBrushBytes": 49532,
+      "trailingLocalOnlyLeafBrushRefs": 203,
+      "brushVertsLogicalBase": 75510604,
+      "expectedBrushVertsLogicalBaseAfterLeafSequenceAlign4": 75510604,
+      "brushVertReferenceCount": 9284,
+      "allBrushVertReferencesPackedVirtualInPool": true
+    },
+    "semanticProof": {
+      "allGlobalLeafBrushValuesInBrushRange": true,
+      "minBrushIndex": 0,
+      "maxBrushIndex": 9283,
+      "uniqueBrushIndices": 9284,
+      "numBrushes": 9284,
+      "coversEveryBrushIndexExactlyAsASet": true,
+      "allNodeSlicesInsidePrefixMatchGlobalPool": true
+    },
+    "status": "resolved_same_clipmap_reusable_leafnode_prefix_pool"
+  },
+  "checks": {
+    "brushSidesPoolAnchoredByPackedCbrushRefs": true,
+    "leafbrushBaseEqualsBrushSidesEndPlusLeafNodeFixedBytes": true,
+    "perNodeLeafArraysSourceContiguous": true,
+    "globalPoolIsExactPrefixOfPerNodeLeafSequence": true,
+    "globalPrefixEndsOnLeafNodeArrayBoundary": true,
+    "brushVertsPoolBeginsAtAlignedEndOfFullLeafSequence": true,
+    "allGlobalLeafBrushRefsInRange": true,
+    "allNodeSlicesInsidePrefixMatchGlobalPool": true,
+    "globalLeafBrushSetCoversEveryBrush": true,
+    "noUnresolvedClipInfoDependenciesRemain": true
+  },
+  "normalizedArtifact": {
+    "bytes": 29537267,
+    "sha256": "4a00398040ca805e82e1f0e6fa7924a94be96d89ccba926d54e2ac963246f4ab",
+    "deterministicSecondPassSha256": "4a00398040ca805e82e1f0e6fa7924a94be96d89ccba926d54e2ac963246f4ab",
+    "notCommittedBecauseGeneratedLargeArtifact": true
+  },
+  "normalizer": {
+    "path": "tools/t6_clipmap_normalize_v3.py",
+    "sha256": "061f0b65bf3298788b9ead229e3e7e39921452309db85f0fdfc574b7d41c2204"
+  },
+  "allChecksPass": true
+}
