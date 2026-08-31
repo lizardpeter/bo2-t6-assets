@@ -8,14 +8,18 @@ Decompressed byte-stream SHA-256: `7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd00
 
 This proof is for the native T6 collision asset, not a triangles-only approximation. A completed decoder must preserve the full `clipMap_t`/PVS structure, collision materials and flags, BSP/leaf/brush topology, submodels, DynEnt relationships, constraints/ropes, MapEnts, triggers where present, and standard engine-friendly collision geometry without discarding lossless T6 metadata.
 
-## Asset numbering
+## Asset identity
 
-Two asset indices are retained because they describe different things:
+The raw 840-entry T6 `XAssetList` directly proves this neighborhood:
 
-- Raw `XAssetList` index: **625** (`CLIPMAP_PVS`)
-- Serialized/walked asset index: **629**
+- asset **624**: `GFXWORLD`
+- asset **625**: `GAMEWORLD_MP`
+- asset **626**: `TECHNIQUE_SET`
+- asset **627**: `TECHNIQUE_SET`
+- asset **628**: `GLASSES`
+- asset **629**: **`CLIPMAP_PVS`**
 
-The walked index is four higher because four inserted/alias slots occur earlier in the serialized walk. Do not silently collapse these numbering systems.
+Therefore the Nuketown `CLIPMAP_PVS` top-level asset index is **629**. An earlier draft of this checkpoint incorrectly described raw index 625 as `CLIPMAP_PVS`; that was rejected after re-reading the exact XAsset array.
 
 ## Fixed `clipMap_t` header
 
@@ -98,7 +102,7 @@ The T6 format supports these structures and the generalized decoder must preserv
 
 ## Alignment rule learned
 
-Do **not** treat native `alignas`/`type_align32` requirements as a blanket instruction to align every FastFile stream cursor. Actual retail serialization must be followed field-by-field. Forcing a 16-byte file-cursor alignment before the Nuketown `CollisionAabbTree` stream produces invalid records; the unforced cursor produces coherent T6 structures and the exact downstream MapEnts boundary.
+Do **not** treat native `alignas`/`type_align32` requirements as a blanket instruction to align every FastFile source cursor. The existing raw-XAsset proof establishes the actual T6 rule: XBlock alignment advances destination memory only and consumes **no serialized source bytes**. The Nuketown collision replay confirms this directly; forcing source-cursor padding before aligned native structures breaks valid downstream records.
 
 ## Remaining tail to close
 
