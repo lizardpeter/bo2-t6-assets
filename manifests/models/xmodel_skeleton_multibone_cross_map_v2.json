@@ -1,0 +1,84 @@
+{
+  "format": "t6-xmodel-skeleton-multibone-cross-map-v2",
+  "normalizer": "tools/t6_xmodel_skeleton_normalize_v2.py",
+  "localValidatedNormalizerSha256": "b06464730e537be2afa378f88ffca694ec1fee380b857e0818134455957edc52",
+  "fullSweepLocalProofSha256": "69dc4dd2d3b79cd6de26136b9e39e7d855a18cead384ab1aee753dc9b71c71cf",
+  "result": {
+    "maps": 3,
+    "multiBoneXModels": 27,
+    "passed": 27,
+    "failed": 0,
+    "allBoneNamesResolved": true,
+    "allHierarchiesValid": true,
+    "allTranslationAllocationTailsZero": true,
+    "maxBoneCount": 80,
+    "reusableSkeletonAliasesResolved": 1
+  },
+  "maps": [
+    {
+      "map": "mp_nuketown_2020",
+      "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+      "count": 6,
+      "maxBoneCount": 56,
+      "models": [
+        [135,"berlin_com_light_ceiling_round_off",2,1],
+        [221,"dest_nt_nuked_male_01_d0",4,1],
+        [230,"dest_nt_nuked_female_01_d0",4,1],
+        [273,"dest_nt_nuked_female_02_d0",4,1],
+        [274,"dest_nt_nuked_female_03_d0",4,1],
+        [447,"german_shepherd",56,1]
+      ],
+      "reusableOwnerProof": {
+        "aliasAssetIndex": 274,
+        "ownerAssetIndex": 273,
+        "ownerName": "dest_nt_nuked_female_02_d0",
+        "comparisonCount": 36,
+        "surfaceComparisonCount": 30,
+        "allComparedPointersMatch": true
+      }
+    },
+    {
+      "map": "mp_raid",
+      "expandedSha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8",
+      "count": 10,
+      "maxBoneCount": 80,
+      "models": [
+        [283,"anim_rus_split_wood",4,1],
+        [308,"com_trashbin02",2,1],
+        [338,"com_locker_double_clean",3,1],
+        [364,"p6_blackout_door_security_frame",4,1],
+        [378,"picture_frame_table_silver1_4x6",2,1],
+        [398,"com_emergencylightcase",4,3],
+        [646,"p6_anim_cocaine",2,1],
+        [676,"german_shepherd",56,1],
+        [682,"veh_t6_civ_van_sprinter_whole",59,1],
+        [687,"veh_t6_luxury_sedan_clean_whole",80,1]
+      ]
+    },
+    {
+      "map": "mp_hijacked",
+      "expandedSha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b",
+      "count": 11,
+      "maxBoneCount": 56,
+      "models": [
+        [228,"p6_light_blk_emergency_red",3,3],
+        [240,"p6_blackout_hatch_door_left",7,1],
+        [382,"picture_frame_table_silver1_4x6",2,1],
+        [416,"p6_anim_beer_pack",9,1],
+        [542,"veh_iw_zodiac",20,1],
+        [558,"veh_iw_mh6_littlebird_noblurblade",40,1],
+        [714,"fxdest_p6_ceiling_fan_modern_d0",5,1],
+        [715,"fxanim_gp_umbrella_01_mod",8,1],
+        [717,"fxanim_gp_dryer_mod",10,1],
+        [718,"fxanim_gp_seagull_mod",29,1],
+        [720,"german_shepherd",56,1]
+      ]
+    }
+  ],
+  "coverageNotes": [
+    "The sweep covers every >1-bone top-level XModel in the XModel ranges required by the three maps' static and dynamic placement targets.",
+    "Both one-root and multi-root skeletons are represented.",
+    "The reusable alias is accepted only through a unique VIRTUAL allocation replay; no model-name matching is used.",
+    "Retail T6 translation allocations consistently preserve a zero-filled N-float tail after the 3*N semantic translation floats for N non-root bones."
+  ]
+}
