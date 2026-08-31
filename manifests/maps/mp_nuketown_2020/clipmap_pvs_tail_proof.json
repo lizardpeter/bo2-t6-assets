@@ -1,0 +1,143 @@
+{
+  "format": "t6-nuketown-clipmap-pvs-tail-proof-v1",
+  "map": "mp_nuketown_2020",
+  "xassetIndex": 629,
+  "xassetType": "CLIPMAP_PVS",
+  "source": {
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "serializedSpan": {
+    "start": 87882673,
+    "end": 92414145,
+    "bytes": 4531472,
+    "sha256": "5f275dbae3110a5f402405be9a3f69baa674f816832e8f736b0167dadd5270f0"
+  },
+  "sections": [
+    {
+      "name": "clipMap_t_fixed",
+      "start": 87882673,
+      "end": 87883005,
+      "bytes": 332,
+      "sha256": "c22b18d6a601affe3d8841d205273ccf398899e16a9a1f0c62c94ca859345ce8"
+    },
+    {
+      "name": "clipMap_pre_MapEnts_payload",
+      "start": 87883005,
+      "end": 92203534,
+      "bytes": 4320529,
+      "sha256": "7ac2eb9f4c65822072317af460c001c847b9c28cc9330229549363b9d00e6bd3"
+    },
+    {
+      "name": "MapEnts_fixed",
+      "start": 92203534,
+      "end": 92203570,
+      "bytes": 36,
+      "sha256": "c2c72109efcf968f225efb951fd2f48a1a4e2704981fa00b8c0e1d8e6bb0a468"
+    },
+    {
+      "name": "MapEnts_entityString",
+      "start": 92203570,
+      "end": 92381541,
+      "bytes": 177971,
+      "sha256": "4a7966ac877fd5fe57746ad4e71bc765660f91d67a108a363cbfb5007524e104"
+    },
+    {
+      "name": "box_brush",
+      "start": 92381541,
+      "end": 92381637,
+      "bytes": 96,
+      "sha256": "d964f01a237d1ec441f3c3f291bae5af8e7502dbb8e966dde88fb2e8957d7a80",
+      "decoded": {
+        "mins": [0.0, 0.0, 0.0],
+        "contents": -1,
+        "maxs": [0.0, 0.0, 0.0],
+        "numsides": 0,
+        "sidesPointer": 0,
+        "numverts": 0,
+        "vertsPointer": 0
+      }
+    },
+    {
+      "name": "dynEntDefList_0",
+      "start": 92381637,
+      "end": 92414145,
+      "bytes": 32508,
+      "count": 387,
+      "recordBytes": 84,
+      "sha256": "bfe2e3acd1bcd4f09a9da2a955f5cbc9df41764848eb5b49491c3f44b05fe50b",
+      "typeCounts": {
+        "0": 256,
+        "1": 119,
+        "2": 12
+      },
+      "pointerFacts": {
+        "destroyPiecesAllNull": true,
+        "xModelUniquePointerValues": 26,
+        "xModelNullRecords": 256,
+        "destroyedXModelUniquePointerValues": 6,
+        "destroyedXModelNullRecords": 367,
+        "destroyFxUniquePointerValues": 3,
+        "destroyFxNullRecords": 371,
+        "physPresetUniquePointerValues": 10,
+        "physPresetNullRecords": 268,
+        "followingOrInsertNestedAssetPointersObserved": false
+      },
+      "firstRecord": {
+        "type": 1,
+        "quat": [0.0, 0.0, 0.9762959480285645, 0.2164396345615387],
+        "origin": [1069.780029296875, 119.93399810791016, 2.5],
+        "xModelPointerHex": "0xA00036A5",
+        "destroyedXModelPointerHex": "0x00000000",
+        "brushModel": 0,
+        "physicsBrushModel": 0,
+        "destroyFxPointerHex": "0x00000000",
+        "destroySound": 0,
+        "destroyPiecesPointerHex": "0x00000000",
+        "physPresetPointerHex": "0xA0004265",
+        "physConstraints": [511, 511, 511, 511],
+        "health": 0,
+        "flagsHex": "0x00000200",
+        "contentsHex": "0x20000401",
+        "targetname": 10,
+        "target": 10
+      }
+    }
+  ],
+  "runtimeBlockRule": {
+    "runtimeVirtualIsZeroFilled": true,
+    "serializedSourceBytesConsumed": 0,
+    "evidence": "OpenAssetTools ZoneInputStream::LoadDataFromBlock handles BLOCK_TYPE_RUNTIME with memset(dst, 0, size) rather than m_stream.Load().",
+    "affectedClipMapFields": [
+      "dynEntPoseList[0]",
+      "dynEntPoseList[1]",
+      "dynEntClientList[0]",
+      "dynEntClientList[1]",
+      "dynEntServerList[0]",
+      "dynEntServerList[1]",
+      "dynEntCollList[0]",
+      "dynEntCollList[1]",
+      "dynEntCollList[2]",
+      "dynEntCollList[3]",
+      "ropes"
+    ]
+  },
+  "constraints": {
+    "count": 0,
+    "serializedSourceBytes": 0
+  },
+  "nextAssetProof": {
+    "xassetIndex": 630,
+    "xassetType": "FX",
+    "fixedStart": 92414145,
+    "fixedBytes": 76,
+    "namePointerHex": "0xFFFFFFFF",
+    "elemDefCountLooping": 0,
+    "elemDefCountOneShot": 0,
+    "elemDefCountEmission": 0,
+    "elemDefsPointerHex": "0x00000000",
+    "inlineNameStart": 92414221,
+    "inlineName": ",impacts/fx_small_impact_core",
+    "inlineNameEnd": 92414251
+  },
+  "conclusion": "Nuketown asset 629 CLIPMAP_PVS is now source-byte closed from its 332-byte fixed clipMap_t at 87,882,673 through the final serialized DynEntityDef at 92,414,145. Runtime DynEnt pose/client/server/collision arrays and ropes allocate/zero runtime block memory and consume no FastFile source bytes. Byte 92,414,145 is independently validated as the fixed start of top-level asset 630 FX."
+}
