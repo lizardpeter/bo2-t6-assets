@@ -1,0 +1,79 @@
+{
+  "format": "t6-xmodel-reusable-allocation-proof-v1",
+  "map": "mp_nuketown_2020",
+  "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+  "owner": {
+    "xassetIndex": 273,
+    "name": "dest_nt_nuked_female_02_d0",
+    "fixedStart": 26256479,
+    "numBones": 4,
+    "numRootBones": 1,
+    "numSurfs": 10,
+    "skeletonArrays": {
+      "boneNames": {"sourceStart":26256727,"sourceBytes":8,"sha256":"da110a2cae122a58239f8dc69468dd6ca3b3a6beb392e4b05d41aef67ebb62b1"},
+      "parentList": {"sourceStart":26256735,"sourceBytes":3,"sha256":"039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"},
+      "quats": {"sourceStart":26256738,"sourceBytes":24,"sha256":"bb77ab9fe6c807c39766500fc9c231aed3cb0594c46678257b595d59100de30b"},
+      "trans": {"sourceStart":26256762,"sourceBytes":48,"sha256":"cc31509e137dd32a8aaee824b458f5b0c2217931f2639df4ef45d1c131c5134e"},
+      "partClassification": {"sourceStart":26256810,"sourceBytes":4,"sha256":"df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"},
+      "baseMat": {"sourceStart":26256814,"sourceBytes":128,"sha256":"f1cccc91167fb9503b2e7807fc1e5a0bae75b1004aa30a98fef7c0ba0e1b5e51"}
+    }
+  },
+  "alias": {
+    "xassetIndex": 274,
+    "name": "dest_nt_nuked_female_03_d0",
+    "fixedStart": 26757920,
+    "numBones": 4,
+    "numRootBones": 1,
+    "numSurfs": 10,
+    "packedSkeletonPointers": {
+      "boneNames": {"rawHex":"0xA18ED00D","block":5,"offset":26136588},
+      "parentList": {"rawHex":"0xA18ED015","block":5,"offset":26136596},
+      "quats": {"rawHex":"0xA18ED019","block":5,"offset":26136600},
+      "trans": {"rawHex":"0xA18ED031","block":5,"offset":26136624},
+      "partClassification": {"rawHex":"0xA18ED061","block":5,"offset":26136672},
+      "baseMat": {"rawHex":"0xA18ED065","block":5,"offset":26136676}
+    }
+  },
+  "destinationReplay": {
+    "virtualBase": 26136588,
+    "rules": [
+      "boneNames: align2, 4*uint16 = 8 bytes",
+      "parentList: align1, 3*uint8 = 3 bytes",
+      "quats: align2, 3*XModelQuat(8) = 24 bytes",
+      "trans: align4, 12*float = 48 bytes",
+      "partClassification: align1, 4*uint8 = 4 bytes",
+      "baseMat: align4, 4*DObjAnimMat(32) = 128 bytes",
+      "XSurface fixed array: align16, 10*80 = 800 bytes",
+      "GfxPackedVertex arrays: align16, 32 bytes each",
+      "XRigidVertList arrays: align4, 12 bytes each",
+      "XSurfaceCollisionTree: align4, 40 bytes",
+      "XSurfaceCollisionNode: align16, 16 bytes",
+      "XSurfaceCollisionLeaf: align2, 2 bytes",
+      "XSurfaceTri16: destination start align16; element payload size 6 bytes"
+    ],
+    "skeletonPredictions": {
+      "boneNames":26136588,
+      "parentList":26136596,
+      "quats":26136600,
+      "trans":26136624,
+      "partClassification":26136672,
+      "baseMat":26136676,
+      "surfsFixed":26136816,
+      "surface0Verts":26137616
+    },
+    "surfacePointerMatches": [
+      {"surface":0,"verts0":{"predicted":26137616,"actual":26137616},"vertList":{"predicted":26251024,"actual":26251024},"triIndices":{"predicted":26268640,"actual":26268640}},
+      {"surface":1,"verts0":{"predicted":26302832,"actual":26302832},"vertList":{"predicted":26340176,"actual":26340176},"triIndices":{"predicted":26345872,"actual":26345872}},
+      {"surface":2,"verts0":{"predicted":26357360,"actual":26357360},"vertList":{"predicted":26379248,"actual":26379248},"triIndices":{"predicted":26382832,"actual":26382832}},
+      {"surface":3,"verts0":{"predicted":26389744,"actual":26389744},"vertList":{"predicted":26447792,"actual":26447792},"triIndices":{"predicted":26459568,"actual":26459568}},
+      {"surface":4,"verts0":{"predicted":26475440,"actual":26475440},"vertList":{"predicted":26496368,"actual":26496368},"triIndices":{"predicted":26500112,"actual":26500112}},
+      {"surface":5,"verts0":{"predicted":26505632,"actual":26505632},"vertList":{"predicted":26521296,"actual":26521296},"triIndices":{"predicted":26523392,"actual":26523392}},
+      {"surface":6,"verts0":{"predicted":26527744,"actual":26527744},"vertList":{"predicted":26570096,"actual":26570096},"triIndices":{"predicted":26575040,"actual":26575040}},
+      {"surface":7,"verts0":{"predicted":26584336,"actual":26584336},"vertList":{"predicted":26599008,"actual":26599008},"triIndices":{"predicted":26600448,"actual":26600448}},
+      {"surface":8,"verts0":{"predicted":26603616,"actual":26603616},"vertList":{"predicted":26613488,"actual":26613488},"triIndices":{"predicted":26615664,"actual":26615664}},
+      {"surface":9,"verts0":{"predicted":26618272,"actual":26618272},"vertList":{"predicted":26626176,"actual":26626176},"triIndices":{"predicted":26627184,"actual":26627184}}
+    ],
+    "allComparedPointersMatch": true
+  },
+  "conclusion": "XAsset 274's packed skeleton and nested XSurface pointers exactly target the destination VIRTUAL allocations created by XAsset 273. The match spans the complete reusable skeleton allocation sequence plus all ten surface nested allocations, uniquely proving XAsset 273 as the reusable owner. No model-name similarity or map-specific guessed source offset is required."
+}
