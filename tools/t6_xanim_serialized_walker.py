@@ -136,7 +136,7 @@ class XAnimWalker:
         if small not in (0, 1):
             raise WalkError(f"{label}: invalid smallTrans {small}")
         if size == 0:
-            # size:u16 + small:u8 + pad:u8 + frame0 vec3
+            # Retail-proven on zm_prison: size:u16 + small:u8 + pad:u8 + frame0 vec3 = 16 source bytes.
             self.take(16, label, size=0, smallTrans=bool(small), frameMode="constant")
             return {"size": 0, "smallTrans": bool(small), "frameMode": "constant"}
 
@@ -185,7 +185,7 @@ class XAnimWalker:
         self.need_at(a, 4, label)
         size = self.u16(a)
         if size == 0:
-            # size:u16 + pad:u16 + XQuat2 frame0 (2 * int16)
+            # Retail-proven on zm_prison: size:u16 + pad:u16 + XQuat2 frame0 = 8 source bytes.
             self.take(8, label, size=0, frameMode="constant")
             return {"size": 0, "frameMode": "constant"}
 
@@ -215,7 +215,8 @@ class XAnimWalker:
         self.need_at(a, 4, label)
         size = self.u16(a)
         if size == 0:
-            # size:u16 + pad:u16 + XQuat frame0 (4 * int16)
+            # Struct-derived only: no constant full-quat retail fixture found yet.
+            # size:u16 + pad:u16 + XQuat frame0 (4 * int16) = 12 source bytes.
             self.take(12, label, size=0, frameMode="constant")
             return {"size": 0, "frameMode": "constant"}
 
@@ -382,6 +383,9 @@ class XAnimWalker:
                 "indexWidthRule": "numframes < 256 => uint8 else uint16",
                 "nativeAlignmentAddsSerializedPadding": False,
                 "flexibleDynamicArraysExtendFromInlineMemberOffset": True,
+                "constantDeltaTrans16BytesRetailProven": True,
+                "constantDeltaQuat2EightBytesRetailProven": True,
+                "constantDeltaFullQuat12BytesRetailProven": False,
             },
         }
 
