@@ -1,0 +1,73 @@
+{
+  "format": "t6-clipmap-dynent-asset-resolution-v7-proof",
+  "normalizer": "tools/t6_clipmap_normalize_v7.py",
+  "normalizerSha256": "f3d3487a450f6c0393b966e8862a9344d6625f2b5424fd21c950d3ee92faaf90",
+  "normalizerGitBlob": "e243a732b9abb7091c32896518de5aad1ef49dba",
+  "maps": [
+    {
+      "map": "mp_nuketown_2020",
+      "dynEntDefCount": 387,
+      "liveXModelRefs": 131,
+      "destroyedXModelRefs": 20,
+      "uniqueXModelTargets": 27,
+      "maxXModelTargetAssetIndex": 449,
+      "requiredTopLevelXModelsThroughMaxTarget": 379,
+      "destroyFxRefs": 16,
+      "destroyFxUniqueAssets": 2,
+      "physPresetTopLevelRefs": 69,
+      "physPresetTopLevelUniqueAssets": 6,
+      "physPresetInlineRefs": 0,
+      "physPresetReusableNestedRefs": 50,
+      "physPresetReusableNestedUniqueAllocations": 3,
+      "deterministicV7Artifact": {
+        "bytes": 31669192,
+        "sha256": "10108823940cc56833217650d985e47c5ea70a87c339042f352b480718f90c95",
+        "secondGenerationMatches": true
+      }
+    },
+    {
+      "map": "mp_raid",
+      "dynEntDefCount": 580,
+      "liveXModelRefs": 324,
+      "destroyedXModelRefs": 126,
+      "uniqueXModelTargets": 60,
+      "maxXModelTargetAssetIndex": 687,
+      "requiredTopLevelXModelsThroughMaxTarget": 422,
+      "destroyFxRefs": 99,
+      "destroyFxUniqueAssets": 11,
+      "physPresetTopLevelRefs": 22,
+      "physPresetTopLevelUniqueAssets": 2,
+      "physPresetInlineRefs": 0,
+      "physPresetReusableNestedRefs": 282,
+      "physPresetReusableNestedUniqueAllocations": 12
+    },
+    {
+      "map": "mp_hijacked",
+      "dynEntDefCount": 559,
+      "liveXModelRefs": 303,
+      "destroyedXModelRefs": 228,
+      "uniqueXModelTargets": 57,
+      "maxXModelTargetAssetIndex": 723,
+      "requiredTopLevelXModelsThroughMaxTarget": 452,
+      "destroyFxRefs": 217,
+      "destroyFxUniqueAssets": 14,
+      "physPresetTopLevelRefs": 53,
+      "physPresetTopLevelUniqueAssets": 3,
+      "physPresetInlineRefs": 2,
+      "physPresetInlinePointerKinds": {"following": 2},
+      "physPresetReusableNestedRefs": 132,
+      "physPresetReusableNestedUniqueAllocations": 10
+    }
+  ],
+  "aggregate": {
+    "dynEntDefCount": 1526,
+    "liveXModelRefs": 758,
+    "destroyedXModelRefs": 374,
+    "uniqueXModelTargetsPerMapSum": 144,
+    "destroyFxRefs": 332,
+    "physPresetTopLevelRefs": 144,
+    "physPresetInlineRefs": 2,
+    "physPresetReusableNestedRefs": 464
+  },
+  "conclusion": "Live/destroyed XModel and destroy-FX pointers resolve only when they exactly address a type-correct top-level XAsset header slot. DynEnt PhysPreset provenance requires three distinct classes in retail T6: top-level XAsset references, inline serialized PhysPreset objects, and packed reusable nested PhysPreset allocations."
+}
