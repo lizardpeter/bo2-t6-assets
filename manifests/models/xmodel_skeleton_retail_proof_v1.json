@@ -1,0 +1,57 @@
+{
+  "format": "t6-xmodel-skeleton-retail-proof-v1",
+  "normalizer": "tools/t6_xmodel_skeleton_normalize_v1.py",
+  "normalizerSha256": "024a9a45f6e715a906e5e44a8894d45036b3ed5aad3bf771858f5c3758b3dd40",
+  "normalizerGitBlob": "ce9c797ffabd4d09eaa1d64dfb6367cd8e161b99",
+  "sourceExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+  "fixtures": [
+    {
+      "xassetIndex": 273,
+      "name": "dest_nt_nuked_female_02_d0",
+      "fixedStart": 26256479,
+      "serializedEnd": 26757920,
+      "serializedBytes": 501441,
+      "serializedSha256": "3a3c14d26acdbb8181e0a77467a4ec0a49c8ac0b0970f90ec548c9a433ddfb6b",
+      "outputBytes": 3077,
+      "outputSha256": "a932085e9a53976210f3c4b00c8ea75e97a08e343425819b5f95c96092daa3e7",
+      "numBones": 4,
+      "numRootBones": 1,
+      "nonRootBones": 3,
+      "allBoneNamesResolved": true,
+      "hierarchyValid": true,
+      "serializedTranslationFloatCount": 12,
+      "semanticTranslationFloatCount": 9,
+      "allocationTailFloatCount": 3,
+      "allocationTailAllZero": true,
+      "firstBone": "tag_base_d0_body",
+      "lastBone": "tag_base_d3_arm_right"
+    },
+    {
+      "xassetIndex": 447,
+      "name": "german_shepherd",
+      "fixedStart": 35578229,
+      "serializedEnd": 35849082,
+      "serializedBytes": 270853,
+      "serializedSha256": "2f71264050ee83d03f8abbde979596772727d12c53a8e2ae4451f6da43989d1a",
+      "outputBytes": 34601,
+      "outputSha256": "c7b37652d5eae390215b7a619c66f3578acb1e3cc5b880309271df09ca5adc8f",
+      "numBones": 56,
+      "numRootBones": 1,
+      "nonRootBones": 55,
+      "allBoneNamesResolved": true,
+      "hierarchyValid": true,
+      "serializedTranslationFloatCount": 220,
+      "semanticTranslationFloatCount": 165,
+      "allocationTailFloatCount": 55,
+      "allocationTailAllZero": true,
+      "firstBone": "tag_origin",
+      "lastBone": "j_palm_end_ri"
+    }
+  ],
+  "rules": {
+    "parent": "parentIndex = boneIndex - parentList[boneIndex - numRootBones]",
+    "quaternion": "int16 / 32767.0",
+    "translation": "T6 serializes 4 floats per non-root allocation but semantic local translations consume the first 3*N floats; the remaining N-float allocation tail is preserved verbatim"
+  },
+  "conclusion": "Both a small four-bone destructible mannequin and a 56-bone animated character resolve every ScriptString bone name and form valid native parent hierarchies. Retail bytes independently confirm the T6 4-float allocation / 3-float semantic translation quirk."
+}
