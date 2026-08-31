@@ -62,10 +62,19 @@ class XModelWalker(AssetDispatchWalker):
             raise WalkError(f'non-finite vec3 at {base}')
         return vals
 
+    def _collision_scale3(self, base: int) -> list[float]:
+        vals = list(struct.unpack_from('<3f', self.data, base))
+        # Retail T6 writes +INF for a degenerate quantization axis in some
+        # XSurfaceCollisionTree records (zero extent => reciprocal scale INF).
+        # NaN and -INF remain invalid.
+        if not all(math.isfinite(v) or (math.isinf(v) and v > 0) for v in vals):
+            raise WalkError(f'invalid collision-tree scale vec3 at {base}')
+        return vals
+
     def walk_collision_tree(self, label: str) -> dict:
         base, _ = self.take(XSURFACE_COLLISION_TREE_SIZE, f'{label}.fixed')
         trans = self._finite3(base)
-        scale = self._finite3(base + 12)
+        scale = self._collision_scale3(base + 12)
         node_count = self.u32at(base, 24)
         nodes_ptr = self.u32at(base, 28)
         leaf_count = self.u32at(base, 32)
