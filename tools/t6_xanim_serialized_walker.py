@@ -136,11 +136,14 @@ class XAnimWalker:
         if small not in (0, 1):
             raise WalkError(f"{label}: invalid smallTrans {small}")
         if size == 0:
+            # size:u16 + small:u8 + pad:u8 + frame0 vec3
             self.take(16, label, size=0, smallTrans=bool(small), frameMode="constant")
             return {"size": 0, "smallTrans": bool(small), "frameMode": "constant"}
 
         index_width = 1 if numframes < 256 else 2
         count = size + 1
+        # Source prefix ends immediately before flexible indices:
+        # outer(size,small,pad)=4 + frames(mins,sizevec,framesPtr)=28.
         prefix = 32
         self.need_at(a, prefix, label)
         frames_ptr = self.u32(a + 28)
@@ -152,6 +155,9 @@ class XAnimWalker:
                 "field": label,
                 "pointer": ptr_kind(frames_ptr),
             })
+            # Packed frames mean this source span contains only the native active
+            # header variant. This branch needs a retail oracle before claiming a
+            # source stride, so fail closed.
             raise WalkError(f"{label}: packed dynamic frames not retail-closed")
 
         idx_bytes = count * index_width
@@ -179,12 +185,13 @@ class XAnimWalker:
         self.need_at(a, 4, label)
         size = self.u16(a)
         if size == 0:
+            # size:u16 + pad:u16 + XQuat2 frame0 (2 * int16)
             self.take(8, label, size=0, frameMode="constant")
             return {"size": 0, "frameMode": "constant"}
 
         index_width = 1 if numframes < 256 else 2
         count = size + 1
-        prefix = 8
+        prefix = 8  # size/pad + frames pointer
         frames_ptr = self.u32(a + 4)
         if not is_inline(frames_ptr):
             raise WalkError(f"{label}: dynamic frames pointer is not inline: {ptr_kind(frames_ptr)}")
@@ -208,6 +215,7 @@ class XAnimWalker:
         self.need_at(a, 4, label)
         size = self.u16(a)
         if size == 0:
+            # size:u16 + pad:u16 + XQuat frame0 (4 * int16)
             self.take(12, label, size=0, frameMode="constant")
             return {"size": 0, "frameMode": "constant"}
 
@@ -275,6 +283,7 @@ class XAnimWalker:
         elif name_ptr:
             self.dependencies.append({"field": "XAnimParts.name", "pointer": ptr_kind(name_ptr)})
 
+        # The T6 contract explicitly counts names by PART_TYPE_ALL only.
         names_count = bone_count[9]
         self.walk_pointer_array(names_ptr, names_count, 2, "XAnimParts.names")
 
@@ -313,6 +322,7 @@ class XAnimWalker:
         elif delta_ptr:
             self.dependencies.append({"field": "XAnimParts.deltaPart", "pointer": ptr_kind(delta_ptr)})
 
+        # Reordered top-level scalar arrays.
         self.walk_pointer_array(data_byte_ptr, data_byte_count, 1, "XAnimParts.dataByte")
         self.walk_pointer_array(data_short_ptr, data_short_count, 2, "XAnimParts.dataShort")
         self.walk_pointer_array(data_int_ptr, data_int_count, 4, "XAnimParts.dataInt")
