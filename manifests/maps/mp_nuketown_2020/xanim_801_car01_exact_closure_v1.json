@@ -1,0 +1,59 @@
+{
+  "format": "t6-xanimparts-retail-byte-closure-v1",
+  "map": "mp_nuketown_2020",
+  "xassetIndex": 801,
+  "xassetType": "XANIMPARTS",
+  "name": "fxanim_mp_nuked2025_car01_anim",
+  "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+  "serializedSpan": {
+    "start": 92960192,
+    "end": 92960792,
+    "bytes": 600,
+    "sha256": "0e2f7effc94121207e1c2ad60db35ff69424e19c364d689914c953a1b389298e"
+  },
+  "header": {
+    "fixedBytes": 104,
+    "numframes": 34,
+    "framerate": 30.0,
+    "frequency": 0.8823529481887817,
+    "notifyCount": 1,
+    "boneCount": [0,0,0,0,0,0,0,0,0,0],
+    "dataByteCount": 0,
+    "dataShortCount": 0,
+    "dataIntCount": 0,
+    "randomDataShortCount": 0,
+    "randomDataByteCount": 0,
+    "randomDataIntCount": 0,
+    "indexCount": 0,
+    "bLoop": false,
+    "bDelta": false,
+    "bDelta3D": true,
+    "bLeftHandGripIK": false
+  },
+  "sections": [
+    {"name":"XAnimParts.fixed","start":92960192,"end":92960296,"bytes":104,"sha256":"5b6c3d1a26dc5e9c4f389e063d5c762ffef7a8ac47f2fe3c85d256d04e428633"},
+    {"name":"name","start":92960296,"end":92960327,"bytes":31,"text":"fxanim_mp_nuked2025_car01_anim","sha256":"f7664a9e4ba2e7be27c30e537bf4a1d594299321860bc02569aed513d5a19eb9"},
+    {"name":"notify","start":92960327,"end":92960335,"bytes":8,"count":1,"recordBytes":8,"decoded":[{"scriptString":542,"time":1.0}],"sha256":"fe1159c72f3007d2ee4bce90a55fc0ed61dedf21a30489233bc9c3109dcb3896"},
+    {"name":"deltaPart.fixed","start":92960335,"end":92960347,"bytes":12,"pointers":["0xFFFFFFFF","0x00000000","0xFFFFFFFF"],"sha256":"9d4b936a67c21ab14da09aa480239b43ea122c9c933d876013ee3012e464c16b"},
+    {"name":"delta.trans","start":92960347,"end":92960568,"bytes":221,"size":26,"smallTrans":false,"indexWidthBytes":1,"indexCount":27,"indicesStart":92960379,"framesStart":92960406,"frameCount":27,"frameRecordBytes":6,"sha256":"91dcdb00924a47ccb14d556f8004ae4fe88fec38119cce88349af0719262b98c"},
+    {"name":"delta.quat","start":92960568,"end":92960792,"bytes":224,"size":23,"indexWidthBytes":1,"indexCount":24,"indicesStart":92960576,"framesStart":92960600,"frameCount":24,"frameRecordBytes":8,"sha256":"f05fcd8905d7fe5f516e4f4b44486a96c9462142704d84cd7ae87477d7569880"}
+  ],
+  "sourceLayoutRulesProven": {
+    "xanimPartsFixedBytes": 104,
+    "notifyRecordBytes": 8,
+    "deltaPartFixedBytes": 12,
+    "deltaTransDynamicPrefixBytesBeforeIndices": 32,
+    "deltaQuatDynamicPrefixBytesBeforeIndices": 8,
+    "dynamicIndexWidthRule": "numframes < 256 => uint8; otherwise uint16",
+    "deltaTransFrameBytesWhenSmallTransFalse": 6,
+    "deltaFullQuatFrameBytes": 8,
+    "flexibleArrayRule": "dynamic index arrays begin at the native inline-array member offset and extend in-place; do not add nominal native struct tail/padding before them"
+  },
+  "nextAssetProof": {
+    "xassetIndex": 802,
+    "xassetType": "XANIMPARTS",
+    "fixedStart": 92960792,
+    "nameAtFixedPlus104": "fxanim_mp_nuked2025_car02_anim"
+  },
+  "conclusion": "Asset 801 is byte-closed exactly to the independently validated start of asset 802."
+}
