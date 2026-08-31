@@ -1,0 +1,85 @@
+{
+  "format": "t6-clipmap-normalized-plane-proof-v2",
+  "map": "mp_nuketown_2020",
+  "assetIndex": 629,
+  "input": {
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+    "clipMapFixedStart": 87882673,
+    "clipMapSerializedEnd": 92414145,
+    "clipMapSerializedSha256": "5f275dbae3110a5f402405be9a3f69baa674f816832e8f736b0167dadd5270f0",
+    "gfxWorldAssetIndex": 624,
+    "gfxWorldFixedStart": 63150420
+  },
+  "planePool": {
+    "pointer": {
+      "raw": 2747280741,
+      "rawHex": "0xA3C02D65",
+      "kind": "packed",
+      "block": 5,
+      "blockName": "VIRTUAL",
+      "offset": 62926180
+    },
+    "count": 15197,
+    "logicalRange": {
+      "start": 62926180,
+      "end": 63230120,
+      "bytes": 303940
+    },
+    "owner": {
+      "assetType": "GfxWorld",
+      "fixedStart": 63150420,
+      "fixedSize": 1028,
+      "planeCount": 15197,
+      "nodeCount": 7528,
+      "dpvsPlanesPlanesPointerRaw": 4294967295,
+      "dpvsPlanesNodesPointerRaw": 4294967295,
+      "ownershipProof": "GfxWorld dpvsPlanes.planes is FOLLOWING with same planeCount"
+    },
+    "serializedSource": {
+      "start": 63157443,
+      "end": 63461383,
+      "bytes": 303940,
+      "sha256": "3eab0e54c1f4a2118e5c81f2e41a00df85c49680f1abdd9cd46800539d01824c",
+      "recordSize": 20,
+      "allRecordsStructurallyValid": true
+    },
+    "referenceProof": {
+      "brushSides": {
+        "count": 38928,
+        "allPackedVirtualInPool": true,
+        "uniquePlaneIndices": 14964
+      },
+      "bspNodes": {
+        "count": 2753,
+        "allPackedVirtualInPool": true,
+        "uniquePlaneIndices": 723
+      },
+      "uniquePlaneIndicesAcrossClipMapRefs": 15168,
+      "allReferencesResolveAsBasePlusIndexTimes20": true
+    },
+    "status": "resolved_gfxworld_owned_reusable_virtual_pool"
+  },
+  "checks": {
+    "gfxWorldPlaneCountEqualsClipMap": true,
+    "gfxWorldOwnsFollowingPlanes": true,
+    "gfxWorldOwnsFollowingNodes": true,
+    "serializedPlaneBytesMatchCount": true,
+    "serializedPlaneRecordsStructurallyValid": true,
+    "allBrushSidePlaneRefsResolve": true,
+    "allBspNodePlaneRefsResolve": true,
+    "allRefsAreBasePlusIndexTimes20": true,
+    "planePoolRemovedFromUnresolvedDependencies": true,
+    "onlyLeafbrushPoolRemainsUnresolved": true
+  },
+  "normalizedArtifact": {
+    "bytes": 28329628,
+    "sha256": "c9d24d9457ddcd19a7f3812a85eba118b1c5c5f7a7f5062b6988f02152947849",
+    "deterministicSecondPassSha256": "c9d24d9457ddcd19a7f3812a85eba118b1c5c5f7a7f5062b6988f02152947849",
+    "notCommittedBecauseGeneratedLargeArtifact": true
+  },
+  "normalizer": {
+    "path": "tools/t6_clipmap_normalize_v2.py",
+    "sha256": "a94f03c66848c55d36c7f0e086247969b49d31c3985c045cb7ba344f129f8056"
+  },
+  "allChecksPass": true
+}
