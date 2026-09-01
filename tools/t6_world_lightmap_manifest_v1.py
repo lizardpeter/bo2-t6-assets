@@ -5,12 +5,15 @@ Source-closed structure:
 - GfxWorld.lightmapCount + GfxLightmapArray[lightmapCount]
 - each GfxLightmapArray contains GfxImage* primary and GfxImage* secondary
 - each GfxSurface carries lightmapIndex
+- T6 code-texture source 0x4 is LIGHTMAP_PRIMARY / lightmapSamplerPrimary
+- T6 code-texture source 0x5 is LIGHTMAP_SECONDARY / lightmapSamplerSecondary
 - inherited renderer uses lightmapIndex == 31 as the no-lightmap sentinel
 - world lightmap UV is already decoded from vd0 and exported at
   TEXCOORD_<native uvCount> for each vertex group.
 
-This tool does not infer how primary/secondary are combined in the shader. It
-only validates exact indexing and produces a portable dependency manifest.
+This tool does not infer the channel encoding or combine equation for the two
+lightmaps. It validates exact indexing and preserves the T6-native code-sampler
+identity needed by later shader reconstruction.
 """
 from __future__ import annotations
 
@@ -25,6 +28,10 @@ class LightmapManifestError(RuntimeError):
 
 
 NO_LIGHTMAP_INDEX = 31
+LIGHTMAP_PRIMARY_CODE_TEXTURE_SOURCE = 0x4
+LIGHTMAP_SECONDARY_CODE_TEXTURE_SOURCE = 0x5
+LIGHTMAP_PRIMARY_SAMPLER_ACCESSOR = "lightmapSamplerPrimary"
+LIGHTMAP_SECONDARY_SAMPLER_ACCESSOR = "lightmapSamplerSecondary"
 
 
 def _texture_name(image_asset: str, extension: str) -> str:
@@ -88,8 +95,12 @@ def build_manifest(
                 "index": index,
                 "primaryImage": primary,
                 "primarySourceTexture": _texture_name(primary, source_texture_extension),
+                "primaryCodeTextureSource": LIGHTMAP_PRIMARY_CODE_TEXTURE_SOURCE,
+                "primarySamplerAccessor": LIGHTMAP_PRIMARY_SAMPLER_ACCESSOR,
                 "secondaryImage": secondary,
                 "secondarySourceTexture": _texture_name(secondary, source_texture_extension),
+                "secondaryCodeTextureSource": LIGHTMAP_SECONDARY_CODE_TEXTURE_SOURCE,
+                "secondarySamplerAccessor": LIGHTMAP_SECONDARY_SAMPLER_ACCESSOR,
                 "source": entry.get("source"),
             }
         )
@@ -143,7 +154,11 @@ def build_manifest(
                 "hasLightmap": True,
                 "lightmapTexCoord": uv_count,
                 "primarySourceTexture": binding["primarySourceTexture"],
+                "primaryCodeTextureSource": binding["primaryCodeTextureSource"],
+                "primarySamplerAccessor": binding["primarySamplerAccessor"],
                 "secondarySourceTexture": binding["secondarySourceTexture"],
+                "secondaryCodeTextureSource": binding["secondaryCodeTextureSource"],
+                "secondarySamplerAccessor": binding["secondarySamplerAccessor"],
             }
         )
 
@@ -159,13 +174,31 @@ def build_manifest(
             "lightmapCatalogFormat": lightmap_catalog.get("format"),
             "sourceTextureExtension": source_texture_extension,
         },
+        "t6CodeSamplerContract": {
+            "primary": {
+                "materialTextureSource": LIGHTMAP_PRIMARY_CODE_TEXTURE_SOURCE,
+                "materialTextureSourceHex": "0x4",
+                "enum": "TEXTURE_SRC_CODE_LIGHTMAP_PRIMARY",
+                "accessor": LIGHTMAP_PRIMARY_SAMPLER_ACCESSOR,
+            },
+            "secondary": {
+                "materialTextureSource": LIGHTMAP_SECONDARY_CODE_TEXTURE_SOURCE,
+                "materialTextureSourceHex": "0x5",
+                "enum": "TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY",
+                "accessor": LIGHTMAP_SECONDARY_SAMPLER_ACCESSOR,
+            },
+        },
         "policy": {
             "surfaceJoin": "exact GfxSurface.lightmapIndex",
             "noLightmapSentinel": NO_LIGHTMAP_INDEX,
             "imageJoin": "exact GfxLightmapArray primary/secondary GfxImage identities",
             "lightmapUv": "TEXCOORD_<group native uvCount>",
+            "codeSamplerIdentity": (
+                "T6-native MaterialTextureSource/accessor identity preserved exactly"
+            ),
             "shading": (
-                "primary/secondary preserved as separate dependencies; shader combination not guessed"
+                "primary/secondary preserved as separate code-sampler dependencies; "
+                "channel encoding and shader combination not guessed"
             ),
         },
         "stats": {
