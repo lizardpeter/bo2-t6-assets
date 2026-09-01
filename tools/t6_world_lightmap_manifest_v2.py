@@ -4,6 +4,9 @@
 v1 source-closes surface/lightmap indexing and T6 code-sampler identities. v2
 keeps those semantics and distinguishes the exact T6 GfxImage identity from the
 filename emitted by OAT's ImageDumper (`*` is replaced by `_`).
+
+Because that transform is not injective, distinct T6 lightmap image identities
+that collapse to the same OAT disk filename fail closed.
 """
 from __future__ import annotations
 
@@ -32,6 +35,27 @@ def _mapped(asset_name: str, extension: str) -> tuple[str, str]:
         raise LightmapManifestError(str(exc)) from exc
 
 
+def _validate_no_filename_collisions(lightmaps: list[dict]) -> int:
+    by_source: dict[str, set[str]] = {}
+    for lightmap in lightmaps:
+        for prefix in ("primary", "secondary"):
+            source = str(lightmap.get(f"{prefix}SourceTexture") or "")
+            asset = str(lightmap.get(f"{prefix}OatImageAsset") or "")
+            by_source.setdefault(source, set()).add(asset)
+    collisions = {
+        source: sorted(assets)
+        for source, assets in by_source.items()
+        if len(assets) > 1
+    }
+    if collisions:
+        source, assets = sorted(collisions.items())[0]
+        raise LightmapManifestError(
+            "distinct T6 lightmap GfxImage identities collide after OAT filename mapping: "
+            f"{assets!r} -> {source!r}"
+        )
+    return len(by_source)
+
+
 def build_manifest(
     world: dict,
     lightmap_catalog: dict,
@@ -46,7 +70,8 @@ def build_manifest(
 
     remapped = 0
     by_index: dict[int, dict] = {}
-    for lightmap in doc.get("lightmaps", []):
+    lightmaps = doc.get("lightmaps", [])
+    for lightmap in lightmaps:
         index = int(lightmap["index"])
         primary_asset = str(lightmap.get("primaryImage") or "")
         secondary_asset = str(lightmap.get("secondaryImage") or "")
@@ -65,6 +90,8 @@ def build_manifest(
         lightmap["secondaryOatImagePath"] = secondary_path
         lightmap["secondaryOatImageAsset"] = secondary_asset
         by_index[index] = lightmap
+
+    unique_disk_source_count = _validate_no_filename_collisions(lightmaps)
 
     for binding in doc.get("surfaceBindings", []):
         if not binding.get("hasLightmap"):
@@ -90,9 +117,13 @@ def build_manifest(
     policy["sourceTextureMapping"] = (
         "exact OAT ImageDumper disk basename; exact T6 GfxImage identity retained separately"
     )
+    policy["oatImageFilenameCollision"] = (
+        "fail closed if distinct T6 GfxImage identities map to one OAT disk filename"
+    )
     stats = doc.setdefault("stats", {})
-    stats["oatImageDependencyCount"] = 2 * len(doc.get("lightmaps", []))
+    stats["oatImageDependencyCount"] = 2 * len(lightmaps)
     stats["oatImageFilenameChangedDependencyCount"] = remapped
+    stats["oatImageUniqueDiskSourceCount"] = unique_disk_source_count
     return doc
 
 
