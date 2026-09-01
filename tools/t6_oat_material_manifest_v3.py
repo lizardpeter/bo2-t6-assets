@@ -7,6 +7,9 @@ ImageDumper rule at the pinned upstream revision:
 
     GfxImage asset name '*' -> '_' for the output filename
 
+Because that transform is not injective, v3 also fails closed if two distinct
+T6 GfxImage identities collapse to the same OAT disk filename.
+
 The manifest schema intentionally remains ``t6-material-texture-manifest-v1``
 so the already-validated DDS/portable-GLB consumers remain compatible. Tool
 revision and filename policy are recorded under source/policy instead.
@@ -48,6 +51,29 @@ def _update_dependency(dependency: dict, extension: str) -> bool:
     return source_texture != previous
 
 
+def _validate_no_filename_collisions(materials: list[dict]) -> int:
+    by_source: dict[str, set[str]] = {}
+    for material in materials:
+        for layer in material.get("layers", []):
+            for dependency in layer.get("textures", []):
+                source_texture = str(dependency.get("sourceTexture") or "")
+                image_asset = str(dependency.get("imageAsset") or "")
+                by_source.setdefault(source_texture, set()).add(image_asset)
+
+    collisions = {
+        source: sorted(assets)
+        for source, assets in by_source.items()
+        if len(assets) > 1
+    }
+    if collisions:
+        source, assets = sorted(collisions.items())[0]
+        raise OatMaterialManifestError(
+            "distinct T6 GfxImage identities collide after OAT filename mapping: "
+            f"{assets!r} -> {source!r}"
+        )
+    return len(by_source)
+
+
 def build_manifest(
     *,
     material_root: Path,
@@ -64,7 +90,8 @@ def build_manifest(
 
     remapped = 0
     dependency_count = 0
-    for material in doc.get("materials", []):
+    materials = doc.get("materials", [])
+    for material in materials:
         for layer in material.get("layers", []):
             for dependency in layer.get("textures", []):
                 dependency_count += 1
@@ -86,6 +113,8 @@ def build_manifest(
             if isinstance(texture, dict):
                 _update_dependency(texture, source_texture_extension)
 
+    unique_disk_source_count = _validate_no_filename_collisions(materials)
+
     source = doc.setdefault("source", {})
     source["producer"] = "t6_oat_material_manifest_v3.py"
     source["oatImageFilenameReference"] = {
@@ -101,9 +130,13 @@ def build_manifest(
     policy["oatImagePathMapping"] = (
         "images/<GfxImage.name with '*' replaced by '_'><configured extension>"
     )
+    policy["oatImageFilenameCollision"] = (
+        "fail closed if distinct T6 GfxImage identities map to one OAT disk filename"
+    )
     stats = doc.setdefault("stats", {})
     stats["oatImageMappedDependencyCount"] = dependency_count
     stats["oatImageFilenameChangedDependencyCount"] = remapped
+    stats["oatImageUniqueDiskSourceCount"] = unique_disk_source_count
     return doc
 
 
