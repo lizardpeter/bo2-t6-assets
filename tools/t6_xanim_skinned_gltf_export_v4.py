@@ -127,26 +127,45 @@ def validate_skin_rows(mesh_doc: dict, skeleton_doc: dict, lod: int = 0) -> dict
                 "v4 fails closed instead of inventing a skin binding"
             )
 
+        # Native T6 bucket membership is authoritative. A stored influence may
+        # legitimately quantize to zero, so do not infer bucket cardinality by
+        # counting positive glTF weights.
         expected_hist = [rigid + blend_counts[0], blend_counts[1], blend_counts[2], blend_counts[3]]
+        expected_influences = (
+            [1] * rigid
+            + [1] * blend_counts[0]
+            + [2] * blend_counts[1]
+            + [3] * blend_counts[2]
+            + [4] * blend_counts[3]
+        )
+        if len(expected_influences) != len(vertices):
+            raise ExportError(
+                f"surf{surface.get('index')}: serializer influence rows "
+                f"{len(expected_influences)} != vertices {len(vertices)}"
+            )
+
         observed_hist = [0, 0, 0, 0]
-        for vi, (jrow, wrow) in enumerate(zip(joints, weights)):
+        for vi, (jrow, wrow, expected_n) in enumerate(zip(joints, weights, expected_influences)):
             if len(jrow) != 4 or len(wrow) != 4:
                 raise ExportError(f"surf{surface.get('index')} vertex {vi}: JOINTS/WEIGHTS must be VEC4")
-            positives = 0
             total = 0.0
-            for joint, weight in zip(jrow, wrow):
+            for slot, (joint, weight) in enumerate(zip(jrow, wrow)):
                 joint = int(joint)
                 weight = float(weight)
                 if not math.isfinite(weight):
                     raise ExportError(f"surf{surface.get('index')} vertex {vi}: nonfinite weight")
                 if weight < -1e-6:
                     raise ExportError(f"surf{surface.get('index')} vertex {vi}: negative weight {weight}")
-                if weight > 1e-8:
+                if slot < expected_n:
                     if joint < 0 or joint >= bone_count:
                         raise ExportError(
                             f"surf{surface.get('index')} vertex {vi}: joint {joint} outside {bone_count}"
                         )
-                    positives += 1
+                elif abs(weight) > 1e-8:
+                    raise ExportError(
+                        f"surf{surface.get('index')} vertex {vi}: nonzero padded weight slot {slot}: {weight}"
+                    )
+                if weight > 1e-8:
                     min_positive_weight = min(min_positive_weight, weight)
                     max_positive_weight = max(max_positive_weight, weight)
                 total += weight
@@ -156,16 +175,12 @@ def validate_skin_rows(mesh_doc: dict, skeleton_doc: dict, lod: int = 0) -> dict
                 raise ExportError(
                     f"surf{surface.get('index')} vertex {vi}: nonunit skin weights {wrow} sum={total}"
                 )
-            if positives < 1 or positives > 4:
-                raise ExportError(
-                    f"surf{surface.get('index')} vertex {vi}: invalid positive influence count {positives}"
-                )
-            observed_hist[positives - 1] += 1
+            observed_hist[expected_n - 1] += 1
 
         if observed_hist != expected_hist:
             raise ExportError(
-                f"surf{surface.get('index')}: influence histogram {observed_hist} "
-                f"!= serializer census {expected_hist}"
+                f"surf{surface.get('index')}: serializer histogram {observed_hist} "
+                f"!= expected {expected_hist}"
             )
 
         totals["vertices"] += len(vertices)
