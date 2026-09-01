@@ -1,0 +1,99 @@
+{
+  "format": "t6-display-glass-rigid-render-proof-v1",
+  "map": "mp_nuketown_2020",
+  "decoder": {
+    "path": "tools/t6_xmodel_rigid_render_normalize_v1.py",
+    "sha256": "aaa229f6390a8472e8c7922d68fd7fe00b0206c383aa7b1035d5342a7119c66a",
+    "gitBlob": "70e5acbd3b35ad5c4a66317cd314b0484af7330a"
+  },
+  "expandedSource": {
+    "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "xmodel": {
+    "name": "fxanim_mp_nuked2025_display_glass_mod",
+    "fixedStart": 45869989,
+    "numBones": 34,
+    "numRootBones": 1,
+    "numSurfs": 3,
+    "numLods": 1,
+    "collLod": -1,
+    "lodRampType": 0
+  },
+  "renderPrefix": {
+    "surfaceFixedArrayStart": 45872290,
+    "materialHandleArrayStart": 45920236,
+    "end": 45920248,
+    "bytes": 50259,
+    "sha256": "ac14f2d5bfccfe40e65471cbdbcdeafb6483ae98ab2bc3cca7b1128585b04449"
+  },
+  "normalizedFixture": {
+    "generatedBytes": 17762177,
+    "sha256": "f333169ec4adac57b416667e7aeff56199d54333ff35c37be3064a6c670b2a35",
+    "committed": false,
+    "reason": "large generated fixture omitted; decoder plus compact proof reproduce it"
+  },
+  "surfaces": [
+    {
+      "index": 0,
+      "vertices": 172,
+      "triangles": 106,
+      "rigidVertLists": 33,
+      "uniqueJoints": 33,
+      "jointRange": [1, 33],
+      "fixedStart": 45872290,
+      "vertexStart": 45872530,
+      "rigidListFixedStart": 45878034,
+      "triangleStart": 45880412,
+      "serializedPayloadEnd": 45881048
+    },
+    {
+      "index": 1,
+      "vertices": 116,
+      "triangles": 60,
+      "rigidVertLists": 23,
+      "uniqueJoints": 23,
+      "jointRange": [1, 32],
+      "fixedStart": 45872370,
+      "vertexStart": 45881048,
+      "rigidListFixedStart": 45884760,
+      "triangleStart": 45886384,
+      "serializedPayloadEnd": 45886744
+    },
+    {
+      "index": 2,
+      "vertices": 890,
+      "triangles": 390,
+      "rigidVertLists": 33,
+      "uniqueJoints": 33,
+      "jointRange": [1, 33],
+      "fixedStart": 45872450,
+      "vertexStart": 45886744,
+      "rigidListFixedStart": 45915224,
+      "triangleStart": 45917896,
+      "serializedPayloadEnd": 45920236
+    }
+  ],
+  "aggregate": {
+    "vertices": 1178,
+    "triangles": 556,
+    "rigidVertLists": 89,
+    "animatedSkeletonJointsUsed": 33,
+    "jointRange": [1, 33],
+    "allVerticesJointAssigned": true,
+    "allTriangleIndicesInBounds": true,
+    "allSurfacesRigid": true,
+    "binormalSignsObserved": [-1.0, 1.0],
+    "maxDecodedNormalNormError": 2.220446049250313e-16,
+    "maxDecodedTangentNormError": 2.220446049250313e-16,
+    "uvRange": {
+      "min": [-0.625, 0.0],
+      "max": [0.75, 1.3125]
+    }
+  },
+  "sourceGrounding": {
+    "vertexPacking": "T6 Common::Vec2UnpackTexCoords -> UV half-floats; Common::Vec3UnpackUnitVec -> Vec3UnpackUnitVecThirdBased; Common::Vec4UnpackGfxColor -> RGBA8/255",
+    "rigidBoneMapping": "OpenAssetTools T6 XModel loader writes XRigidVertList::boneOffset = boneIndex * sizeof(DObjSkelMat); T6 DObjSkelMat is vec4 axis[3] + vec4 origin = 64 bytes",
+    "rigidVertexRanges": "OpenAssetTools creates rigid lists by advancing a contiguous currentVertexTail for each bone",
+    "scope": "This proof covers owned rigid XSurfaces only. Blended/skinned XSurfaces are intentionally rejected rather than approximated."
+  }
+}
