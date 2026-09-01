@@ -29,7 +29,7 @@
       "id": "world-core-streams",
       "title": "GfxWorld primary geometry/index stream",
       "status": "closed",
-      "evidence": ["manifests/world/T6_WORLD_VERTEX_FORMAT_CENSUS_V1.json", "Nuketown direct byte proof", "manifests/world/T6_NUKETOWN_VD1_RETAIL_EXTENT_PROOF_V1.json"],
+      "evidence": ["manifests/world/T6_WORLD_VERTEX_FORMAT_CENSUS_V1.json", "Nuketown direct byte proof", "manifests/maps/mp_nuketown_2020/vd1_raw_extent_proof_v1.json"],
       "closureRequirement": "36-byte vd0 layout, index reconstruction, surface/group allocation, coordinate conversion and exact range validation are retail-proven."
     },
     {
@@ -133,7 +133,7 @@
       "id": "lightmap-structure",
       "title": "Lightmap ownership, nullable roles, UV binding and lossless payload archival",
       "status": "closed",
-      "evidence": ["manifests/world/T6_NUKETOWN_LIGHTMAP_NULL_PRIMARY_PROOF_V1.json", "nullable lightmap manifest/archive v3", "production pipeline v5+"],
+      "evidence": ["manifests/maps/mp_nuketown_2020/lightmap_role_presence_proof_v1.json", "nullable lightmap manifest/archive v3", "production pipeline v5+"],
       "closureRequirement": "Primary/secondary role presence is preserved exactly, surface/lightmap indices and UVs are retained, and real DDS dependencies are archived without fake fallbacks."
     },
     {
