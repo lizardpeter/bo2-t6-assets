@@ -1,0 +1,96 @@
+{
+  "format": "t6-nuketown-lightmap-role-presence-proof-v1",
+  "gfxWorld": {
+    "indexCount": 300840,
+    "lightmapCount": 2,
+    "surfaceCount": 5614,
+    "vertexCount": 146764,
+    "vertexDataSize0": 5285088,
+    "vertexDataSize1": 33764
+  },
+  "lightmapArray": {
+    "bytes": 16,
+    "end": 66745586,
+    "entries": [
+      {
+        "index": 0,
+        "primary": {
+          "gfxImage": null,
+          "pointerKind": "null",
+          "pointerRawHex": "0x00000000",
+          "present": false
+        },
+        "secondary": {
+          "gfxImage": {
+            "category": 2,
+            "dataStart": 66745699,
+            "depth": 1,
+            "height": 3072,
+            "loadDefFormat": 28,
+            "mapType": 3,
+            "name": "*lightmap0_secondary",
+            "objectEnd": 73037155,
+            "objectStart": 66745586,
+            "resourceSize": 6291456,
+            "semantic": 1,
+            "width": 512
+          },
+          "pointerKind": "following",
+          "pointerRawHex": "0xffffffff",
+          "present": true
+        }
+      },
+      {
+        "index": 1,
+        "primary": {
+          "gfxImage": null,
+          "pointerKind": "null",
+          "pointerRawHex": "0x00000000",
+          "present": false
+        },
+        "secondary": {
+          "gfxImage": {
+            "category": 2,
+            "dataStart": 73037268,
+            "depth": 1,
+            "height": 1536,
+            "loadDefFormat": 28,
+            "mapType": 3,
+            "name": "*lightmap1_secondary",
+            "objectEnd": 76182996,
+            "objectStart": 73037155,
+            "resourceSize": 3145728,
+            "semantic": 1,
+            "width": 512
+          },
+          "pointerKind": "following",
+          "pointerRawHex": "0xffffffff",
+          "present": true
+        }
+      }
+    ],
+    "rawHex": "00000000ffffffff00000000ffffffff",
+    "start": 66745570
+  },
+  "map": "mp_nuketown_2020",
+  "proofBoundary": {
+    "notProven": "The pixel-channel meaning or final T6 lightmap shader equation.",
+    "proven": "Nuketown GfxLightmapArray entries 0 and 1 have null primary GfxImage pointers and present secondary GfxImages with the recorded identities/metadata."
+  },
+  "sourceProof": {
+    "bytes": 3508,
+    "file": "T6_NUKETOWN_GFXWORLD_DRAW_PROOF_V1.json",
+    "format": "t6-gfxworld-draw-proof-v1",
+    "gfxWorldAssetIndex": 624,
+    "sha256": "f20dfd43e1caff1df564fe10a25dc2fdc4e9598cb63a7f80924d3260f1a951d7"
+  },
+  "validation": {
+    "fallbackTextureInvented": false,
+    "lightmapImagesEndExactlyAtVd0": true,
+    "primaryPointersNullForAllEntries": true,
+    "retailRequiresNullableLightmapRoles": true,
+    "secondaryPointersFollowingForAllEntries": true,
+    "vd0ImmediatelyFollowedByVd1": true,
+    "vd1ImmediatelyFollowedByIndices": true
+  }
+}
