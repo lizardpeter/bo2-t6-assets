@@ -1,0 +1,79 @@
+{
+  "format": "t6-lightmap-sampler-contract-v1",
+  "game": "t6",
+  "status": {
+    "t6NativeSamplerIdentity": "P2-source-known",
+    "surfaceJoinAlgorithm": "P3-synthetic-regression",
+    "nuketownSurfaceUvIndexSide": "P4-retail-proven",
+    "retailPrimarySecondaryImageCatalog": "pending",
+    "primarySecondaryChannelEncoding": "unknown",
+    "primarySecondaryCombineEquation": "unknown"
+  },
+  "samplers": {
+    "primary": {
+      "materialTextureSource": 4,
+      "materialTextureSourceHex": "0x4",
+      "enum": "TEXTURE_SRC_CODE_LIGHTMAP_PRIMARY",
+      "accessor": "lightmapSamplerPrimary",
+      "updateFrequency": "CUSTOM"
+    },
+    "secondary": {
+      "materialTextureSource": 5,
+      "materialTextureSourceHex": "0x5",
+      "enum": "TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY",
+      "accessor": "lightmapSamplerSecondary",
+      "updateFrequency": "CUSTOM"
+    }
+  },
+  "t6Structure": {
+    "worldFields": [
+      "GfxWorld.lightmapCount",
+      "GfxWorld.lightmaps"
+    ],
+    "lightmapEntryFields": [
+      "GfxLightmapArray.primary",
+      "GfxLightmapArray.secondary"
+    ],
+    "imageIdentity": "GfxImage.name",
+    "surfaceSelector": "GfxSurface.lightmapIndex",
+    "lightmapUv": "dedicated packed world lightmap UV exported after native material UV sets"
+  },
+  "sourceReferences": [
+    {
+      "repository": "Laupetin/OpenAssetTools",
+      "commit": "7d027e8f89118196713e955b0e11f8404149c54d",
+      "path": "src/Common/Game/T6/T6_Assets.h",
+      "establishes": [
+        "TEXTURE_SRC_CODE_LIGHTMAP_PRIMARY == 0x4",
+        "TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY == 0x5",
+        "GfxWorld lightmap ownership",
+        "GfxLightmapArray primary/secondary GfxImage pointers",
+        "GfxImage name identity"
+      ]
+    },
+    {
+      "repository": "Laupetin/OpenAssetTools",
+      "commit": "7d027e8f89118196713e955b0e11f8404149c54d",
+      "path": "src/ObjCommon/Game/T6/Techset/TechsetConstantsT6.h",
+      "establishes": [
+        "LIGHTMAP_PRIMARY accessor == lightmapSamplerPrimary",
+        "LIGHTMAP_SECONDARY accessor == lightmapSamplerSecondary",
+        "both code texture sources use CUSTOM update frequency"
+      ]
+    }
+  ],
+  "explicitNonClaims": [
+    "primary is not yet labeled as irradiance/color by this project",
+    "secondary is not yet labeled as direction/dominant-light data by this project",
+    "RGB/A channel meanings are not yet source-closed",
+    "primary and secondary are not yet merged into a generic lightmap texture",
+    "a generic glTF lightmap extension/material mapping is not inferred from sampler names alone"
+  ],
+  "nextProof": [
+    "emit exact retail GfxWorld primary/secondary image identities",
+    "retain and inspect representative primary/secondary image payloads",
+    "decompile or otherwise recover representative T6 lit pixel shaders that sample both code textures",
+    "match sampled channels/math to retained retail images",
+    "validate reconstructed lighting on known world surfaces before production shader binding"
+  ]
+}
