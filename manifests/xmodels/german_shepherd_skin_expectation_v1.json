@@ -1,0 +1,48 @@
+{
+  "format": "t6-xmodel-skinned-fixture-expectation-v1",
+  "status": "retail-census-recovered; reproducible normalized sidecar/archive pending",
+  "asset": {
+    "type": "XModel",
+    "xassetIndex": 447,
+    "name": "german_shepherd"
+  },
+  "expected": {
+    "bones": 56,
+    "surfaces": 3,
+    "vertices": 5731,
+    "triangles": 7123,
+    "rigidVertices": 1177,
+    "blendedVertices": 4554,
+    "unweightedVertices": 0,
+    "influenceHistogram": {
+      "1": 2353,
+      "2": 1149,
+      "3": 1340,
+      "4": 889
+    },
+    "vertsBlendWordStrideByInfluenceCount": {
+      "1": 1,
+      "2": 3,
+      "3": 5,
+      "4": 7
+    }
+  },
+  "interpretation": {
+    "oneInfluenceIncludesRigidVertices": true,
+    "blendedOneInfluenceVertices": 1176,
+    "blendedInfluenceHistogram": {
+      "1": 1176,
+      "2": 1149,
+      "3": 1340,
+      "4": 889
+    },
+    "blendedHistogramSum": 4554,
+    "allInfluenceHistogramSum": 5731
+  },
+  "nextProofRequirement": [
+    "rerun t6_xmodel_mesh_normalize_v1.py on the exact retail owning fastfile bytes",
+    "run t6_xanim_skinned_gltf_export_v4.py in bind-pose mode",
+    "archive normalized mesh/skeleton source SHA-256 values and deterministic glTF SHA-256",
+    "load the generated glTF in an independent loader/Blender and record primitive/bounds validation"
+  ]
+}
