@@ -1,0 +1,66 @@
+{
+  "deltaPartX86Offsets": {
+    "quat2Hex": "0x04",
+    "quat3DHex": "0x08",
+    "transHex": "0x00"
+  },
+  "format": "t6-retail-xanim-delta-proof-v1",
+  "functions": {
+    "XAnim_CalcDelta3DForTime": "0x00667940",
+    "XAnim_CalcDeltaForTime": "0x006b5680",
+    "XAnim_CalcPosDeltaEntire": "0x008da5e0",
+    "XAnim_CalcPosDelta_byte": "0x008da9c0",
+    "XAnim_CalcPosDelta_ushort": "0x008dac40",
+    "XAnim_CalcRotDelta2D_byte": "0x008da8c0",
+    "XAnim_CalcRotDelta2D_ushort": "0x008dab40",
+    "XAnim_CalcRotDelta3D_byte": "0x008dadc0",
+    "XAnim_CalcRotDelta3D_ushort": "0x008daf30",
+    "XAnim_GetTimeIndex_byte": "0x008da6a0",
+    "XAnim_GetTimeIndex_ushort": "0x008da7b0",
+    "relativeDeltaRangeConsumer": "0x008d72d0",
+    "weightedDeltaAccumulator": "0x008d8f10"
+  },
+  "proofBoundary": "Direct static proof for the pinned retail PC executable. This closes XAnim deltaPart pointer layout, 2D/3D time evaluation, terminal delta evaluation, key-index width selection, decoded translation interpolation, and loop-wrap relative-delta composition. It does not by itself prove how a model's ordinary animated root-bone translation track should be composed with bind pose; that remains a separate binding question.",
+  "referenceImplementations": {
+    "OpenAssetToolsT6Struct": "Laupetin/OpenAssetTools@7d027e8f89118196713e955b0e11f8404149c54d src/Common/Game/T6/T6_Assets.h",
+    "OpenBO2NamesOnly": "builtbyxeno/OpenBO2@a64812d21946baf710cec7fa26b98ad0d193903b src/code/src_noserver/xanim/xanim_calc.cpp",
+    "note": "Reference projects are used for structure/function naming only; promoted semantics are independently verified against the pinned retail executable bytes."
+  },
+  "retailExecutable": {
+    "bytes": 12850328,
+    "file": "t6mp.exe",
+    "imageBaseHex": "0x00400000",
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1"
+  },
+  "semantics": {
+    "dispatch": "weighted runtime path selects 2D evaluator when bDelta, otherwise 3D evaluator when bDelta3D",
+    "endOrZeroFramePath": "time == 1.0 or numframes == 0 evaluates terminal/constant rotation and XAnim_CalcPosDeltaEntire",
+    "frameIndexWidth": "numframes < 256 uses uint8 indices; numframes >= 256 uses uint16 indices",
+    "loopRange": "higher-level relative-delta consumer evaluates start/end and, when bLoop and startTime > endTime, incorporates the full deltaPart across the wrap",
+    "rotation2D": "deltaPart.quat2; null -> planar identity; size==0 -> constant signed-int16 pair; keyed -> component-wise linear interpolation in stored signed-int16 domain",
+    "rotation3D": "deltaPart.quat; null -> quaternion identity; size==0 -> constant signed-int16 quaternion; keyed -> component-wise linear interpolation in stored signed-int16 domain",
+    "timeDomain": "normalized animation time; retail evaluator has explicit time == 1.0 end/full-delta path",
+    "translation": "null -> zero; size==0 -> constant vec3; keyed -> decode SMALL_TRANS/FULL_TRANS and linearly interpolate between surrounding keys"
+  },
+  "validation": {
+    "byteAndUshortIndexPathsMatched": true,
+    "correctedNotifyVsDeltaPartOffsetsMatched": true,
+    "exactRetailSha256": true,
+    "instructionBytesMatched": true,
+    "loopRangeConsumerMatched": true,
+    "threeDimensionalEvaluatorMatched": true,
+    "twoDimensionalEvaluatorMatched": true,
+    "weightedDispatchMatched": true
+  },
+  "xanimPartsX86Offsets": {
+    "bDelta3DHex": "0x12",
+    "bDeltaHex": "0x11",
+    "bLoopHex": "0x10",
+    "deltaPartHex": "0x64",
+    "framerateHex": "0x30",
+    "frequencyHex": "0x34",
+    "notifyCountHex": "0x22",
+    "notifyHex": "0x60",
+    "numframesHex": "0x0e"
+  }
+}
