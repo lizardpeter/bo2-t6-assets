@@ -1,0 +1,40 @@
+{
+  "format": "t6-retail-xanim-delta-proof-v2",
+  "extends": "manifests/xanim/T6_RETAIL_XANIM_DELTA_PROOF_V1.json",
+  "producer": "tools/t6_retail_xanim_delta_proof_v2.py",
+  "retailExecutable": {
+    "bytes": 12850328,
+    "imageBaseHex": "0x00400000",
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1"
+  },
+  "quaternionApplication": {
+    "quat2": {
+      "consumerVaHex": "0x008d72d0",
+      "normalizationBlockVaHex": "0x008d74b9",
+      "retailByteProven": true,
+      "semantics": "The relative-delta consumer squares the two planar rotation components, sums them, computes 2/(a^2+b^2), and uses that common normalization factor in the rotation composition. Non-zero common magnitude therefore does not change the applied planar rotation; the applied result follows the normalized direction of the component-linearly interpolated pair."
+    },
+    "quat3D": {
+      "weightedAccumulatorVaHex": "0x008d8f10",
+      "normalizationBlockVaHex": "0x008d9ae7",
+      "int16Scale": 0.000030518509447574615,
+      "retailByteProven": true,
+      "semantics": "XAnim_CalcDelta3DForTime output is converted with the exact 1/32767 int16 unit scale and accumulated component-wise by weight. The downstream animation-tree delta path computes x^2+y^2+z^2+w^2, performs an inverse-square-root normalization, and writes the commonly scaled x/y/z/w values back before the delta result leaves that normalization branch."
+    },
+    "gltfConsequence": "T6 delta rotation is not core-glTF LINEAR quaternion interpolation (SLERP). Exact export must preserve normalize(componentLerp(stored T6 quaternion)). The v2 delta glTF semantics module uses a CUBICSPLINE whose unnormalized polynomial is a positive scalar multiple of the native component-linear quaternion, so glTF-required quaternion normalization follows the retail T6 rotation path."
+  },
+  "validation": {
+    "v1RetailDeltaEvaluatorProofInherited": true,
+    "quat2MagnitudeInvariantApplicationMatched": true,
+    "quat3DInt16UnitScaleMatched": true,
+    "quat3DDownstreamNormalizationMatched": true,
+    "localByteVerifierExecutedAgainstPinnedRetailExe": true
+  },
+  "relatedEvidence": [
+    "manifests/xanim/T6_RETAIL_XANIM_DELTA_PROOF_V1.json",
+    "manifests/xanim/T6_ZM_TOMB_DELTA_ENDPOINT_CENSUS_V1.json",
+    "tools/t6_xanim_delta_gltf_semantics_v2.py",
+    "tools/t6_xanim_skinned_gltf_export_v6.py"
+  ],
+  "proofBoundary": "Direct static proof for the pinned retail PC executable through the delta-rotation application/normalization boundary. This closes XAnimParts.deltaPart root-motion evaluation and the normalization premise required for exact glTF delta-rotation playback. It does not close the separate ordinary animated root-bone translation track/bind-pose composition path."
+}
