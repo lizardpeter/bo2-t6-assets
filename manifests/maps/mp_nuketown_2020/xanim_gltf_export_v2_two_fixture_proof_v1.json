@@ -1,0 +1,69 @@
+{
+  "format": "t6-xanim-gltf-export-v2-proof-v1",
+  "tool": {
+    "path": "tools/t6_xanim_gltf_export_v2.py",
+    "sha256": "586d3b330d8678d7bb6acc84cc56200bca68b2a4b5ce84391499801eb6aceb20"
+  },
+  "fixtures": [
+    {
+      "scope": "skeleton-bound",
+      "name": "fxanim_mp_nuked2025_display_glass_anim",
+      "fileBytes": 135991,
+      "sha256": "9310b50f91fb7440c0f77c11e7a587df9ede844e1faaab3f56784a5b32fb14b5",
+      "nodes": 35,
+      "channels": 66,
+      "rotationChannels": 33,
+      "translationChannels": 33,
+      "samplers": 66,
+      "accessors": 132,
+      "bufferViews": 132,
+      "embeddedBufferBytes": 35068,
+      "durationSeconds": 1.3,
+      "deltaOnly": false,
+      "boundTracks": 33,
+      "rotationSamples": 979,
+      "maxFloat32QuaternionNormError": 4.17026286836375e-08,
+      "minAdjacentQuaternionDot": 0.502088944863554,
+      "deterministicGenerationCount": 2,
+      "note": "v2 skeleton-bound path validated against existing v1 display-glass proof; generator string differs."
+    },
+    {
+      "scope": "pure-delta",
+      "name": "fxanim_mp_nuked2025_car01_anim",
+      "fileBytes": 5494,
+      "sha256": "13541e8ee3517975cf03798b5c203998787c6c1de20d2aae61b50bab90ff6e75",
+      "nodes": 2,
+      "channels": 2,
+      "rotationChannels": 1,
+      "translationChannels": 1,
+      "samplers": 2,
+      "accessors": 4,
+      "bufferViews": 4,
+      "embeddedBufferBytes": 912,
+      "durationSeconds": 1.1333333333333333,
+      "deltaOnly": true,
+      "boundTracks": 0,
+      "rotationSamples": 24,
+      "maxFloat32QuaternionNormError": 2.7457635498606692e-08,
+      "minAdjacentQuaternionDot": 0.9641181888874186,
+      "deterministicGenerationCount": 2,
+      "twoGenerationsByteIdentical": true,
+      "xanimSource": {
+        "xassetIndex": 801,
+        "fixedStart": 92960192,
+        "serializedEnd": 92960792,
+        "serializedBytes": 600,
+        "serializedSha256": "0e2f7effc94121207e1c2ad60db35ff69424e19c364d689914c953a1b389298e",
+        "boneTracks": 0,
+        "deltaTranslationKeys": 27,
+        "deltaFullQuaternionKeys": 24,
+        "notify": "end"
+      }
+    }
+  ],
+  "validation": {
+    "structural": "all scene nodes reachable; no cycles; sampler/accessor counts and embedded buffer lengths valid; key times strictly increasing",
+    "independentLoader": "trimesh 4.11.1 loaded both outputs as Scene",
+    "coordinateStrategy": "native T6 local values under -90deg X and 0.0254 world wrapper"
+  }
+}
