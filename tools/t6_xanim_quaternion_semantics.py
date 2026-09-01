@@ -120,7 +120,10 @@ def augment_delta(delta: dict | None) -> None:
 
 
 def augment_normalized_xanim(doc: dict) -> dict:
-    for track in doc.get("tracks", []):
+    tracks = doc.get("boneTracks")
+    if tracks is None:
+        tracks = doc.get("tracks", [])
+    for track in tracks:
         augment_quat_track(track.get("quat"))
     augment_delta(doc.get("delta"))
     doc.setdefault("quaternionSemantics", {})
