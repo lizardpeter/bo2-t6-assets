@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 import struct
-from typing import Iterable
 
 POINTER_BITS = 32
 OFFSET_BLOCK_BITS = 3
@@ -123,6 +122,50 @@ GFX_PACKED_VERTEX_SIZE = 32
 GFX_WORLD_VD0_STRIDE = 36
 
 
+def _f32(value: float) -> float:
+    """Round exactly as an IEEE-754 C++ float assignment/operation result."""
+    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
+
+
+def _f32_bits(value: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", _f32(value)))[0]
+
+
+def _bits_f32(value: int) -> float:
+    return struct.unpack("<f", struct.pack("<I", int(value) & 0xFFFFFFFF))[0]
+
+
+def pack_unit_vec_third_based(vector: tuple[float, float, float] | list[float]) -> int:
+    """Pack a T6 PackedUnitVec using Treyarch's 10/10/10 third-based encoding.
+
+    Ported from OpenAssetTools Common/Utils/Pack.cpp, whose implementation is
+    based on reversed game code. Operations are explicitly rounded to float32
+    so the low ten mantissa bits match the native C++ calculation.
+    """
+    if len(vector) != 3:
+        raise ValueError("unit vector must contain exactly 3 components")
+    bias = _f32(-24624.0939334638)
+    scale = _f32(0.0001218318939208984)
+    parts: list[int] = []
+    for component in vector:
+        value = _f32(_f32(_f32(component) - bias) * scale)
+        parts.append(_f32_bits(value) & 0x3FF)
+    return parts[0] | (parts[1] << 10) | (parts[2] << 20)
+
+
+def unpack_unit_vec_third_based(packed: int) -> tuple[float, float, float]:
+    """Decode T6 PackedUnitVec to the three float components used by the game."""
+    decode_scale = _f32(8208.0312)
+    out: list[float] = []
+    packed = int(packed) & 0xFFFFFFFF
+    for shift in (0, 10, 20):
+        value = (packed >> shift) & 0x3FF
+        bits = (value - 2 * (value & 0x200) + 0x40400000) & 0xFFFFFFFF
+        decoded = _bits_f32(bits)
+        out.append(_f32(_f32(decoded - _f32(3.0)) * decode_scale))
+    return out[0], out[1], out[2]
+
+
 def unpack_half2(raw4: bytes) -> tuple[float, float]:
     if len(raw4) != 4:
         raise ValueError("half2 must be exactly 4 bytes")
@@ -152,7 +195,9 @@ def decode_world_vd0_vertex(raw36: bytes) -> dict:
         "binormalSign": binormal_sign,
         "colorRGBA8": list(color),
         "uv0": list(uv0),
+        "normal": list(unpack_unit_vec_third_based(normal)),
         "normalPacked": normal,
+        "tangent": list(unpack_unit_vec_third_based(tangent)),
         "tangentPacked": tangent,
         "lightmapUV": list(lightmap_uv),
         "lightmapUVRaw": list(struct.unpack_from("<HH", raw36, 32)),
