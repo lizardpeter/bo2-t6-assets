@@ -4,8 +4,11 @@
 The primary input is the flat material texture mapping emitted by the retained
 BO2 Blender/Frost workflow:
 
-  index,material_index,material,layer_index,layer,role,
+  material_index,material,layer_index,layer,role,
   texture_index,source_texture,compositors
+
+Some derivative tables may prepend an optional `index` column; it is ignored.
+The semantic contract begins at `material_index`.
 
 That table is already semantic rather than positional: roles such as colorMap,
 normalMap, specularMap, colorGloss, colorOpacity are explicit, and layered
@@ -27,7 +30,7 @@ import argparse
 import csv
 import hashlib
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 
@@ -97,6 +100,27 @@ def _resolve_texture(source_texture: str, texture_root: Path | None) -> dict | N
     }
 
 
+def _compositor_identities(text: str) -> list[str]:
+    """Preserve recovered compositor expressions without guessing grammar.
+
+    The retained Frost mapping contains pipe-delimited expressions such as
+    `ao_decal_ramp|BlendTextures` and longer chains. The meaning/order of every
+    pipe token is not yet source-closed, so a pipe expression remains one
+    opaque identity. Comma/semicolon are accepted only as outer separators for
+    derivative tables that store more than one recovered expression per cell.
+    """
+    value = text.strip()
+    if not value:
+        return []
+    values: list[str] = []
+    for comma_part in value.split(","):
+        for semicolon_part in comma_part.split(";"):
+            identity = semicolon_part.strip()
+            if identity:
+                values.append(identity)
+    return values
+
+
 def normalize_mapping_csv(
     csv_path: Path,
     *,
@@ -106,7 +130,6 @@ def normalize_mapping_csv(
     text = raw.decode("utf-8-sig")
     reader = csv.DictReader(text.splitlines())
     required = {
-        "index",
         "material_index",
         "material",
         "layer_index",
@@ -140,11 +163,7 @@ def normalize_mapping_csv(
         texture_index = _int(row["texture_index"], "texture_index", row_number)
         source_texture = (row["source_texture"] or "").strip()
         compositor_text = (row["compositors"] or "").strip()
-        compositors = [
-            part.strip()
-            for part in compositor_text.replace(";", ",").split(",")
-            if part.strip()
-        ]
+        compositors = _compositor_identities(compositor_text)
 
         if not material_name:
             raise TextureManifestError(f"row {row_number}: empty material name")
@@ -305,6 +324,8 @@ def normalize_mapping_csv(
             "bytes": len(raw),
             "sha256": hashlib.sha256(raw).hexdigest(),
             "textureRoot": str(texture_root) if texture_root is not None else None,
+            "columns": reader.fieldnames or [],
+            "optionalIndexColumnPresent": "index" in fields,
         },
         "policy": {
             "roleSelection": "exact role column only; never filename/position heuristics",
@@ -312,6 +333,7 @@ def normalize_mapping_csv(
             "specularPolicy": "preserve exact TS_SPECULAR_MAP dependency; no implicit PBR remap",
             "packedRolePolicy": "preserve colorGloss/colorOpacity and other packed roles until channel semantics are proven",
             "layeredPolicy": "preserve all layers/compositor identities; no implicit bake",
+            "compositorGrammar": "pipe-delimited expressions are opaque exact identities until grammar is source-closed",
             "textureFileResolution": "exact source_texture basename under textureRoot only",
         },
         "stats": {
