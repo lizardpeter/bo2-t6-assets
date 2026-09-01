@@ -1,0 +1,94 @@
+{
+  "format": "t6-display-glass-rigid-animated-gltf-v3-proof",
+  "map": "mp_nuketown_2020",
+  "model": "fxanim_mp_nuked2025_display_glass_mod",
+  "animation": "fxanim_mp_nuked2025_display_glass_anim",
+  "exporter": {
+    "path": "tools/t6_xanim_rigid_gltf_export_v3.py",
+    "gitBlob": "0f21f199ccaba636d3aa4f0fbc51507a3e305dfe",
+    "sha256": "9e9c969d8fb6db4200df8991bd138ee3b5ff9d96b8bd27f6502114d19c27bb22",
+    "exactGitHubBytesRetested": true
+  },
+  "inputs": {
+    "skeleton": "t6-xmodel-skeleton-normalized-v2-compatible-test",
+    "render": "t6-xmodel-rigid-render-normalized-v1",
+    "xanim": "t6-xanim-normalized-v1",
+    "renderNormalizedSha256": "f333169ec4adac57b416667e7aeff56199d54333ff35c37be3064a6c670b2a35",
+    "expandedFastFileSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "output": {
+    "file": "display_glass_rigid_v3.gltf",
+    "committed": false,
+    "reason": "generated artifact is reproducible from committed tools and compact proofs",
+    "bytes": 331694,
+    "sha256": "407a1d1eaa890f8119c8e4e2e0300e967a0b91ae1bc77371bafd5a866f527795",
+    "embeddedBufferBytes": 155860,
+    "deterministicSecondGenerationIdentical": true
+  },
+  "scene": {
+    "nodes": 36,
+    "boneNodes": 34,
+    "meshNodes": 1,
+    "worldConversionNodes": 1,
+    "meshes": 1,
+    "primitives": 3,
+    "skins": 1,
+    "skinJoints": 34,
+    "inverseBindMatrices": 34,
+    "vertices": 1178,
+    "triangles": 556,
+    "rigidAnimatedJointsUsedByVertices": 33,
+    "rigidJointRange": [1, 33],
+    "materials": 3,
+    "materialPolicy": "placeholder only; exact T6 Material/shader remains intentionally unresolved and source material-handle pointers are retained in extras"
+  },
+  "animation": {
+    "channels": 66,
+    "rotationChannels": 33,
+    "translationChannels": 33,
+    "rotationSamples": 979,
+    "translationCompositionCorrectedChannels": 33,
+    "maxFloat32QuaternionNormError": 4.17026286836375e-08,
+    "minAdjacentQuaternionDot": 0.502088944863554,
+    "keyTimesStrictlyIncreasing": true,
+    "rootTranslationPolicy": "fail closed until the T6 root-bone runtime path is independently source-closed"
+  },
+  "translationCompositionProof": {
+    "rule": "for animated non-root bones, glTF local translation = XModel localTranslation + decoded XAnim translation delta",
+    "runtimeGrounding": "Treyarch skeleton runtime CalcSkelNonRootBones adds model->localTrans[3*boneOffset] to childMat->trans before applying the parent transform; animated child quaternion is then parent-composed without adding model localQuat",
+    "firstTrack": "car01_glass_prestine_jnt",
+    "bindLocalTranslation": [-4.500001907348633, 49.8907470703125, 21.10617446899414],
+    "firstDecodedXAnimDelta": [1.9073486328125e-06, -66.3013259385482, -42.02572972048089],
+    "expectedCombined": [-4.5, -16.410578868235703, -20.91955525148675],
+    "exportedFloat32": [-4.5, -16.410579681396484, -20.9195556640625],
+    "maxFloat32RoundingError": 8.131607813766095e-07
+  },
+  "skinValidation": {
+    "localHierarchyMatchesAllGlobalBaseMats": true,
+    "maxBindHierarchyReferenceError": 0.0,
+    "maxGlobalBindTimesInverseBindIdentityError": 0.0,
+    "allRigidWeightsSumToOneExactly": true,
+    "allJointIndicesInSkinRange": true,
+    "allTriangleIndicesInPrimitiveRange": true,
+    "bindPoseEffectiveSkinTransformIsIdentity": true
+  },
+  "coordinateConversion": {
+    "nativeGeometryRetained": true,
+    "wrapperRotation": "-90 degrees about X, T6 Z-up to glTF Y-up",
+    "wrapperUniformScale": 0.0254,
+    "sourceUnits": "inches",
+    "targetUnits": "meters"
+  },
+  "thirdPartyLoad": {
+    "loader": "trimesh 4.11.1",
+    "loadedAs": "Scene",
+    "geometryCount": 3,
+    "bounds": [[-0.9779, -1.8276874710083006, -1.416988702392578], [0.7492999031066894, 0.9493939880371093, -1.1174620239257813]]
+  },
+  "scopeLimits": [
+    "rigid XSurfaces only; blended/skinned XSurface weight streams are not approximated",
+    "bound XAnim deltaPart is rejected in v3",
+    "animated root translation is rejected until separately proven",
+    "exact T6 material/shader/texture export is intentionally separate"
+  ]
+}
