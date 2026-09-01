@@ -10,9 +10,8 @@ from pathlib import Path
 from t6_material_texture_manifest_v1 import normalize_mapping_csv
 
 
-def _write_csv(path: Path, rows: list[dict]) -> None:
+def _write_csv(path: Path, rows: list[dict], *, with_optional_index: bool = False) -> None:
     fields = [
-        "index",
         "material_index",
         "material",
         "layer_index",
@@ -22,43 +21,65 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
         "source_texture",
         "compositors",
     ]
+    if with_optional_index:
+        fields.insert(0, "index")
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
-        writer.writerows(rows)
+        for row_index, source in enumerate(rows):
+            row = dict(source)
+            if with_optional_index:
+                row["index"] = row_index
+            writer.writerow(row)
 
 
 def main() -> int:
     rows = [
         # Simple material: exactly the two core-preview semantics we allow.
-        {"index": 0, "material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "colorMap", "texture_index": 100, "source_texture": "simple_c.tga", "compositors": ""},
-        {"index": 1, "material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "normalMap", "texture_index": 101, "source_texture": "simple_n.tga", "compositors": ""},
-        {"index": 2, "material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "specularMap", "texture_index": 102, "source_texture": "simple_s.tga", "compositors": ""},
+        {"material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "colorMap", "texture_index": 100, "source_texture": "simple_c.tga", "compositors": ""},
+        {"material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "normalMap", "texture_index": 101, "source_texture": "simple_n.tga", "compositors": ""},
+        {"material_index": 1, "material": "simple", "layer_index": 0, "layer": "simple", "role": "specularMap", "texture_index": 102, "source_texture": "simple_s.tga", "compositors": ""},
         # Packed role must remain metadata-only.
-        {"index": 3, "material_index": 2, "material": "packed", "layer_index": 0, "layer": "packed", "role": "colorGloss", "texture_index": 200, "source_texture": "packed_cg.tga", "compositors": ""},
-        # Layered material: even base color/normal are not silently bound.
-        {"index": 4, "material_index": 3, "material": "layered", "layer_index": 0, "layer": "base", "role": "colorMap", "texture_index": 300, "source_texture": "base_c.tga", "compositors": "BlendTextures"},
-        {"index": 5, "material_index": 3, "material": "layered", "layer_index": 0, "layer": "base", "role": "normalMap", "texture_index": 301, "source_texture": "base_n.tga", "compositors": "BlendTextures"},
-        {"index": 6, "material_index": 3, "material": "layered", "layer_index": 1, "layer": "snow", "role": "colorOpacity", "texture_index": 302, "source_texture": "snow_co.tga", "compositors": "BlendTextures"},
+        {"material_index": 2, "material": "packed", "layer_index": 0, "layer": "packed", "role": "colorGloss", "texture_index": 200, "source_texture": "packed_cg.tga", "compositors": ""},
+        # Layered material: even base color/normal are not silently bound. The
+        # pipe-delimited compositor expression must stay opaque/exact.
+        {"material_index": 3, "material": "layered", "layer_index": 0, "layer": "base", "role": "colorMap", "texture_index": 300, "source_texture": "base_c.tga", "compositors": "ao_decal_ramp|BlendTextures"},
+        {"material_index": 3, "material": "layered", "layer_index": 0, "layer": "base", "role": "normalMap", "texture_index": 301, "source_texture": "base_n.tga", "compositors": "ao_decal_ramp|BlendTextures"},
+        {"material_index": 3, "material": "layered", "layer_index": 1, "layer": "snow", "role": "colorOpacity", "texture_index": 302, "source_texture": "snow_co.tga", "compositors": "ao_decal_ramp|BlendTextures"},
         # Multiple exact colorMap candidates are deliberately ambiguous.
-        {"index": 7, "material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 400, "source_texture": "a_c.tga", "compositors": ""},
-        {"index": 8, "material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 401, "source_texture": "b_c.tga", "compositors": ""},
+        {"material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 400, "source_texture": "a_c.tga", "compositors": ""},
+        {"material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 401, "source_texture": "b_c.tga", "compositors": ""},
         # Exact duplicate row should be coalesced, not counted twice.
-        {"index": 8, "material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 401, "source_texture": "b_c.tga", "compositors": ""},
+        {"material_index": 4, "material": "ambiguous", "layer_index": 0, "layer": "ambiguous", "role": "colorMap", "texture_index": 401, "source_texture": "b_c.tga", "compositors": ""},
     ]
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         mapping = root / "mapping.csv"
+        mapping_with_index = root / "mapping_with_index.csv"
         textures = root / "textures"
         textures.mkdir()
+        # Primary regression matches the actual retained Frost CSV header.
         _write_csv(mapping, rows)
+        # Derivative/viewer tables that prepend an index remain accepted.
+        _write_csv(mapping_with_index, rows, with_optional_index=True)
         (textures / "simple_c.tga").write_bytes(b"color")
         (textures / "simple_n.tga").write_bytes(b"normal")
         # specular intentionally missing to exercise exact file-resolution status.
 
         doc = normalize_mapping_csv(mapping, texture_root=textures)
         stats = doc["stats"]
+        assert doc["source"]["optionalIndexColumnPresent"] is False
+        assert doc["source"]["columns"] == [
+            "material_index",
+            "material",
+            "layer_index",
+            "layer",
+            "role",
+            "texture_index",
+            "source_texture",
+            "compositors",
+        ]
         assert stats["materialCount"] == 4
         assert stats["layeredMaterialCount"] == 1
         assert stats["compositorMaterialCount"] == 1
@@ -70,7 +91,9 @@ def main() -> int:
             "normalMap": 2,
             "specularMap": 1,
         }
-        assert stats["compositorUseCounts"] == {"BlendTextures": 3}
+        assert stats["compositorUseCounts"] == {
+            "ao_decal_ramp|BlendTextures": 3
+        }
         assert stats["standardPreviewBindingCount"] == 2
         assert stats["ambiguousStandardPreviewBindings"] == 1
         assert stats["duplicateIdenticalRows"] == 1
@@ -95,7 +118,7 @@ def main() -> int:
 
         layered = by_name["layered"]
         assert layered["layered"] is True
-        assert layered["compositors"] == ["BlendTextures"]
+        assert layered["compositors"] == ["ao_decal_ramp|BlendTextures"]
         assert layered["standardPreview"] == {}
         assert len(layered["layers"]) == 2
         assert all(
@@ -116,6 +139,16 @@ def main() -> int:
         assert json.dumps(doc, sort_keys=True, separators=(",", ":")) == json.dumps(
             doc2, sort_keys=True, separators=(",", ":")
         )
+
+        # Optional index column changes source provenance only, not normalized
+        # material semantics or counts.
+        with_index = normalize_mapping_csv(
+            mapping_with_index,
+            texture_root=textures,
+        )
+        assert with_index["source"]["optionalIndexColumnPresent"] is True
+        assert with_index["stats"] == doc["stats"]
+        assert with_index["materials"] == doc["materials"]
 
         print("PASS t6_material_texture_manifest_v1 regression")
         print(json.dumps(stats, indent=2, sort_keys=True))
