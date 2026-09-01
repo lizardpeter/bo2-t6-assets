@@ -1,0 +1,65 @@
+{
+  "combined": {
+    "adjacentNegativeDotCount": 0,
+    "engineNormMax": 1.0000149434054617,
+    "engineNormMin": 0.9999850098015616,
+    "halfQuatFrameCount": 2120,
+    "halfQuatTrackCount": 1246,
+    "maxAbsEngineNormError": 1.4990198438424862e-05,
+    "meanAbsEngineNormError": 6.178596434781884e-06,
+    "unitXYZWMaxNormError": 2.220446049250313e-16,
+    "xanimCount": 672
+  },
+  "engineScale": 3.051850947599719e-05,
+  "format": "t6-xanim-half-quaternion-semantics-proof-v1",
+  "mapping": {
+    "halfQuatRaw0": "z",
+    "halfQuatRaw1": "w",
+    "x": 0.0,
+    "y": 0.0
+  },
+  "notes": [
+    "0.000030518509 is approximately 1/32767, not 1/32768.",
+    "Lossless normalized data retains raw int16 values; standard export should use normalized unit xyzw generated from engine-space [0,0,z,w].",
+    "No direct implemented T6 xanim_calc body is publicly available in the OpenBO2/OpenT6 source snapshots used here; component placement is established from matching T6 type/runtime declarations plus the immediately preceding Treyarch runtime implementation and retail T6 invariants."
+  ],
+  "retailRuns": [
+    {
+      "adjacentFramePairs": 592,
+      "adjacentNegativeDotCount": 0,
+      "engineNormMax": 1.0000149434054617,
+      "engineNormMin": 0.9999857665583984,
+      "firstName": "ai_zombie_idle_v1_delta",
+      "halfQuatFrameCount": 1258,
+      "halfQuatTrackCount": 666,
+      "lastName": "ai_zombie_acid_stun_e",
+      "map": "zm_prison",
+      "maxAbsEngineNormError": 1.4943405461709247e-05,
+      "meanAbsEngineNormError": 5.679419521341442e-06,
+      "unitXYZWMaxNormError": 2.220446049250313e-16,
+      "xanimCount": 336,
+      "xassetRange": [560, 895]
+    },
+    {
+      "adjacentFramePairs": 282,
+      "adjacentNegativeDotCount": 0,
+      "engineNormMax": 1.0000149434054617,
+      "engineNormMin": 0.9999850098015616,
+      "firstName": "ai_zombie_idle_v1_delta",
+      "halfQuatFrameCount": 862,
+      "halfQuatTrackCount": 580,
+      "lastName": "ai_zombie_grabbed_by_mech",
+      "map": "zm_tomb",
+      "maxAbsEngineNormError": 1.4990198438424862e-05,
+      "meanAbsEngineNormError": 6.907093600800534e-06,
+      "unitXYZWMaxNormError": 2.220446049250313e-16,
+      "xanimCount": 336,
+      "xassetRange": [562, 897]
+    }
+  ],
+  "sourceEvidence": {
+    "t6RuntimeDeclaration": "OpenBO2 xanim_calc.cpp declares XAnim_CalcDeltaForTime with vec2_t rotDelta and XAnim_CalcDelta3DForTime with vec4_t rotDelta",
+    "t6ZoneTypes": "OpenAssetTools T6 XAnim uses HALF_QUAT and XQuat2 int16[2] for two-component tracks",
+    "treyarchRuntimePredecessor": "KisakBlack xanim_calc.cpp expands simple quaternion as frameVec=[0,0,dataShort[0]*0.000030518509,dataShort[1]*0.000030518509]"
+  }
+}
