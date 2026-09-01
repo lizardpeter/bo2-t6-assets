@@ -10,6 +10,7 @@ Read these first:
 
 - `research/T6_PROOF_STANDARD.md` — defines P0 through P8 and what the project is allowed to call “solved”.
 - `research/T6_REVERSE_ENGINEERING_LEDGER.md` — permanent subsystem-by-subsystem closure ledger for world formats, materials, images, lightmaps, XModels, XAnim, collision, entities, lighting, FX, audio, weapons, characters, UI/scripts, and remaining T6 XAsset classes.
+- `research/T6_PROGRESS_2026-09-01_LIGHTMAP_V4.md` — exact checkpoint for the current world/lightmap v4 and retail-shader work.
 
 The central rule is:
 
@@ -79,26 +80,66 @@ The exact layered pixel-shader/blend composition is **not** silently approximate
 
 `tools/t6_dds_texture_stage_v2.py` stages the currently source-closed DDS subset and determines BC5 normal reconstruction from exact Material semantics, including layered normal maps that are deliberately unbound in generic glTF.
 
+`tools/t6_oat_material_manifest_v3.py` preserves exact T6 `GfxImage` identity separately from the exact OpenAssetTools disk filename. OAT's pinned image writer replaces `*` with `_` for the output filename; v3 also rejects non-injective filename aliases rather than silently merging distinct T6 assets.
+
 `tools/t6_world_textured_gltf_export_v2.py` embeds every exact staged material dependency image into the GLB. Only independently safe standard-preview bindings are connected to generic glTF material slots. Non-core Treyarch dependencies remain embedded and indexed in `extras.T6` instead of being guessed away.
 
 ### Lightmaps
 
 T6 `GfxWorld` owns an array of `GfxLightmapArray` entries, each containing separate primary and secondary `GfxImage` assets. Surfaces already carry `lightmapIndex`, and the world vertex pipeline already exports the dedicated lightmap UVs.
 
+T6-native code-sampler identities are source-known:
+
+```text
+0x4  TEXTURE_SRC_CODE_LIGHTMAP_PRIMARY
+     lightmapSamplerPrimary
+
+0x5  TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY
+     lightmapSamplerSecondary
+```
+
 Current lightmap tools:
 
-- `tools/t6_world_lightmap_manifest_v1.py` — exact `surface -> lightmap index -> primary/secondary image` join with fail-closed validation.
-- `tools/test_t6_world_lightmap_manifest_v1.py` — deterministic synthetic/negative regression.
+- `tools/t6_world_lightmap_manifest_v1.py` — original strict `surface -> lightmap index -> primary/secondary image` join.
+- `tools/t6_world_lightmap_manifest_v2.py` — same exact T6 join plus exact OAT image disk-name mapping/collision rejection.
+- `tools/test_t6_world_lightmap_manifest_v1.py` / `v2.py` — deterministic synthetic/negative regressions.
 - `tools/t6_gfxworld_lightmap_oat_patch/` — pinned OpenAssetTools patch that emits the exact loaded T6 GfxWorld primary/secondary image-name catalog without inventing shader semantics.
+- `tools/t6_world_lightmap_glb_embed_v2.py` — losslessly archives exact primary/secondary DDS bytes as untyped GLB bufferViews with SHA-256, T6 sampler identity and surface/UV provenance. It intentionally creates no generic glTF lightmap binding.
+- `tools/test_t6_world_lightmap_glb_embed_v1.py` / `v2.py` — archival integrity, determinism, deduplication, corruption, missing-file and identity/disk-bijection regressions.
 
-The next retail promotion is to run that dumper on a retained map GfxWorld and archive the exact image-pair catalog. Primary/secondary shader composition remains a separate proof boundary.
+The next retail promotion is to run the retained GfxWorld dumper on a retail map (Nuketown first), archive its exact pair catalog, run the v4 pipeline, and independently verify the final GLB/raw DDS recovery.
+
+Primary/secondary channel meaning and the exact T6 pixel-shader combine equation remain a separate proof boundary. Older IW/Treyarch-family formulas are not promoted as T6 truth.
+
+### Retail lightmap shader provenance
+
+Pinned stock OpenAssetTools already dumps T6 DX11 shader bytecode losslessly from `MaterialPixelShader::prog.loadDef.program` for exactly `programSize` bytes. Pixel shaders are emitted as:
+
+```text
+shader_bin/ps_<MaterialPixelShader.name>.cso
+```
+
+The accompanying OAT text dumps provide the exact chain:
+
+```text
+Material JSON
+  -> techniqueSet
+  -> techsets/<name>.techset
+  -> techniques/<name>.tech
+  -> per-pass pixelShader + sampler bindings
+  -> shader_bin/ps_<name>.cso
+```
+
+`tools/t6_lightmap_shader_inventory_v1.py` walks that chain and selects only pixel-shader passes that explicitly reference `lightmapSamplerPrimary` and/or `lightmapSamplerSecondary`. It hashes the exact DXBC bytes and preserves material/techset/technique/pass provenance without interpreting shader instructions. `tools/test_t6_lightmap_shader_inventory_v1.py` covers the parser and fail-closed path.
+
+The next shader-semantic step is DXBC instruction disassembly of those retail-selected shaders, followed by cross-technique validation of the observed primary/secondary sample swizzles and combine math.
 
 ## Strongest one-command world pipeline
 
 Current production entry point:
 
 ```text
-tools/t6_oat_world_textured_export_pipeline_v3.py
+tools/t6_oat_world_textured_export_pipeline_v4.py
 ```
 
 It promotes the strongest current stages into one deterministic path:
@@ -109,7 +150,8 @@ raw GfxWorld sidecars
   -> geometry-only reference GLB
 
 exact OAT Material JSONs
-  -> ordinary + generated/layered material manifest v2
+  -> ordinary + generated/layered material manifest v3
+     (exact T6 image identity + exact OAT disk filename)
 
 exact DDS assets
   -> semantic-aware DDS stage v2
@@ -119,13 +161,15 @@ normalized world + staged dependencies
      (all exact material dependency images embedded)
 
 optional exact GfxWorld lightmap catalog
-  -> surface/lightmap primary+secondary dependency manifest v1
+  -> surface/lightmap primary+secondary dependency manifest v2
+  -> exact raw primary/secondary DDS archive v2 inside final GLB
+     (renderer-neutral; no guessed lightmap shader)
 ```
 
 Example Windows invocation:
 
 ```bat
-py tools\t6_oat_world_textured_export_pipeline_v3.py ^
+py tools\t6_oat_world_textured_export_pipeline_v4.py ^
   --map <map_name> ^
   --surfaces <gfxworld.surfaces.json> ^
   --vd0 <gfxworld.vd0.bin> ^
@@ -136,11 +180,13 @@ py tools\t6_oat_world_textured_export_pipeline_v3.py ^
   --prefix <prefix_walk.json> ^
   --asset-pointer-base <virtual_base> ^
   --oat-material-root <OAT_materials_directory> ^
-  --dds-root <exact_DDS_directory> ^
+  --dds-root <exact_OAT_DDS_directory> ^
   --lightmap-catalog <optional_gfxworld_lightmap_catalog.json> ^
   --out-dir <output_directory> ^
   --write-gltf
 ```
+
+If the lightmap catalog is provided, missing lightmap DDS files fail closed by default. `--allow-missing-lightmap-dds` exists only for an explicitly incomplete archival run and records missing identities rather than silently dropping them.
 
 The geometry-only GLB remains beside the textured result so geometry can always be validated independently from renderer/material reconstruction.
 
