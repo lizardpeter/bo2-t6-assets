@@ -270,7 +270,9 @@ def main() -> int:
             len(gltf.get("animations", [{}])[0].get("channels", []))
             if gltf.get("animations") else 0
         ),
-        "translationCompositionCorrectedChannels": extras := gltf["extras"]["T6"]["translationCompositionCorrectedChannels"],
+        "translationCompositionCorrectedChannels": (
+            gltf["extras"]["T6"]["translationCompositionCorrectedChannels"]
+        ),
         "deltaChannelsRewritten": gltf["extras"]["T6"]["deltaChannelsRewritten"],
     }, indent=2, sort_keys=True))
     return 0
