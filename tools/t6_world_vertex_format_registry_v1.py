@@ -10,9 +10,13 @@ same thing as retail byte validation. This registry deliberately separates:
 4. final decoder/export eligibility.
 
 Existing direct byte proofs (for example the Nuketown census) remain valid.
-Previously-unproven formats can be promoted only when a
-`t6-world-vd1-raw-census-v2` report contains an unambiguous raw stride equal to
-the source-closed family stride and no fixture reports a contradictory stride.
+Previously-unproven formats can be promoted only when a supported raw census
+contains an unambiguous raw stride equal to the source-closed family stride and
+no clean fixture reports a contradictory stride.
+
+Accepted raw evidence formats:
+- t6-world-vd1-raw-census-v2 (full material/prefix reconstruction path)
+- t6-world-vd1-layout-census-v1 (standalone layout + exact vd1 bridge path)
 
 This makes format promotion data-driven: adding a clean retail fixture can
 enable a format without weakening the decoder or hand-editing a pending list.
@@ -24,11 +28,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-from t6_zone_core import MaterialWorldVertexFormat, WORLD_VERTEX_FORMATS
+from t6_zone_core import WORLD_VERTEX_FORMATS
 
 
 class WorldVertexFormatRegistryError(RuntimeError):
     pass
+
+
+RAW_CENSUS_FORMATS = {
+    "t6-world-vd1-raw-census-v2",
+    "t6-world-vd1-layout-census-v1",
+}
 
 
 def _load(path: Path) -> dict:
@@ -69,9 +79,10 @@ def _validate_baseline(census: dict) -> None:
 
 
 def _validate_raw_census(report: dict, source: str) -> None:
-    if report.get("format") != "t6-world-vd1-raw-census-v2":
+    fmt = report.get("format")
+    if fmt not in RAW_CENSUS_FORMATS:
         raise WorldVertexFormatRegistryError(
-            f"{source}: unsupported raw census {report.get('format')!r}"
+            f"{source}: unsupported raw census {fmt!r}; expected one of {sorted(RAW_CENSUS_FORMATS)}"
         )
     observed = report.get("observedRawStrideByFormat")
     if not isinstance(observed, dict):
@@ -130,6 +141,7 @@ def build_registry(
                 {
                     "fixture": fixture,
                     "source": source,
+                    "censusFormat": report.get("format"),
                     "observedRawStrides": strides,
                     "blockerCount": len(blockers),
                     "clean": len(blockers) == 0,
@@ -216,6 +228,7 @@ def build_registry(
             "baselineMapCount": len(baseline_census.get("maps", [])),
             "rawCensusCount": len(raw_censuses),
             "rawCensusSources": [source for source, _ in raw_censuses],
+            "acceptedRawCensusFormats": sorted(RAW_CENSUS_FORMATS),
         },
         "policy": {
             "formulaAloneCannotEnableExport": True,
