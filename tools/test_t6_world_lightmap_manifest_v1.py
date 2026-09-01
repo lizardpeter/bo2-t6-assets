@@ -6,6 +6,10 @@ import copy
 import json
 
 from t6_world_lightmap_manifest_v1 import (
+    LIGHTMAP_PRIMARY_CODE_TEXTURE_SOURCE,
+    LIGHTMAP_PRIMARY_SAMPLER_ACCESSOR,
+    LIGHTMAP_SECONDARY_CODE_TEXTURE_SOURCE,
+    LIGHTMAP_SECONDARY_SAMPLER_ACCESSOR,
     LightmapManifestError,
     NO_LIGHTMAP_INDEX,
     build_manifest,
@@ -67,11 +71,33 @@ def main() -> int:
     catalog = _catalog()
     doc = build_manifest(world, catalog)
 
+    assert LIGHTMAP_PRIMARY_CODE_TEXTURE_SOURCE == 0x4
+    assert LIGHTMAP_SECONDARY_CODE_TEXTURE_SOURCE == 0x5
+    assert LIGHTMAP_PRIMARY_SAMPLER_ACCESSOR == "lightmapSamplerPrimary"
+    assert LIGHTMAP_SECONDARY_SAMPLER_ACCESSOR == "lightmapSamplerSecondary"
+
     assert doc["format"] == "t6-world-lightmap-manifest-v1"
     assert doc["map"] == "mp_test"
     assert doc["policy"]["surfaceJoin"] == "exact GfxSurface.lightmapIndex"
     assert doc["policy"]["noLightmapSentinel"] == 31
     assert doc["policy"]["lightmapUv"] == "TEXCOORD_<group native uvCount>"
+    assert doc["policy"]["codeSamplerIdentity"] == (
+        "T6-native MaterialTextureSource/accessor identity preserved exactly"
+    )
+    assert doc["t6CodeSamplerContract"] == {
+        "primary": {
+            "materialTextureSource": 4,
+            "materialTextureSourceHex": "0x4",
+            "enum": "TEXTURE_SRC_CODE_LIGHTMAP_PRIMARY",
+            "accessor": "lightmapSamplerPrimary",
+        },
+        "secondary": {
+            "materialTextureSource": 5,
+            "materialTextureSourceHex": "0x5",
+            "enum": "TEXTURE_SRC_CODE_LIGHTMAP_SECONDARY",
+            "accessor": "lightmapSamplerSecondary",
+        },
+    }
     assert doc["stats"] == {
         "surfaceCount": 4,
         "lightmapCount": 2,
@@ -84,8 +110,13 @@ def main() -> int:
     assert doc["referencedLightmapIndices"] == [0, 1]
     assert doc["unreferencedLightmapIndices"] == []
 
-    assert doc["lightmaps"][0]["primarySourceTexture"] == "*lightmap0_primary.dds"
-    assert doc["lightmaps"][0]["secondarySourceTexture"] == "*lightmap0_secondary.dds"
+    lm0 = doc["lightmaps"][0]
+    assert lm0["primarySourceTexture"] == "*lightmap0_primary.dds"
+    assert lm0["primaryCodeTextureSource"] == 4
+    assert lm0["primarySamplerAccessor"] == "lightmapSamplerPrimary"
+    assert lm0["secondarySourceTexture"] == "*lightmap0_secondary.dds"
+    assert lm0["secondaryCodeTextureSource"] == 5
+    assert lm0["secondarySamplerAccessor"] == "lightmapSamplerSecondary"
     assert doc["lightmaps"][1]["primarySourceTexture"] == "*lightmap1_primary.dds"
     assert doc["lightmaps"][1]["secondarySourceTexture"] == "*lightmap1_secondary.dds"
 
@@ -97,7 +128,11 @@ def main() -> int:
         "hasLightmap": True,
         "lightmapTexCoord": 1,
         "primarySourceTexture": "*lightmap0_primary.dds",
+        "primaryCodeTextureSource": 4,
+        "primarySamplerAccessor": "lightmapSamplerPrimary",
         "secondarySourceTexture": "*lightmap0_secondary.dds",
+        "secondaryCodeTextureSource": 5,
+        "secondarySamplerAccessor": "lightmapSamplerSecondary",
     }
     assert by_surface[1]["lightmapTexCoord"] == 3
     assert by_surface[2] == {
