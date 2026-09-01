@@ -10,7 +10,9 @@ Read these first:
 
 - `research/T6_PROOF_STANDARD.md` — defines P0 through P8 and what the project is allowed to call “solved”.
 - `research/T6_REVERSE_ENGINEERING_LEDGER.md` — permanent subsystem-by-subsystem closure ledger for world formats, materials, images, lightmaps, XModels, XAnim, collision, entities, lighting, FX, audio, weapons, characters, UI/scripts, and remaining T6 XAsset classes.
-- `research/T6_PROGRESS_2026-09-01_LIGHTMAP_V4.md` — exact checkpoint for the current world/lightmap v4 and retail-shader work.
+- `research/T6_PROGRESS_2026-09-01_LIGHTMAP_V4.md` — exact checkpoint for world/lightmap production v4.
+- `research/T6_PROGRESS_2026-09-01_LIGHTMAP_SHADER_CHAIN.md` — historical source/DXBC provenance checkpoint.
+- `research/T6_PROGRESS_2026-09-01_LIGHTMAP_SHADER_LINEAGE_V2.md` — current authoritative lightmap shader-lineage/research-pipeline checkpoint.
 
 The central rule is:
 
@@ -24,7 +26,7 @@ Unknown or ambiguous data fails closed and remains preserved for later work.
 - Preserve original FF/IPAK/SABS/SABL/IWD sources and hashes where available.
 - Keep decoded assets separate from tools, proof manifests, and retained source containers.
 - Store human-readable manifests, classifications, hashes, dependency graphs, and research notes in normal Git.
-- Store large binary assets through Git LFS when added from a local clone.
+- Store binary archival assets through Git LFS where configured, including retained `.cso` / `.dxbc` shader inputs.
 - Keep generated exports deterministic where practical.
 - Never discard unresolved Treyarch semantics merely because a generic preview format cannot represent them.
 - Keep enough provenance that a future decoder can reproduce an export without re-discovering the original T6 relationship.
@@ -107,11 +109,11 @@ Current lightmap tools:
 - `tools/t6_world_lightmap_glb_embed_v2.py` — losslessly archives exact primary/secondary DDS bytes as untyped GLB bufferViews with SHA-256, T6 sampler identity and surface/UV provenance. It intentionally creates no generic glTF lightmap binding.
 - `tools/test_t6_world_lightmap_glb_embed_v1.py` / `v2.py` — archival integrity, determinism, deduplication, corruption, missing-file and identity/disk-bijection regressions.
 
-The next retail promotion is to run the retained GfxWorld dumper on a retail map (Nuketown first), archive its exact pair catalog, run the v4 pipeline, and independently verify the final GLB/raw DDS recovery.
+The next retail image-side promotion is to run the retained GfxWorld dumper on a retail map (Nuketown first), archive its exact pair catalog, run the world v4 pipeline, and independently verify final GLB/raw DDS recovery.
 
 Primary/secondary channel meaning and the exact T6 pixel-shader combine equation remain a separate proof boundary. Older IW/Treyarch-family formulas are not promoted as T6 truth.
 
-### Retail lightmap shader provenance
+### Retail lightmap shader provenance and lineage
 
 Pinned stock OpenAssetTools already dumps T6 DX11 shader bytecode losslessly from `MaterialPixelShader::prog.loadDef.program` for exactly `programSize` bytes. Pixel shaders are emitted as:
 
@@ -119,7 +121,7 @@ Pinned stock OpenAssetTools already dumps T6 DX11 shader bytecode losslessly fro
 shader_bin/ps_<MaterialPixelShader.name>.cso
 ```
 
-The accompanying OAT text dumps provide the exact chain:
+The accompanying OAT dumps provide the exact chain:
 
 ```text
 Material JSON
@@ -130,9 +132,19 @@ Material JSON
   -> shader_bin/ps_<name>.cso
 ```
 
-`tools/t6_lightmap_shader_inventory_v1.py` walks that chain and selects only pixel-shader passes that explicitly reference `lightmapSamplerPrimary` and/or `lightmapSamplerSecondary`. It hashes the exact DXBC bytes and preserves material/techset/technique/pass provenance without interpreting shader instructions. `tools/test_t6_lightmap_shader_inventory_v1.py` covers the parser and fail-closed path.
+The current shader research toolchain is:
 
-The next shader-semantic step is DXBC instruction disassembly of those retail-selected shaders, followed by cross-technique validation of the observed primary/secondary sample swizzles and combine math.
+- `tools/t6_lightmap_shader_inventory_v2.py` — exact Material/techset/technique/pass worklist plus `T6 code sampler -> shader resource` bridge and exact shader hashes.
+- `tools/t6_dxbc_inspect_v1.py` — strict DXBC container/SHDR/SHEX/RDEF inspection.
+- `tools/t6_lightmap_shader_dxbc_manifest_v1.py` — exact `shader resource -> RDEF TEXTURE -> t#` resolution.
+- `tools/t6_dxbc_disassemble_v1.py` — exact `fxc /dumpbin` or `dxc -dumpbin` archival, including disassembler SHA-256 and raw stdout/stderr hashes.
+- `tools/t6_lightmap_disassembly_evidence_v1.py` — every declaration/executable line touching the resolved primary/secondary `t#`, with bounded context.
+- `tools/t6_lightmap_dxbc_lineage_v1.py` — first conservative lineage implementation, retained as a historical comparison artifact.
+- `tools/t6_lightmap_dxbc_lineage_v2.py` — authoritative dumpbin-faithful lineage parser with decorated opcode, absolute-value source-modifier, numeric-prefix, control-flow and unparsed-candidate handling.
+
+The parser correction from v1 to v2 is documented in `research/T6_PROGRESS_2026-09-01_LIGHTMAP_SHADER_LINEAGE_V2.md` instead of being hidden by rewriting history.
+
+At this checkpoint the repository does **not** yet retain a retail BO2 lightmap `ps_*.cso` fixture, so retail channel/equation proof is still pending. The next semantic promotion requires both exact retail shader programs and their exact paired primary/secondary lightmap pixel data.
 
 ## Strongest one-command world pipeline
 
@@ -190,6 +202,43 @@ If the lightmap catalog is provided, missing lightmap DDS files fail closed by d
 
 The geometry-only GLB remains beside the textured result so geometry can always be validated independently from renderer/material reconstruction.
 
+## Strongest one-command lightmap shader research pipeline
+
+Current authoritative research entry point:
+
+```text
+tools/t6_lightmap_shader_research_pipeline_v2.py
+```
+
+Given one normal pinned-OAT dump plus an explicit `fxc.exe` or `dxc.exe`, it retains the complete chain:
+
+```text
+inventory v2
+  -> DXBC/RDEF manifest v1
+  -> hashed disassembly archive v1
+  -> bounded register evidence v1
+  -> legacy lineage v1
+  -> authoritative lineage v2
+  -> top-level research manifest v2
+```
+
+By default the disassembler is run twice and every archived stdout/stderr artifact must be byte-identical. Missing selected shaders, empty inventories, missing executable lightmap-register use, or nondeterministic deterministic stages fail closed.
+
+Example Windows invocation:
+
+```bat
+py tools\t6_lightmap_shader_research_pipeline_v2.py ^
+  --material-root "<OAT_DUMP_ROOT>\materials" ^
+  --techset-root "<OAT_DUMP_ROOT>\techsets" ^
+  --technique-root "<OAT_DUMP_ROOT>\techniques" ^
+  --shader-root "<OAT_DUMP_ROOT>\shader_bin" ^
+  --tool "<PATH_TO_FXC_OR_DXC>" ^
+  --tool-kind fxc ^
+  --out-dir "<OUTPUT_ROOT>\lightmap_shader_research_v2"
+```
+
+The `.cso` remains the authoritative source artifact. Dumpbin text and lineage are derived evidence and never replace the original retail bytes.
+
 ## XModel / skinning / XAnim checkpoint
 
 Rigid XModel rendering, skeleton reconstruction, inverse-bind validation, and a real retail animated Nuketown map object have been carried through standard glTF.
@@ -224,7 +273,7 @@ source-containers/       optional original FF/IPAK/SABS/SABL/IWD sources via Git
 
 ## Large-file policy
 
-Do not commit large `.ff`, `.ipak`, `.bin`, model, texture, audio, archive, or other binary payloads to ordinary Git history. `.gitattributes` defines the intended Git LFS classes. A local clone with Git LFS installed is required to upload large archival payloads.
+Do not commit retail `.ff`, `.ipak`, expanded `.bin`, models, textures, audio, shader binaries, archives, or other binary payloads to ordinary Git history when an LFS rule exists. `.gitattributes` defines the intended Git LFS classes. A local clone with Git LFS installed is required to upload those archival payloads.
 
 ## Completion criterion
 
