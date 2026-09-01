@@ -1,0 +1,37 @@
+{
+  "depthStencilState": {
+    "api": "ID3D11Device::CreateDepthStencilState",
+    "builderVaHex": "0x00770c50",
+    "descriptorBytes": 52,
+    "deviceVtableOffsetHex": "0x54",
+    "dynamicPath": "0x770ef0 can provide a runtime write mask and binds a separate stencil reference through OMSetDepthStencilState",
+    "ordinaryMaterialStencilWriteMask": 255,
+    "stencilReadMask": 255,
+    "stencilWriteMaskPolicy": "builder second argument; ordinary material-state creation at 0x731dc8 passes 0xff"
+  },
+  "format": "t6-retail-d3d11-state-proof-v1",
+  "proofBoundary": "Direct static proof for the pinned retail PC executable. Shadowmap bias/scale remain runtime DVARs; the listed defaults are exact registration defaults, while current values can change during execution.",
+  "rasterizerState": {
+    "api": "ID3D11Device::CreateRasterizerState",
+    "builderVaHex": "0x00770da0",
+    "deviceVtableOffsetHex": "0x58",
+    "modes": [
+      {"depthBias": 0, "depthBiasClamp": 0.0, "enum": 0, "name": "offset0", "slopeScaledDepthBias": 0.0, "stateBitsByte1MaskedHex": "0x00", "usesShadowmapDvars": false},
+      {"depthBias": 256, "depthBiasClamp": 0.0, "enum": 1, "name": "offset1", "slopeScaledDepthBias": 1.0, "stateBitsByte1MaskedHex": "0x10", "usesShadowmapDvars": false},
+      {"depthBias": 512, "depthBiasClamp": 0.0, "enum": 2, "name": "offset2", "slopeScaledDepthBias": 2.0, "stateBitsByte1MaskedHex": "0x20", "usesShadowmapDvars": false},
+      {"depthBias": -8192, "depthBiasClamp": 0.0, "enum": 3, "name": "offsetShadowmap", "slopeScaledDepthBias": -2.0, "stateBitsByte1MaskedHex": "0x30", "usesShadowmapDvars": true}
+    ],
+    "polygonOffsetField": {"bitRange": "4-5", "maskHex": "0x30", "stateWord": "loadBits[1] / T6 state byte 1"},
+    "shadowmapDvars": {
+      "sm_polygonOffsetBias": {"default": 8192, "max": 65536, "min": 0, "runtimeUse": "DepthBias = -currentValue", "type": "int"},
+      "sm_polygonOffsetScale": {"default": 2.0, "max": 8.0, "min": 0.0, "runtimeUse": "SlopeScaledDepthBias = -currentValue", "type": "float"}
+    }
+  },
+  "retailExecutable": {
+    "bytes": 12850328,
+    "file": "t6mp(1)(1).exe",
+    "imageBaseHex": "0x00400000",
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1"
+  },
+  "validation": {"d3d11BuilderCallsMatched": true, "dvarRegistrationMatched": true, "exactRetailSha256": true, "instructionBytesMatched": true}
+}
