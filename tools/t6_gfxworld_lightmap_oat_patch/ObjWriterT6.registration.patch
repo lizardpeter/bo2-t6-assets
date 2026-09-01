@@ -1,0 +1,20 @@
+diff --git a/src/ObjWriting/Game/T6/ObjWriterT6.cpp b/src/ObjWriting/Game/T6/ObjWriterT6.cpp
+--- a/src/ObjWriting/Game/T6/ObjWriterT6.cpp
++++ b/src/ObjWriting/Game/T6/ObjWriterT6.cpp
+@@
+ #include "Game/T6/Font/FontDumperT6.h"
+ #include "Game/T6/Image/ImageDumperT6.h"
+ #include "Game/T6/Maps/MapEntsDumperT6.h"
+ #include "Game/T6/Material/MaterialJsonDumperT6.h"
+ #include "Game/T6/Techset/TechsetDumperT6.h"
+ #include "Game/T6/XAnim/XAnimDumperT6.h"
+ #include "Game/T6/XModel/XModelDumperT6.h"
++#include "GfxWorldLightmap/GfxWorldLightmapDumperT6.h"
+@@
+     // REGISTER_DUMPER(AssetDumperComWorld, m_com_world)
+     // REGISTER_DUMPER(AssetDumperGameWorldSp, m_game_world_sp)
+     // REGISTER_DUMPER(AssetDumperGameWorldMp, m_game_world_mp)
+     RegisterAssetDumper(std::make_unique<map_ents::DumperT6>());
+-    // REGISTER_DUMPER(AssetDumperGfxWorld, m_gfx_world)
++    RegisterAssetDumper(std::make_unique<gfx_world_lightmap::DumperT6>());
+     RegisterAssetDumper(std::make_unique<light_def::DumperT6>());
