@@ -65,6 +65,7 @@ def main() -> int:
         assert doc["source"]["producer"] == "t6_oat_material_manifest_v3.py"
         assert doc["stats"]["oatImageMappedDependencyCount"] == 2
         assert doc["stats"]["oatImageFilenameChangedDependencyCount"] == 1
+        assert doc["stats"]["oatImageUniqueDiskSourceCount"] == 2
 
         by_name = {entry["material"]: entry for entry in doc["materials"]}
         star = by_name["wpc/star"]
@@ -115,6 +116,29 @@ def main() -> int:
             pass
         else:
             raise AssertionError("nested image path was not rejected by flat staging policy")
+
+        # OAT's '*' -> '_' disk transform is not injective. Two distinct T6
+        # GfxImage identities must never silently collapse to one staged file.
+        collision = root / "collision_materials"
+        _write(collision / "wpc" / "star.json", _material("*foo", "colorMap"))
+        _write(collision / "wpc" / "underscore.json", _material("_foo", "colorMap"))
+        try:
+            build_manifest(
+                material_root=collision,
+                catalog_doc={
+                    "materials": [
+                        {"index": 0, "name": "wpc/star"},
+                        {"index": 1, "name": "wpc/underscore"},
+                    ]
+                },
+                source_texture_extension=".dds",
+            )
+        except OatMaterialManifestError as exc:
+            text = str(exc)
+            assert "collide after OAT filename mapping" in text
+            assert "*foo" in text and "_foo" in text and "_foo.dds" in text
+        else:
+            raise AssertionError("distinct GfxImage identities were allowed to collide")
 
     print("PASS t6_oat_material_manifest_v3 regression")
     return 0
