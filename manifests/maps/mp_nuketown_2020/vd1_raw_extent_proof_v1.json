@@ -1,0 +1,60 @@
+{
+  "ambiguousNonzeroFormatCandidates": [
+    {"rawStrideCandidate": 8, "spanBytes": 2704, "vd0Offset": 4832016, "vd1Offset": 20200, "vertexCount": 338, "worldVertFormat": 2},
+    {"rawStrideCandidate": 8, "spanBytes": 48, "vd0Offset": 5038352, "vd1Offset": 31400, "vertexCount": 6, "worldVertFormat": 2},
+    {"rawStrideCandidate": 4, "spanBytes": 80, "vd0Offset": 5038800, "vd1Offset": 31448, "vertexCount": 20, "worldVertFormat": 1},
+    {"rawStrideCandidate": 8, "spanBytes": 168, "vd0Offset": 5042336, "vd1Offset": 31688, "vertexCount": 21, "worldVertFormat": 3},
+    {"rawStrideCandidate": 4, "spanBytes": 112, "vd0Offset": 5044160, "vd1Offset": 31856, "vertexCount": 28, "worldVertFormat": 1},
+    {"rawStrideCandidate": 4, "spanBytes": 16, "vd0Offset": 5058976, "vd1Offset": 33716, "vertexCount": 4, "worldVertFormat": 1},
+    {"rawStrideCandidate": 4, "spanBytes": 32, "vd0Offset": 5109792, "vd1Offset": 33732, "vertexCount": 8, "worldVertFormat": 1}
+  ],
+  "ambiguousOffsetBuckets": [
+    {"distinctVertexCountCount": 131, "exactStrideCandidateSet": [8, 13, 169, 208, 338, 676], "formatSet": [0, 2], "maxVertexCount": 7799, "memberCount": 150, "minVertexCount": 4, "nextOffset": 22904, "spanBytes": 2704, "vd1Offset": 20200},
+    {"distinctVertexCountCount": 15, "exactStrideCandidateSet": [3, 4, 6, 8, 12], "formatSet": [0, 2], "maxVertexCount": 1677, "memberCount": 15, "minVertexCount": 4, "nextOffset": 31448, "spanBytes": 48, "vd1Offset": 31400},
+    {"distinctVertexCountCount": 2, "exactStrideCandidateSet": [4], "formatSet": [0, 1], "maxVertexCount": 20, "memberCount": 2, "minVertexCount": 6, "nextOffset": 31528, "spanBytes": 80, "vd1Offset": 31448},
+    {"distinctVertexCountCount": 4, "exactStrideCandidateSet": [7, 8, 42], "formatSet": [0, 3], "maxVertexCount": 24, "memberCount": 4, "minVertexCount": 4, "nextOffset": 31856, "spanBytes": 168, "vd1Offset": 31688},
+    {"distinctVertexCountCount": 2, "exactStrideCandidateSet": [4], "formatSet": [0, 1], "maxVertexCount": 29, "memberCount": 2, "minVertexCount": 28, "nextOffset": 31968, "spanBytes": 112, "vd1Offset": 31856},
+    {"distinctVertexCountCount": 2, "exactStrideCandidateSet": [4], "formatSet": [0, 1], "maxVertexCount": 50, "memberCount": 3, "minVertexCount": 4, "nextOffset": 33732, "spanBytes": 16, "vd1Offset": 33716},
+    {"distinctVertexCountCount": 7, "exactStrideCandidateSet": [2, 4], "formatSet": [0, 1], "maxVertexCount": 700, "memberCount": 7, "minVertexCount": 8, "nextOffset": 33764, "spanBytes": 32, "vd1Offset": 33732}
+  ],
+  "conclusions": {
+    "format0SecondaryOwnership": "not promoted: format0 groups either point to end-of-vd1 or share active offsets with groups that own nonzero-format candidates",
+    "formulaIndependentRetailStridesConfirmed": {"1": 4, "2": 8, "3": 8, "6": 12},
+    "knownFormatContradictionCount": 0,
+    "pendingFormat8TwentyByteQuestion": "not answered by Nuketown because format 8 is absent",
+    "pendingFormats": [4, 5, 7, 8]
+  },
+  "format": "t6-world-vd1-retail-extent-proof-v1",
+  "map": "mp_nuketown_2020",
+  "method": {
+    "allocationSpan": "next distinct serialized vd1Offset minus current vd1Offset; final allocation ends at retained vd1Bytes",
+    "formulaIndependent": true,
+    "promotionRule": "one offset bucket must have exactly one positive vertexCount and span must divide it exactly",
+    "vertexCount": "retained independently audited group vertexCount from vd0 allocation proof",
+    "worldVertFormatUse": "label only; current formula stride is not used to derive raw stride"
+  },
+  "proofBoundary": "This promotes only raw allocation stride for retained Nuketown formats 1,2,3,6. It does not assign vd1 column semantics and does not prove formats 4,5,7,8.",
+  "source": {
+    "proofBytes": 873158,
+    "proofFile": "T6_NUKETOWN_WORLD_VERTEX_PROOF_V1.json",
+    "proofGroupCount": 340,
+    "proofSha256": "2e0a72303593a082ea0468a6ffd6b18e9d5bd9aa16c2a0b7337a2e7a95fe505d",
+    "vd1Bytes": 33764
+  },
+  "stats": {
+    "ambiguousAllocationCount": 7,
+    "ambiguousNonzeroFormatGroupCount": 7,
+    "distinctActiveVd1OffsetCount": 120,
+    "format0GroupCount": 220,
+    "format0GroupsAtVd1EndOffset": 44,
+    "format0GroupsSharingActiveVd1Offsets": 176,
+    "unambiguousAllocationCount": 113,
+    "unambiguousNonzeroFormatGroupCount": 113
+  },
+  "unambiguousStrideEvidence": {
+    "1": {"allocationCount": 91, "groupCount": 91, "name": "TEX_2_NRM_1", "rawStrideBytes": 4, "spanBytesTotal": 25324, "vertexCountTotal": 6331},
+    "2": {"allocationCount": 5, "groupCount": 5, "name": "TEX_2_NRM_2", "rawStrideBytes": 8, "spanBytesTotal": 1632, "vertexCountTotal": 204},
+    "3": {"allocationCount": 16, "groupCount": 16, "name": "TEX_3_NRM_1", "rawStrideBytes": 8, "spanBytesTotal": 3600, "vertexCountTotal": 450},
+    "6": {"allocationCount": 1, "groupCount": 1, "name": "TEX_4_NRM_1", "rawStrideBytes": 12, "spanBytesTotal": 48, "vertexCountTotal": 4}
+  }
+}
