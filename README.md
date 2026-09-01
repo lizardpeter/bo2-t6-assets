@@ -1,64 +1,131 @@
 # Black Ops II (T6) Asset Archive
 
-Private archival/research repository for the ongoing Call of Duty: Black Ops II (T6) asset extraction and reconstruction project.
+Private archival/research repository for the ongoing Call of Duty: Black Ops II / Treyarch T6 asset extraction, reverse engineering, validation, and reconstruction project.
 
-## Goals
+The long-term target is **all of T6**, not merely a visually plausible map converter. Every format and relationship is advanced through retained evidence, deterministic decoders/tests, explicit proof boundaries, and production integration.
 
-- Preserve exact source provenance (`common_mp` -> `common_patch_mp` -> `patch_mp`).
-- Keep extracted/decoded assets separate from reconstruction tooling and manifests.
-- Store human-readable manifests, classifications, hashes, and scripts in normal Git.
+## Proof discipline
+
+Read these first:
+
+- `research/T6_PROOF_STANDARD.md` — defines P0 through P8 and what the project is allowed to call “solved”.
+- `research/T6_REVERSE_ENGINEERING_LEDGER.md` — permanent subsystem-by-subsystem closure ledger for world formats, materials, images, lightmaps, XModels, XAnim, collision, entities, lighting, FX, audio, weapons, characters, UI/scripts, and remaining T6 XAsset classes.
+
+The central rule is:
+
+> Formula support, a synthetic regression, a retail byte fixture, cross-fixture proof, export integration, and independent consumer validation are different milestones. Do not silently promote one into another.
+
+Unknown or ambiguous data fails closed and remains preserved for later work.
+
+## Repository goals
+
+- Preserve exact source provenance (`base -> common patch -> patch`) instead of treating patch-layer counts as additive.
+- Preserve original FF/IPAK/SABS/SABL/IWD sources and hashes where available.
+- Keep decoded assets separate from tools, proof manifests, and retained source containers.
+- Store human-readable manifests, classifications, hashes, dependency graphs, and research notes in normal Git.
 - Store large binary assets through Git LFS when added from a local clone.
-- Never treat patch-layer counts as additive when they override base XAssets.
-- Preserve proof boundaries: inferred identities are labeled as such until exact serialized definitions are recovered.
+- Keep generated exports deterministic where practical.
+- Never discard unresolved Treyarch semantics merely because a generic preview format cannot represent them.
+- Keep enough provenance that a future decoder can reproduce an export without re-discovering the original T6 relationship.
 
-## Current verified checkpoint
+## Current world/map checkpoint
 
-Stage 18C classifies all 172 top-level `common_mp` weapon definitions:
+### Geometry
 
-- 39 standard player weapon families
-- 15 selectable equipment definitions
-- 47 alternate/attachment variants
-- 71 scorestreak/internal/helper definitions
+The generic world decoder/exporter supports all nine known T6 `MaterialWorldVertexFormat` layouts in synthetic regression coverage.
 
-`common_patch_mp` contains 81 weapon definitions, all of which are names already present in `common_mp`; it is therefore an override/update layer for those names rather than 81 additional guns.
+Retained retail byte proof is deliberately narrower. The current machine-readable census is:
 
-The clean final multiplayer loadout catalog currently contains 40 weapon families (including the patch-era Peacekeeper) plus 15 equipment items = 55 player-facing rows.
+`manifests/world/T6_WORLD_VERTEX_FORMAT_CENSUS_V1.json`
 
-## World/map export checkpoint
-
-The source-closed world pipeline now has a deterministic geometry-only reference path and a conservative textured path.
-
-Geometry path:
+Nuketown currently retail-proves formats:
 
 ```text
-GfxWorld sidecars
-  -> serialized vd0/vd1 byte audit
-  -> exact material-pointer resolution
-  -> normalized shared world vertex groups
-  -> glTF 2.0 / GLB
+0  TEX_1_NRM_1
+1  TEX_2_NRM_1
+2  TEX_2_NRM_2
+3  TEX_3_NRM_1
+6  TEX_4_NRM_1
 ```
 
-The generic world decoder/exporter handles all nine known T6 `MaterialWorldVertexFormat` layouts (0-8) in synthetic regression coverage. Retail byte proof remains deliberately narrower: formats already observed and byte-audited in retained retail fixtures are considered proven for those fixtures only; formula/regression coverage does not upgrade an unseen retail format to retail proof.
+Formats `4`, `5`, `7`, and `8` have source/formula + synthetic coverage but still require retained retail fixtures before they may be called retail-byte-proven. `tools/t6_world_format_target_scan_v1.py` exists specifically to find materials/maps that should exercise those variants.
 
-The textured path adds:
+### Layered/generated materials
+
+Generated world materials such as:
 
 ```text
-material_texture_mapping.csv
-  -> exact semantic material manifest
-  -> exact sourceTexture TGA staging
-  -> deterministic PNGs
-  -> exact material-name join
-  -> source-approved colorMap / normalMap glTF preview bindings
+*22n_14(wpc/base:wpc/decal)
 ```
 
-Non-core Treyarch semantics such as `specularMap`, packed `colorGloss` / `colorOpacity`, and layered/compositor materials are retained in `extras.T6.materialDependencyGraph` rather than silently translated into generic PBR channels. The untextured reference GLB is kept beside the textured GLB so geometry can always be compared independently from material reconstruction.
+are no longer treated as opaque names.
 
-### One-command textured world export
+The current source-closed reconstruction knows that:
 
-From a Windows clone, after the required raw world sidecars and exact material/texture mapping have been produced:
+- numeric tokens are component BSP material indices;
+- `n` denotes the component's real-normal-map expectation;
+- `$identitynormalmap` is not treated as a real normal map;
+- component names in parentheses preserve exact layer identities/order;
+- generated texture tables concatenate component texture tables in layer order;
+- layer count + real-normal count determines the layered world vertex format.
+
+Nuketown retains a dedicated layered-material proof under:
+
+`manifests/maps/mp_nuketown_2020/layered_material_fixture_proof_v1.json`
+
+The exact layered pixel-shader/blend composition is **not** silently approximated into generic PBR. All exact dependencies remain preserved for a future Treyarch-aware Blender/wgpu shader.
+
+### DDS / texture dependencies
+
+`tools/t6_dds_texture_stage_v2.py` stages the currently source-closed DDS subset and determines BC5 normal reconstruction from exact Material semantics, including layered normal maps that are deliberately unbound in generic glTF.
+
+`tools/t6_world_textured_gltf_export_v2.py` embeds every exact staged material dependency image into the GLB. Only independently safe standard-preview bindings are connected to generic glTF material slots. Non-core Treyarch dependencies remain embedded and indexed in `extras.T6` instead of being guessed away.
+
+### Lightmaps
+
+T6 `GfxWorld` owns an array of `GfxLightmapArray` entries, each containing separate primary and secondary `GfxImage` assets. Surfaces already carry `lightmapIndex`, and the world vertex pipeline already exports the dedicated lightmap UVs.
+
+Current lightmap tools:
+
+- `tools/t6_world_lightmap_manifest_v1.py` — exact `surface -> lightmap index -> primary/secondary image` join with fail-closed validation.
+- `tools/test_t6_world_lightmap_manifest_v1.py` — deterministic synthetic/negative regression.
+- `tools/t6_gfxworld_lightmap_oat_patch/` — pinned OpenAssetTools patch that emits the exact loaded T6 GfxWorld primary/secondary image-name catalog without inventing shader semantics.
+
+The next retail promotion is to run that dumper on a retained map GfxWorld and archive the exact image-pair catalog. Primary/secondary shader composition remains a separate proof boundary.
+
+## Strongest one-command world pipeline
+
+Current production entry point:
+
+```text
+tools/t6_oat_world_textured_export_pipeline_v3.py
+```
+
+It promotes the strongest current stages into one deterministic path:
+
+```text
+raw GfxWorld sidecars
+  -> audited normalized world
+  -> geometry-only reference GLB
+
+exact OAT Material JSONs
+  -> ordinary + generated/layered material manifest v2
+
+exact DDS assets
+  -> semantic-aware DDS stage v2
+
+normalized world + staged dependencies
+  -> portable textured GLB v2
+     (all exact material dependency images embedded)
+
+optional exact GfxWorld lightmap catalog
+  -> surface/lightmap primary+secondary dependency manifest v1
+```
+
+Example Windows invocation:
 
 ```bat
-py tools\t6_world_textured_export_pipeline_v1.py ^
+py tools\t6_oat_world_textured_export_pipeline_v3.py ^
   --map <map_name> ^
   --surfaces <gfxworld.surfaces.json> ^
   --vd0 <gfxworld.vd0.bin> ^
@@ -68,36 +135,53 @@ py tools\t6_world_textured_export_pipeline_v1.py ^
   --catalog <material_catalog.json> ^
   --prefix <prefix_walk.json> ^
   --asset-pointer-base <virtual_base> ^
-  --material-texture-mapping <material_texture_mapping.csv> ^
-  --texture-root <directory_with_exact_TGA_basenames> ^
+  --oat-material-root <OAT_materials_directory> ^
+  --dds-root <exact_DDS_directory> ^
+  --lightmap-catalog <optional_gfxworld_lightmap_catalog.json> ^
   --out-dir <output_directory> ^
   --write-gltf
 ```
 
-The command retains the audit proof, resolved surfaces, normalized world JSON, geometry-only GLB, material manifest, texture-stage manifest, staged PNGs, textured GLB, optional embedded `.gltf`, and SHA-256 pipeline manifests.
+The geometry-only GLB remains beside the textured result so geometry can always be validated independently from renderer/material reconstruction.
 
-Current regressions for this layer:
+## XModel / skinning / XAnim checkpoint
 
-```bat
-py tools\test_t6_texture_stage_v1.py
-py tools\test_t6_world_textured_gltf_export_v1.py
-py tools\test_t6_world_textured_export_pipeline_v1.py
+Rigid XModel rendering, skeleton reconstruction, inverse-bind validation, and a real retail animated Nuketown map object have been carried through standard glTF.
+
+`tools/t6_xanim_skinned_gltf_export_v4.py` is the generalized rigid+blended skin exporter. Its skin validation covers native 1/2/3/4-influence rows and fails closed on unweighted vertices or invalid joint/weight data. The non-root XAnim translation rule used by the proven path is:
+
+```text
+glTF local translation = XModel bind-local translation + XAnim translation delta
 ```
 
-The all-format pipeline test intentionally exercises world vertex formats 0-8 synthetically. It validates serializer/tool integration; it is not a substitute for a retail byte fixture.
+A retained `german_shepherd` 56-bone fixture census is recorded in:
+
+`manifests/xmodels/german_shepherd_skin_expectation_v1.json`
+
+Its next proof step is intentionally explicit: regenerate the normalized mesh/skeleton from the exact retail owning fastfile, export bind-pose skin through v4, retain hashes, and independently load/validate it before promoting the fixture further.
+
+## Weapon-definition checkpoint
+
+Stage 18C classifies the 172 top-level `common_mp` weapon definitions into player weapon families, equipment, alternate/attachment variants, and scorestreak/internal/helper definitions. Patch-zone duplicate names are tracked as overrides rather than additional weapons.
+
+Weapon work remains one subsystem inside the larger T6 ledger; complete first-person weapon/viewhand/XAnim/material/FX/audio linkage is not yet declared T6-closed.
 
 ## Repository layout
 
 ```text
-assets/                  # decoded/exported assets; large binaries via Git LFS
-manifests/               # inventories, hashes, dependency graphs, classifications
-tools/                   # collectors, decoders, verification scripts
-source-containers/       # optional original FF/IPAK/etc. sources via Git LFS
-research/                # notes and proof-boundary documentation
+assets/                  decoded/exported assets; large binaries via Git LFS
+manifests/               retained proofs, censuses, hashes, dependency graphs
+research/                proof standard, closure ledger, reverse-engineering notes
+tools/                   collectors, decoders, exporters, regressions, OAT patches
+source-containers/       optional original FF/IPAK/SABS/SABL/IWD sources via Git LFS
 ```
 
 ## Large-file policy
 
-Do not commit large `.ff`, `.ipak`, `.bin`, model, texture, audio, archive, or other binary payloads to ordinary Git history. `.gitattributes` defines the intended Git LFS classes. A local clone with Git LFS installed is required to upload the binary archive itself.
+Do not commit large `.ff`, `.ipak`, `.bin`, model, texture, audio, archive, or other binary payloads to ordinary Git history. `.gitattributes` defines the intended Git LFS classes. A local clone with Git LFS installed is required to upload large archival payloads.
+
+## Completion criterion
+
+This repository is not “done” when one map looks correct. The project is complete only when the closure ledger reaches the declared T6 archival/reconstruction scope with retained retail fixtures, cross-fixture validation, production integration, and independent-consumer validation for every material format/asset class that matters.
 
 This repository is intentionally separate from `bo2-pc-server-decompile`.
