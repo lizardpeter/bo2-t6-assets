@@ -1,0 +1,40 @@
+{
+  "conclusion": "For ordinary animated bone tracks, T6 uses raw decoded XAnim translation for roots and bind-local XModel.trans + XAnim translation delta for non-roots.",
+  "format": "t6-retail-xanim-root-translation-proof-v1",
+  "functions": {
+    "CalcSkelNonRootBonesEquivalent": "0x008d6b50",
+    "CalcSkelRootBonesNoParentOrDuplicateEquivalent": "0x008d6100",
+    "CalcSkelRootBonesWithParentEquivalent": "0x008d6220",
+    "primarySkeletonConsumerA": "0x00422a6f",
+    "primarySkeletonConsumerB": "0x005c6948"
+  },
+  "proofBoundary": "Direct static retail-byte proof for the pinned PC executable through the primary DObj root/non-root skeleton composition path. This closes ordinary animated root-bone translation composition. It does not add any claim about unretained executable builds or the separate XAnim binary serialization fixture gate.",
+  "retailExecutable": {
+    "bytes": 12850328,
+    "file": "t6mp(1)(1).exe",
+    "imageBaseHex": "0x00400000",
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1"
+  },
+  "semantics": {
+    "deltaPartSeparation": "XAnimParts.deltaPart root motion is a separate already-proven runtime path and is not conflated with ordinary bone-track root translation",
+    "ordinaryAnimatedNonRootTranslation": "XModel compact bind-local translation + XAnim local translation delta, then parent-space composition",
+    "ordinaryAnimatedRootTranslation": "XAnim local translation directly; no XModel compact bind-local translation is added for root bones",
+    "rootWithModelParent": "root animated local transform may be composed with the supplied parent DObj transform, but still does not index XModel.trans[]"
+  },
+  "validation": {
+    "exactRetailSha256": true,
+    "nonRootCompactBindPlusDeltaMatched": true,
+    "nonRootWholeFunctionPinned": true,
+    "rootDoesNotUseCompactModelTrans": true,
+    "rootNoParentWholeFunctionPinned": true,
+    "rootWithParentWholeFunctionPinned": true,
+    "twoPrimaryConsumersMatched": true
+  },
+  "xmodelX86Offsets": {
+    "numBonesHex": "0x04",
+    "numRootBonesHex": "0x05",
+    "parentListHex": "0x0c",
+    "quatsHex": "0x10",
+    "transHex": "0x14"
+  }
+}
