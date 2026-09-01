@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Stage retail T6 world lightmap shader evidence for the research pipeline.
 
-This tool consumes an OpenAssetTools output tree from a hash-pinned retail T6
-map dump. It does not guess technique families or shader semantics. Instead it:
+Consumes a pinned OpenAssetTools T6 dump and retains exact Material ->
+TechniqueSet -> Technique -> pixel-shader provenance for techniques that bind
+lightmapSamplerPrimary and/or lightmapSamplerSecondary.
 
-1. indexes T6 Material JSONs, .techset files, .tech files and pixel-shader .cso;
-2. identifies materials whose exact technique graph references
-   lightmapSamplerPrimary and/or lightmapSamplerSecondary;
-3. copies only the required provenance chain into a compact retained bundle;
-4. hashes every source artifact;
-5. writes a deterministic worklist suitable for
-   t6_lightmap_shader_research_pipeline_v2.py.
+Pinned OAT T6 .techset grammar is explicitly supported:
 
-The actual arithmetic/channel semantics remain a downstream proof target.
+    "lit sun shadow":
+      example_lit_sun_shadow;
+
+Technique references are bare asset names; the disk file is
+techniques/<name>.tech. No fuzzy name substitution is performed.
 """
 from __future__ import annotations
 
@@ -30,7 +29,7 @@ class RetailLightmapStageError(RuntimeError):
 
 LIGHTMAP_NAMES = ("lightmapSamplerPrimary", "lightmapSamplerSecondary")
 PIXEL_RE = re.compile(r'\bpixelShader\s+\d+\.\d+\s+"([^"]+)"')
-TECHSET_NAME_RE = re.compile(r'"?([^"\s]+)"?')
+TECHSET_ENTRY_RE = re.compile(r'^\s{2,}([^\s;{}][^;{}]*?)\s*;\s*(?://.*)?$', re.MULTILINE)
 
 
 def _sha256(data: bytes) -> str:
@@ -39,11 +38,7 @@ def _sha256(data: bytes) -> str:
 
 def _file_record(path: Path, root: Path) -> dict:
     data = path.read_bytes()
-    return {
-        "relative": path.relative_to(root).as_posix(),
-        "bytes": len(data),
-        "sha256": _sha256(data),
-    }
+    return {"relative": path.relative_to(root).as_posix(), "bytes": len(data), "sha256": _sha256(data)}
 
 
 def _copy_exact(src: Path, src_root: Path, dst_root: Path) -> dict:
@@ -51,14 +46,9 @@ def _copy_exact(src: Path, src_root: Path, dst_root: Path) -> dict:
     dst = dst_root / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dst)
-    a = src.read_bytes()
-    b = dst.read_bytes()
-    if a != b:
+    if src.read_bytes() != dst.read_bytes():
         raise RetailLightmapStageError(f"copy mismatch for {src}")
-    return {
-        "source": _file_record(src, src_root),
-        "staged": _file_record(dst, dst_root),
-    }
+    return {"source": _file_record(src, src_root), "staged": _file_record(dst, dst_root)}
 
 
 def _index_unique(root: Path, pattern: str) -> dict[str, Path]:
@@ -89,14 +79,19 @@ def _techset_reference(doc: dict) -> str:
 
 
 def _parse_techset_techniques(text: str) -> list[str]:
-    # OAT techset files contain exact referenced technique names. We remain
-    # syntax-conservative: retain tokens ending in .tech if present, otherwise
-    # quoted/non-whitespace names that correspond to files are resolved later.
     names: list[str] = []
     seen: set[str] = set()
-    for raw in re.findall(r'"([^"]+\.tech)"|([^\s=;{}]+\.tech)', text):
-        value = raw[0] or raw[1]
+    for match in TECHSET_ENTRY_RE.finditer(text):
+        value = match.group(1).strip()
+        if value.startswith('"') or ':' in value or value.startswith("//"):
+            continue
+        # OAT emits a bare technique asset identity followed by ';'. Accept an
+        # optional .tech suffix for robustness, but normalize to disk basename.
         base = Path(value).name
+        if base.endswith(".tech"):
+            base = base[:-5]
+        if not base or any(ch in base for ch in ('"', "'", "=", "{" , "}")):
+            raise RetailLightmapStageError(f"unrecognized technique reference line: {match.group(0)!r}")
         if base not in seen:
             seen.add(base)
             names.append(base)
@@ -130,16 +125,16 @@ def build_stage(*, oat_root: Path, output_dir: Path, map_name: str, retail_ff_sh
 
     candidates: list[dict] = []
     retained_paths: set[Path] = set()
+    parsed_techset_count = 0
     for material_path in sorted(material_root.rglob("*.json")):
         doc = _load_material(material_path)
         if doc is None:
             continue
         techset_name = _techset_reference(doc)
-        techset_file = techsets.get(Path(techset_name).name + ("" if techset_name.endswith(".techset") else ".techset"))
-        if techset_file is None:
-            # Some OAT outputs store techniqueSet with path-like identity; fall
-            # back only to an exact basename match, never fuzzy substitution.
-            techset_file = techsets.get(Path(techset_name).name)
+        techset_basename = Path(techset_name).name
+        if not techset_basename.endswith(".techset"):
+            techset_basename += ".techset"
+        techset_file = techsets.get(techset_basename)
         if techset_file is None:
             raise RetailLightmapStageError(
                 f"material {material_path} references missing techniqueSet {techset_name!r}"
@@ -147,14 +142,15 @@ def build_stage(*, oat_root: Path, output_dir: Path, map_name: str, retail_ff_sh
         techset_text = techset_file.read_text(encoding="utf-8", errors="strict")
         technique_names = _parse_techset_techniques(techset_text)
         if not technique_names:
-            # Retain candidate discovery fail-closed; a missing parse cannot be
-            # treated as no lightmap usage.
-            continue
+            raise RetailLightmapStageError(
+                f"could not parse any OAT technique references from {techset_file}"
+            )
+        parsed_techset_count += 1
 
         local_techniques: list[dict] = []
         material_has_lightmap = False
         for technique_name in technique_names:
-            technique_file = techniques.get(Path(technique_name).name)
+            technique_file = techniques.get(technique_name + ".tech")
             if technique_file is None:
                 raise RetailLightmapStageError(
                     f"techset {techset_file} references missing technique {technique_name!r}"
@@ -170,14 +166,16 @@ def build_stage(*, oat_root: Path, output_dir: Path, map_name: str, retail_ff_sh
                     raise RetailLightmapStageError(
                         f"technique {technique_file} references missing pixel shader {shader_name!r}"
                     )
-                shader_records.append({
-                    "name": shader_name,
-                    "file": _file_record(shader_file, oat_root),
-                })
+                shader_records.append({"name": shader_name, "file": _file_record(shader_file, oat_root)})
                 retained_paths.add(shader_file)
             if roles:
+                if not shader_records:
+                    raise RetailLightmapStageError(
+                        f"lightmap technique {technique_file} has no parsed pixelShader declaration"
+                    )
                 material_has_lightmap = True
             local_techniques.append({
+                "techniqueAsset": technique_name,
                 "technique": technique_file.relative_to(oat_root).as_posix(),
                 "roles": roles,
                 "pixelShaders": shader_records,
@@ -219,6 +217,7 @@ def build_stage(*, oat_root: Path, output_dir: Path, map_name: str, retail_ff_sh
         "candidates": candidates,
         "copies": copies,
         "stats": {
+            "parsedMaterialTechsetCount": parsed_techset_count,
             "materialChainCount": len(candidates),
             "retainedArtifactCount": len(copies),
             "uniquePixelShaderCount": len(shader_names),
@@ -232,14 +231,19 @@ def build_stage(*, oat_root: Path, output_dir: Path, map_name: str, retail_ff_sh
             "techniqueRoot": str(staged_root / "techniques"),
             "shaderRoot": str(staged_root / "shader_bin"),
         },
+        "sourceGrammar": {
+            "oatCommit": "7d027e8f89118196713e955b0e11f8404149c54d",
+            "techsetReference": "quoted technique type label followed by indented bare technique asset name and semicolon",
+            "techniqueDiskRule": "techniques/<asset>.tech",
+            "pixelShaderDiskRule": "shader_bin/ps_<pixelShader asset>.cso",
+        },
         "proofBoundary": (
             "This stage proves exact retained Material -> TechniqueSet -> Technique -> pixel-shader provenance "
             "for OAT output and sampler-name presence. It does not prove lightmap channel meaning or shader arithmetic."
         ),
     }
-    payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     out = output_dir / "t6_retail_lightmap_shader_stage_v1.json"
-    out.write_text(payload, encoding="utf-8")
+    out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 
 
@@ -250,12 +254,7 @@ def main() -> int:
     parser.add_argument("--map", required=True)
     parser.add_argument("--retail-ff-sha256")
     args = parser.parse_args()
-    doc = build_stage(
-        oat_root=args.oat_root,
-        output_dir=args.out_dir,
-        map_name=args.map,
-        retail_ff_sha256=args.retail_ff_sha256,
-    )
+    doc = build_stage(oat_root=args.oat_root, output_dir=args.out_dir, map_name=args.map, retail_ff_sha256=args.retail_ff_sha256)
     print(json.dumps({"map": doc["map"], **doc["stats"], "stagedRoot": doc["stagedRoot"]}, indent=2))
     return 0
 
