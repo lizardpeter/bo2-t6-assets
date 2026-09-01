@@ -1,0 +1,50 @@
+{
+  "format": "t6-zm-tomb-delta-endpoint-census-v1",
+  "retailFastfile": {
+    "file": "zm_tomb.ff",
+    "bytes": 78753344,
+    "sha256": "663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5"
+  },
+  "expandedXFile": {
+    "bytes": 359627377,
+    "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219",
+    "sourceStart": 34168670,
+    "sourceEnd": 42223687,
+    "sourceBytes": 8055017,
+    "xanimCount": 336,
+    "sourceChainEndedExactly": true
+  },
+  "deltaTracks": {
+    "dynamic": {
+      "total": 341,
+      "translation": 268,
+      "quat2": 73,
+      "quat3D": 0,
+      "firstIndexZero": 341,
+      "lastIndexEqualsNumframes": 341,
+      "strictlyIncreasing": 341,
+      "allIndicesInRangeZeroToNumframes": 341,
+      "exceptions": 0
+    },
+    "constant": {
+      "total": 84,
+      "translation": 36,
+      "quat2": 48,
+      "quat3D": 0
+    }
+  },
+  "validation": {
+    "retailFastfileReDecryptedIn2026_09_01Session": true,
+    "expandedShaMatchesPrior672AnimationSweep": true,
+    "serializedSourceEndMatchesPriorSweep": true,
+    "allDynamicTracksCoverExactNativeDomain": true,
+    "noSyntheticEndpointExtensionRequired": true
+  },
+  "producer": "tools/t6_xanim_delta_endpoint_census_v1.py",
+  "relatedProof": [
+    "manifests/xanim/zombies_672_animation_semantic_sweep_v1.json",
+    "manifests/xanim/T6_RETAIL_XANIM_DELTA_PROOF_V1.json"
+  ],
+  "conclusion": "Every one of the 341 dynamic deltaPart tracks in this retained retail Tomb corpus begins at frame 0, ends exactly at XAnimParts.numframes, is strictly increasing, and stays within the native frame domain. Production exporters must validate this domain and must not fabricate/clamp first or last delta keys.",
+  "proofBoundary": "Direct retail evidence for 336 consecutive zm_tomb XAnimParts / 341 dynamic delta tracks. The prior combined Zombies sweep establishes the broader parser counts across zm_tomb+zm_prison, but this endpoint census does not claim unobserved per-index results for zm_prison because its retail FF was not available as a standalone Library input during this run."
+}
