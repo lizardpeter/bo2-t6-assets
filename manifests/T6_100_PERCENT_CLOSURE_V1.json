@@ -1,0 +1,158 @@
+{
+  "format": "t6-100-percent-closure-v1",
+  "goal": "Every retained retail T6 MP and Zombies world can be exported deterministically without guessed geometry or silent asset substitution, with renderer-critical T6 semantics either reproduced exactly or preserved in an executable T6-aware scene contract.",
+  "statusVocabulary": {
+    "closed": "Required implementation and the stated retail proof boundary are both satisfied.",
+    "implemented-awaiting-retail": "Production-safe implementation exists, but required retail corpus evidence has not yet been retained/run.",
+    "partial": "Substantial exact work exists, but a named semantic/coverage gap remains.",
+    "open": "Required semantic behavior or production implementation remains unsolved."
+  },
+  "rules": {
+    "percent100RequiresEveryGateClosed": true,
+    "formulaOrCrossEngineAnalogyCannotCloseRetailSemanticGate": true,
+    "preservationDoesNotEqualRendererSemanticClosure": true,
+    "retailContradictionReopensAffectedGate": true,
+    "missingAssetMayNeverBeSilentlySubstituted": true,
+    "allMapRegressionMeansEveryHashPinnedTargetInScope": true
+  },
+  "gates": [
+    {
+      "id": "containers",
+      "title": "Lossless retail container preservation and extraction",
+      "status": "closed",
+      "evidence": ["STATUS.md", "standalone BO2/T6 archive verification contract"],
+      "closureRequirement": "All discovered FF/IPAK/SABS/SABL/IWD inputs preserved byte-for-byte and verified while normalized extraction remains separately audited."
+    },
+    {
+      "id": "world-core-streams",
+      "title": "GfxWorld primary geometry/index stream",
+      "status": "closed",
+      "evidence": ["manifests/world/T6_WORLD_VERTEX_FORMAT_CENSUS_V1.json", "Nuketown direct byte proof"],
+      "closureRequirement": "36-byte vd0 layout, index reconstruction, surface/group allocation, coordinate conversion, and exact range validation are retail-proven."
+    },
+    {
+      "id": "world-all-nine-formats",
+      "title": "All nine T6 world vertex formats",
+      "status": "implemented-awaiting-retail",
+      "evidence": ["manifests/world/T6_WORLD_VERTEX_FORMAT_REGISTRY_V1.json", "tools/t6_world_vertex_format_registry_v1.py", "scripts/t6_find_pending_world_formats_v2.ps1"],
+      "current": {"exportEnabled": [0,1,2,3,6], "pending": [4,5,7,8]},
+      "closureRequirement": "Registry reports allFormatsExportEnabled=true from clean direct/raw retail evidence with zero contradictory strides."
+    },
+    {
+      "id": "static-xmodels",
+      "title": "Static XModel geometry, LODs, skeleton metadata and placements",
+      "status": "closed",
+      "evidence": ["Nuketown full static assembly", "T6 XModel normalizers/exporters"],
+      "closureRequirement": "Retail model geometry/LOD/placement transforms reconstruct without guessed axes or oversized accessor artifacts."
+    },
+    {
+      "id": "skinned-xmodels",
+      "title": "Rigid and 1/2/3/4-influence skinned XModels",
+      "status": "closed",
+      "evidence": ["tools/t6_xanim_skinned_gltf_export_v4.py", "german_shepherd 56-bone retail fixture"],
+      "closureRequirement": "Native vertsBlend influence buckets, normalized weights, joint indices, hierarchy and inverse bind matrices validate on retail blended meshes."
+    },
+    {
+      "id": "xanim-binary",
+      "title": "XAnimParts binary tracks and delta payload decoding",
+      "status": "partial",
+      "evidence": ["manifests/xanim/zombies_672_animation_semantic_sweep_v1.json", "tools/t6_xanim_normalize_v1.py"],
+      "current": {"retailAnimationsSwept": 672, "dynamicDeltaTranslations": 521, "constantDeltaTranslations": 71, "dynamicQuat2Deltas": 153, "constantQuat2Deltas": 76, "knownFixtureGap": "constant full-quat delta retail fixture"},
+      "closureRequirement": "Every serialized delta union branch used by retail T6 has at least one direct fixture and deterministic round-trip/semantic validation."
+    },
+    {
+      "id": "xanim-runtime-binding",
+      "title": "XAnim runtime transform composition",
+      "status": "partial",
+      "evidence": ["non-root bind-local translation + XAnim delta retail proof", "tools/t6_xanim_skinned_gltf_export_v4.py"],
+      "current": {"nonRootTranslation": "closed", "localRotation": "closed", "animatedRootTranslation": "open", "deltaPartRuntimeBinding": "open"},
+      "closureRequirement": "Direct T6 runtime/retail-output proof closes root translation and deltaPart composition; generalized exporter no longer fails closed on either."
+    },
+    {
+      "id": "material-image-identity",
+      "title": "Material/image identity and complete dependency retention",
+      "status": "closed",
+      "evidence": ["tools/t6_oat_material_manifest_v3.py", "tools/t6_world_textured_gltf_export_v2.py"],
+      "closureRequirement": "Exact T6 material and GfxImage identities survive OAT disk mapping, collision checks, staging and GLB dependency embedding without semantic substitution."
+    },
+    {
+      "id": "material-render-state-archive",
+      "title": "Exact T6 material GPU render-state archival",
+      "status": "implemented-awaiting-retail",
+      "evidence": ["tools/t6_oat_material_manifest_v4.py", "tools/t6_oat_world_textured_export_pipeline_v7.py"],
+      "closureRequirement": "Retail production v7 runs retain decoded stateBits/stateBitsEntry, alpha/blend/cull/depth/write/polygon-offset/stencil, constants and sortKey for every used material with zero routing errors."
+    },
+    {
+      "id": "material-render-state-playback",
+      "title": "T6-aware render-state playback",
+      "status": "open",
+      "evidence": ["OAT T6 material.v1 decoded state schema"],
+      "closureRequirement": "Blender/wgpu adapter consumes exact state routing and reproduces required alpha-test, separate blend equations, cull, depth, write masks, polygon offset and stencil rather than relying on generic glTF defaults."
+    },
+    {
+      "id": "layered-special-materials",
+      "title": "Layered and special world material shader semantics",
+      "status": "partial",
+      "evidence": ["tools/t6_layered_material_name_v1.py", "tools/t6_layered_world_format_v1.py", "material component dependency reconstruction"],
+      "closureRequirement": "Layered blend/compositor behavior plus special glass/decal/emissive/scrolling/water-like technique families used by target maps are shader/provenance closed and reproduced by the T6-aware adapter."
+    },
+    {
+      "id": "lightmap-structure",
+      "title": "Lightmap ownership, nullable roles, UV binding and lossless payload archival",
+      "status": "closed",
+      "evidence": ["Nuketown secondary-only retail lightmap proof", "nullable lightmap manifest/archive v3", "production pipeline v5+"],
+      "closureRequirement": "Primary/secondary role presence is preserved exactly, surface/lightmap indices and UVs are retained, and real DDS dependencies are archived without fake fallbacks."
+    },
+    {
+      "id": "lightmap-shader-semantics",
+      "title": "Exact T6 lightmap channel meaning and combine equation",
+      "status": "open",
+      "evidence": ["research/T6_PROGRESS_2026-09-01_LIGHTMAP_SHADER_CHAIN.md", "tools/t6_lightmap_shader_research_pipeline_v2.py"],
+      "closureRequirement": "Representative retail T6 world pixel shaders are retained/disassembled, primary/secondary channel lineage and arithmetic are proven across required technique families, and the renderer implements only observed equations."
+    },
+    {
+      "id": "world-environment-lighting",
+      "title": "Reflection probes, fog, LUT/exposure, sky and scene-light reconstruction",
+      "status": "partial",
+      "evidence": ["GfxWorld semantic archival of reflection/fog/exposure/LUT/sky metadata", "ComWorld primary lights"],
+      "closureRequirement": "Archived environment/light data is consumed by the exported Blender/wgpu scene with representative retail visual validation."
+    },
+    {
+      "id": "collision-gameplay-world",
+      "title": "Collision, MapEnts/AddOnMapEnts and GameWorld semantics",
+      "status": "partial",
+      "evidence": ["clipMap primary collision", "MapEnt entity parsing", "GameWorld path-node archival"],
+      "closureRequirement": "All map collision/brush/submodel/trigger/dynamic-entity/path data required for a faithful usable map is normalized or explicitly executable from retained authoritative metadata, not merely preserved."
+    },
+    {
+      "id": "fx-dynamic-map-objects",
+      "title": "FX, animated/dynamic map objects and destructibles",
+      "status": "partial",
+      "evidence": ["retail display-glass animated XModel proof", "FxEffectDef/DestructibleDef normalized archival"],
+      "closureRequirement": "All target-map dynamic/animated/destructible/FX placements resolve to usable assets and timing/attachment semantics rather than static placeholders."
+    },
+    {
+      "id": "mp-retail-corpus",
+      "title": "All 31 hash-pinned retail MP maps",
+      "status": "implemented-awaiting-retail",
+      "evidence": ["manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json", "scripts/t6_find_pending_world_formats_v2.ps1"],
+      "current": {"targetFastfiles": 31},
+      "closureRequirement": "Every hash-pinned MP target completes production export and validation with zero unresolved geometry/material/state/lightmap blockers."
+    },
+    {
+      "id": "zombies-retail-corpus",
+      "title": "All retail Zombies worlds/subzones/patch layers",
+      "status": "partial",
+      "evidence": ["retained source coverage manifest", "672-animation zm_prison/zm_tomb semantic sweep"],
+      "closureRequirement": "Hash-pinned Zombies target manifest exists and every world/subzone/required patch layer completes the same production export/validation contract as MP."
+    },
+    {
+      "id": "determinism-independent-validation",
+      "title": "Determinism and independent consumer validation",
+      "status": "partial",
+      "evidence": ["deterministic GLB hashes on retained fixtures", "third-party trimesh validation", "Blender validation on representative exports"],
+      "closureRequirement": "Whole target corpus reproduces deterministic hashes/manifests where source inputs match and independently loads in glTF tooling/Blender with validated bounds, indices, skins, materials and scene transforms."
+    }
+  ],
+  "releaseRule": "100% is a boolean certification, not a rounded estimate: every gate above must be status=closed and its closureRequirement must be backed by retained evidence."
+}
