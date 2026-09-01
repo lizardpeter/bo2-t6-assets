@@ -2,6 +2,7 @@
 
 #include "Utils/Logging/Log.h"
 
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -39,8 +40,50 @@ namespace
 
     std::string JsonString(const char* value)
     {
+        const auto* text = value ? value : "";
         std::ostringstream out;
-        out << std::quoted(value ? value : "");
+        out << '"';
+        for (const auto* p = reinterpret_cast<const unsigned char*>(text); *p; ++p)
+        {
+            switch (*p)
+            {
+            case '"':
+                out << "\\\"";
+                break;
+            case '\\':
+                out << "\\\\";
+                break;
+            case '\b':
+                out << "\\b";
+                break;
+            case '\f':
+                out << "\\f";
+                break;
+            case '\n':
+                out << "\\n";
+                break;
+            case '\r':
+                out << "\\r";
+                break;
+            case '\t':
+                out << "\\t";
+                break;
+            default:
+                if (*p < 0x20)
+                {
+                    out << "\\u"
+                        << std::hex << std::uppercase << std::setw(4)
+                        << std::setfill('0') << static_cast<unsigned int>(*p)
+                        << std::dec << std::nouppercase << std::setfill(' ');
+                }
+                else
+                {
+                    out << static_cast<char>(*p);
+                }
+                break;
+            }
+        }
+        out << '"';
         return out.str();
     }
 } // namespace
