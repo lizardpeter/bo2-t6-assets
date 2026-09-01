@@ -311,6 +311,33 @@ def scan_files(
     }
 
 
+def _error_document(
+    *,
+    inputs: list[Path],
+    map_name: str | None,
+    target_formats: set[int],
+    error: str,
+) -> dict:
+    return {
+        "format": "t6-world-layout-target-scan-v1",
+        "mapFilter": map_name,
+        "targetFormats": sorted(target_formats),
+        "inputPathCount": len(inputs),
+        "candidateLayoutFileCount": 0,
+        "matchedLayoutFileCount": 0,
+        "parseErrorCount": 0,
+        "parseErrors": [],
+        "observedFormats": [],
+        "targetHits": [],
+        "targetHit": False,
+        "scanError": error,
+        "reports": [],
+        "proofBoundary": (
+            "No observation claim is made when layout discovery itself fails."
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+", type=Path)
@@ -321,11 +348,27 @@ def main() -> int:
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 
-    doc = scan_files(
-        args.inputs,
-        target_formats=(set(args.target_formats) if args.target_formats else None),
-        map_name=args.map_name,
-    )
+    targets = set(args.target_formats) if args.target_formats else set(TARGET_DEFAULT)
+    try:
+        doc = scan_files(
+            args.inputs,
+            target_formats=targets,
+            map_name=args.map_name,
+        )
+        exit_code = 0 if doc["targetHit"] else 1
+        if doc["parseErrorCount"]:
+            exit_code = 3
+        elif doc["matchedLayoutFileCount"] == 0:
+            exit_code = 2
+    except LayoutScanError as exc:
+        doc = _error_document(
+            inputs=args.inputs,
+            map_name=args.map_name,
+            target_formats=targets,
+            error=str(exc),
+        )
+        exit_code = 2
+
     payload = json.dumps(doc, indent=2, sort_keys=True) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -337,18 +380,14 @@ def main() -> int:
                     "observedFormats": doc["observedFormats"],
                     "targetHits": doc["targetHits"],
                     "matchedLayoutFileCount": doc["matchedLayoutFileCount"],
+                    "scanError": doc.get("scanError"),
                 },
                 indent=2,
             )
         )
     else:
         print(payload, end="")
-
-    if doc["parseErrorCount"]:
-        return 3
-    if doc["matchedLayoutFileCount"] == 0:
-        return 2
-    return 0 if doc["targetHit"] else 1
+    return exit_code
 
 
 if __name__ == "__main__":
