@@ -30,12 +30,18 @@ def main() -> int:
         root = Path(td) / "oat"
         out = Path(td) / "out"
         _write(root / "materials" / "world" / "brick.json", _material("world_lm"))
-        _write(root / "techsets" / "world_lm.techset", 'technique "world_lit.tech";\n')
+        # Exact pinned OAT grammar: quoted technique-type label followed by an
+        # indented bare technique asset identity and semicolon.
+        _write(
+            root / "techsets" / "world_lm.techset",
+            '"lit sun shadow":\n  world_lit;\n',
+        )
         _write(
             root / "techniques" / "world_lit.tech",
-            'lightmapSamplerPrimary = sampler.lightmapSamplerPrimary;\n'
-            'lightmapSamplerSecondary = sampler.lightmapSamplerSecondary;\n'
-            'pixelShader 5.0 "world_lit_ps";\n',
+            '{\n  pixelShader 4.0 "world_lit_ps"\n  {\n'
+            '    lightmapSamplerPrimary = sampler.lightmapSamplerPrimary;\n'
+            '    // Omitted due to matching accessors: lightmapSamplerSecondary = sampler.lightmapSamplerSecondary;\n'
+            '  }\n}\n',
         )
         _write(root / "shader_bin" / "ps_world_lit_ps.cso", b"DXBCsynthetic")
 
@@ -45,6 +51,7 @@ def main() -> int:
             map_name="mp_fixture",
             retail_ff_sha256="a" * 64,
         )
+        assert doc["stats"]["parsedMaterialTechsetCount"] == 1
         assert doc["stats"]["materialChainCount"] == 1
         assert doc["stats"]["uniquePixelShaderCount"] == 1
         assert doc["stats"]["primaryTechniqueEdgeCount"] == 1
@@ -56,7 +63,6 @@ def main() -> int:
         assert (staged / "techniques" / "world_lit.tech").is_file()
         assert (staged / "shader_bin" / "ps_world_lit_ps.cso").read_bytes() == b"DXBCsynthetic"
 
-        # Broken provenance must fail closed rather than silently dropping the edge.
         bad = Path(td) / "bad"
         _write(bad / "materials" / "a.json", _material("missing"))
         for dirname in ("techsets", "techniques", "shader_bin"):
