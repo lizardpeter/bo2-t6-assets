@@ -44,6 +44,7 @@ def main() -> int:
     assert doc["source"]["producer"] == "t6_world_lightmap_manifest_v2.py"
     assert doc["stats"]["oatImageDependencyCount"] == 2
     assert doc["stats"]["oatImageFilenameChangedDependencyCount"] == 1
+    assert doc["stats"]["oatImageUniqueDiskSourceCount"] == 2
 
     lm = doc["lightmaps"][0]
     assert lm["primaryImage"] == "*lm_primary"
@@ -79,6 +80,21 @@ def main() -> int:
         pass
     else:
         raise AssertionError("nested OAT image path did not fail closed")
+
+    collision = _catalog()
+    collision["lightmapCount"] = 2
+    collision["lightmaps"] = [
+        {"index": 0, "primaryImage": "*foo", "secondaryImage": "secondary0"},
+        {"index": 1, "primaryImage": "_foo", "secondaryImage": "secondary1"},
+    ]
+    try:
+        build_manifest(world, collision)
+    except LightmapManifestError as exc:
+        text = str(exc)
+        assert "collide after OAT filename mapping" in text
+        assert "*foo" in text and "_foo" in text and "_foo.dds" in text
+    else:
+        raise AssertionError("distinct lightmap GfxImage identities were allowed to collide")
 
     print("PASS t6_world_lightmap_manifest_v2 regression")
     return 0
