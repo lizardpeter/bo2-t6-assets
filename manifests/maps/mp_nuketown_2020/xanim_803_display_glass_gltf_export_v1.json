@@ -1,0 +1,86 @@
+{
+  "format": "t6-xanim-gltf-export-proof-v1",
+  "map": "mp_nuketown_2020",
+  "scope": "skeleton + animation channels only; render mesh/skinning is intentionally not part of this proof",
+  "source": {
+    "xanim": {
+      "xassetIndex": 803,
+      "name": "fxanim_mp_nuked2025_display_glass_anim",
+      "fixedStart": 92961531,
+      "serializedEnd": 92978304,
+      "serializedSha256": "8253493e6aceff84691e2c64b2c4544253d555c5944da7bfc198608ed2fa1b56",
+      "normalizedJsonBytes": 345280,
+      "normalizedJsonSha256": "3f867f4a2642e77d02953015f013eb67cfcd1b7f237ec007ae8b85578a61fbed"
+    },
+    "xmodel": {
+      "name": "fxanim_mp_nuked2025_display_glass_mod",
+      "fixedStart": 45869989,
+      "fixedSha256": "3c9a8d5f508a42da8011e8713a8e96851116206475291082f844c47f777cc6c7",
+      "numBones": 34,
+      "numRootBones": 1,
+      "normalizedSkeletonJsonBytes": 28044,
+      "normalizedSkeletonJsonSha256": "c31bbb7ef0328acc86af5a69465a51bd28c776e77f1111b99b28dc289cc0cb77"
+    }
+  },
+  "binding": {
+    "animationTrackCount": 33,
+    "boundTrackCount": 33,
+    "allTracksBound": true,
+    "scriptStringIdsValidated": true,
+    "modelRootOmittedByAnimation": "tag_origin",
+    "priorBindingProof": "manifests/maps/mp_nuketown_2020/xanim_803_display_glass_xmodel_binding_v1.json"
+  },
+  "exporter": {
+    "path": "tools/t6_xanim_gltf_export.py",
+    "commit": "3b29f02f1a4dc4a835426211ab97de640f53da81",
+    "gitBlob": "0b3d7873c630d2531114d5aad30d71075ef09c41",
+    "sha256": "17ed901c67d8bd2e0aab6bcac5e3c4d5bb394366e0de7da48e156b82f1f6a378",
+    "quaternionSemanticsTool": "tools/t6_xanim_quaternion_semantics.py"
+  },
+  "coordinateConversion": {
+    "strategy": "preserve all native T6 local bone/animation transforms under one glTF wrapper node",
+    "wrapperName": "__T6_WORLD_TO_GLTF__",
+    "rotationXYZW": [-0.7071067811865476, 0.0, 0.0, 0.7071067811865476],
+    "meaning": "rotate -90 degrees about X: T6 Z-up -> glTF Y-up",
+    "uniformScale": 0.0254,
+    "unitMeaning": "T6 inches -> meters"
+  },
+  "gltf": {
+    "version": "2.0",
+    "fileBytes": 135958,
+    "sha256": "c1f2edcde2ff6be8588ead76eed9ba712ed1691dcaf34af153b54262d92657ff",
+    "deterministicGenerationCount": 2,
+    "twoGenerationsByteIdentical": true,
+    "nodes": 35,
+    "channels": 66,
+    "rotationChannels": 33,
+    "translationChannels": 33,
+    "samplers": 66,
+    "accessors": 132,
+    "bufferViews": 132,
+    "embeddedBufferBytes": 35068,
+    "durationSeconds": 1.3,
+    "rotationSamples": 979,
+    "maxFloat32QuaternionNormError": 4.17026286836375e-08
+  },
+  "independentValidation": {
+    "library": "trimesh",
+    "version": "4.11.1",
+    "loadSucceeded": true,
+    "loadedType": "Scene",
+    "graphNodeCount": 36
+  },
+  "losslessness": {
+    "gltfPurpose": "standard float skeleton/animation interchange",
+    "authoritativeRawT6Data": "normalized JSON sidecars remain authoritative for raw int16, packed pools, ScriptStrings, pointers, and serializer provenance",
+    "gltfExtrasPreserve": [
+      "source identity and hashes",
+      "T6 track types",
+      "ScriptString binding",
+      "notifies",
+      "delta metadata",
+      "coordinate/unit conversion"
+    ]
+  },
+  "result": "First retail T6 XModel skeleton + XAnim successfully exported to deterministic, independently loadable glTF 2.0 animation channels with exact 33/33 ScriptString-backed binding."
+}
