@@ -135,6 +135,7 @@ def main() -> int:
         "_lm_primary.dds": b"DDS " + b"PRIMARY" * 5,
         "lm_secondary0.dds": b"DDS " + b"SECONDARY0" * 3,
         "lm_secondary1.dds": b"DDS " + b"SECONDARY1" * 4,
+        "alternate_primary.dds": b"DDS " + b"ALTERNATE" * 4,
     }
 
     with tempfile.TemporaryDirectory() as td:
@@ -192,6 +193,9 @@ def main() -> int:
         assert lm0["primary"]["bufferView"] == lm1["primary"]["bufferView"]
 
         unique_views: dict[str, int] = {}
+        used_payloads = {
+            key: value for key, value in payloads.items() if key != "alternate_primary.dds"
+        }
         for lightmap in archive["lightmaps"]:
             for role in ("primary", "secondary"):
                 item = lightmap[role]
@@ -208,7 +212,7 @@ def main() -> int:
                 assert prior == item["bufferView"]
 
         assert out1["buffers"][0]["byteLength"] == len(raw1)
-        assert len(raw1) > len(geometry) + sum(len(v) for v in payloads.values())
+        assert len(raw1) > len(geometry) + sum(len(v) for v in used_payloads.values())
 
         # Missing exact DDS fails closed by default.
         missing_root = root / "missing"
@@ -238,7 +242,7 @@ def main() -> int:
         # Invalid DDS magic is never archived as a lightmap payload.
         bad_root = root / "bad"
         bad_root.mkdir()
-        for name, payload in payloads.items():
+        for name, payload in used_payloads.items():
             (bad_root / name).write_bytes(payload)
         (bad_root / "lm_secondary0.dds").write_bytes(b"NOTDDS")
         _expect_error(
@@ -262,7 +266,7 @@ def main() -> int:
 
         # A single T6 identity may not point at two different extracted files.
         split_identity = copy.deepcopy(manifest)
-        split_identity["lightmaps"][1]["primarySourceTexture"] = "lm_secondary1.dds"
+        split_identity["lightmaps"][1]["primarySourceTexture"] = "alternate_primary.dds"
         _expect_error(
             lambda: embed_lightmap_dds(
                 source_gltf, geometry, split_identity, dds_root=root
