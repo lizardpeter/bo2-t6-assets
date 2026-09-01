@@ -73,26 +73,32 @@
     {
       "id": "xanim-runtime-binding",
       "title": "XAnim runtime transform composition",
-      "status": "partial",
+      "status": "closed",
       "evidence": [
-        "manifests/xanim/T6_RETAIL_XANIM_DELTA_PROOF_V1.json",
-        "tools/t6_retail_xanim_delta_proof_v1.py",
+        "manifests/xanim/T6_RETAIL_XANIM_DELTA_PROOF_V2.json",
+        "tools/t6_retail_xanim_delta_proof_v2.py",
+        "manifests/xanim/T6_RETAIL_XANIM_ROOT_TRANSLATION_PROOF_V1.json",
+        "tools/t6_retail_xanim_root_translation_proof_v1.py",
+        "manifests/xanim/T6_ZM_TOMB_DELTA_ENDPOINT_CENSUS_V1.json",
         "tools/t6_xanim_delta_gltf_semantics_v2.py",
-        "tools/t6_xanim_skinned_gltf_export_v6.py",
-        "retail-proven non-root bind-local + XAnim translation-delta rule"
+        "tools/t6_xanim_skinned_gltf_export_v7.py",
+        "tools/test_t6_xanim_skinned_gltf_export_v6.py",
+        "tools/test_t6_xanim_skinned_gltf_export_v7.py"
       ],
       "current": {
-        "nonRootTranslation": "closed",
+        "nonRootTranslation": "closed; XModel bind-local translation + XAnim translation delta",
+        "ordinaryAnimatedRootBoneTranslation": "closed; raw decoded XAnim translation, no compact XModel.trans add",
+        "rootWithModelParent": "closed; parent DObj transform composition remains separate from compact XModel.trans",
         "localRotation": "closed",
         "deltaPartPointerLayout": "closed; notify=+0x60, deltaPart=+0x64",
         "deltaPart2DEvaluator": "closed",
         "deltaPart3DEvaluator": "closed",
         "deltaPartByteUshortIndexDispatch": "closed",
         "deltaPartRuntimeBinding": "closed",
-        "deltaDynamicEndpointPolicy": "stored native 0..numframes domain only; no fabricated keys",
-        "ordinaryAnimatedRootBoneTranslation": "open sub-gate"
+        "deltaQuaternionApplicationNormalization": "closed",
+        "deltaDynamicEndpointPolicy": "stored native 0..numframes domain only; no fabricated keys"
       },
-      "closureRequirement": "Direct T6 runtime/retail-output proof closes the remaining ordinary animated root-bone translation/bind-pose composition and representative retail v6 exports independently validate deltaPart playback."
+      "closureRequirement": "Direct retail-byte proof covers ordinary root/non-root composition and deltaPart evaluation/application, while production exporter regressions preserve those separate paths without synthetic animation endpoints."
     },
     {
       "id": "material-image-identity",
@@ -190,12 +196,12 @@
   ],
   "summary": {
     "gateCount": 19,
-    "closed": 6,
+    "closed": 7,
     "implementedAwaitingRetail": 4,
-    "partial": 9,
+    "partial": 8,
     "open": 0,
     "release100Percent": false,
-    "milestone": "No gate remains without a defensible implementation/proof path; remaining work is explicit semantic closure, retail corpus execution, renderer integration and independent validation."
+    "milestone": "XAnim runtime transform composition is retail-byte-closed; remaining work is explicit binary/interchange fixture closure, retail corpus execution, renderer integration and independent validation."
   },
   "releaseRule": "100% is a boolean certification, not a rounded estimate: every gate above must be status=closed and its closureRequirement must be backed by retained evidence."
 }
