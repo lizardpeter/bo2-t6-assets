@@ -30,25 +30,42 @@ def baseline() -> dict:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    proof = json.loads(
+    proof45 = json.loads(
         (root / "manifests/world/T6_RETAIL_WORLD_FORMATS_45_PROOF_V1.json").read_text(encoding="utf-8")
     )
-    out = registry.build_registry(baseline(), [("fmt45", proof)])
-    assert out["coverage"]["exportEnabledFormats"] == [0, 1, 2, 3, 4, 5, 6]
-    assert out["coverage"]["pendingFormats"] == [7, 8]
+    proof7 = json.loads(
+        (root / "manifests/world/T6_RETAIL_WORLD_FORMAT_7_PROOF_V1.json").read_text(encoding="utf-8")
+    )
+    proofs = [("fmt45", proof45), ("fmt7", proof7)]
+    out = registry.build_registry(baseline(), proofs)
+    assert out["coverage"]["exportEnabledFormats"] == [0, 1, 2, 3, 4, 5, 6, 7]
+    assert out["coverage"]["pendingFormats"] == [8]
+    assert out["coverage"]["contradictedFormats"] == []
     assert out["formats"]["4"]["cleanObservedRawStrides"] == [12]
     assert out["formats"]["5"]["cleanObservedRawStrides"] == [16]
+    assert out["formats"]["7"]["cleanObservedRawStrides"] == [16]
     assert out["formats"]["4"]["retailProofMaps"] == ["mp_hijacked", "mp_raid"]
     assert out["formats"]["5"]["retailProofMaps"] == ["mp_hijacked", "mp_raid"]
+    assert out["formats"]["7"]["retailProofMaps"] == ["zm_prison", "zm_tomb"]
 
-    bad = copy.deepcopy(proof)
-    bad["maps"][0]["formats"]["4"]["rawStrides"] = [16]
+    bad45 = copy.deepcopy(proof45)
+    bad45["maps"][0]["formats"]["4"]["rawStrides"] = [16]
     try:
-        registry.build_registry(baseline(), [("bad", bad)])
+        registry.build_registry(baseline(), [("bad45", bad45), ("fmt7", proof7)])
     except registry.RegistryError:
         pass
     else:
         raise AssertionError("contradictory format-4 proof was accepted")
+
+    bad7 = copy.deepcopy(proof7)
+    bad7["maps"][0]["format7"]["rawStrides"] = [20]
+    try:
+        registry.build_registry(baseline(), [("fmt45", proof45), ("bad7", bad7)])
+    except registry.RegistryError:
+        pass
+    else:
+        raise AssertionError("contradictory format-7 proof was accepted")
+
     print("PASS: T6 world vertex format registry v2")
     return 0
 
