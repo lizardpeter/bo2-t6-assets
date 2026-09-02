@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the T6 world-vertex registry from baseline and direct retail proofs.
 
-V2 keeps the V1 policy boundary but additionally accepts the stronger
-`t6-retail-world-formats-45-proof-v1` schema, where each format is bound from
-GfxSurface -> MaterialMemory -> Material -> TechniqueSet and the raw vd1 stride
-is independently derived from allocation spans.
+V2 keeps the V1 policy boundary but accepts material-bound direct retail proof
+schemas. Each promoted format is bound from GfxSurface -> MaterialMemory ->
+Material -> TechniqueSet and the raw vd1 stride is independently derived from
+allocation spans.
 """
 from __future__ import annotations
 
@@ -23,7 +23,10 @@ SPECS = {
     7: ("TEX_4_NRM_2", 4, 2, 16, ["uv1", "uv2", "uv3", "normalTransform0"]),
     8: ("TEX_4_NRM_3", 4, 3, 20, ["uv1", "uv2", "uv3", "normalTransform0", "normalTransform1"]),
 }
-DIRECT_PROOF_FORMATS = {"t6-retail-world-formats-45-proof-v1"}
+DIRECT_PROOF_FORMATS = {
+    "t6-retail-world-formats-45-proof-v1",
+    "t6-retail-world-format-7-proof-v1",
+}
 
 
 class RegistryError(RuntimeError):
@@ -51,6 +54,21 @@ def validate_baseline(doc: dict) -> None:
                 raise RegistryError(f"baseline format {fmt} {key}={row.get(key)!r} != {value!r}")
 
 
+def _map_format_rows(proof: dict, m: dict) -> dict:
+    pf = proof.get("format")
+    if pf == "t6-retail-world-formats-45-proof-v1":
+        rows = m.get("formats", {})
+        if not isinstance(rows, dict):
+            raise RegistryError("formats-45 proof map rows must be an object")
+        return rows
+    if pf == "t6-retail-world-format-7-proof-v1":
+        row = m.get("format7")
+        if not isinstance(row, dict):
+            raise RegistryError("format-7 proof map lacks format7 row")
+        return {"7": row}
+    raise RegistryError(f"unsupported direct proof {pf!r}")
+
+
 def validate_direct_proof(doc: dict, source: str) -> None:
     if doc.get("format") not in DIRECT_PROOF_FORMATS:
         raise RegistryError(f"{source}: unsupported direct proof {doc.get('format')!r}")
@@ -62,7 +80,7 @@ def validate_direct_proof(doc: dict, source: str) -> None:
     for m in maps:
         if not isinstance(m.get("map"), str) or not m["map"]:
             raise RegistryError(f"{source}: map without name")
-        fmts = m.get("formats", {})
+        fmts = _map_format_rows(doc, m)
         for key, row in fmts.items():
             fmt = int(key)
             if fmt not in SPECS:
@@ -96,7 +114,7 @@ def build_registry(baseline: dict, proofs: list[tuple[str, dict]]) -> dict:
 
         for source, proof in proofs:
             for m in proof["maps"]:
-                row = m.get("formats", {}).get(str(fmt))
+                row = _map_format_rows(proof, m).get(str(fmt))
                 if row is None:
                     continue
                 raw = sorted({int(x) for x in row["rawStrides"]})
