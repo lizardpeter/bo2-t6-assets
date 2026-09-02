@@ -1,0 +1,44 @@
+{
+  "dagSetSha256": "b46197488dd9ef523158a4488a4fab8fe0ced793ffdbf44e34f2283f5327586b",
+  "format": "t6-retail-special-shdr-branch-symbolic-v1",
+  "outputDependencyPatterns": [
+    {"count":33,"family":"emissive_or_burning","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":11,"family":"rawnormal_special","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":20,"family":"tv_special","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":2,"family":"water","outputs":[{"lightmapDependencies":["secondary.w","secondary.x"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.y"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.z"],"output":"o0.z"}]},
+    {"count":11,"family":"water","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":1,"family":"water","outputs":[{"lightmapDependencies":["secondary.w"],"output":"o0.x"},{"lightmapDependencies":["secondary.w"],"output":"o0.y"},{"lightmapDependencies":["secondary.w"],"output":"o0.z"}]}
+  ],
+  "producer": "tools/t6_retail_special_shdr_branch_symbolic_v1.py",
+  "proofBoundary": "Structured branch-aware SM4 expression DAG reconstruction for all retained special pixel shaders containing IF. T6 IF test mode is decoded from opcode bit 18; branch states are executed independently and merged at ENDIF with exact symbolic select nodes. All retained IF conditions in this set are NONZERO tests and lightmap-independent. This proves supported assembly-level dataflow across IF/ELSE/ENDIF; it does not reconstruct HLSL source.",
+  "shaderRowExamples": [
+    {"dagSha256":"9c2520917e6c35d0cd856b41c1be9029fffd3f48db804850f631f36a4dd330e6","elseCount":1,"family":"water","ifCount":2,"nodeCount":1224,"outputCount":3,"sampleCount":3,"sha256":"043d0ad76bf0b153f6fe3d79484f4c3e6e475a8486e983fea580a9c20061a605"},
+    {"dagSha256":"c173112942af2c4fce8a69e056038f0632b243e47bdee78202dd51b0f7cbfcc2","elseCount":1,"family":"tv_special","ifCount":2,"nodeCount":846,"outputCount":3,"sampleCount":3,"sha256":"8f4b49f70512871d6bc02d63d6e2d283e8d8292cf5606910cdac02b5f6cd1fd5"},
+    {"dagSha256":"828cb2eca5408057dc1a9650d4f244ce4a136e8a87dc810ac572b7eacfb6eb93","elseCount":1,"family":"tv_special","ifCount":2,"nodeCount":880,"outputCount":3,"sampleCount":3,"sha256":"fdca2cefbc1ccb1e8e25a449a4c204015366d7a776dac9c4b75fbc888757ac46"}
+  ],
+  "shaderRowSetSha256": "e4ce7309c2a84449c830eb232b3c7a34317f2a2d27f56d5668b501420b469f7d",
+  "sourcePixelShaderSetSha256": "aa581f23bf696c334020e19ad97e7f26f7772aac999b8720e7da60fbc1a61bc7",
+  "summary": {
+    "conditionLightmapDependentCount": 0,
+    "controlFlowLightmappedShaderCount": 78,
+    "discardCount": 0,
+    "elseCount": 75,
+    "endifCount": 175,
+    "familyCounts": {
+      "emissive_or_burning": {"conditionLightmapDependentCount":0,"elseCount":36,"ifCount":78,"nodeCount":33251,"outputCount":99,"sampleCount":99,"shaderCount":33},
+      "rawnormal_special": {"conditionLightmapDependentCount":0,"elseCount":12,"ifCount":26,"nodeCount":10788,"outputCount":33,"sampleCount":33,"shaderCount":11},
+      "tv_special": {"conditionLightmapDependentCount":0,"elseCount":12,"ifCount":36,"nodeCount":13333,"outputCount":60,"sampleCount":60,"shaderCount":20},
+      "water": {"conditionLightmapDependentCount":0,"elseCount":15,"ifCount":35,"nodeCount":14364,"outputCount":42,"sampleCount":40,"shaderCount":14}
+    },
+    "ifCount": 175,
+    "ifTestModeCounts": {"nonzero":175},
+    "lightmapDependentOutputCount": 234,
+    "lightmapDependentSampleInputCount": 0,
+    "lightmapSampleCount": 232,
+    "maxNestingDepth": 2,
+    "nodeCount": 71736,
+    "outputDependencyPatternCount": 6,
+    "symbolicBlockerCount": 0,
+    "uniqueDagCount": 78
+  }
+}
