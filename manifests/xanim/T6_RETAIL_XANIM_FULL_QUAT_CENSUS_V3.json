@@ -1,0 +1,121 @@
+{
+  "format": "t6-retail-xanim-full-quat-census-v3",
+  "supersedes": "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V2.json",
+  "producer": "tools/t6_xanim_retail_delta_branch_census_v3.py",
+  "purpose": "Exhaustive serialized XAnimParts delta-union census across all nine retained expanded T6 MP/Zombies XFiles after direct proof of the empty-placeholder XAnim serialization class.",
+  "retainedExpandedSources": {
+    "common_zm": {"bytes": 16936620, "sha256": "28ff1b05ca1565f6c90acd473262e0d566fbc22fc2005c6def09fed9555b7527"},
+    "patch_zm": {"bytes": 10330637, "sha256": "3a5df2757981c0ae5d7963f41f6b621349b2604efd6360f3e7bb0fe145a6c499"},
+    "zm_prison": {"bytes": 344067743, "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"},
+    "zm_tomb": {"bytes": 359627377, "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"},
+    "common_mp": {"bytes": 206493911, "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"},
+    "patch_mp": {"bytes": 14713756, "sha256": "1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9"},
+    "mp_nuketown_2020": {"bytes": 154653476, "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"},
+    "mp_hijacked": {"bytes": 141043798, "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"},
+    "mp_raid": {"bytes": 156092603, "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"}
+  },
+  "zones": [
+    {"zone": "common_zm", "expected": 819, "identified": 819, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 310, "transConstant": 0, "quat2Keyed": 78, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "patch_zm", "expected": 51, "identified": 51, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 2, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "zm_prison", "expected": 1434, "identified": 1434, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 288, "transConstant": 38, "quat2Keyed": 90, "quat2Constant": 43, "quatKeyed": 3, "quatConstant": 0}},
+    {"zone": "zm_tomb", "expected": 1735, "identified": 1735, "emptyPlaceholderCount": 22, "countClosesExactly": true, "branches": {"transKeyed": 362, "transConstant": 37, "quat2Keyed": 83, "quat2Constant": 64, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "common_mp", "expected": 4233, "identified": 4233, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 378, "transConstant": 124, "quat2Keyed": 93, "quat2Constant": 108, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "patch_mp", "expected": 10, "identified": 10, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 1, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "mp_nuketown_2020", "expected": 9, "identified": 9, "emptyPlaceholderCount": 1, "countClosesExactly": true, "branches": {"transKeyed": 3, "transConstant": 0, "quat2Keyed": 1, "quat2Constant": 0, "quatKeyed": 2, "quatConstant": 0}},
+    {"zone": "mp_hijacked", "expected": 5, "identified": 5, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 3, "transConstant": 0, "quat2Keyed": 3, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "mp_raid", "expected": 2, "identified": 2, "emptyPlaceholderCount": 0, "countClosesExactly": true, "branches": {"transKeyed": 0, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}}
+  ],
+  "emptyPlaceholderClass": {
+    "fixedBytes": 104,
+    "fixedSha256": "c084814eb5a0112d1b22bd723c31b6e092aba5f45746ae022d43663fae1220d9",
+    "fixedContract": "namePtr=0xFFFFFFFF followed by 100 zero bytes; all counts, numframes, flags, streamedFileSize, boneCount, notifyCount, assetType, isDefault, timing fields and child pointers are zero",
+    "serializedChildren": "inline comma-prefixed name only",
+    "records": [
+      {"zone": "zm_tomb", "xassetIndex": 3480, "start": 166464262, "end": 166464393, "name": ",viewmodel_raygun_mk2_idle"},
+      {"zone": "zm_tomb", "xassetIndex": 3481, "start": 166464393, "end": 166464524, "name": ",viewmodel_raygun_mk2_fire"},
+      {"zone": "zm_tomb", "xassetIndex": 3482, "start": 166464524, "end": 166464663, "name": ",viewmodel_raygun_mk2_reload_empty"},
+      {"zone": "zm_tomb", "xassetIndex": 3483, "start": 166464663, "end": 166464797, "name": ",viewmodel_raygun_mk2_pullout"},
+      {"zone": "zm_tomb", "xassetIndex": 3484, "start": 166464797, "end": 166464935, "name": ",viewmodel_raygun_mk2_first_raise"},
+      {"zone": "zm_tomb", "xassetIndex": 3485, "start": 166464935, "end": 166465069, "name": ",viewmodel_raygun_mk2_putaway"},
+      {"zone": "zm_tomb", "xassetIndex": 3486, "start": 166465069, "end": 166465209, "name": ",viewmodel_raygun_mk2_pullout_quick"},
+      {"zone": "zm_tomb", "xassetIndex": 3487, "start": 166465209, "end": 166465345, "name": ",viewmodel_raygun_mk2_sprint_in"},
+      {"zone": "zm_tomb", "xassetIndex": 3488, "start": 166465345, "end": 166465483, "name": ",viewmodel_raygun_mk2_sprint_loop"},
+      {"zone": "zm_tomb", "xassetIndex": 3489, "start": 166465483, "end": 166465620, "name": ",viewmodel_raygun_mk2_sprint_out"},
+      {"zone": "zm_tomb", "xassetIndex": 3490, "start": 166465620, "end": 166465755, "name": ",viewmodel_raygun_mk2_crawl_in"},
+      {"zone": "zm_tomb", "xassetIndex": 3491, "start": 166465755, "end": 166465895, "name": ",viewmodel_raygun_mk2_crawl_forward"},
+      {"zone": "zm_tomb", "xassetIndex": 3492, "start": 166465895, "end": 166466032, "name": ",viewmodel_raygun_mk2_crawl_back"},
+      {"zone": "zm_tomb", "xassetIndex": 3493, "start": 166466032, "end": 166466170, "name": ",viewmodel_raygun_mk2_crawl_right"},
+      {"zone": "zm_tomb", "xassetIndex": 3494, "start": 166466170, "end": 166466307, "name": ",viewmodel_raygun_mk2_crawl_left"},
+      {"zone": "zm_tomb", "xassetIndex": 3495, "start": 166466307, "end": 166466443, "name": ",viewmodel_raygun_mk2_crawl_out"},
+      {"zone": "zm_tomb", "xassetIndex": 3496, "start": 166466443, "end": 166466578, "name": ",viewmodel_raygun_mk2_ads_fire"},
+      {"zone": "zm_tomb", "xassetIndex": 3497, "start": 166466578, "end": 166466711, "name": ",viewmodel_raygun_mk2_d2p_in"},
+      {"zone": "zm_tomb", "xassetIndex": 3498, "start": 166466711, "end": 166466846, "name": ",viewmodel_raygun_mk2_d2p_loop"},
+      {"zone": "zm_tomb", "xassetIndex": 3499, "start": 166466846, "end": 166466980, "name": ",viewmodel_raygun_mk2_d2p_out"},
+      {"zone": "zm_tomb", "xassetIndex": 3500, "start": 166466980, "end": 166467113, "name": ",viewmodel_raygun_mk2_ads_up"},
+      {"zone": "zm_tomb", "xassetIndex": 3501, "start": 166467113, "end": 166467248, "name": ",viewmodel_raygun_mk2_ads_down"},
+      {"zone": "mp_nuketown_2020", "xassetIndex": 787, "start": 92825778, "end": 92825902, "name": ",viewmodel_m67_idle"}
+    ]
+  },
+  "nuketownBoundaryProof": {
+    "xanim787End": 92825902,
+    "weapon788": {"fixedStart": 92825902, "fixedBytes": 716, "internalName": "vcs_controller_mp", "serializedEnd": 92830751},
+    "scriptParseTree789_797": {
+      "start": 92830751,
+      "end": 92901128,
+      "records": 9,
+      "names": [
+        "maps/mp/_events.gsc",
+        "maps/mp/mp_nuketown_2020.gsc",
+        "maps/mp/mp_nuketown_2020_amb.gsc",
+        "maps/mp/mp_nuketown_2020_fx.gsc",
+        "maps/mp/createfx/mp_nuketown_2020_fx.gsc",
+        "clientscripts/mp/mp_nuketown_2020.csc",
+        "clientscripts/mp/mp_nuketown_2020_amb.csc",
+        "clientscripts/mp/mp_nuketown_2020_fx.csc",
+        "clientscripts/mp/createfx/mp_nuketown_2020_fx.csc"
+      ]
+    },
+    "xanim798Start": 92901128,
+    "statement": "The ScriptParseTree chain ends exactly at the already-proven XAnim 798 start, and the WeaponVariantDef starts exactly at XAnim 787's empty-placeholder end."
+  },
+  "summary": {
+    "zonesScanned": 9,
+    "zonesCountClosed": 9,
+    "expectedXAnimRecordsAllZones": 8298,
+    "structuralRecordsIdentifiedAllZones": 8298,
+    "unresolvedStructuralRecordsAllZones": 0,
+    "emptyPlaceholderRecords": 23,
+    "exactCountXAnimRecords": 8298,
+    "exactCountBranchTotals": {
+      "transKeyed": 1347,
+      "transConstant": 199,
+      "quat2Keyed": 348,
+      "quat2Constant": 215,
+      "quatKeyed": 5,
+      "quatConstant": 0
+    },
+    "constantFullQuatObserved": 0,
+    "dynamicFullQuatObserved": 5
+  },
+  "constantFullQuatFixtureStatus": {
+    "directRetailFixtureFound": false,
+    "exhaustiveNegativeCensusCoverage": 8298,
+    "exhaustiveNegativeCensusZones": ["common_zm", "patch_zm", "zm_prison", "zm_tomb", "common_mp", "patch_mp", "mp_nuketown_2020", "mp_hijacked", "mp_raid"],
+    "unresolvedRecords": 0,
+    "statement": "No serialized constant full-quaternion delta track occurs anywhere in these nine count-closed retained XFiles. This is exhaustive for this retained nine-zone corpus, not a claim about T6 content not yet included in the corpus."
+  },
+  "compiledInterchangeStatus": {
+    "nonEmptyDeltaWriter": "implemented",
+    "roundTripRegression": "implemented",
+    "codec": "tools/t6_compiled_xanim_v19_delta_v1.py",
+    "regression": "tools/test_t6_compiled_xanim_v19_delta_v1.py"
+  },
+  "proofBoundary": [
+    "Every XANIMPARTS XAsset entry in the nine supplied retained expanded XFiles now has a structurally identified serialized source record.",
+    "The 23 empty-placeholder records contribute no delta branches because every field after namePtr is zero; they close structural counts without changing delta-branch totals.",
+    "The absence of constant full-quaternion delta is exhaustive across these 8,298 records and these nine XFiles only.",
+    "The 12-byte size==0 full-quaternion source parser branch remains structurally supported but has no direct retail fixture in this corpus; no synthetic fixture is promoted to retail evidence.",
+    "Dynamic full-quaternion delta is directly observed five times in the count-closed corpus.",
+    "Compiled-v19 non-empty delta interchange is implemented and regression-tested; it is no longer the outstanding implementation gap."
+  ]
+}
