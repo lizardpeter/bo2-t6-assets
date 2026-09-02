@@ -36,9 +36,34 @@
       "id": "world-all-nine-formats",
       "title": "All nine T6 world vertex formats",
       "status": "implemented-awaiting-retail",
-      "evidence": ["manifests/world/T6_WORLD_VERTEX_FORMAT_REGISTRY_V1.json", "tools/t6_world_vertex_format_registry_v1.py", "tools/t6_world_vd1_layout_census_v1.py", "scripts/t6_find_pending_world_formats_v2.ps1"],
-      "current": {"exportEnabled": [0, 1, 2, 3, 6], "pending": [4, 5, 7, 8]},
-      "closureRequirement": "Registry reports allFormatsExportEnabled=true from clean direct/raw retail evidence with zero contradictory strides for formats 0-8."
+      "evidence": [
+        "manifests/world/T6_WORLD_VERTEX_FORMAT_REGISTRY_V1.json",
+        "tools/t6_world_vertex_format_registry_v2.py",
+        "tools/test_t6_world_vertex_format_registry_v2.py",
+        "manifests/world/T6_RETAIL_WORLD_FORMATS_45_PROOF_V1.json",
+        "tools/t6_retail_world_formats_45_proof_v1.py",
+        "tools/test_t6_retail_world_formats_45_proof_v1.py",
+        "manifests/world/T6_RETAIL_WORLD_FORMAT_7_PROOF_V1.json",
+        "tools/t6_retail_world_format_7_proof_v1.py",
+        "tools/test_t6_retail_world_format_7_proof_v1.py",
+        "manifests/world/T6_RETAIL_WORLD_FORMAT_8_RETAINED_ABSENCE_CENSUS_V1.json",
+        "tools/t6_retail_world_format_8_absence_census_v1.py",
+        "tools/test_t6_retail_world_format_8_absence_census_v1.py",
+        "manifests/world/T6_RETAIL_MP_FORMAT8_SCAN_QUEUE_V1.json",
+        "tools/t6_world_format8_scan_queue_v1.py",
+        "tools/test_t6_world_format8_scan_queue_v1.py"
+      ],
+      "current": {
+        "exportEnabled": [0, 1, 2, 3, 4, 5, 6, 7],
+        "pending": [8],
+        "format4": "40 direct material-bound retail vd1 allocations across mp_raid + mp_hijacked; 40/40 stride 12; zero contradictions",
+        "format5": "13 direct material-bound retail vd1 allocations across mp_raid + mp_hijacked; 13/13 stride 16; zero contradictions",
+        "format7": "11 direct material-bound retail vd1 allocations across zm_prison + zm_tomb; 11/11 stride 16; zero contradictions",
+        "format8RetainedCorpus": "0 strict inline MaterialTechniqueSet format-8 bodies across 1,332 strong TechniqueSet bodies in 18 exact retained XFiles; none of the five decoded retained worlds uses format 8 in a surface-referenced vertex group",
+        "format8TargetGap": "28 of 31 hash-pinned MP map FastFiles remain in the exact format-8 scan queue; unretained Zombies target coverage also remains outside the retained-corpus absence proof",
+        "format8ExpectedStride": 20
+      },
+      "closureRequirement": "Registry reports allFormatsExportEnabled=true from clean direct/raw retail evidence with zero contradictory strides for formats 0-8. Format 8 may close from a clean direct/material-bound or standalone raw stride-20 fixture, or from an exhaustive absence proof over the complete hash-pinned target corpus; retained-corpus absence alone is insufficient."
     },
     {
       "id": "static-xmodels",
@@ -191,8 +216,8 @@
       "id": "mp-retail-corpus",
       "title": "All 31 hash-pinned retail MP maps",
       "status": "implemented-awaiting-retail",
-      "evidence": ["manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json", "scripts/t6_find_pending_world_formats_v2.ps1"],
-      "current": {"targetFastfiles": 31},
+      "evidence": ["manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json", "manifests/world/T6_RETAIL_MP_FORMAT8_SCAN_QUEUE_V1.json", "scripts/t6_find_pending_world_formats_v2.ps1"],
+      "current": {"targetFastfiles": 31, "format8AuditedMaps": 3, "format8PendingMaps": 28},
       "closureRequirement": "Every hash-pinned MP target completes production export and validation with zero unresolved geometry/material/state/lightmap blockers."
     },
     {
@@ -217,7 +242,7 @@
     "partial": 8,
     "open": 0,
     "release100Percent": false,
-    "milestone": "XAnim runtime transform composition is retail-byte-closed and the retained 18-XFile binary branch census is structurally exact at 11,205/11,205 records. Compiled-v19 non-empty delta interchange is implemented and regression-tested; remaining XAnim binary closure is full-target-corpus branch coverage or a direct fixture for any branch not yet observed, alongside renderer/corpus integration and independent validation."
+    "milestone": "World vertex binary layout is now retail-byte-proven and export-enabled for formats 0-7; format 8 is the sole remaining world-format holdout, with zero strict inline hits across 1,332 TechniqueSet bodies in 18 retained XFiles and an exact 28-map remaining MP scan queue. XAnim runtime transform composition is retail-byte-closed and the retained 18-XFile binary branch census is structurally exact at 11,205/11,205 records. Remaining closure is concentrated in format-8/full-corpus evidence, renderer/shader semantics, corpus integration and independent validation."
   },
   "releaseRule": "100% is a boolean certification, not a rounded estimate: every gate above must be status=closed and its closureRequirement must be backed by retained evidence."
 }
