@@ -1,0 +1,121 @@
+{
+  "format": "t6-retail-xanim-full-quat-census-v2",
+  "supersedes": "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V1.json",
+  "producer": "tools/t6_xanim_retail_delta_branch_census_v2.py",
+  "purpose": "Retail XAnim delta-union census after directly proving the patch_mp assetType-0 records and localizing the remaining source gaps by exact XAsset serialization groups.",
+  "retainedExpandedSources": {
+    "common_zm": {"bytes": 16936620, "sha256": "28ff1b05ca1565f6c90acd473262e0d566fbc22fc2005c6def09fed9555b7527"},
+    "patch_zm": {"bytes": 10330637, "sha256": "3a5df2757981c0ae5d7963f41f6b621349b2604efd6360f3e7bb0fe145a6c499"},
+    "zm_prison": {"bytes": 344067743, "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"},
+    "zm_tomb": {"bytes": 359627377, "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"},
+    "common_mp": {"bytes": 206493911, "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"},
+    "patch_mp": {"bytes": 14713756, "sha256": "1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9"},
+    "mp_nuketown_2020": {"bytes": 154653476, "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"},
+    "mp_hijacked": {"bytes": 141043798, "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"},
+    "mp_raid": {"bytes": 156092603, "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"}
+  },
+  "zones": [
+    {"zone": "common_zm", "expected": 819, "identified": 819, "countClosesExactly": true, "branches": {"transKeyed": 310, "transConstant": 0, "quat2Keyed": 78, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "patch_zm", "expected": 51, "identified": 51, "countClosesExactly": true, "branches": {"transKeyed": 2, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "zm_prison", "expected": 1434, "identified": 1434, "countClosesExactly": true, "branches": {"transKeyed": 288, "transConstant": 38, "quat2Keyed": 90, "quat2Constant": 43, "quatKeyed": 3, "quatConstant": 0}},
+    {"zone": "zm_tomb", "expected": 1735, "identified": 1713, "countClosesExactly": false, "unresolved": 22, "branches": {"transKeyed": 362, "transConstant": 37, "quat2Keyed": 83, "quat2Constant": 64, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "common_mp", "expected": 4233, "identified": 4233, "countClosesExactly": true, "branches": {"transKeyed": 378, "transConstant": 124, "quat2Keyed": 93, "quat2Constant": 108, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "patch_mp", "expected": 10, "identified": 10, "countClosesExactly": true, "branches": {"transKeyed": 1, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "mp_nuketown_2020", "expected": 9, "identified": 8, "countClosesExactly": false, "unresolved": 1, "branches": {"transKeyed": 3, "transConstant": 0, "quat2Keyed": 1, "quat2Constant": 0, "quatKeyed": 2, "quatConstant": 0}},
+    {"zone": "mp_hijacked", "expected": 5, "identified": 5, "countClosesExactly": true, "branches": {"transKeyed": 3, "transConstant": 0, "quat2Keyed": 3, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}},
+    {"zone": "mp_raid", "expected": 2, "identified": 2, "countClosesExactly": true, "branches": {"transKeyed": 0, "transConstant": 0, "quat2Keyed": 0, "quat2Constant": 0, "quatKeyed": 0, "quatConstant": 0}}
+  ],
+  "retailAssetType0Fixtures": [
+    {
+      "zone": "patch_mp",
+      "xassetIndex": 1416,
+      "name": "void",
+      "recordStart": 8064582,
+      "recordEnd": 8081031,
+      "numframes": 80,
+      "framerate": 30.0,
+      "frequency": 0.375,
+      "assetType": 0,
+      "deltaPartPresent": false,
+      "fixedRecordSha256": "b82412114fc78c6778f841e42e5d479ad7a5c50b9480eae217014a5ef2df6a58"
+    },
+    {
+      "zone": "patch_mp",
+      "xassetIndex": 1417,
+      "name": "void_loop",
+      "recordStart": 8081031,
+      "recordEnd": 8097513,
+      "numframes": 80,
+      "framerate": 30.0,
+      "frequency": 0.375,
+      "assetType": 0,
+      "deltaPartPresent": false,
+      "fixedRecordSha256": "1f0c6d6e166937c02ffc7a5618d21c03db67f637bd7a5a15013e5905270716da"
+    }
+  ],
+  "remainingGapLocalization": {
+    "zm_tomb": {
+      "unresolvedRecords": 22,
+      "xassetIndices": [3480, 3501],
+      "groupLength": 22,
+      "groupStatement": "All 22 missing Tomb XAnimParts are one consecutive XAsset serialization group. The other 95 expected XAnim serialization groups match the 95 detected record chains exactly after this single group is omitted.",
+      "ordinaryHeaderSearchResult": "No additional inline or packed positive-frame XAnim fixed records satisfying the established T6 timing relation were found. A relaxed search of the normal serialization interval also did not recover a 22-record ordinary XAnim chain.",
+      "proofBoundary": "The group is localized but its storage/alias semantics are not yet closed; its absence cannot be used as evidence about constant full-quaternion delta usage."
+    },
+    "mp_nuketown_2020": {
+      "unresolvedRecords": 1,
+      "xassetIndex": 787,
+      "nextKnownRun": [798, 805],
+      "nextKnownRunLength": 8,
+      "groupStatement": "The isolated XAnimParts at index 787 is unresolved. The separate eight-entry XAnim run at indices 798-805 is fully structurally identified.",
+      "proofBoundary": "The unresolved isolated asset remains outside the constant-full-quaternion absence proof."
+    }
+  },
+  "summary": {
+    "zonesScanned": 9,
+    "zonesCountClosed": 7,
+    "expectedXAnimRecordsAllZones": 8298,
+    "structuralRecordsIdentifiedAllZones": 8275,
+    "unresolvedStructuralRecordsAllZones": 23,
+    "exactCountXAnimRecords": 6554,
+    "exactCountBranchTotals": {
+      "transKeyed": 982,
+      "transConstant": 162,
+      "quat2Keyed": 264,
+      "quat2Constant": 151,
+      "quatKeyed": 3,
+      "quatConstant": 0
+    },
+    "identifiedAllZoneBranchTotals": {
+      "transKeyed": 1347,
+      "transConstant": 199,
+      "quat2Keyed": 348,
+      "quat2Constant": 215,
+      "quatKeyed": 5,
+      "quatConstant": 0
+    },
+    "constantFullQuatObservedInExactCountZones": 0,
+    "dynamicFullQuatObservedInExactCountZones": 3,
+    "dynamicFullQuatObservedAllIdentifiedRecords": 5
+  },
+  "constantFullQuatFixtureStatus": {
+    "directRetailFixtureFound": false,
+    "exactNegativeCensusCoverage": 6554,
+    "exactNegativeCensusZones": ["common_zm", "patch_zm", "zm_prison", "common_mp", "patch_mp", "mp_hijacked", "mp_raid"],
+    "partialZonesNotUsedForAbsenceProof": ["zm_tomb", "mp_nuketown_2020"],
+    "remainingUnresolvedRecords": 23
+  },
+  "compiledInterchangeStatus": {
+    "nonEmptyDeltaWriter": "implemented",
+    "roundTripRegression": "implemented",
+    "codec": "tools/t6_compiled_xanim_v19_delta_v1.py",
+    "regression": "tools/test_t6_compiled_xanim_v19_delta_v1.py"
+  },
+  "proofBoundary": [
+    "The constant full-quaternion size==0 source branch still has no retained direct retail fixture.",
+    "Zero constant full-quaternion observations are exhaustive only across the seven count-closed zones totaling 6,554 XAnimParts.",
+    "The 22 localized Tomb entries and the isolated Nuketown entry remain explicit unknowns and are not promoted to negative branch evidence.",
+    "Dynamic full-quaternion use remains directly proven by three count-closed zm_prison fixtures plus two additional structurally identified Nuketown fixtures.",
+    "Compiled-v19 non-empty delta interchange is no longer a missing implementation; the remaining binary semantic gap is the unresolved source corpus/constant-full-quaternion fixture boundary."
+  ]
+}
