@@ -1,0 +1,36 @@
+{
+  "dagSetSha256": "ffc6c894a767aa4563e67d05b8f1911d6f09e3b4f3b288148d86fd65c43bb30c",
+  "format": "t6-retail-special-shdr-symbolic-v1",
+  "outputDependencyPatterns": [
+    {"count":27,"family":"emissive_or_burning","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":9,"family":"rawnormal_special","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":24,"family":"water","outputs":[{"lightmapDependencies":["secondary.w","secondary.x"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.y"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.z"],"output":"o0.z"}]},
+    {"count":9,"family":"water","outputs":[{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.x"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.y"},{"lightmapDependencies":["secondary.w","secondary.x","secondary.y","secondary.z"],"output":"o0.z"}]},
+    {"count":7,"family":"water","outputs":[{"lightmapDependencies":["secondary.w"],"output":"o0.x"},{"lightmapDependencies":["secondary.w"],"output":"o0.y"},{"lightmapDependencies":["secondary.w"],"output":"o0.z"}]}
+  ],
+  "producer": "tools/t6_retail_special_shdr_symbolic_v1.py",
+  "proofBoundary": "Direct straight-line SM4 expression DAG reconstruction from retained SHDR tokens for special pixel shaders that have no if/else/endif and directly sample t13. Every t13 sample remains a distinct symbolic atom keyed by its instruction DWORD; coordinates, LOD, bias and derivative inputs are independently checked for lightmap dependency. This proves supported assembly-level dataflow, not reconstructed HLSL, and excludes control-flow shaders.",
+  "shaderRowExamples": [
+    {"dagSha256":"35432412a6aaa7e7e355e21e1c282fb77c8697506ea6a23a5f1dc3ab13fc48e6","family":"water","nodeCount":472,"outputCount":3,"sampleCount":3,"sha256":"00959ded1d759ad801ae2813345d98bbdbe06e033b6cab718c9f7054ffd26bde"},
+    {"dagSha256":"f52a4cf59a337079ada71098358b845bba2f66d2b45c0ea2ecf81f2fbd58baf5","family":"water","nodeCount":859,"outputCount":3,"sampleCount":1,"sha256":"80031142117f006bbe009a99a6b7fbc30c1278326cd2c8525d331140ba0800aa"},
+    {"dagSha256":"641747f84bc56d78ad435cea194f75c24f47c0e37ae96632c7a172ba5a8b6bf2","family":"water","nodeCount":692,"outputCount":3,"sampleCount":3,"sha256":"ff52b312e3d5bb936fbb608ce28712c6f0dd7346b9d97a87b029a6b76c03a5b4"}
+  ],
+  "shaderRowSetSha256": "646419b3f90fdd16a6be584cd994b6d00bd0e6daf923f1d2de4b9a07d2882d81",
+  "sourcePixelShaderSetSha256": "aa581f23bf696c334020e19ad97e7f26f7772aac999b8720e7da60fbc1a61bc7",
+  "summary": {
+    "branchFreeLightmappedShaderCount": 76,
+    "familyCounts": {
+      "emissive_or_burning": {"nodeCount":14463,"outputCount":81,"sampleCount":81,"shaderCount":27},
+      "rawnormal_special": {"nodeCount":4535,"outputCount":27,"sampleCount":27,"shaderCount":9},
+      "water": {"nodeCount":24110,"outputCount":120,"sampleCount":103,"shaderCount":40}
+    },
+    "lightmapDependentDiscardCount": 0,
+    "lightmapDependentOutputCount": 228,
+    "lightmapDependentSampleInputCount": 0,
+    "lightmapSampleCount": 211,
+    "nodeCount": 43108,
+    "outputDependencyPatternCount": 5,
+    "symbolicBlockerCount": 0,
+    "uniqueDagCount": 76
+  }
+}
