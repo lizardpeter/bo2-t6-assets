@@ -59,8 +59,9 @@
       "title": "XAnimParts binary tracks and delta payload decoding/interchange",
       "status": "partial",
       "evidence": [
-        "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V3.json",
+        "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V4.json",
         "tools/t6_xanim_retail_delta_branch_census_v3.py",
+        "tools/test_t6_xanim_retail_delta_branch_census_v3.py",
         "tools/t6_xanim_normalize_v1.py",
         "tools/t6_compiled_xanim_v19_delta_v1.py",
         "tools/test_t6_compiled_xanim_v19_delta_v1.py",
@@ -68,19 +69,19 @@
         "standalone xanim.py retail parser"
       ],
       "current": {
-        "retainedXFilesCensused": 9,
-        "retailXAnimRecordsExpected": 8298,
-        "retailXAnimRecordsStructurallyIdentified": 8298,
-        "unresolvedRecordsInNineXFileCensus": 0,
-        "emptyPlaceholderRecords": 23,
-        "dynamicDeltaTranslations": 1347,
+        "retainedXFilesCensused": 18,
+        "retailXAnimRecordsExpected": 11205,
+        "retailXAnimRecordsStructurallyIdentified": 11205,
+        "unresolvedRecordsInRetainedCensus": 0,
+        "emptyPlaceholderRecords": 2849,
+        "dynamicDeltaTranslations": 1350,
         "constantDeltaTranslations": 199,
         "dynamicQuat2Deltas": 348,
         "constantQuat2Deltas": 215,
         "dynamicFullQuatDeltas": 5,
         "constantFullQuatDeltas": 0,
-        "constantFullQuatNineXFileAbsence": "exhaustive across all 8,298 XAnimParts in the nine count-closed retained XFiles",
-        "knownFixtureGap": "no direct constant full-quat delta retail fixture; the size==0 12-byte source branch remains struct-derived outside the nine-XFile absence proof",
+        "constantFullQuatRetainedCorpusAbsence": "exhaustive across all 11,205 XAnimParts in the 18 count-closed retained XFiles",
+        "knownFixtureGap": "no direct constant full-quat delta retail fixture; the size==0 12-byte source branch remains struct-derived outside the currently retained 18-XFile absence proof",
         "compiledV19NonEmptyDeltaWriter": "implemented and regression-tested"
       },
       "closureRequirement": "Every serialized delta union branch used across the full target retail corpus must have a retained direct fixture or an exhaustive target-corpus absence proof, with deterministic normalized/compiled round-trip validation. Non-empty compiled-v19 interchange is implemented; remaining closure work is expansion of the exact branch census to the full target corpus or discovery of a direct constant full-quat fixture."
@@ -216,7 +217,7 @@
     "partial": 8,
     "open": 0,
     "release100Percent": false,
-    "milestone": "XAnim runtime transform composition is retail-byte-closed and the nine-XFile binary branch census is structurally exact at 8,298/8,298 records. Compiled-v19 non-empty delta interchange is implemented and regression-tested; remaining XAnim binary closure is full-target-corpus branch coverage or a direct fixture for any branch not yet observed, alongside renderer/corpus integration and independent validation."
+    "milestone": "XAnim runtime transform composition is retail-byte-closed and the retained 18-XFile binary branch census is structurally exact at 11,205/11,205 records. Compiled-v19 non-empty delta interchange is implemented and regression-tested; remaining XAnim binary closure is full-target-corpus branch coverage or a direct fixture for any branch not yet observed, alongside renderer/corpus integration and independent validation."
   },
   "releaseRule": "100% is a boolean certification, not a rounded estimate: every gate above must be status=closed and its closureRequirement must be backed by retained evidence."
 }
