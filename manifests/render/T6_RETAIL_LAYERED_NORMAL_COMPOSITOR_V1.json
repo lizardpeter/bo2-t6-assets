@@ -1,0 +1,103 @@
+{
+  "examples": [
+    {
+      "baseline": "zero",
+      "sha256": "060955acaefc12173c858815e91de6fdac0247a3769e56abd0a388f711da27dc",
+      "steps": [
+        {
+          "currentNormalPairSha256": "ee2f91f62d131c70b921deb409bf200a4b5f20a17a91a3900cfe3a6ed6cb964a",
+          "layer": 1,
+          "mode": "b",
+          "rgbWeightDagSha256": "1efdea20c1971819b5212811b280f1253b3be1686a122fcc91f46815df916020",
+          "statePairSha256": "79dfff8f11fee21f230a5655b66929cd7d7fba77cea21ab46af1a8093a24f2fd",
+          "transform": "direct"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0x0_b1c1n1s1"
+    },
+    {
+      "baseline": "explicit_normal",
+      "sha256": "088034561cf5e2d72a8110feae96a7800bbee809ca0b3251bcc56083b1213f30",
+      "steps": [
+        {
+          "currentNormalPairSha256": "94395a53dc628da1521abc73b95f1dce7204a51ea56b79d89a374390c8648d45",
+          "layer": 2,
+          "mode": "b",
+          "rgbWeightDagSha256": "4132f47297c194ec467f8d75f8596b3d45a4799c5e44f71ec481484c950e7221",
+          "statePairSha256": "911ef80b971cf8102bae7ee729a05a2f9aed54da28c48943b66524fb90a95bd8",
+          "transform": "transform2x2"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0x0_b1c1v1_b2c2n2s2_m3c3"
+    },
+    {
+      "baseline": "explicit_normal",
+      "sha256": "08e8256fdee46d4276947a442d51424284907165e6fb2d36e5617d88c4606384",
+      "steps": [
+        {
+          "currentNormalPairSha256": "07fd3d0cc40a54b8f4e0c72e614139827a4f894aeace1bb3bc9bc53e29176a65",
+          "layer": 1,
+          "mode": "b",
+          "rgbWeightDagSha256": "36bb1e083e24420aebca1d8bcefd7936b4f57af5a409a2e71d73a5413bb0973e",
+          "statePairSha256": "aacf3b7b78f1bdf573a51dda7876384df95e99741a5296c3176f75bb28e2d7d5",
+          "transform": "transform2x2"
+        },
+        {
+          "currentNormalPairSha256": "bc5855e4fe154e87a4d7f04fc11b81352dbe4d9d7bbe6c4d5d108974f397bf94",
+          "layer": 2,
+          "mode": "b",
+          "rgbWeightDagSha256": "c642ac69a9196d8be1a8c6a015684d2dbbcce7655743f4760ebf5f0440dcfaaa",
+          "statePairSha256": "f99965641572ba92336bcb525cf8b3d3c1f851461875546437854bcc7e1603a3",
+          "transform": "transform2x2"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0s0_b1c1n1_b2c2n2s2v2"
+    },
+    {
+      "baseline": "explicit_normal",
+      "sha256": "0b7d5f5ee4932a7afc557ae897cc9f19baf9a457132118a492fd4445101e7447",
+      "steps": [
+        {
+          "currentNormalPairSha256": "0173a6cd0fbcca34999d58d01de739a3ea8e8bc3460fdf8127539df595f96d0e",
+          "layer": 1,
+          "mode": "t",
+          "rgbWeightDagSha256": "f5d13d71f5c9ff7c325c739c93c75da9333bcc126385af1217a6b1c967250fa0",
+          "statePairSha256": "f5185bc4c4e9614f44d26de382677d5e24befe02c7e7e9ebfde85370ff141065",
+          "transform": "transform2x2"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0x0_t1c1n1_a2c2"
+    }
+  ],
+  "format": "t6-retail-layered-normal-compositor-v1",
+  "producer": "tools/t6_retail_layered_normal_compositor_v1.py",
+  "proofBoundary": "Direct ordered XY normal-state recurrence proof for slot-4 layer_lmap across all 107 retained unique shaders containing layered normals. Every transition is required to use the exact scalar RGB weight/threshold DAG from the same retail shader. This proves decoded XY state and the observed direct/2x2 transform relation; later Z reconstruction, normalization, lighting consumption, non-slot4 passes, playback, and unretained maps remain outside this proof.",
+  "recurrence": {
+    "b": "prevNormalXY + (layerNormalXY - prevNormalXY) * exactRgbWeight; when no previous normal exists, layerNormalXY * exactRgbWeight",
+    "layerNormal": "normalMapSamplerN.xy decoded by retail shader, then either used directly or transformed by an observed 2x2 vertex-input basis",
+    "t": "select(exactRgbThresholdCondition, layerNormalXY, prevNormalXY)"
+  },
+  "sourceSlot4ShaderSetSha256": "f3065ec05f2992048ceb7e3fae845f13e6e8b57f1eb717e644b26cb45774f799",
+  "summary": {
+    "baselineShaderCounts": {
+      "explicit_normal": 98,
+      "zero": 9
+    },
+    "layerStepCount": 129,
+    "operatorStepCounts": {
+      "b": 110,
+      "t": 19
+    },
+    "recurrenceFailureCount": 0,
+    "rowsSha256": "89c415c4233ff11fed4f72862bfdcb6dacde95f421373822c151564069bde05f",
+    "sameRgbWeightDagMismatchCount": 0,
+    "shaderCount": 107,
+    "transformDagSetSha256": "9194f67aa2f3198511607d5d8f10ad0ae230008ef06cbe98ac7ebcf9ce246e7e",
+    "transformStepCounts": {
+      "direct": 9,
+      "transform2x2": 120
+    },
+    "uniqueTransformDagPairCount": 69,
+    "xyRecurrenceCheckCount": 258
+  }
+}

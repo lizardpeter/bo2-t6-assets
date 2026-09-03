@@ -1,0 +1,128 @@
+{
+  "examples": [
+    {
+      "baseline": {
+        "w": "color_alpha",
+        "x": "default_0.2",
+        "y": "default_0.2",
+        "z": "default_0.2"
+      },
+      "sha256": "060955acaefc12173c858815e91de6fdac0247a3769e56abd0a388f711da27dc",
+      "steps": [
+        {
+          "channelStateSha256": {
+            "w": "53bd26a9d2545400f336e0b62821ab775c1296c522be37efec9f2e8988336f40",
+            "x": "1264a454407d5b1619b2cada4e9b153e7f31edc3702d2691edb97b0f386cb258",
+            "y": "40972c3945f880d1fcf16eeb0193f688094de10e35ad1e49a409bf958388e643",
+            "z": "c8c7e23fe9e903feda976ea21633c8a3285f4498c7de47d94162c0b5b17b2a37"
+          },
+          "layer": 1,
+          "mode": "b",
+          "rgbWeightDagSha256": "1efdea20c1971819b5212811b280f1253b3be1686a122fcc91f46815df916020"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0x0_b1c1n1s1"
+    },
+    {
+      "baseline": {
+        "w": "color_alpha",
+        "x": "default_0.2",
+        "y": "default_0.2",
+        "z": "default_0.2"
+      },
+      "sha256": "088034561cf5e2d72a8110feae96a7800bbee809ca0b3251bcc56083b1213f30",
+      "steps": [
+        {
+          "channelStateSha256": {
+            "w": "5d26b6d8eda91571bedba9fa1b612000ac0e4fc711f9f5c886748bc4603d0b6d",
+            "x": "d4618d6b20d279919504ec09026aec38ec57751e75bb511f93500486421d4a5c",
+            "y": "59a72b1476b0ae1f4d2dba4cbd22c73cd134c4f75a797c4f20bff7bbb90f3486",
+            "z": "ee55822ac7602df828b205d2ab99941cd1f67327856dc8bfdb79b391c915aa64"
+          },
+          "layer": 2,
+          "mode": "b",
+          "rgbWeightDagSha256": "4132f47297c194ec467f8d75f8596b3d45a4799c5e44f71ec481484c950e7221"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0x0_b1c1v1_b2c2n2s2_m3c3"
+    },
+    {
+      "baseline": {
+        "w": "explicit_spec",
+        "x": "explicit_spec",
+        "y": "explicit_spec",
+        "z": "explicit_spec"
+      },
+      "sha256": "08e8256fdee46d4276947a442d51424284907165e6fb2d36e5617d88c4606384",
+      "steps": [
+        {
+          "channelStateSha256": {
+            "w": "5c046a0adc022a3c509cb00e681bc1aef7f1ff6c77716b82ee47843c5072f31a",
+            "x": "61341537d1ce83f9834aab29ce20e8d78a0225bbbed591eb83c12d3f7a448bfb",
+            "y": "2076eeed5a9847bcc239c5090c96838205bb06cfa537b45f296acd4f50fffb7a",
+            "z": "ecc47d69d04233ca623cff4572394c075ff3e8728d67efc03d26350451e42324"
+          },
+          "layer": 2,
+          "mode": "b",
+          "rgbWeightDagSha256": "c642ac69a9196d8be1a8c6a015684d2dbbcce7655743f4760ebf5f0440dcfaaa"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0s0_b1c1n1_b2c2n2s2v2"
+    },
+    {
+      "baseline": {
+        "w": "color_alpha",
+        "x": "default_0.2",
+        "y": "default_0.2",
+        "z": "default_0.2"
+      },
+      "sha256": "0af1bf65f88da99695283e76ab005b882b3db0f797700d70d3c74ae946880080",
+      "steps": [
+        {
+          "channelStateSha256": {
+            "w": "e3248f3125364dbe3ee1e479210e63b778535fa7289a12d1c6170bd726566348",
+            "x": "caaf73aff99c620a9c4cb67ae50912b9351dc3252804523e76998297b4437c93",
+            "y": "5c2b64c4d61e962f1ce0cbecfbe94f41b54bf3e2e93139026276f860d8e9bb99",
+            "z": "1d27319f8137ab5400d7ed17dc44eb9f76869716198cc2488b90fbfb8919de32"
+          },
+          "layer": 1,
+          "mode": "b",
+          "rgbWeightDagSha256": "f50baedc00af7edb4aa28a4658090c6b20f765fa3a493e5aac01cf8d4e1b1fc6"
+        }
+      ],
+      "techniqueSet": "lit_sm_r0c0n0x0_b1c1s1"
+    }
+  ],
+  "format": "t6-retail-layered-specular-compositor-v1",
+  "producer": "tools/t6_retail_layered_specular_compositor_v1.py",
+  "proofBoundary": "Direct ordered XYZW specular-state recurrence proof for slot-4 layer_lmap across all 73 retained unique shaders containing layered specular maps. Every transition is required to use the exact RGB scalar weight/threshold DAG from the same retail shader. Non-slot4 passes, final lighting equations, playback, and unretained maps remain outside this proof.",
+  "recurrence": {
+    "b": "prevSpecRGBA + (layerSpecRGBA - prevSpecRGBA) * exactRgbWeight",
+    "fallback": "without base specular map: RGB starts at 0.2; alpha starts from base color alpha for x0 techniques, otherwise 0",
+    "t": "select(exactRgbThresholdCondition, layerSpecRGBA, prevSpecRGBA)"
+  },
+  "sourceSlot4ShaderSetSha256": "f3065ec05f2992048ceb7e3fae845f13e6e8b57f1eb717e644b26cb45774f799",
+  "summary": {
+    "baselineChannelShaderCounts": {
+      "w:color_alpha": 38,
+      "w:default_0": 7,
+      "w:explicit_spec": 28,
+      "x:default_0.2": 45,
+      "x:explicit_spec": 28,
+      "y:default_0.2": 45,
+      "y:explicit_spec": 28,
+      "z:default_0.2": 45,
+      "z:explicit_spec": 28
+    },
+    "layerStepCount": 82,
+    "operatorStepCounts": {
+      "b": 74,
+      "t": 8
+    },
+    "recurrenceFailureCount": 0,
+    "rowsSha256": "b24316e179e43b24ec1e65998517497820bb20cf472cd960b529b4725b64cf45",
+    "sameRgbWeightDagMismatchCount": 0,
+    "shaderCount": 73,
+    "xyzwRecurrenceCheckCount": 328
+  }
+}
