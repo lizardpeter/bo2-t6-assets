@@ -1,0 +1,40 @@
+{
+  "basis": {
+    "baseNormal": ["TEXCOORD1.x", "TEXCOORD1.y", "TEXCOORD1.z"],
+    "layeredXBasis": ["TEXCOORD3.x", "TEXCOORD3.y", "TEXCOORD3.z"],
+    "layeredYBasis": ["TEXCOORD2.x", "TEXCOORD2.y", "TEXCOORD2.z"]
+  },
+  "equations": {
+    "normalize": "rawNormal * rsq(dot(rawNormal, rawNormal))",
+    "rawNormal": "TEXCOORD1.xyz + layeredNormalX * TEXCOORD3.xyz + layeredNormalY * TEXCOORD2.xyz",
+    "secondaryDirection": "2 * lightmapSamplerSecondary.rgb - 1",
+    "secondaryDirectionalDot": "dot(secondaryDirection, normalizedNormal)"
+  },
+  "examples": [
+    {"normalizedVectorSha256":"e54ec742543f04404b2a8d8c18e82d952d5161f18e79fb9f301c6a61db2b757a","rawVectorSha256":"fc9d449caa4f12fd76807bd1dbf31c2abc881d09432ca5f60db1e832244e4c5c","sha256":"037fcf62fc958c4aa622657e5329eb06cf0cbe6522f826915af3e673b7049f9d","signedSecondaryDotSha256":"60ab8164ece31fd8e2e300ecad38b859bd4d0ecac801554ec3db03cd9cb56ccb","techniqueSet":"lit_sm_r0c0n0x0_b1c1n1x1","texcoord5NormalizedDotCount":2,"worldVertFormat":2},
+    {"normalizedVectorSha256":"208928463640e39682b96df2ce8ed04023617613220b446e6990a45ff6b1d2fa","rawVectorSha256":"35ab49a121362c2a6616f4222ec900079bd9cb4b8f301022548f4142f7cd8a91","sha256":"055653807f16010a96f3c4beba72a3e13a6785710b238789cf4aae8cf99fa952","signedSecondaryDotSha256":"75250f1d2be109ba65465ba88144807f49a591c71bc653bf60afeb933a39bc4f","techniqueSet":"lit_sm_r0c0n0x0_b1c1n1s1v1","texcoord5NormalizedDotCount":2,"worldVertFormat":2},
+    {"normalizedVectorSha256":"4387be02e8874ee2ac7a46a4491c3be1e76cb0c7ead577ee5bb295afc1606ce0","rawVectorSha256":"dbbc5bb1e6f12363f7092386171083321585d543b820432d38175a41b842f554","sha256":"0679808712b2852709110535151f33e9348c57f78bb977de9477b53fb0399c80","signedSecondaryDotSha256":"112c5b11b0dd15da435814553270c6e91bbbcf8420db12214c984d38970873ee","techniqueSet":"lit_sm_r0c0n0x0_b1c1n1x1_m2c2","texcoord5NormalizedDotCount":2,"worldVertFormat":3},
+    {"normalizedVectorSha256":"005a21e177842fb095a7335087d241dd4bfe1be362d326c0e788cdfdb32e3292","rawVectorSha256":"9559039ab756142dbb79690233615a8821b882d4e9a5b26f19acfa927330f39b","sha256":"07a8f32c6f11d328864c4d7c70dc68b0ca4456a744673607f7b12a6fd36e18b9","signedSecondaryDotSha256":"0692e59cc2a46191432ab3b8693eece46f422600de96d58a27a9e94620eab52a","techniqueSet":"lit_sm_r0c0n0_b1c1n1","texcoord5NormalizedDotCount":0,"worldVertFormat":1},
+    {"normalizedVectorSha256":"1dfef5a3e4cfdbfed35c06ba3809ee84738084410a9395ae0d8b1848abf140d0","rawVectorSha256":"255c008a1d6bd6dbec5af64a4a1568548537c9c8c39f91c65ae908c56511d71a","sha256":"08ab73d044be8c0fb21750ff1aa232be4400a76c34a6a68bc55adbc5cb7d7397","signedSecondaryDotSha256":"2cc85cc852c362b000345a693081d27293a81c2ad26f3fa3737b311d46ebc545","techniqueSet":"lit_sm_r0c0n0s0_b1c1n1s1v1","texcoord5NormalizedDotCount":2,"worldVertFormat":1}
+  ],
+  "format": "t6-retail-layered-normal-reconstruction-v1",
+  "producer": "tools/t6_retail_layered_normal_reconstruction_v1.py",
+  "proofBoundary": "Direct retained-DXBC proof over all 107 unique slot-4 layered shaders that contain layered normals. The already-proven layered XY state is converted to a three-component vector by one universal input-basis equation, normalized with rsq(dot(v,v)), and consumed by exactly one dot against lightmapSamplerSecondary.rgb decoded channelwise as 2*x-1. This proves retained normal reconstruction and the signed secondary-RGB directional relation; downstream interpretation of that dot, other lightmap channels, non-slot4 normal paths, renderer playback, and unretained maps remain separate.",
+  "sourceSlot4ShaderSetSha256": "f3065ec05f2992048ceb7e3fae845f13e6e8b57f1eb717e644b26cb45774f799",
+  "summary": {
+    "basisPatternCount": 1,
+    "normalizationComponentCheckCount": 321,
+    "normalizationFailureCount": 0,
+    "normalizationVectorCheckCount": 107,
+    "rawVectorConstructionCheckCount": 107,
+    "rawVectorConstructionFailureCount": 0,
+    "rowsSha256": "439ea8e76555fd8aedd5739cc5a08e729b3a99c55c24acc0e100478390dad622",
+    "shaderCount": 107,
+    "signedSecondaryChannelDecodeCheckCount": 321,
+    "signedSecondaryChannelDecodeFailureCount": 0,
+    "signedSecondaryLightmapDotShaderCount": 107,
+    "texcoord5NoDotShaderCount": 6,
+    "texcoord5NormalizedDotCount": 202,
+    "texcoord5NormalizedDotShaderCount": 101
+  }
+}
