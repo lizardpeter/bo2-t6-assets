@@ -1,0 +1,74 @@
+{
+  "dispatcherEvidence": [
+    {"flags": [], "layerOperationCount": 23, "mode": "a", "weightClass": "alpha_vertex"},
+    {"flags": [], "layerOperationCount": 39, "mode": "b", "weightClass": "alpha_vertex"},
+    {"flags": ["n"], "layerOperationCount": 28, "mode": "b", "weightClass": "alpha_vertex"},
+    {"flags": ["n","s"], "layerOperationCount": 30, "mode": "b", "weightClass": "alpha_vertex"},
+    {"flags": ["n","s","v"], "layerOperationCount": 24, "mode": "b", "weightClass": "height"},
+    {"flags": ["n","v"], "layerOperationCount": 18, "mode": "b", "weightClass": "height"},
+    {"flags": ["n","x"], "layerOperationCount": 10, "mode": "b", "weightClass": "vertex_only"},
+    {"flags": ["s"], "layerOperationCount": 20, "mode": "b", "weightClass": "alpha_vertex"},
+    {"flags": ["v"], "layerOperationCount": 8, "mode": "b", "weightClass": "height"},
+    {"flags": [], "layerOperationCount": 71, "mode": "m", "weightClass": "vertex_only"},
+    {"flags": [], "layerOperationCount": 11, "mode": "t", "weightClass": "threshold_alpha_vertex"},
+    {"flags": ["n"], "layerOperationCount": 11, "mode": "t", "weightClass": "threshold_alpha_vertex"},
+    {"flags": ["n","s"], "layerOperationCount": 8, "mode": "t", "weightClass": "threshold_alpha_vertex"}
+  ],
+  "format": "t6-retail-layered-lmap-compositor-v1",
+  "formatOccurrenceCounts": {"1":78,"2":54,"3":46,"4":52,"5":26,"6":9,"7":8},
+  "heightWeightExamples": [
+    {"expressionPrefix":"sat(div((-(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(-(exp((log((0.00100000005+(COLOR.y*0.998000026)))*cb1[59].y)))*cb1[59].x))))+L1.w),(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(exp((cb1[59].y*log((-((0.00100000005+(COLOR.y*0.998000026)))+1))))*cb1[59].x)))+-(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(-(exp((log((0.00100000005+(COLOR.y*0.998000026)))*cb1[59].y)))*cb1[59].x)))))))","layerOperationCount":3,"weightDagSha256":"b7fe6f8f0013bd6aa1fb927e572ed7309425b0ed43c1863f6832e5f556fa5eeb"},
+    {"expressionPrefix":"sat(div((-(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(-(exp((log((0.00100000005+(COLOR.y*0.998000026)))*cb1[59].y)))*cb1[59].x))))+L1.w),(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(exp((cb1[59].y*log((-((0.00100000005+(COLOR.y*0.998000026)))+1))))*cb1[59].x)))+-(sat(((-((0.00100000005+(COLOR.y*0.998000026)))+1)+(-(exp((log((0.00100000005+(COLOR.y*0.998000026)))*cb1[59].y)))*cb1[59].x)))))))","layerOperationCount":2,"weightDagSha256":"9be89e61c503570d56ef754b5a0edb49c6b55fb4deeaf8ffa90e4e215395e088"},
+    {"expressionPrefix":"sat(div((-(sat(((-(TEXCOORD6.y)+1)+(-(exp((log(TEXCOORD6.y)*cb1[59].y)))*cb1[59].x))))+L1.w),(sat(((-(TEXCOORD6.y)+1)+(exp((cb1[59].y*log((-(TEXCOORD6.y)+1))))*cb1[59].x)))+-(sat(((-(TEXCOORD6.y)+1)+(-(exp((log(TEXCOORD6.y)*cb1[59].y)))*cb1[59].x)))))))","layerOperationCount":2,"weightDagSha256":"ca1e53334717d0a70d3b72334e965c2b86e5d821eb2365ea035d7078fec092c1"}
+  ],
+  "mapCoverage": [
+    {"map":"mp_hijacked","slot4TechniqueSetOccurrences":46},
+    {"map":"mp_nuketown_2020","slot4TechniqueSetOccurrences":34},
+    {"map":"mp_raid","slot4TechniqueSetOccurrences":66},
+    {"map":"zm_prison","slot4TechniqueSetOccurrences":94},
+    {"map":"zm_tomb","slot4TechniqueSetOccurrences":33}
+  ],
+  "modeSignatureCoverage": [
+    {"modeSignature":"a","shaderCount":7},{"modeSignature":"b","shaderCount":43},{"modeSignature":"m","shaderCount":5},{"modeSignature":"t","shaderCount":6},
+    {"modeSignature":"aa","shaderCount":2},{"modeSignature":"ab","shaderCount":2},{"modeSignature":"am","shaderCount":2},{"modeSignature":"ba","shaderCount":5},{"modeSignature":"bb","shaderCount":38},{"modeSignature":"bm","shaderCount":22},{"modeSignature":"bt","shaderCount":4},{"modeSignature":"mm","shaderCount":5},{"modeSignature":"ta","shaderCount":1},{"modeSignature":"tb","shaderCount":9},{"modeSignature":"tm","shaderCount":6},{"modeSignature":"amm","shaderCount":1},{"modeSignature":"bam","shaderCount":1},{"modeSignature":"bbm","shaderCount":4},{"modeSignature":"bmm","shaderCount":6},{"modeSignature":"mmm","shaderCount":1},{"modeSignature":"tbm","shaderCount":1},{"modeSignature":"tmm","shaderCount":1},{"modeSignature":"ttm","shaderCount":1}
+  ],
+  "producer": "tools/t6_retail_layered_lmap_compositor_v1.py",
+  "proofBoundary": "Direct retained-byte RGB compositor proof for slot 4 (layer_lmap) across all 273 layered TechniqueSet occurrences / 173 unique PS in the five retained worlds. TechniqueSet serialization, DXBC/RDEF/ISGN, SHDR instructions and operands are decoded fail-closed. All RGB channels must match the ordered b/a/m/t recurrence and TechniqueSet suffix flags must predict the observed scalar-weight class. Multiplication is canonicalized only for associative/commutative equivalence. The 50 vN height steps remain exact DAG hashes, not a guessed closed form. Normal/specular composition, non-slot4 passes, playback and unretained maps are outside this proof.",
+  "recurrence": {
+    "a":"prev + layer * weight",
+    "b":"prev + (layer - prev) * weight",
+    "dispatcher":{"a":"alpha_vertex","b":"vN -> height; else xN -> vertex_only; else alpha_vertex","m":"vertex_only","t":"threshold_alpha_vertex"},
+    "heightPolicy":"vN uses the exact retained SM4 scalar-weight DAG; no universal simplified height formula is asserted.",
+    "m":"prev * (1 + (layer - 1) * weight)",
+    "ordinaryWeights":{"alpha_vertex":"layerN.a * vertexWeightN","threshold_alpha_vertex":"condition(layerN.a * vertexWeightN >= 0.5)","vertex_only":"vertexWeightN"},
+    "t":"select(layerAlpha * vertexWeight >= 0.5, layer, prev)"
+  },
+  "representativeShaders": [
+    {"compositorSha256":"bcf3f7d890ef7aa3f09f048354b13f91f1ef1780a0e10e19001c2e3f00fa5f6c","layerCount":2,"modeSignature":"b","occurrenceCount":5,"sha256":"bdca2be08ba60858d7692223e9b16fd1e88a75e2447b79e846c09a1a45f5ca10","steps":[{"flags":[],"inputDeps":["TEXCOORD6.y"],"layer":1,"mode":"b","resourceDeps":["colorMapSampler1"],"weightClass":"alpha_vertex","weightDagSha256":"17cec9278b8e0fcfc1c7f13b92ba6702ac781815c436919b8e88ccb0af096263"}],"techniqueSet":"lit_sm_r0c0n0x0_b1c1","worldVertFormat":1},
+    {"compositorSha256":"2b77a0a06e4f340ae222365321fbe4847304d9198b8ebbfaee5035c1764b28ab","layerCount":3,"modeSignature":"ba","occurrenceCount":1,"sha256":"304a9bd7959e401938841dd4daaef86d308dafecd7f5860a3b114c7e54e7398b","steps":[{"flags":["n","s","v"],"inputDeps":["COLOR.y"],"layer":1,"mode":"b","resourceDeps":["colorMapSampler1"],"weightClass":"height","weightDagSha256":"9be89e61c503570d56ef754b5a0edb49c6b55fb4deeaf8ffa90e4e215395e088"},{"flags":[],"inputDeps":["COLOR.z"],"layer":2,"mode":"a","resourceDeps":["colorMapSampler2"],"weightClass":"alpha_vertex","weightDagSha256":"0bb91d6a8f387c65c1d5d24663cef8bbe37f875cccb4a9c81da9454821dcfdd4"}],"techniqueSet":"lit_sm_r0c0n0x0_b1c1n1s1v1_a2c2","worldVertFormat":4},
+    {"compositorSha256":"0c3f72ef488f5d67bc92d47398136b6fc8fe7ddd64022351b3e8542d56f03e4f","layerCount":4,"modeSignature":"bmm","occurrenceCount":1,"sha256":"3c1ddb4ff3fec47d6e6f651e6a984c45487dff7c6687349c737542def97e3935","steps":[{"flags":["n","s"],"inputDeps":["COLOR.y"],"layer":1,"mode":"b","resourceDeps":["colorMapSampler1"],"weightClass":"alpha_vertex","weightDagSha256":"db0085e91e492e79e041cbc4f56aadf19a4a8b824d5e17c4a0eb872ac1e0ec12"},{"flags":[],"inputDeps":["COLOR.z"],"layer":2,"mode":"m","resourceDeps":[],"weightClass":"vertex_only","weightDagSha256":"26d22dcbc681b219acd52ee4ec3e9e4e1598af66dff3391ed8e3ecf9ec4c376d"},{"flags":[],"inputDeps":["COLOR.w"],"layer":3,"mode":"m","resourceDeps":[],"weightClass":"vertex_only","weightDagSha256":"411905a2e14c8a81666db72377975d5b76c691654b98c59cf478f3c631ee01ec"}],"techniqueSet":"lit_sm_r0c0n0x0_b1c1n1s1_m2c2_m3c3","worldVertFormat":7}
+  ],
+  "summary": {
+    "bWeightClassCounts":{"alpha_vertex":117,"height":50,"vertex_only":10},
+    "canonicalRgbWeightMismatchCount":0,
+    "crossModeShaderReuseCount":0,
+    "crossTechniqueSetNameShaderReuseCount":0,
+    "crossWorldVertFormatShaderReuseCount":0,
+    "heightLayerOperationCount":50,
+    "heightWeightDagSetSha256":"58f547861e2fe86526db62868137071d6c9803c4caaac60574263396dcfce8f1",
+    "layerDispatchFailureCount":0,
+    "modeSignatureCount":23,
+    "operatorStepCounts":{"a":23,"b":177,"m":71,"t":30},
+    "perShaderCompositorRowsSha256":"5c242506d0ca1dda9135a6d0030a4be4a63c23bc6a49621bff54da0e4ec25879",
+    "recurrenceFailureCount":0,
+    "recurrenceMatchedShaderCount":173,
+    "retainedMapCount":5,
+    "slot4ShaderSetSha256":"f3065ec05f2992048ceb7e3fae845f13e6e8b57f1eb717e644b26cb45774f799",
+    "techniqueSetOccurrenceCount":273,
+    "totalLayerOperationCount":301,
+    "uniqueHeightWeightDagCount":44,
+    "uniqueSlot4ShaderCount":173,
+    "weightClassCounts":{"alpha_vertex":140,"height":50,"threshold_alpha_vertex":30,"vertex_only":81}
+  },
+  "vertexWeightPolicy":{"2layer":{"layer1":"TEXCOORD6.y"},"3layer":{"layer1":"COLOR.y","layer2":"COLOR.z"},"4layer":{"layer1":"COLOR.y","layer2":"COLOR.z","layer3":"COLOR.w"}}
+}
