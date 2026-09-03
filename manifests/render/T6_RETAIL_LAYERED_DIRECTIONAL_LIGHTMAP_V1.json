@@ -1,0 +1,96 @@
+{
+  "compilerEncodings": {
+    "explicit": "row0 and row1 RGB normalization are materialized before the final directional mad",
+    "folded": "row0 RGB normalization is folded into the final mad; row1 normalization is materialized"
+  },
+  "equation": {
+    "direction": "2 * row2.rgb - 1",
+    "rgb": "row0.rgb / (row0.w + 1e-6) + row1.rgb / (row1.w + 1e-6) * saturate(dot(direction, N))",
+    "row0": "sample(lightmapSamplerSecondary, float2(TEXCOORD0.z, TEXCOORD0.w / 3))",
+    "row1": "sample(lightmapSamplerSecondary, float2(TEXCOORD0.z, TEXCOORD0.w / 3 + 1/3))",
+    "row2": "sample(lightmapSamplerSecondary, float2(TEXCOORD0.z, TEXCOORD0.w / 3 + 2/3))"
+  },
+  "format": "t6-retail-layered-directional-lightmap-v1",
+  "producer": "tools/t6_retail_layered_directional_lightmap_v1.py",
+  "proofBoundary": "Direct retained-DXBC/SM4 proof over all 173 unique slot-4 layered pixel shaders in the five pinned retail worlds. All three lightmapSamplerSecondary samples are tied to exact TEXCOORD0.zw row coordinates; row0/row1 alpha-biased normalization, signed row2 RGB, saturated three-component directional dot, and the final RGB mad are matched from operand-level dataflow. Every matched RGB component must be an ancestor of final o0.rgb. N is intentionally left as the bytecode-proven dot counterpart here; the separately committed 107-shader normal-reconstruction proof connects one such N to the normalized fully composed layered normal. Physical interpretation of the three texture rows beyond these equations, environment/reflection lighting, dynamic/non-world passes, renderer playback, and unretained maps remain outside this proof.",
+  "representativeShaderRows": [
+    {
+      "coordinateCheckCount": 12,
+      "directionalEquationCount": 2,
+      "encoding": "explicit",
+      "rgbAncestryCheckCount": 6,
+      "sha256": "037fcf62fc958c4aa622657e5329eb06cf0cbe6522f826915af3e673b7049f9d",
+      "techniqueSet": "lit_sm_r0c0n0x0_t1c1_m2c2_m3c3",
+      "worldVertFormat": 6
+    },
+    {
+      "coordinateCheckCount": 6,
+      "directionalEquationCount": 1,
+      "encoding": "folded",
+      "rgbAncestryCheckCount": 3,
+      "sha256": "055653807f16010a96f3c4beba72a3e13a6785710b238789cf4aae8cf99fa952",
+      "techniqueSet": "lit_sm_b0c0_b1c1",
+      "worldVertFormat": 1
+    }
+  ],
+  "shaderRowSchema": [
+    "sha256",
+    "techniqueSet",
+    "worldVertFormat",
+    "directionalEquationCount",
+    "encoding",
+    "coordinateCheckCount",
+    "rgbAncestryCheckCount"
+  ],
+  "shaderRowsSha256": "1b609b25f75a1630bee7c21670110ea74e871f973f029507e5f0e5d90bc735e3",
+  "sourceSlot4ShaderSetSha256": "f3065ec05f2992048ceb7e3fae845f13e6e8b57f1eb717e644b26cb45774f799",
+  "sources": {
+    "expandedRetailMaps": {
+      "mp_hijacked": {
+        "file": "mp/mp_hijacked.expanded.bin",
+        "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+      },
+      "mp_nuketown_2020": {
+        "file": "mp/mp_nuketown_2020.expanded.bin",
+        "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+      },
+      "mp_raid": {
+        "file": "mp/mp_raid.expanded.bin",
+        "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+      },
+      "zm_prison": {
+        "file": "zm_prison.expanded.bin",
+        "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+      },
+      "zm_tomb": {
+        "file": "zm_tomb.expanded.bin",
+        "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+      }
+    },
+    "layeredCompositorBaseline": "manifests/render/T6_RETAIL_LAYERED_LMAP_COMPOSITOR_V1.json",
+    "normalReconstructionConnection": "manifests/render/T6_RETAIL_LAYERED_NORMAL_RECONSTRUCTION_V1.json"
+  },
+  "summary": {
+    "coordinateCheckCount": 1986,
+    "directionalEquationCount": 331,
+    "explicitEquationCount": 316,
+    "foldedEquationCount": 15,
+    "formatEquationCounts": {
+      "1": 67,
+      "2": 47,
+      "3": 56,
+      "4": 88,
+      "5": 41,
+      "6": 16,
+      "7": 16
+    },
+    "oneEquationShaderCount": 15,
+    "reflectionProbeShaderCount": 158,
+    "retainedMapCount": 5,
+    "rgbFinalOutputAncestryCheckCount": 993,
+    "shaderFailureCount": 0,
+    "slot4TechniqueSetOccurrenceCount": 273,
+    "twoEquationShaderCount": 158,
+    "uniqueSlot4ShaderCount": 173
+  }
+}
