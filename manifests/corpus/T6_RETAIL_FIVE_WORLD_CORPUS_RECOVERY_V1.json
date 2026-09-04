@@ -1,0 +1,67 @@
+{
+  "format": "t6-retail-five-world-corpus-recovery-v1",
+  "date": "2026-09-04",
+  "status": "recovered-and-byte-verified",
+  "purpose": "Canonical retained-byte corpus for T6 world/material/shader/reflection proof work. Raw retail FastFiles were recovered from the archived BO2 FastFile collection and independently expanded. Every expanded output matches the pre-existing repository SHA-256 guard exactly.",
+  "expansion": {
+    "containerFamily": "T6 encrypted FastFile/XFile",
+    "streamCount": 4,
+    "cipher": "Salsa20",
+    "ivEvolution": "per-stream SHA-1/XOR schedule reproduced from retained record behavior",
+    "compression": "raw DEFLATE/zlib-compatible inflate after decryption",
+    "acceptanceRule": "expanded bytes must match repository-pinned SHA-256 exactly; no same-name substitution is accepted"
+  },
+  "worlds": [
+    {
+      "map": "mp_nuketown_2020",
+      "rawFastFile": "mp_nuketown_2020.ff",
+      "rawBytes": 38472064,
+      "rawSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+      "expandedPath": "mp/mp_nuketown_2020.expanded.bin",
+      "expandedBytes": 154653476,
+      "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+      "retainedAudit": {
+        "recordCount": 4730,
+        "streamRecordCounts": [1183, 1183, 1182, 1182],
+        "recordLevelAgreement": true
+      }
+    },
+    {
+      "map": "mp_raid",
+      "rawFastFile": "mp_raid.ff",
+      "rawBytes": 35718144,
+      "rawSha256": "bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888",
+      "expandedPath": "mp/mp_raid.expanded.bin",
+      "expandedBytes": 156092603,
+      "expandedSha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+    },
+    {
+      "map": "mp_hijacked",
+      "rawFastFile": "mp_hijacked.ff",
+      "rawBytes": 30292736,
+      "rawSha256": "2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037",
+      "expandedPath": "mp/mp_hijacked.expanded.bin",
+      "expandedBytes": 141043798,
+      "expandedSha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+    },
+    {
+      "map": "zm_prison",
+      "rawFastFile": "zm_prison.ff",
+      "rawBytes": 65981312,
+      "rawSha256": "ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1",
+      "expandedPath": "zm_prison.expanded.bin",
+      "expandedBytes": 344067743,
+      "expandedSha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+    },
+    {
+      "map": "zm_tomb",
+      "rawFastFile": "zm_tomb.ff",
+      "rawBytes": 78753344,
+      "rawSha256": "663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5",
+      "expandedPath": "zm_tomb.expanded.bin",
+      "expandedBytes": 359627377,
+      "expandedSha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+    }
+  ],
+  "proofBoundary": "This manifest proves source recovery and deterministic expanded-byte reproduction only. It does not itself promote any map, material, shader, lightmap, XModel, or reflection semantic. Downstream verifiers must continue to validate these exact expanded SHA-256 identities before consuming the corpus."
+}
