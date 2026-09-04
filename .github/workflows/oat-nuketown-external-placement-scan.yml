@@ -2,7 +2,10 @@ name: oat-nuketown-external-placement-scan
 on:
   push:
     branches: [base-ipak-r2-recovery]
-    paths: [.github/workflows/oat-nuketown-external-placement-scan.yml]
+    paths:
+      - .github/workflows/oat-nuketown-external-placement-scan.yml
+      - tools/t6_oat_gfxworld_layout_probe.cpp
+      - tools/t6_oat_external_gfxworld_scan.py
 permissions:
   contents: read
 jobs:
@@ -84,7 +87,6 @@ jobs:
           assert len(selected)==1943, f'playable identity filter yielded {len(selected)}, expected 1943'
           assert not missing, f'missing playable identities: {missing}'
 
-          # Validate every packed axis as an approximately orthonormal basis and every scale as finite/positive.
           import math
           worst_norm=0.0; worst_dot=0.0
           for r in p['placements']:
