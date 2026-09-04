@@ -1,0 +1,88 @@
+{
+  "format": "t6-retail-reflection-probe-matrix-binding-v1",
+  "matrixBindingCensus": [
+    {
+      "buffer": 3,
+      "codeIndex": 213,
+      "codeIndexHex": "0xD5",
+      "codeName": "CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX",
+      "firstRow": 0,
+      "locationOffset": 0,
+      "passOccurrenceCount": 5676,
+      "rowCount": 4,
+      "size": 64,
+      "type": 3
+    },
+    {
+      "buffer": 0,
+      "codeIndex": 229,
+      "codeIndexHex": "0xE5",
+      "codeName": "CONST_SRC_CODE_TRANSPOSE_VIEW_PROJECTION_MATRIX",
+      "firstRow": 0,
+      "locationOffset": 576,
+      "passOccurrenceCount": 5676,
+      "rowCount": 4,
+      "size": 64,
+      "type": 3
+    },
+    {
+      "buffer": 0,
+      "codeIndex": 237,
+      "codeIndexHex": "0xED",
+      "codeName": "CONST_SRC_CODE_TRANSPOSE_SHADOW_LOOKUP_MATRIX",
+      "firstRow": 0,
+      "locationOffset": 768,
+      "passOccurrenceCount": 2580,
+      "rowCount": 4,
+      "size": 64,
+      "type": 3
+    }
+  ],
+  "producer": "tools/t6_retail_reflection_probe_matrix_binding_v1.py",
+  "proofBoundary": "Direct retained-byte MaterialShaderArgument proof over all 5,676 parsed pass occurrences whose physically direct pixel shader belongs to the 4,086-shader surface-normal reflection subset. Every occurrence contains exactly one type-3 code vertex constant binding source index 0xD5, firstRow 0, rowCount 4 to vertex constant buffer 3 offset 0, size 64. The pinned T6 asset contract names type 3 MTL_ARG_CODE_VERTEX_CONST and source 0xD5 CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX. This establishes the serialized engine source identity feeding the dlights.worldMatrix RDEF destination. It does not by itself prove whether T6 world matrices are camera-relative or assign view/incident semantics to TEXCOORD5.",
+  "sources": {
+    "packedVsAliasProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_PACKED_VS_ALIAS_V1.json",
+    "surfaceNormalProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_SURFACE_NORMAL_V1.json",
+    "t6AssetContract": {
+      "commit": "6d44ed0568c9d5312cf04265e2e15f77cd0e4f3a",
+      "path": "src/Common/Game/T6/T6_Assets.h",
+      "project": "OpenAssetTools"
+    },
+    "texcoord5ProducerProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_TEXCOORD5_PRODUCER_V1.json"
+  },
+  "summary": {
+    "mapCountsSha256": "7019b85253c025f3df56128bfbbaed5ae3db662dca34c0749847e4a6a2808a5d",
+    "matrixBindingRowsSha256": "aca8513acaba834ae626bb79aeafaf9b313bdb1d160d8b617bc87c3e89f04d59",
+    "occurrenceRowsSha256": "4454cb8cb2cf84e885192eecb823aef936f7f4dab2fa6bd899754ee7eb681768",
+    "retainedMapCount": 5,
+    "slotCountsSha256": "3e122f64523a1ae895fdd1035cba32db6734baf6a7fe5e6e9ce4c98099dc784a",
+    "surfaceNormalTargetShaderCount": 4086,
+    "targetPassArgumentPointerKinds": {
+      "following": 5676
+    },
+    "targetPassOccurrenceCount": 5676,
+    "transposeShadowLookupBindingCount": 2580,
+    "transposeViewProjectionBindingCount": 5676,
+    "worldMatrixBindingCheckCount": 5676,
+    "worldMatrixBindingFailureCount": 0,
+    "worldMatrixDestinationBuffer": 3,
+    "worldMatrixDestinationOffset": 0,
+    "worldMatrixFirstRow": 0,
+    "worldMatrixRowCount": 4,
+    "worldMatrixSizeBytes": 64,
+    "worldMatrixSourceIndex": 213
+  },
+  "worldMatrixBinding": {
+    "argumentType": 3,
+    "argumentTypeName": "MTL_ARG_CODE_VERTEX_CONST",
+    "buffer": 3,
+    "codeIndex": 213,
+    "codeIndexHex": "0xD5",
+    "codeName": "CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX",
+    "firstRow": 0,
+    "locationOffset": 0,
+    "rowCount": 4,
+    "shaderRdefDestination": "dlights.worldMatrix",
+    "sizeBytes": 64
+  }
+}
