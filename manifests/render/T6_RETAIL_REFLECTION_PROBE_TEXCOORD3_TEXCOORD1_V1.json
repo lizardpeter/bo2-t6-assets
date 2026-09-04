@@ -1,0 +1,73 @@
+{
+  "directVertexShaderProofs": [
+    {
+      "texcoord1InputLeaves": [["POSITION", 0]],
+      "texcoord1WorldMatrixRows": [0, 1, 2],
+      "texcoord3InputLeaves": [["NORMAL", 0]],
+      "texcoord3WorldMatrixRows": [0, 1, 2],
+      "vertexShaderSha256": "51ba26227419b17b0db9649c60035f575360627eb3b3c5e80d1d98c8e2991488"
+    },
+    {
+      "texcoord1InputLeaves": [["POSITION", 0]],
+      "texcoord1WorldMatrixRows": [0, 1, 2],
+      "texcoord3InputLeaves": [["NORMAL", 0]],
+      "texcoord3WorldMatrixRows": [0, 1, 2],
+      "vertexShaderSha256": "b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe"
+    },
+    {
+      "texcoord1InputLeaves": [["POSITION", 0]],
+      "texcoord1WorldMatrixRows": [0, 1, 2],
+      "texcoord3InputLeaves": [["NORMAL", 0]],
+      "texcoord3WorldMatrixRows": [0, 1, 2],
+      "vertexShaderSha256": "cb8d81451205da31d5e9c2b8abdc872036f4c08c6e9123aaa42b19a315a3907c"
+    },
+    {
+      "texcoord1InputLeaves": [["POSITION", 0]],
+      "texcoord1WorldMatrixRows": [0, 1, 2],
+      "texcoord3InputLeaves": [["NORMAL", 0]],
+      "texcoord3WorldMatrixRows": [0, 1, 2],
+      "vertexShaderSha256": "e9b431c3f5589aca304d9072a857c15374d1427b286c7933811a566b198b258f"
+    }
+  ],
+  "equation": {
+    "mappedOpposingVector": "TEXCOORD1.xyz=(worldMatrix*float4(POSITION.xyz,1)).xyz",
+    "mappedSurfaceNormal": "N=normalize(worldMatrix3x3 * decoded NORMAL0)",
+    "reflection": "cubeCoord=normalize(TEXCOORD1)-2*N*dot(N,normalize(TEXCOORD1))"
+  },
+  "format": "t6-retail-reflection-probe-texcoord3-texcoord1-v1",
+  "producer": "tools/t6_retail_reflection_probe_texcoord3_texcoord1_v1.py",
+  "proofBoundary": "Global retained-DXBC census contains exactly 42 unique reflection shaders with one formula-A fetch normalizing TEXCOORD3 against formula-B TEXCOORD1. Physical role promotion is restricted to 22 identities recovered through the broader retained TechniqueSet graph (24 pass occurrences). Four direct VS payloads independently prove TEXCOORD3 has only NORMAL0 ancestry through normalized cb3/worldMatrix 3x3 transformation and TEXCOORD1 has only homogeneous POSITION ancestry through cb3 rows 0..2. Two Hijacked packed pointers are cross-map anchored exactly to the two direct Raid VS payloads. Two Nuketown packed pointer identities are bounded to the two direct Nuketown VS payloads by the serializer differential invariant calibrated against 32 independently resolved pointer pairs: prior maximum differential drift is 12 bytes; among all direct Nuketown VS objects exactly one pair lies within that bound of the target pointer-pair spacing, namely the two candidates, at 5-byte drift. All four candidates prove identical relevant roles, so pointer permutation identity is unnecessary. Twenty globally retained shader identities remain without retained pass/VS producer mapping and are not promoted.",
+  "scanCoverage": [
+    {"map": "mp_nuketown_2020", "parsedPassCount": 2031, "rejectedCandidateCount": 0, "targetPassCount": 20, "techniqueSetCandidateCount": 101},
+    {"map": "mp_raid", "parsedPassCount": 3229, "rejectedCandidateCount": 0, "targetPassCount": 2, "techniqueSetCandidateCount": 171},
+    {"map": "mp_hijacked", "parsedPassCount": 2489, "rejectedCandidateCount": 1, "targetPassCount": 2, "techniqueSetCandidateCount": 134},
+    {"map": "zm_prison", "parsedPassCount": 3726, "rejectedCandidateCount": 6, "targetPassCount": 0, "techniqueSetCandidateCount": 187},
+    {"map": "zm_tomb", "parsedPassCount": 2507, "rejectedCandidateCount": 2, "targetPassCount": 0, "techniqueSetCandidateCount": 129}
+  ],
+  "summary": {
+    "closedMappedShaderCount": 22,
+    "crossMapAnchorConflictCount": 0,
+    "crossMapAnchoredPackedPointerCount": 2,
+    "directVertexShaderCount": 4,
+    "directVertexShaderOccurrenceCount": 4,
+    "directVertexShaderProofRowsSha256": "b02303fd72744b8c70dd1bdb1ef1ff133b5c8e4e7e98b2f768b7c45223f0dc6a",
+    "directVertexShaderRoleProofCount": 4,
+    "globalFamilyFetchCount": 42,
+    "globalFamilyShaderCount": 42,
+    "globalShaderRowsSha256": "cf865119d342260faae59ebd964fadcfe6ad40cfb6280e28fe5a4f3c19cb59a4",
+    "mappedPassOccurrenceCount": 24,
+    "mappedPixelShaderCount": 22,
+    "mappedShaderSetSha256": "daa4182a80447333636ff85d9fdb3feed7bd6f548bc67fd6e610fd363dc9cea4",
+    "nuketownCandidateObjectSpacingBytes": 18407,
+    "nuketownCandidatePairAmbiguityCount": 0,
+    "nuketownDifferentialDriftBytes": 5,
+    "nuketownTargetPointerSpacingBytes": 18412,
+    "packedVertexShaderOccurrenceCount": 20,
+    "priorAliasCalibrationMaxDifferentialDriftBytes": 12,
+    "priorAliasCalibrationPairCount": 32,
+    "remainingUnmappedFamilyShaderCount": 20,
+    "scanRowsSha256": "58c1a07d70b6c6429abe6f78ebee0a4f2f4d286669b14d2a7e4b7d3ef51dd8af",
+    "uniquePackedPointerCount": 4,
+    "unmappedPixelShaderCount": 20
+  }
+}
