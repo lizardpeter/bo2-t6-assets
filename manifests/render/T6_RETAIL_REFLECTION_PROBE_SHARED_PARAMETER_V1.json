@@ -1,0 +1,286 @@
+{
+  "directTextureXSources": [
+    {
+      "channel": "w",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "DiffuseAndGloss",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "w",
+      "count": 280,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "x",
+      "count": 40,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "w",
+      "count": 80,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 3
+    },
+    {
+      "channel": "w",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 4
+    },
+    {
+      "channel": "w",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 5
+    },
+    {
+      "channel": "w",
+      "count": 60,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss2",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "w",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularGlossMap",
+      "resourceRegister": 1
+    },
+    {
+      "channel": "x",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "Specular_Gloss_Map",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "z",
+      "count": 24,
+      "opcode": "SAMPLE",
+      "resourceName": "colorMapSampler",
+      "resourceRegister": 0
+    },
+    {
+      "channel": "x",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "gloss_map",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "x",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "gloss_map",
+      "resourceRegister": 3
+    },
+    {
+      "channel": "z",
+      "count": 64,
+      "opcode": "SAMPLE",
+      "resourceName": "normalMapSampler",
+      "resourceRegister": 1
+    },
+    {
+      "channel": "w",
+      "count": 352,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 1
+    },
+    {
+      "channel": "w",
+      "count": 898,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 2
+    },
+    {
+      "channel": "w",
+      "count": 86,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 3
+    }
+  ],
+  "equation": {
+    "A": [
+      {
+        "bits": "3f855556",
+        "value": "1.04166675"
+      },
+      {
+        "bits": "3ef33333",
+        "value": "0.474999994"
+      },
+      {
+        "bits": "3c955567",
+        "value": "0.0182291996"
+      },
+      {
+        "bits": "3e800000",
+        "value": "0.25"
+      }
+    ],
+    "B": [
+      {
+        "bits": "00000000",
+        "value": "0"
+      },
+      {
+        "bits": "00000000",
+        "value": "0"
+      },
+      {
+        "bits": "bc800000",
+        "value": "-0.015625"
+      },
+      {
+        "bits": "3f400000",
+        "value": "0.75"
+      }
+    ],
+    "C": "min(E,Qy)",
+    "F": "Qx*C + Qz",
+    "angularInputFromPriorProof": "E = 2^(-9.28*saturate(dot(U,-V)))",
+    "decodedProbeRgb": "probe.rgb / (probe.a + 1e-6)",
+    "lanes": {
+      "Qw": "0.25*x + 0.75",
+      "Qx": "1.0416667461395264*x",
+      "Qy": "0.4749999940395355*x",
+      "Qz": "0.018229199573397636*x - 0.015625"
+    },
+    "lod": "4 - 4*x",
+    "qPack": "Q = x*A + B",
+    "reflectionFactorRgb": "saturate(P.rgb * (Qw - F) + F)",
+    "reflectionRgb": "decodedProbe.rgb * reflectionFactor.rgb"
+  },
+  "factorForms": [
+    {
+      "count": 4216,
+      "formSha256": "a0daa888619bad43ca75c1b1f045cfed43f46ed608e0af417648dc2fd2d618b4",
+      "laneExpressions": [
+        "mad_sat(P,add(neg(mad(Qx,min(P,Qy),Qz)),Qw),mad(Qx,min(P,Qy),Qz))",
+        "mad_sat(P,add(neg(mad(Qx,min(P,Qy),Qz)),Qw),mad(Qx,min(P,Qy),Qz))",
+        "mad_sat(P,add(neg(mad(Qx,min(P,Qy),Qz)),Qw),mad(Qx,min(P,Qy),Qz))"
+      ]
+    },
+    {
+      "count": 20,
+      "formSha256": "bcf4be739b61d581e495abf4ce4a58db9b1d8adabf687983d1e0ed1fb44d301c",
+      "laneExpressions": [
+        "mad_sat(add(neg(mad(Qx,min(P,Qy),Qz)),Qw),P,mad(Qx,min(P,Qy),Qz))",
+        "mad_sat(add(neg(mad(Qx,min(P,Qy),Qz)),Qw),P,mad(Qx,min(P,Qy),Qz))",
+        "mad_sat(add(neg(mad(Qx,min(P,Qy),Qz)),Qw),P,mad(Qx,min(P,Qy),Qz))"
+      ]
+    }
+  ],
+  "format": "t6-retail-reflection-probe-shared-parameter-v1",
+  "mapCoverage": [
+    {
+      "map": "mp_nuketown_2020",
+      "reflectionProbeShaderCount": 1285,
+      "validDxbcCount": 1972
+    },
+    {
+      "map": "mp_raid",
+      "reflectionProbeShaderCount": 2063,
+      "validDxbcCount": 3064
+    },
+    {
+      "map": "mp_hijacked",
+      "reflectionProbeShaderCount": 1722,
+      "validDxbcCount": 2299
+    },
+    {
+      "map": "zm_prison",
+      "reflectionProbeShaderCount": 3158,
+      "validDxbcCount": 3920
+    },
+    {
+      "map": "zm_tomb",
+      "reflectionProbeShaderCount": 1979,
+      "validDxbcCount": 2839
+    }
+  ],
+  "producer": "tools/t6_retail_reflection_probe_shared_parameter_v1.py",
+  "proofBoundary": "Direct retained-SM4 value/writer-identity proof for all 4,236 reflectionProbeSampler fetches whose already-proven mip equation is LOD = 4 - 4*x. The exact same scalar x is required to feed exactly one four-lane MAD Q=x*A+B with the pinned immediate vectors, all four Q lanes must be ancestors of the post-decode reflection factor, and that factor must match one of two retained compiler encodings that are algebraically identical to saturate(P.rgb*(Qw-(Qx*min(E,Qy)+Qz)) + (Qx*min(E,Qy)+Qz)), with E inherited from the separately proven angular stage. Direct x texture origins are tied to RDEF names/channels. This proof does not assign one universal physical gloss/roughness meaning to x, does not name P.rgb physically, and does not reconstruct original HLSL.",
+  "sources": {
+    "angularProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_ANGULAR_V1.json",
+    "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
+    "expandedRetailMaps": {
+      "mp_hijacked": {
+        "file": "mp/mp_hijacked.expanded.bin",
+        "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+      },
+      "mp_nuketown_2020": {
+        "file": "mp/mp_nuketown_2020.expanded.bin",
+        "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+      },
+      "mp_raid": {
+        "file": "mp/mp_raid.expanded.bin",
+        "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+      },
+      "zm_prison": {
+        "file": "zm_prison.expanded.bin",
+        "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+      },
+      "zm_tomb": {
+        "file": "zm_tomb.expanded.bin",
+        "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+      }
+    },
+    "mipProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_MIP_V1.json",
+    "weightProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_WEIGHT_V1.json"
+  },
+  "summary": {
+    "affine4Minus4xFetchCount": 4236,
+    "allFourQLanesReachFactorCount": 4236,
+    "directTextureXSourceCount": 2024,
+    "directXSourceRowsSha256": "6d795b12d55076271bf9991df49866b92e5572282597657ce6d7d95858fbfc3f",
+    "factorFormRowsSha256": "cf7d843e1c89a4c14e15af2f85a4297a4ec5cad90fe8fadc75761fcb8290bbe4",
+    "qFactorCommutedFormCount": 20,
+    "qFactorDominantFormCount": 4216,
+    "qFactorFormCount": 2,
+    "retainedMapCount": 5,
+    "sameXPackCheckCount": 4236,
+    "sameXPackFailureCount": 0,
+    "shaderRowsSha256": "2f36fe08cf09364ddbf524686a2a387be6958ca86093d1366cd5ad1c75f8d506",
+    "uniqueQPackPerFetchCount": 4236,
+    "uniqueReflectionProbeShaderCount": 5868,
+    "xOriginRowsSha256": "36da72e458715345b02ad4cbe893f5f110e20b30e6aca6f9afada96b604df0f8",
+    "xSourceOriginCount": 4236
+  },
+  "xSourceOriginCounts": [
+    {
+      "count": 40,
+      "firstWriter": "CB",
+      "sourceKind": "constant_buffer"
+    },
+    {
+      "count": 1350,
+      "firstWriter": "MAD",
+      "sourceKind": "temp"
+    },
+    {
+      "count": 822,
+      "firstWriter": "MUL",
+      "sourceKind": "temp"
+    },
+    {
+      "count": 2024,
+      "firstWriter": "SAMPLE",
+      "sourceKind": "temp"
+    }
+  ]
+}
