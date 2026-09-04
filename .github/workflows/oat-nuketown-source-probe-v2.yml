@@ -1,0 +1,56 @@
+name: oat-nuketown-source-probe-v2
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-source-probe-v2.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact Nuketown FF from shared Drive
+        run: |
+          python -m pip install --disable-pip-version-check gdown
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+      - name: Fetch OpenAssetTools v0.33.0 Linux release
+        run: |
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat
+          tar -xzf oat-linux.tar.gz -C oat
+          find oat -maxdepth 4 -type f -printf '%p\n' | sort
+      - name: Probe Unlinker CLI and pinned FF
+        run: |
+          UNLINKER=$(find oat -type f -name 'Unlinker' | head -n 1)
+          test -n "$UNLINKER"
+          echo "UNLINKER=$UNLINKER"
+          chmod +x "$UNLINKER"
+          "$UNLINKER" --help | tee unlinker-help.txt || true
+          mkdir -p probe_out
+          set +e
+          "$UNLINKER" mp_nuketown_2020.ff --output-folder probe_out --model-format GLB --verbose > unlinker-run.txt 2>&1
+          RC=$?
+          if [ $RC -ne 0 ]; then
+            "$UNLINKER" --output-folder probe_out --model-format GLB --verbose mp_nuketown_2020.ff >> unlinker-run.txt 2>&1
+            RC=$?
+          fi
+          set -e
+          echo "unlinker_rc=$RC"
+          find probe_out -maxdepth 6 -type f -printf '%s %p\n' | sort > probe-files.txt || true
+          head -n 200 probe-files.txt || true
+          tail -n 200 unlinker-run.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oat-nuketown-source-probe-v2
+          path: |
+            unlinker-help.txt
+            unlinker-run.txt
+            probe-files.txt
+            probe_out/
+          retention-days: 1
