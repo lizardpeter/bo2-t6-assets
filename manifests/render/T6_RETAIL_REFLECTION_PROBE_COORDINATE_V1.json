@@ -1,0 +1,89 @@
+{
+  "equation": {
+    "cubeCoordinate": "normalizedB - 2 * normalizedA * dot(normalizedA, normalizedB)",
+    "normalizedA": "rawA * rsq(dot(rawA,rawA))",
+    "normalizedB": "rawB * rsq(dot(rawB,rawB))"
+  },
+  "format": "t6-retail-reflection-probe-coordinate-v1",
+  "mapCoverage": [
+    {
+      "map": "mp_nuketown_2020",
+      "reflectionProbeShaderCount": 1285,
+      "validDxbcCount": 1972
+    },
+    {
+      "map": "mp_raid",
+      "reflectionProbeShaderCount": 2063,
+      "validDxbcCount": 3064
+    },
+    {
+      "map": "mp_hijacked",
+      "reflectionProbeShaderCount": 1722,
+      "validDxbcCount": 2299
+    },
+    {
+      "map": "zm_prison",
+      "reflectionProbeShaderCount": 3158,
+      "validDxbcCount": 3920
+    },
+    {
+      "map": "zm_tomb",
+      "reflectionProbeShaderCount": 1979,
+      "validDxbcCount": 2839
+    }
+  ],
+  "producer": "tools/t6_retail_reflection_probe_coordinate_v1.py",
+  "proofBoundary": "Direct retained-SM4 operand/dataflow proof over all 5,868 unique shaders reflecting reflectionProbeSampler in the five pinned retail worlds. All 5,888 t15/s15 cube fetches are identified from decoded SAMPLE* operands. Their three consumed coordinate components are universally produced by the exact reflect-form equation B - 2*A*dot(A,B), and both A and B are immediately normalized by raw*rsq(dot(raw,raw)). A/B are intentionally mathematical labels only: this proof does not yet assign physical normal/view semantics to either raw vector. SAMPLE_L versus SAMPLE_B opcode identity is counted exactly, but LOD/bias value semantics, Fresnel/specular weighting, final RGB ancestry, and renderer playback remain separate.",
+  "sources": {
+    "expandedRetailMaps": {
+      "mp_hijacked": {
+        "file": "mp/mp_hijacked.expanded.bin",
+        "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+      },
+      "mp_nuketown_2020": {
+        "file": "mp/mp_nuketown_2020.expanded.bin",
+        "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+      },
+      "mp_raid": {
+        "file": "mp/mp_raid.expanded.bin",
+        "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+      },
+      "zm_prison": {
+        "file": "zm_prison.expanded.bin",
+        "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+      },
+      "zm_tomb": {
+        "file": "zm_tomb.expanded.bin",
+        "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+      }
+    },
+    "rdefGuard": "manifests/render/T6_RETAIL_REFLECTION_PROBE_RDEF_GUARD_V1.json"
+  },
+  "summary": {
+    "coordinateMadCheckCount": 5888,
+    "coordinateStorageCounts": {
+      "xyw": 725,
+      "xyz": 4896,
+      "xzw": 8,
+      "yzw": 259
+    },
+    "doubleDotCheckCount": 5888,
+    "normalizedVectorCheckCount": 11776,
+    "oneSampleShaderCount": 5848,
+    "rawVectorKindPairCounts": {
+      "INPUT+INPUT": 768,
+      "INPUT+TEMP": 5120
+    },
+    "reflectFormulaFailureCount": 0,
+    "reflectionCubeSampleCount": 5888,
+    "resourceSamplerPairFailureCount": 0,
+    "retainedMapCount": 5,
+    "sampleOpcodeCounts": {
+      "SAMPLE_B": 9,
+      "SAMPLE_L": 5879
+    },
+    "shaderRowsSha256": "6c2bbd4e5fe92d4e9a05a1debdac0904d870809cb17a292a4205bb7bea2861b3",
+    "twoSampleShaderCount": 20,
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
