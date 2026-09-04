@@ -1,0 +1,79 @@
+{
+  "format": "t6-retail-reflection-probe-closure-ledger-v1",
+  "totalFetchCount": 5888,
+  "measuredClosure": {
+    "closedFetchCount": 5823,
+    "remainingFetchCount": 65,
+    "closedPercent": 98.89605978260869
+  },
+  "closureAccounting": {
+    "preTempComponentClosedFetchCount": 5808,
+    "tempComponentClosedFetchCount": 15,
+    "sumCheck": 5823
+  },
+  "tempComponentProof": {
+    "status": "independently-reproduced; durable verifier and synthetic regression checkpointed; generated corpus manifest pending pinned-corpus rerun",
+    "targetFetchCount": 15,
+    "families": {
+      "TEXCOORD1": {
+        "fetchCount": 6,
+        "normalTextures": ["normalMap00", "normalMap01"],
+        "controlCBuffer": "cb2[10]"
+      },
+      "TEXCOORD3": {
+        "fetchCount": 9,
+        "normalTextures": ["normalMapHi", "normalMapLo"],
+        "controlCBuffer": "cb2[6]"
+      }
+    },
+    "rawStorageComponentCounts": {
+      "xyz": 14,
+      "yzw": 1
+    },
+    "rawZ": "MOV immediate float32 1.0 / 0x3f800000",
+    "scratchManifestSha256": "481a750d41b755f644b368e3b33145eaf5739f1f7a57594fdcee1b662023370d",
+    "verifier": "tools/t6_retail_reflection_probe_temp_component_normal_v1.py",
+    "verifierCommit": "266d52dc23d562f6086c6c13cc0f5714f06111fc",
+    "syntheticRegression": "tools/test_t6_retail_reflection_probe_temp_component_normal_v1.py",
+    "syntheticRegressionCommit": "0172ba7ab1eb5001696426de65f006b63a7fe34b"
+  },
+  "unresolvedFamilies": [
+    {
+      "formulaA": "TEXCOORD2.xyz",
+      "formulaB": "TEXCOORD1.xyz",
+      "remainingFetchCount": 21,
+      "sourcePopulationCount": 75,
+      "alreadyClosedFetchCount": 54
+    },
+    {
+      "formulaA": "TEXCOORD3.xyz",
+      "formulaB": "TEXCOORD1.xyz",
+      "remainingFetchCount": 20,
+      "sourcePopulationCount": 42,
+      "alreadyClosedFetchCount": 22
+    },
+    {
+      "formulaA": "TEXCOORD2.xyz",
+      "formulaB": "TEXCOORD0.xyz",
+      "remainingFetchCount": 24,
+      "sourcePopulationCount": 24,
+      "alreadyClosedFetchCount": 0,
+      "specialBank": "pimp_shader_sw4_3d_zm_sphere_elec_*",
+      "physicalClosureGate": "tools/t6_retail_reflection_probe_sphere_elec_physical_closure_v1.py",
+      "physicalClosureGateCommit": "19081cc25808c5f9f17762e16af3117496445773",
+      "status": "mathematical pixel normal closed; physical paired-VS semantics pending pinned-corpus execution"
+    }
+  ],
+  "conditionalNextBoundary": {
+    "ifSphereElectricGatePasses": {
+      "closedFetchCount": 5847,
+      "remainingFetchCount": 41,
+      "closedPercent": 99.30366847826087,
+      "remainingFamilies": {
+        "TEXCOORD2/TEXCOORD1": 21,
+        "TEXCOORD3/TEXCOORD1": 20
+      }
+    }
+  },
+  "proofBoundary": "Accounting checkpoint only. The 5,823 measured closure includes the independently reproduced 15-fetch mixed-writer TEMP proof, for which the durable verifier and synthetic regression are committed but a newly generated corpus manifest cannot be produced in the current environment because the five pinned expanded retail worlds are unavailable. The 24 sphere-electric fetches are not counted as closed here; their physical closure remains conditional on a successful fail-closed corpus rerun."
+}
