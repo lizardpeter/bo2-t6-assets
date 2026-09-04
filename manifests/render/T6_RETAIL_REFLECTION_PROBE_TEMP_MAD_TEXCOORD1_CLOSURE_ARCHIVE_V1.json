@@ -1,0 +1,166 @@
+{
+  "classSemantics": {
+    "camoDetailTangentBasis": "same exact TBN normal equation; x/y reach Camo_Detail_Map channels",
+    "normalNamedTangentBasis": "x/y reach normal-named reflected texture resources",
+    "waterCrossBasis": "cross(TEXCOORD4,TEXCOORD5) base with x/y reaching normalMap00/normalMap01"
+  },
+  "equations": {
+    "reflection": "cubeCoord=normalize(TEXCOORD1)-2*N*dot(N,normalize(TEXCOORD1))",
+    "tangentBasis": "N=normalize(normalize(TEXCOORD3)+x*TEXCOORD4.xyz+y*(cross(normalize(TEXCOORD3),TEXCOORD4.xyz)*TEXCOORD4.w))",
+    "waterCrossBasis": "N=normalize(cross(TEXCOORD4.xyz,TEXCOORD5.xyz)+x*TEXCOORD4.xyz+y*TEXCOORD5.xyz)"
+  },
+  "examples": {
+    "camoDetailTangentBasis": [
+      {
+        "class": "camoDetailTangentBasis",
+        "maps": [
+          "zm_prison",
+          "zm_tomb"
+        ],
+        "packing": "xyz",
+        "sampleInstructionIndex": 195,
+        "sha256": "1ac7bbbea152d135398fe3898cf5838069cc4000db548afdf45eaf305e2751f4",
+        "xLeaves": [
+          [
+            "Camo_Detail_Map",
+            0,
+            "x",
+            "SAMPLE"
+          ]
+        ],
+        "yLeaves": [
+          [
+            "Camo_Detail_Map",
+            0,
+            "y",
+            "SAMPLE"
+          ]
+        ]
+      }
+    ],
+    "normalNamedTangentBasis": [
+      {
+        "class": "normalNamedTangentBasis",
+        "maps": [
+          "mp_hijacked",
+          "mp_raid"
+        ],
+        "packing": "xyz",
+        "sampleInstructionIndex": 124,
+        "sha256": "0027b46501b0440a280b4e06c17d90603fead6a62302d5a69f4dd8340a2ece6b",
+        "xLeaves": [
+          [
+            "micro_normal_map",
+            2,
+            "x",
+            "SAMPLE"
+          ]
+        ],
+        "yLeaves": [
+          [
+            "micro_normal_map",
+            2,
+            "y",
+            "SAMPLE"
+          ]
+        ]
+      }
+    ],
+    "waterCrossBasis": [
+      {
+        "class": "waterCrossBasis",
+        "maps": [
+          "mp_hijacked"
+        ],
+        "sampleInstructionIndex": 63,
+        "sha256": "00959ded1d759ad801ae2813345d98bbdbe06e033b6cab718c9f7054ffd26bde",
+        "xLeaves": [
+          [
+            "normalMap00",
+            0,
+            "x",
+            "SAMPLE"
+          ],
+          [
+            "normalMap01",
+            1,
+            "x",
+            "SAMPLE"
+          ]
+        ],
+        "yLeaves": [
+          [
+            "normalMap00",
+            0,
+            "y",
+            "SAMPLE"
+          ],
+          [
+            "normalMap01",
+            1,
+            "y",
+            "SAMPLE"
+          ]
+        ]
+      }
+    ]
+  },
+  "forensicDigests": {
+    "allResourceRoleRowsSha256": "72e68b55ce1b575d6c72e30029f9dffbbd4ef160ebd77d61948720eac131587d",
+    "allShaderRowsSha256": "82871c899d879506d6b762a3dc3ded8bda1f6dd81bfaf00b4b215a2f2a85a180",
+    "classCountsSha256": "a3bcd1e6f91cf38feb3e2a710e5c91034bfb803cbf7fcb9f66a81efb5ff61250"
+  },
+  "format": "t6-retail-reflection-probe-temp-mad-texcoord1-closure-archive-v1",
+  "producer": "tools/t6_retail_reflection_probe_temp_mad_texcoord1_closure_archive_v1.py",
+  "proofBoundary": "Exhaustive retained-DXBC closure of all 995 unique reflectionProbeSampler shaders whose coordinate formula uses a MAD-produced normalized operand against normalized TEXCOORD1.xyz. Exactly 964 use a normal-named texture-driven tangent-basis reconstruction, including seven equivalent yzw-packed cross-product encodings; 20 use the identical tangent-basis reconstruction with perturbation coefficients sourced from Camo_Detail_Map.x/y; 11 use a distinct water cross-basis reconstruction with coefficients reaching normalMap00/normalMap01. Zero shaders remain unclassified. This proves formula-A is a reconstructed surface-orientation/normal vector by arithmetic role for all 995. Physical vertex semantics of TEXCOORD3/4/5 and camera/view semantics of opposing TEXCOORD1 remain separate except where independently proven by other pass/VS artifacts. This archival wrapper omits full resource-role row arrays while retaining their deterministic SHA-256 digests; the exhaustive verifier remains tools/t6_retail_reflection_probe_temp_mad_texcoord1_closure_v1.py.",
+  "resourceRoleSummary": {
+    "classes": [
+      "camoDetailTangentBasis",
+      "normalNamedTangentBasis",
+      "waterCrossBasis"
+    ],
+    "coefficientRoles": [
+      "x",
+      "y"
+    ],
+    "resourceNames": [
+      "Camo_Detail_Map",
+      "Macro_AO_Mix_Map",
+      "Macro_NormalMap",
+      "Micro_1_NormalMap",
+      "Micro_2_NormalMap",
+      "NormalDetailMap",
+      "NormalMap",
+      "Normal_Map",
+      "Temporal_Map",
+      "WaterNormalMap",
+      "Weapon_Normal_Map",
+      "macro_normal_map",
+      "micro_normal_map",
+      "normalMap00",
+      "normalMap01"
+    ],
+    "roleRowCount": 50,
+    "sampleOpcodes": [
+      "SAMPLE",
+      "SAMPLE_D"
+    ]
+  },
+  "sources": {
+    "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
+    "tangentBasisProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_TANGENT_BASIS_NORMAL_ARCHIVE_V1.json"
+  },
+  "summary": {
+    "camoDetailTangentBasisShaderCount": 20,
+    "classCountsSha256": "a3bcd1e6f91cf38feb3e2a710e5c91034bfb803cbf7fcb9f66a81efb5ff61250",
+    "normalNamedTangentBasisShaderCount": 964,
+    "resourceRoleRowsSha256": "72e68b55ce1b575d6c72e30029f9dffbbd4ef160ebd77d61948720eac131587d",
+    "shaderRowsSha256": "82871c899d879506d6b762a3dc3ded8bda1f6dd81bfaf00b4b215a2f2a85a180",
+    "targetTempMadTexcoord1ShaderCount": 995,
+    "unclassifiedShaderCount": 0,
+    "uniqueReflectionProbeShaderCount": 5868,
+    "waterCrossBasisShaderCount": 11,
+    "xyzCrossPackingShaderCount": 977,
+    "yzwCrossPackingShaderCount": 7
+  }
+}
