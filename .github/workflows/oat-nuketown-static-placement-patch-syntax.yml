@@ -1,0 +1,20 @@
+name: oat-nuketown-static-placement-patch-syntax
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-static-placement-patch-syntax.yml]
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone exact OpenAssetTools source
+        run: git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat
+      - name: Syntax-check GfxWorld static placement dumper
+        run: |
+          cp tools/t6_gfxworld_static_placement_oat_patch/GfxWorldStaticPlacementDumperT6.* /tmp/
+          INCS="$(find oat/src -type d -printf ' -I%p')"
+          g++ -std=c++20 -Wall -Wextra -Werror -fsyntax-only $INCS /tmp/GfxWorldStaticPlacementDumperT6.cpp
