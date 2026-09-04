@@ -1,0 +1,183 @@
+{
+  "alternateShaderExamples": [
+    {
+      "maps": [
+        "mp_hijacked"
+      ],
+      "sha256": "00959ded1d759ad801ae2813345d98bbdbe06e033b6cab718c9f7054ffd26bde"
+    },
+    {
+      "maps": [
+        "mp_hijacked"
+      ],
+      "sha256": "0376298b6c550696247e20f8db0045407b4cafcca97de8bc65a82c2e47306fe2"
+    },
+    {
+      "maps": [
+        "mp_hijacked"
+      ],
+      "sha256": "05afcab2508866572271535259858fcf99b864e87b25c01eef57a29737554b5b"
+    }
+  ],
+  "equations": {
+    "baseNormal": "baseN = normalize(TEXCOORD3.xyz)",
+    "binormal": "B = cross(baseN,T) * TEXCOORD4.w",
+    "cubeCoord": "opposingVector - 2*surfaceVector*dot(surfaceVector,opposingVector)",
+    "opposingVector": "opposingVector = normalize(TEXCOORD1.xyz)",
+    "rawNormal": "rawN = baseN + normalX*T + normalY*B",
+    "surfaceVector": "surfaceVector = normalize(rawN)",
+    "tangent": "T = TEXCOORD4.xyz"
+  },
+  "forensicDigests": {
+    "allAlternateShaderRowsSha256": "d423868fd81b272815e9d2b3b1ac26eea125b32afac8915506529d89585ef8ed",
+    "allNormalResourcePatternRowsSha256": "dac03b4f6b39240238bb6d66b9487e1a6df05d908b3b56e4ce177f017c11afb6",
+    "allNormalResourceRowsSha256": "14975e286ec5e87c50e84eba5b1a59fbbb6c6bb15dbfcff6d067912e9af960ae",
+    "allStandardShaderRowsSha256": "9577bf465eb5be3d716ca53409cd63ef686f248a42de2d8779ff209ac8aa3cae"
+  },
+  "format": "t6-retail-reflection-probe-tangent-basis-normal-archive-v1",
+  "mapCoverage": [
+    {
+      "map": "mp_nuketown_2020",
+      "reflectionProbeShaderCount": 1285
+    },
+    {
+      "map": "mp_raid",
+      "reflectionProbeShaderCount": 2063
+    },
+    {
+      "map": "mp_hijacked",
+      "reflectionProbeShaderCount": 1722
+    },
+    {
+      "map": "zm_prison",
+      "reflectionProbeShaderCount": 3158
+    },
+    {
+      "map": "zm_tomb",
+      "reflectionProbeShaderCount": 1979
+    }
+  ],
+  "normalNamedResourceSummary": {
+    "resourceNames": [
+      "Macro_NormalMap",
+      "Micro_1_NormalMap",
+      "Micro_2_NormalMap",
+      "NormalDetailMap",
+      "NormalMap",
+      "Normal_Map",
+      "WaterNormalMap",
+      "Weapon_Normal_Map",
+      "macro_normal_map",
+      "micro_normal_map"
+    ],
+    "resourcePatternCount": 13,
+    "resourceRowCount": 36,
+    "sampleOpcodes": [
+      "SAMPLE",
+      "SAMPLE_D"
+    ]
+  },
+  "producer": "tools/t6_retail_reflection_probe_tangent_basis_normal_archive_v1.py",
+  "proofBoundary": "Direct retained-DXBC/RDEF proof for 958 of the 995 reflection-probe shaders whose reflect formula uses a MAD-produced normalized vector against normalized TEXCOORD1.xyz. In all 958, the MAD-produced vector is exactly normalize(normalize(TEXCOORD3.xyz) + normalX*TEXCOORD4.xyz + normalY*(cross(normalize(TEXCOORD3.xyz),TEXCOORD4.xyz)*TEXCOORD4.w)); both normalX and normalY have value ancestry to at least one normal-named reflected texture resource. This establishes a normal-map-driven tangent-basis reconstruction at the pixel-shader level. It does not assign physical vertex-normal/tangent semantics to the TEXCOORD basis, does not assign camera/view semantics to TEXCOORD1, and explicitly leaves the remaining 37 shaders in this operand family as a separate alternate reconstruction family. This archival wrapper intentionally omits the full forensic row arrays while retaining their deterministic SHA-256 digests; the exhaustive verifier remains tools/t6_retail_reflection_probe_tangent_basis_normal_v1.py.",
+  "sources": {
+    "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
+    "expandedRetailMaps": {
+      "mp_hijacked": {
+        "file": "mp/mp_hijacked.expanded.bin",
+        "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+      },
+      "mp_nuketown_2020": {
+        "file": "mp/mp_nuketown_2020.expanded.bin",
+        "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+      },
+      "mp_raid": {
+        "file": "mp/mp_raid.expanded.bin",
+        "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+      },
+      "zm_prison": {
+        "file": "zm_prison.expanded.bin",
+        "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+      },
+      "zm_tomb": {
+        "file": "zm_tomb.expanded.bin",
+        "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+      }
+    },
+    "surfaceNormalProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_SURFACE_NORMAL_V1.json"
+  },
+  "standardShaderExamples": [
+    {
+      "baseNormalNormalizeInstructionIndex": 33,
+      "baseNormalSelfDotInstructionIndex": 31,
+      "crossMadInstructionIndex": 35,
+      "crossMulInstructionIndex": 34,
+      "handednessMulInstructionIndex": 36,
+      "maps": [
+        "mp_hijacked",
+        "mp_raid"
+      ],
+      "normalXNamedLeaves": [
+        [
+          "micro_normal_map",
+          2,
+          "x",
+          "SAMPLE"
+        ]
+      ],
+      "normalYNamedLeaves": [
+        [
+          "micro_normal_map",
+          2,
+          "y",
+          "SAMPLE"
+        ]
+      ],
+      "sampleInstructionIndex": 124,
+      "sha256": "0027b46501b0440a280b4e06c17d90603fead6a62302d5a69f4dd8340a2ece6b"
+    },
+    {
+      "baseNormalNormalizeInstructionIndex": 99,
+      "baseNormalSelfDotInstructionIndex": 97,
+      "crossMadInstructionIndex": 102,
+      "crossMulInstructionIndex": 101,
+      "handednessMulInstructionIndex": 103,
+      "maps": [
+        "mp_raid"
+      ],
+      "normalXNamedLeaves": [
+        [
+          "WaterNormalMap",
+          1,
+          "x",
+          "SAMPLE_D"
+        ]
+      ],
+      "normalYNamedLeaves": [
+        [
+          "WaterNormalMap",
+          1,
+          "y",
+          "SAMPLE_D"
+        ]
+      ],
+      "sampleInstructionIndex": 150,
+      "sha256": "00ac8da86e2ee98862ba90dd7ba4eabec09e4796192b74531ec1e167067de758"
+    }
+  ],
+  "summary": {
+    "alternateShaderRowsSha256": "d423868fd81b272815e9d2b3b1ac26eea125b32afac8915506529d89585ef8ed",
+    "alternateTargetShaderCount": 37,
+    "baseNormalNormalizationCheckCount": 958,
+    "crossProductCheckCount": 958,
+    "handednessCheckCount": 958,
+    "normalResourcePatternRowsSha256": "dac03b4f6b39240238bb6d66b9487e1a6df05d908b3b56e4ce177f017c11afb6",
+    "normalResourceRowsSha256": "14975e286ec5e87c50e84eba5b1a59fbbb6c6bb15dbfcff6d067912e9af960ae",
+    "normalXNamedAncestryCheckCount": 958,
+    "normalYNamedAncestryCheckCount": 958,
+    "shaderRowsSha256": "9577bf465eb5be3d716ca53409cd63ef686f248a42de2d8779ff209ac8aa3cae",
+    "standardTangentBasisFailureCount": 0,
+    "standardTangentBasisShaderCount": 958,
+    "targetTempMadTexcoord1ShaderCount": 995,
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
