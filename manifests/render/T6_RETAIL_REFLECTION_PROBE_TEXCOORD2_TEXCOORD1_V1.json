@@ -1,0 +1,75 @@
+{
+  "candidateVertexShaderProofs": [
+    {
+      "texcoord1InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord2InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "vertexShaderSha256": "123691f286a6a7be03eb2370a9e51141819106b1a6862a1bcb057953d5827ff6",
+      "worldMatrixRows": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "texcoord1InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord2InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "vertexShaderSha256": "da7c0b4a5d98290bfd48e0b965e601f1628f0ace01c82157415e18f3ecd0db33",
+      "worldMatrixRows": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "equation": {
+    "mappedOpposingVector": "TEXCOORD1.xyz=(worldMatrix*float4(POSITION.xyz,1)).xyz",
+    "mappedVertexNormal": "N=normalize(worldMatrix3x3 * decoded NORMAL0)",
+    "reflection": "cubeCoord=normalize(TEXCOORD1)-2*N*dot(N,normalize(TEXCOORD1))"
+  },
+  "format": "t6-retail-reflection-probe-texcoord2-texcoord1-v1",
+  "producer": "tools/t6_retail_reflection_probe_texcoord2_texcoord1_v1.py",
+  "proofBoundary": "Global retained-DXBC census contains exactly 75 unique reflection shaders whose formula-A normalizes TEXCOORD2.xyz and formula-B normalizes TEXCOORD1.xyz (one B storage selection is xxy). Physical role promotion is restricted to the 20 identities mapped into one retained Hijacked TechniqueSet. Those 20 occurrences contain two direct VS and 18 packed uses of two pointer identities. Both direct VS independently prove TEXCOORD2 has only NORMAL0 input ancestry through normalized cb3/worldMatrix 3x3 transformation and TEXCOORD1 has only homogeneous POSITION ancestry through cb3 rows 0..2. The two packed pointers are bounded to this two-VS candidate set by a serializer differential test calibrated against all 32 paired aliases in the previously committed packed-VS proof: prior maximum differential drift is 12 bytes; among all 37 direct Hijacked VS objects, exactly one pair lies within that bound of the target pointer-pair spacing, namely these two candidates, with 5-byte drift. Since both candidates prove identical relevant roles, permutation identity is unnecessary. The remaining 55 globally retained shader identities have no retained pass/VS producer mapping and remain unpromoted.",
+  "summary": {
+    "candidateProofRowsSha256": "c54a7c067fd4cbf19ab45d3724da644cdebee0d3ddb2ecc3a1037571bf849d9f",
+    "candidateVertexShaderCount": 2,
+    "candidateVertexShaderRoleProofCount": 2,
+    "closedMappedShaderCount": 20,
+    "directVertexShaderOccurrenceCount": 2,
+    "globalFamilyFetchCount": 75,
+    "globalFamilyShaderCount": 75,
+    "globalShaderRowsSha256": "0d088b939b586ee46c7d69f7728046e0c377e12627f2883eba2786d25de5e5f3",
+    "mappedPassOccurrenceCount": 20,
+    "mappedPixelShaderCount": 20,
+    "mappedShaderSetSha256": "a98583598b635b595a50cf15c0a774afac86f838d33147407e32715b71fe96e7",
+    "packedVertexShaderOccurrenceCount": 18,
+    "priorAliasCalibrationMaxDifferentialDriftBytes": 12,
+    "priorAliasCalibrationPairCount": 32,
+    "remainingUnmappedFamilyShaderCount": 55,
+    "targetCandidateObjectSpacingBytes": 18423,
+    "targetCandidatePairAmbiguityCount": 0,
+    "targetDifferentialDriftBytes": 5,
+    "targetPointerSpacingBytes": 18428,
+    "uniquePackedPointerCount": 2,
+    "unmappedPixelShaderCount": 55
+  }
+}
