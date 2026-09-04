@@ -1,6 +1,6 @@
-#include "Game/T6/T6_Assets.h"
-
+#include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -9,6 +9,8 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+#include "Game/T6/T6_Assets.h"
 
 namespace {
 using RealWrite = ssize_t (*)(int, const void*, size_t);
@@ -40,8 +42,6 @@ std::vector<Region> ReadMaps() {
 }
 
 const Region* FindRegion(const std::vector<Region>& maps, uintptr_t p) {
-    // /proc/self/maps is sorted by address; linear walking here is cheap because
-    // the candidate population is tiny after string discovery.
     for (const auto& r : maps) {
         if (p >= r.lo && p < r.hi) return &r;
         if (p < r.lo) break;
@@ -112,7 +112,6 @@ bool ValidateWorld(const std::vector<Region>& maps, T6::GfxWorld* w) {
     if (!ReadableRange(maps, reinterpret_cast<uintptr_t>(w->dpvs.smodelInsts),
                        size_t(w->dpvs.smodelCount) * sizeof(T6::GfxStaticModelInst))) return false;
 
-    // Require a convincing sample of resolved XModel pointers and printable names.
     unsigned good = 0;
     for (unsigned i = 0; i < w->dpvs.smodelCount && i < 64; ++i) {
         const auto* model = w->dpvs.smodelDrawInsts[i].model;
