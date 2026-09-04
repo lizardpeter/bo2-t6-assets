@@ -1,0 +1,37 @@
+{
+  "format": "t6-nuketown-oat-lod0-static-geometry-crossvalidation-v1",
+  "map": "mp_nuketown_2020",
+  "sourceFastFile": {
+    "file": "mp_nuketown_2020.ff",
+    "bytes": 38472064,
+    "sha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0"
+  },
+  "oat": {
+    "version": "v0.33.0",
+    "sourceWorkflowRun": 33926590921,
+    "sourceArtifactId": 9957013395,
+    "sourceArtifactSha256": "7d44f1ef08e08a58ab57b700416b5a337f860df072c62c811d3bc3f1b4da7e77",
+    "modelFormat": "GLB"
+  },
+  "retainedPlayableStaticProof": {
+    "modelCount": 297,
+    "previouslyNamed": 290,
+    "nameClosureManifest": "NUKETOWN_PLAYABLE_STATIC_XMODEL_NAME_CLOSURE_V1.json"
+  },
+  "validation": {
+    "expectedLod0GlbCount": 297,
+    "existingLod0GlbCount": 297,
+    "missingLod0Glbs": 0,
+    "primitiveMaterialSequenceModelsTested": 297,
+    "primitiveMaterialSequenceMatches": 297,
+    "primitiveMaterialSequenceMismatches": 0,
+    "rule": "For each retained playable-static XModel, compare the retained LOD0 material-slot sequence to the exact material name referenced by every primitive emitted by OAT in <xmodel>_lod0.glb, in primitive order. OAT material-table entries not referenced by LOD0 primitives are ignored as higher-LOD/global-handle baggage."
+  },
+  "geometryAssemblyContract": {
+    "meshNodesHaveLocalTransforms": 0,
+    "implication": "LOD0 mesh primitives can be flattened into one reusable per-XModel mesh definition without discarding a mesh-node local transform. Skeletal helper nodes/skins are not required for static bind-pose placement geometry.",
+    "worldPlacementSource": "T6::GfxWorld.dpvs.smodelDrawInsts",
+    "unitAndBasisRuleToValidate": "OAT XModel vertices are emitted in game linear units with game Z-up converted to glTF Y-up. GfxWorld placement matrices must receive the equivalent basis conjugation and 0.0254 meter conversion before final scene acceptance."
+  },
+  "proofBoundary": "This establishes exact retail identity and LOD0 surface/material correspondence for the 297 static mesh sources. It does not yet promote a world placement transform; placements remain gated on the independent GfxWorld static-placement dump."
+}
