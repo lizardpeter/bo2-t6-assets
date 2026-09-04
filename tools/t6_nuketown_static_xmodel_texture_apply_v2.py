@@ -112,7 +112,10 @@ def extract_entry(data,data_sec,e,lzo):
                 dst=ctypes.create_string_buffer(0x8000);n=ctypes.c_size_t(0x8000);src=ctypes.create_string_buffer(blob);rc=lzo(src,len(blob),dst,ctypes.byref(n),None)
                 if rc!=0:raise ValueError(f'lzo {rc}')
                 out.extend(dst.raw[:n.value])
-            else:raise ValueError(f'compression {comp}')
+            elif comp==0xCF:
+                # Retail T6 padding/skip command: consume stored bytes but emit no output.
+                pass
+            else:raise ValueError(f'compression {comp:#x}')
             p+=sz
         pos=p;blocks+=1
         if blocks>10000:raise ValueError('IPAK runaway')
