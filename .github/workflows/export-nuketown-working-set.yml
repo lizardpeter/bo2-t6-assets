@@ -1,0 +1,21 @@
+name: export-nuketown-working-set
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/export-nuketown-working-set.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-reconstruction-working-set
+          path: |
+            tools/
+            manifests/maps/mp_nuketown_2020/
+            research/
+            README.md
+          retention-days: 1
