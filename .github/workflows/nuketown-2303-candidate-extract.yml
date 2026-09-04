@@ -1,0 +1,71 @@
+name: nuketown-2303-candidate-extract
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/nuketown-2303-candidate-extract.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download authoritative 2992-row placement artifact
+        run: |
+          mkdir recovered
+          gh run download 33930524391 -n nuketown-external-gfxworld-placement-v1 -D recovered
+          test -s recovered/gfxworld-static-placements-external.json
+      - name: Extract exact 297-identity candidate population
+        run: |
+          python - <<'PY'
+          import base64, collections, hashlib, json, math, statistics, zlib
+          from pathlib import Path
+          pp=Path('recovered/gfxworld-static-placements-external.json')
+          p=json.loads(pp.read_text())
+          proofp=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          proof=json.loads(zlib.decompress(base64.b64decode(proofp.read_text())).decode())
+          names={r['xmodelName'] for r in proof['models']}
+          rows=[r for r in p['placements'] if r['model'] in names]
+          assert len(names)==297
+          assert len(rows)==2303
+          out={'format':'t6-nuketown-playable-identity-placement-candidates-v1','sourcePlacementSha256':hashlib.sha256(pp.read_bytes()).hexdigest(),'playableIdentityCount':297,'count':2303,'placements':rows}
+          Path('NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json').write_text(json.dumps(out,separators=(',',':'))+'\n')
+          def rng(k):
+              vals=[r['origin'][k] for r in rows]
+              return [min(vals),max(vals)]
+          byflags=collections.Counter(r['flags'] for r in rows)
+          byvis=collections.Counter(r['visibility'] for r in rows)
+          byprobe=collections.Counter(r['reflectionProbeIndex'] for r in rows)
+          bymodel=collections.Counter(r['model'] for r in rows)
+          stats={
+              'format':'t6-nuketown-playable-identity-candidate-stats-v1',
+              'count':len(rows),
+              'uniqueModels':len(bymodel),
+              'originRanges':{'x':rng(0),'y':rng(1),'z':rng(2)},
+              'boundsRanges':{
+                  'minX':[min(r['mins'][0] for r in rows),max(r['mins'][0] for r in rows)],
+                  'maxX':[min(r['maxs'][0] for r in rows),max(r['maxs'][0] for r in rows)],
+                  'minY':[min(r['mins'][1] for r in rows),max(r['mins'][1] for r in rows)],
+                  'maxY':[min(r['maxs'][1] for r in rows),max(r['maxs'][1] for r in rows)],
+                  'minZ':[min(r['mins'][2] for r in rows),max(r['mins'][2] for r in rows)],
+                  'maxZ':[min(r['maxs'][2] for r in rows),max(r['maxs'][2] for r in rows)],
+              },
+              'flags':sorted(byflags.items()),
+              'visibility':sorted(byvis.items()),
+              'reflectionProbeIndex':sorted(byprobe.items()),
+              'topModels':bymodel.most_common(80),
+          }
+          Path('NUKETOWN_PLAYABLE_IDENTITY_CANDIDATE_STATS_V1.json').write_text(json.dumps(stats,indent=2)+'\n')
+          print(json.dumps(stats,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-playable-identity-candidates-2303-v1
+          path: |
+            NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json
+            NUKETOWN_PLAYABLE_IDENTITY_CANDIDATE_STATS_V1.json
+          retention-days: 2
