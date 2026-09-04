@@ -1,0 +1,32 @@
+name: oat-v033-prebuilt-symbol-probe
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-v033-prebuilt-symbol-probe.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact OAT v0.33.0 Linux release
+        run: |
+          wget -q https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz -O oat.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat.tar.gz' | sha256sum -c -
+          mkdir oatbin && tar -xzf oat.tar.gz -C oatbin
+          find oatbin -maxdepth 3 -type f -printf '%p %s bytes\n' | sort
+      - name: Inspect Unlinker symbols and linkage
+        run: |
+          U=$(find oatbin -type f -name Unlinker -o -name unlinker | head -1)
+          test -n "$U"
+          echo "UNLINKER=$U"
+          file "$U"
+          ldd "$U" || true
+          echo '--- symbols matching Zone/GfxWorld/ObjWriter ---'
+          nm -C "$U" 2>&1 | grep -Ei 'GfxWorld|ObjWriter|DumpZone|ZoneLoader|AssetDump' | head -300 || true
+          echo '--- dynamic symbols ---'
+          nm -D -C "$U" 2>&1 | grep -Ei 'GfxWorld|ObjWriter|DumpZone|ZoneLoader|AssetDump' | head -300 || true
+          echo '--- sections ---'
+          readelf -S "$U" | grep -E 'symtab|debug|dynsym' || true
