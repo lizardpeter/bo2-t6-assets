@@ -1,0 +1,109 @@
+name: base-ipak-r2-cf-nine-recovery
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/base-ipak-r2-cf-nine-recovery.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check pillow
+      - name: Validate only the nine former 0xCF rejects
+        run: |
+          mkdir -p cf9
+          python - <<'PY'
+          import base64,ctypes,ctypes.util,hashlib,importlib.util,json,struct,urllib.request,zlib
+          from pathlib import Path
+          URL='https://r2.houseofkublai.com/bo2/zone/all/base.ipak'; OUT=Path('cf9')
+          TARGETS={
+            'pent_art_wall_greypaint01_n',
+            '~~-gpent_art_wall_creampaint0~e57342c8',
+            '~~-gmetal_corrugated_wide_bar~4e879a92',
+            '~~-gglass_clear_wall_s-rgb&gl~32bf418c',
+            '~~-gme_floorsmoothconcrete_co~9440c1d3',
+            'concrete_base02_n',
+            '~~-gconcrete_base02_c-rgb&~-r~c514ddf2',
+            'rus_concrete_n',
+            '~~-grus_concrete01_c-rgb&~-rr~3232bac1',
+          }
+          bank=json.loads(zlib.decompress(base64.b64decode(Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64').read_text().strip())))
+          aliases=[a for a in bank['aliases'] if a['name'] in TARGETS]
+          if len(aliases)!=9: raise ValueError(f'expected 9 target aliases, got {len(aliases)}')
+          spec=importlib.util.spec_from_file_location('t6tex',Path('tools/t6_nuketown_ipak_partial_texture_export_v2.py')); t6=importlib.util.module_from_spec(spec); spec.loader.exec_module(t6)
+          def rg(a,b):
+            q=urllib.request.Request(URL,headers={'Range':f'bytes={a}-{b}','User-Agent':'bo2-t6-assets-cf-nine/1'})
+            with urllib.request.urlopen(q,timeout=120) as r:
+              if r.status!=206: raise RuntimeError(f'range not honored {r.status}')
+              cr=r.headers.get('Content-Range',''); d=r.read()
+            if len(d)!=b-a+1: raise RuntimeError(f'range length mismatch {cr}')
+            return d,cr
+          head,_=rg(0,65535); magic,ver,total,sc=struct.unpack_from('<4sIII',head,0); secs=[struct.unpack_from('<IIII',head,16+16*i) for i in range(sc)]
+          if magic!=b'KAPI' or ver!=0x50000: raise ValueError('invalid IPAK')
+          data_sec=[s for s in secs if s[0]==2][0]; _,ioff,isz,n=[s for s in secs if s[0]==1][0]; idx,_=rg(ioff,ioff+n*16-1)
+          by_name={struct.unpack_from('<IIII',idx,i*16)[1]:struct.unpack_from('<IIII',idx,i*16) for i in range(n)}
+          lib=ctypes.util.find_library('lzo2'); lzo=ctypes.CDLL(lib).lzo1x_decompress_safe
+          lzo.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t),ctypes.c_void_p]; lzo.restype=ctypes.c_int
+          def align(x,a): return (x+a-1)//a*a
+          def extract(seg,start,e):
+            out=bytearray(); ap=start; ae=start+e[3]; blocks=0; skips=0; skipbytes=0
+            while ap<ae:
+              ap=align(ap,128)
+              if ap>=ae: break
+              p0=ap-start
+              if p0+128>len(seg): raise ValueError('truncated header')
+              hdr=seg[p0:p0+128]; co=struct.unpack_from('<I',hdr,0)[0]; file_off=co&0xffffff; cnt=(co>>24)&0xff
+              if cnt>31: raise ValueError(f'command count {cnt}')
+              cmds=[]
+              for j in range(cnt):
+                w=struct.unpack_from('<I',hdr,4+4*j)[0]; cmds.append((w&0xffffff,(w>>24)&0xff))
+              if any(c in (0,1) for _,c in cmds) and file_off!=len(out): raise ValueError(f'output offset {file_off}!={len(out)}')
+              p=p0+128
+              for sz,c in cmds:
+                blob=seg[p:p+sz]
+                if len(blob)!=sz: raise ValueError('truncated command payload')
+                if c==0: out.extend(blob)
+                elif c==1:
+                  dst=ctypes.create_string_buffer(0x8000); ln=ctypes.c_size_t(0x8000); src=ctypes.create_string_buffer(blob)
+                  rc=lzo(src,len(blob),dst,ctypes.byref(ln),None)
+                  if rc: raise ValueError(f'lzo {rc}')
+                  out.extend(dst.raw[:ln.value])
+                elif c==0xCF:
+                  skips+=1; skipbytes+=sz
+                else: raise ValueError(f'unsupported command {c:#x}')
+                p+=sz
+              ap=start+p; blocks+=1
+              if blocks>10000: raise ValueError('runaway')
+            iwi=bytes(out); crc=zlib.crc32(iwi)&0x1fffffff
+            if crc!=e[0]: raise ValueError(f'CRC29 {crc:08x}!={e[0]:08x}')
+            return iwi,blocks,skips,skipbytes
+          rows=[]; network=len(head)+len(idx)
+          for i,a in enumerate(aliases):
+            nh=int(a['hash']); dh=int(a['dataHash']); e=by_name.get(nh)
+            if e is None or e[0]!=dh: raise ValueError(f'{a["name"]}: exact pair missing at validation time')
+            start=data_sec[1]+e[2]; end=start+e[3]-1; seg,cr=rg(start,end); network+=len(seg)
+            iwi,blocks,skips,skipbytes=extract(seg,start,e)
+            fmt,flags,w,h,d,gamma,sizes=t6.parse_iwi27(iwi); expected=(int(a['width']),int(a['height']),int(a['depth']))
+            if (w,h,d)!=expected: raise ValueError(f'{a["name"]}: dimensions {(w,h,d)}!={expected}')
+            safe=f'{i:02d}_{a["name"].replace("/","__").replace("~","_tilde_")}'; ip=OUT/f'{safe}.iwi'; ip.write_bytes(iwi)
+            png_name=None; png_sha=None
+            try:
+              png,_=t6.iwi_top_png(iwi,normal_semantic=(int(a['semantic'])==5)); pp=OUT/f'{safe}.png'; pp.write_bytes(png); png_name=pp.name; png_sha=hashlib.sha256(png).hexdigest()
+            except Exception: pass
+            rows.append({'name':a['name'],'hash':nh,'dataHash':dh,'semantic':a['semantic'],'width':w,'height':h,'depth':d,'format':fmt,'flags':flags,'gamma':gamma,'ipakEntry':list(e),'contentRange':cr,'blockCount':blocks,'skipCommandCount':skips,'skipBytes':skipbytes,'iwiFile':ip.name,'iwiBytes':len(iwi),'iwiSha256':hashlib.sha256(iwi).hexdigest(),'pngFile':png_name,'pngSha256':png_sha,'crc29Validated':True,'iwi27Validated':True,'dimensionsValidated':True})
+          report={'format':'t6-base-ipak-cf-nine-recovery-v1','sourceUrl':URL,'sourceBytes':total,'indexEntryCount':n,'validatedCount':len(rows),'networkBytes':network,'decoderRule':'0=raw, 1=LZO, 0xCF=ignored padding; all other values fail closed','rows':rows}
+          (OUT/'BASE_IPAK_CF_NINE_RECOVERY_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'validatedCount':len(rows),'networkBytes':network,'skipCommandCount':sum(r['skipCommandCount'] for r in rows),'skipBytes':sum(r['skipBytes'] for r in rows)},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: base-ipak-cf-nine-recovery
+          path: cf9/
+          retention-days: 1
