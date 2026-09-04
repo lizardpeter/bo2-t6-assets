@@ -1,0 +1,46 @@
+{
+  "binding": {
+    "name": "reflectionProbeSampler",
+    "sampler": {
+      "bindCount": 1,
+      "bindPoint": 15,
+      "dimension": "UNKNOWN",
+      "inputType": "SAMPLER"
+    },
+    "texture": {
+      "bindCount": 1,
+      "bindPoint": 15,
+      "dimension": "TEXTURECUBE",
+      "inputType": "TEXTURE"
+    }
+  },
+  "format": "t6-retail-reflection-probe-rdef-guard-v1",
+  "mapCoverage": [
+    {"map": "mp_nuketown_2020", "reflectionProbeShaderCount": 1285, "validDxbcCount": 1972},
+    {"map": "mp_raid", "reflectionProbeShaderCount": 2063, "validDxbcCount": 3064},
+    {"map": "mp_hijacked", "reflectionProbeShaderCount": 1722, "validDxbcCount": 2299},
+    {"map": "zm_prison", "reflectionProbeShaderCount": 3158, "validDxbcCount": 3920},
+    {"map": "zm_tomb", "reflectionProbeShaderCount": 1979, "validDxbcCount": 2839}
+  ],
+  "producer": "tools/t6_retail_reflection_probe_rdef_guard_v1.py",
+  "proofBoundary": "Strict retained-byte DXBC/RDEF guard over every valid embedded shader discovered in the five pinned expanded retail worlds. Every unique shader reflecting reflectionProbeSampler must expose exactly one TEXTURECUBE and one SAMPLER entry at bind point 15 with bind count 1. This proves reflected resource identity/binding only; reflection-vector construction, cube lookup coordinates, mip/LOD behavior, Fresnel/specular weighting, and final RGB contribution remain separate instruction-level proofs.",
+  "sources": {
+    "mp_hijacked": {"file": "mp/mp_hijacked.expanded.bin", "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"},
+    "mp_nuketown_2020": {"file": "mp/mp_nuketown_2020.expanded.bin", "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"},
+    "mp_raid": {"file": "mp/mp_raid.expanded.bin", "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"},
+    "zm_prison": {"file": "zm_prison.expanded.bin", "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"},
+    "zm_tomb": {"file": "zm_tomb.expanded.bin", "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"}
+  },
+  "summary": {
+    "bindingFailureCount": 0,
+    "retainedMapCount": 5,
+    "samplerBindCount": 1,
+    "samplerBindPoint": 15,
+    "samplerDimension": "UNKNOWN",
+    "shaderRowsSha256": "3a7c8ca9afc667a4fa72274ab787fc80ddb794f9533e76320abe7d04dc47df32",
+    "textureBindCount": 1,
+    "textureBindPoint": 15,
+    "textureDimension": "TEXTURECUBE",
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
