@@ -1,16 +1,188 @@
 {
   "directVertexShaderProofs": [
-    {"texcoord0InputLeaves":[["POSITION",0]],"texcoord0WorldMatrixRows":[0,1,2],"texcoord1InputLeaves":[["NORMAL",0]],"texcoord1WorldMatrixRows":[0,1,2],"vertexShaderSha256":"0dfc9adb647183fbf6559bd407141af1e77c2eb08eb37245dbe2ff63ae46db21"},
-    {"texcoord0InputLeaves":[["POSITION",0]],"texcoord0WorldMatrixRows":[0,1,2],"texcoord1InputLeaves":[["NORMAL",0]],"texcoord1WorldMatrixRows":[0,1,2],"vertexShaderSha256":"2f050f09b64d805ed2cece689b06bea7cbc14f6ba354c5a4f5032e6e8b2a9d4a"},
-    {"texcoord0InputLeaves":[["POSITION",0]],"texcoord0WorldMatrixRows":[0,1,2],"texcoord1InputLeaves":[["NORMAL",0]],"texcoord1WorldMatrixRows":[0,1,2],"vertexShaderSha256":"58294667242bb0629bdcb3d8c0992a0366ce7674cfb496b7ed23ee7378a7e77f"},
-    {"texcoord0InputLeaves":[["POSITION",0]],"texcoord0WorldMatrixRows":[0,1,2],"texcoord1InputLeaves":[["NORMAL",0]],"texcoord1WorldMatrixRows":[0,1,2],"vertexShaderSha256":"cd0cda6d3f508d518c027919cac5631393bdc48e6fedea2461b15bb38700c26f"},
-    {"texcoord0InputLeaves":[["POSITION",0]],"texcoord0WorldMatrixRows":[0,1,2],"texcoord1InputLeaves":[["NORMAL",0]],"texcoord1WorldMatrixRows":[0,1,2],"vertexShaderSha256":"f208b62f889e9e758abb7206fef7cfaa15135bf0e9b01a39ff0c9d7697e52fab"}
+    {
+      "texcoord0InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord0WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "texcoord1InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "texcoord1WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "vertexShaderSha256": "0dfc9adb647183fbf6559bd407141af1e77c2eb08eb37245dbe2ff63ae46db21"
+    },
+    {
+      "texcoord0InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord0WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "texcoord1InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "texcoord1WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "vertexShaderSha256": "2f050f09b64d805ed2cece689b06bea7cbc14f6ba354c5a4f5032e6e8b2a9d4a"
+    },
+    {
+      "texcoord0InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord0WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "texcoord1InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "texcoord1WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "vertexShaderSha256": "58294667242bb0629bdcb3d8c0992a0366ce7674cfb496b7ed23ee7378a7e77f"
+    },
+    {
+      "texcoord0InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord0WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "texcoord1InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "texcoord1WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "vertexShaderSha256": "cd0cda6d3f508d518c027919cac5631393bdc48e6fedea2461b15bb38700c26f"
+    },
+    {
+      "texcoord0InputLeaves": [
+        [
+          "POSITION",
+          0
+        ]
+      ],
+      "texcoord0WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "texcoord1InputLeaves": [
+        [
+          "NORMAL",
+          0
+        ]
+      ],
+      "texcoord1WorldMatrixRows": [
+        0,
+        1,
+        2
+      ],
+      "vertexShaderSha256": "f208b62f889e9e758abb7206fef7cfaa15135bf0e9b01a39ff0c9d7697e52fab"
+    }
   ],
-  "equation":{"opposingVector":"TEXCOORD0.xyz=(worldMatrix*float4(POSITION.xyz,1)).xyz","reflection":"cubeCoord=normalize(TEXCOORD0)-2*N*dot(N,normalize(TEXCOORD0))","surfaceNormal":"N=normalize(worldMatrix3x3 * decoded NORMAL0)"},
-  "format":"t6-retail-reflection-probe-texcoord1-texcoord0-v1",
-  "producer":"tools/t6_retail_reflection_probe_texcoord1_texcoord0_v1.py",
-  "proofBoundary":"Retained ownership/producer closure for the exact 11-shader / 11-fetch A=TEXCOORD1, B=TEXCOORD0 reflection family pinned by the exhaustive target-set manifest. All 11 identities are recovered in 11 broad TechniqueSet pass occurrences. Five direct paired VS payloads prove TEXCOORD1 is a normalized NORMAL0/worldMatrix3x3 path and TEXCOORD0 is a POSITION/worldMatrix path. The five target pass occurrences using two reusable packed VS pointers are resolved by an independently checked broad serialization grammar: among cross-map-anchored broad pointers, the exact direct-slot-4 -> first-packed-slot-6 at event-distance-1 pattern occurs five times and agrees with the preceding direct VS in all 5/5 cases; both target pointers instantiate that exact pattern. Camera/view semantics of the opposing vector remain outside this proof.",
-  "resolvedPackedPointers":[{"block":5,"introducedVertexShaderSha256":"58294667242bb0629bdcb3d8c0992a0366ce7674cfb496b7ed23ee7378a7e77f","map":"zm_prison","offset":19277804,"pattern":[4,6,1],"targetOccurrenceCount":2},{"block":5,"introducedVertexShaderSha256":"2f050f09b64d805ed2cece689b06bea7cbc14f6ba354c5a4f5032e6e8b2a9d4a","map":"zm_tomb","offset":6149824,"pattern":[4,6,1],"targetOccurrenceCount":3}],
-  "sources":{"targetSet":"manifests/render/T6_RETAIL_REFLECTION_PROBE_TEXCOORD1_TEXCOORD0_TARGET_V1.json"},
-  "summary":{"calibrationRowsSha256":"2afe501353f01261c6930ce480dbd1b9434adb110a6848fb6c36f38369171dc0","closedFetchCount":11,"closedShaderCount":11,"directProofRowsSha256":"75a0b302b98529c717960b2ef952a58b35bac6a97dea4fa24618a8c3bd9b5f7d","directVertexShaderCount":5,"directVertexShaderOccurrenceCount":6,"directVertexShaderRoleProofCount":5,"globalFamilyFetchCount":11,"globalFamilyShaderCount":11,"introductionCalibrationCount":5,"introductionCalibrationFailureCount":0,"mappedPassOccurrenceCount":11,"mappedPixelShaderCount":11,"packedVertexShaderOccurrenceCount":5,"resolvedPackedOccurrenceCount":5,"resolvedPackedPointerCount":2,"resolvedPointerRowsSha256":"1659208cec848b51aed374828d70205717665f1eb44248eee9f9ff0e6cb4044f","scanRowsSha256":"833c9efa3e3f32e34126411135e93de45613d294b3c287c191cfa7f468b4e577","targetShaderSetSha256":"013157b8e9af431ba3585a6016dbdac597de460e4ab408781e411625a980826b","uniquePackedPointerCount":2}
+  "equation": {
+    "opposingVector": "TEXCOORD0.xyz=(worldMatrix*float4(POSITION.xyz,1)).xyz",
+    "reflection": "cubeCoord=normalize(TEXCOORD0)-2*N*dot(N,normalize(TEXCOORD0))",
+    "surfaceNormal": "N=normalize(worldMatrix3x3 * decoded NORMAL0)"
+  },
+  "format": "t6-retail-reflection-probe-texcoord1-texcoord0-v1",
+  "producer": "tools/t6_retail_reflection_probe_texcoord1_texcoord0_v1.py",
+  "proofBoundary": "Retained ownership/producer closure for the exact 11-shader / 11-fetch A=TEXCOORD1, B=TEXCOORD0 reflection family pinned by the exhaustive target-set manifest. All 11 identities are recovered in 11 broad TechniqueSet pass occurrences. Five direct paired VS payloads prove TEXCOORD1 is a normalized NORMAL0/worldMatrix3x3 path and TEXCOORD0 is a POSITION/worldMatrix path. The five target pass occurrences using two reusable packed VS pointers are resolved by an independently checked broad serialization grammar: among cross-map-anchored broad pointers, the exact direct-slot-4 -> first-packed-slot-6 at event-distance-1 pattern occurs five times and agrees with the preceding direct VS in all 5/5 cases; both target pointers instantiate that exact pattern. Camera/view semantics of the opposing vector remain outside this proof.",
+  "resolvedPackedPointers": [
+    {
+      "block": 5,
+      "introducedVertexShaderSha256": "58294667242bb0629bdcb3d8c0992a0366ce7674cfb496b7ed23ee7378a7e77f",
+      "map": "zm_prison",
+      "offset": 19277804,
+      "pattern": [
+        4,
+        6,
+        1
+      ],
+      "targetOccurrenceCount": 2
+    },
+    {
+      "block": 5,
+      "introducedVertexShaderSha256": "2f050f09b64d805ed2cece689b06bea7cbc14f6ba354c5a4f5032e6e8b2a9d4a",
+      "map": "zm_tomb",
+      "offset": 6149824,
+      "pattern": [
+        4,
+        6,
+        1
+      ],
+      "targetOccurrenceCount": 3
+    }
+  ],
+  "sources": {
+    "targetSet": "manifests/render/T6_RETAIL_REFLECTION_PROBE_TEXCOORD1_TEXCOORD0_TARGET_V1.json"
+  },
+  "summary": {
+    "calibrationRowsSha256": "2afe501353f01261c6930ce480dbd1b9434adb110a6848fb6c36f38369171dc0",
+    "closedFetchCount": 11,
+    "closedShaderCount": 11,
+    "directProofRowsSha256": "75a0b302b98529c717960b2ef952a58b35bac6a97dea4fa24618a8c3bd9b5f7d",
+    "directVertexShaderCount": 5,
+    "directVertexShaderOccurrenceCount": 6,
+    "directVertexShaderRoleProofCount": 5,
+    "globalFamilyFetchCount": 11,
+    "globalFamilyShaderCount": 11,
+    "introductionCalibrationCount": 5,
+    "introductionCalibrationFailureCount": 0,
+    "mappedPassOccurrenceCount": 11,
+    "mappedPixelShaderCount": 11,
+    "packedVertexShaderOccurrenceCount": 5,
+    "resolvedPackedOccurrenceCount": 5,
+    "resolvedPackedPointerCount": 2,
+    "resolvedPointerRowsSha256": "1659208cec848b51aed374828d70205717665f1eb44248eee9f9ff0e6cb4044f",
+    "scanRowsSha256": "833c9efa3e3f32e34126411135e93de45613d294b3c287c191cfa7f468b4e577",
+    "targetShaderSetSha256": "013157b8e9af431ba3585a6016dbdac597de460e4ab408781e411625a980826b",
+    "uniquePackedPointerCount": 2
+  }
 }
