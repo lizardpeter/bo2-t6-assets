@@ -1,0 +1,201 @@
+name: base-ipak-r2-recovery
+
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/base-ipak-r2-recovery.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check pillow
+
+      - name: Fetch retail base.ipak from R2
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --output "$RUNNER_TEMP/base.ipak" \
+            'https://r2.houseofkublai.com/bo2/zone/all/base.ipak'
+          ls -lh "$RUNNER_TEMP/base.ipak"
+
+      - name: Recover exact named payloads
+        shell: bash
+        run: |
+          mkdir -p recovered
+          python - <<'PY'
+          import ctypes, ctypes.util, hashlib, importlib.util, json, mmap, os, struct, zlib
+          from pathlib import Path
+
+          root = Path.cwd()
+          src = root / 'tools' / 't6_nuketown_ipak_partial_texture_export_v2.py'
+          spec = importlib.util.spec_from_file_location('t6tex', src)
+          t6 = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(t6)
+
+          targets = [
+              ('~-gnt_2020_plastic_cream_col', 2),
+              ('~-gmetal_chrome_boat_c', 2),
+              ('~-gmetal_chrome_col', 2),
+              ('~-gnt_wood_fence', 2),
+          ]
+          path = Path(os.environ['RUNNER_TEMP']) / 'base.ipak'
+          outdir = root / 'recovered'
+
+          libname = ctypes.util.find_library('lzo2')
+          if not libname:
+              raise RuntimeError('liblzo2 not found')
+          lzo = ctypes.CDLL(libname).lzo1x_decompress_safe
+          lzo.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p,
+                          ctypes.POINTER(ctypes.c_size_t), ctypes.c_void_p]
+          lzo.restype = ctypes.c_int
+
+          def align(n, a):
+              return (n + a - 1) // a * a
+
+          def extract(mm, data_sec, e):
+              data_hash, name_hash, rel_off, raw_size = e
+              pos = data_sec[1] + rel_off
+              end = pos + raw_size
+              out = bytearray()
+              blocks = 0
+              while pos < end:
+                  pos = align(pos, 0x80)
+                  if pos >= end:
+                      break
+                  hdr = mm[pos:pos+128]
+                  if len(hdr) != 128:
+                      raise ValueError('truncated IPAK block header')
+                  co = struct.unpack_from('<I', hdr, 0)[0]
+                  file_off = co & 0xffffff
+                  cnt = (co >> 24) & 0xff
+                  if cnt > 31:
+                      raise ValueError('IPAK block command count')
+                  cmds = []
+                  for i in range(cnt):
+                      w = struct.unpack_from('<I', hdr, 4 + 4*i)[0]
+                      cmds.append((w & 0xffffff, (w >> 24) & 0xff))
+                  if any(comp in (0, 1) for _, comp in cmds) and file_off != len(out):
+                      raise ValueError(f'IPAK block offset mismatch {file_off} != {len(out)}')
+                  p = pos + 128
+                  for sz, comp in cmds:
+                      blob = mm[p:p+sz]
+                      if len(blob) != sz:
+                          raise ValueError('truncated IPAK command')
+                      if comp == 0:
+                          out.extend(blob)
+                      elif comp == 1:
+                          dst = ctypes.create_string_buffer(0x8000)
+                          n = ctypes.c_size_t(0x8000)
+                          srcbuf = ctypes.create_string_buffer(blob)
+                          rc = lzo(srcbuf, len(blob), dst, ctypes.byref(n), None)
+                          if rc != 0:
+                              raise ValueError(f'lzo error {rc}')
+                          out.extend(dst.raw[:n.value])
+                      else:
+                          raise ValueError(f'unsupported IPAK compression command {comp}')
+                      p += sz
+                  pos = p
+                  blocks += 1
+                  if blocks > 10000:
+                      raise ValueError('IPAK block runaway')
+              result = bytes(out)
+              crc29 = zlib.crc32(result) & 0x1fffffff
+              if crc29 != data_hash:
+                  raise ValueError(f'CRC29 mismatch {crc29:08x}!={data_hash:08x}')
+              return result, blocks
+
+          report = {
+              'format': 't6-base-ipak-r2-exact-name-recovery-v1',
+              'sourceUrl': 'https://r2.houseofkublai.com/bo2/zone/all/base.ipak',
+              'sourceBytes': path.stat().st_size,
+              'targets': [],
+          }
+
+          with path.open('rb') as fh:
+              mm = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
+              magic, ver, declared_size, sc = struct.unpack_from('<4sIII', mm, 0)
+              if magic != b'KAPI' or ver != 0x50000 or declared_size != len(mm):
+                  raise ValueError((magic, hex(ver), declared_size, len(mm)))
+              sections = [struct.unpack_from('<IIII', mm, 16 + 16*i) for i in range(sc)]
+              data_secs = [s for s in sections if s[0] == 2]
+              index_secs = [s for s in sections if s[0] == 1]
+              if len(data_secs) != 1 or len(index_secs) != 1:
+                  raise ValueError('expected one data and one index section')
+              data_sec = data_secs[0]
+              _, ioff, isz, icount = index_secs[0]
+              if icount * 16 > isz:
+                  raise ValueError('invalid index size')
+
+              wanted = {t6.r_hash_string(name): (name, semantic) for name, semantic in targets}
+              hits = {}
+              for i in range(icount):
+                  e = struct.unpack_from('<IIII', mm, ioff + 16*i)
+                  if e[1] in wanted:
+                      if e[1] in hits:
+                          raise ValueError(f'duplicate target nameHash {e[1]:08x}')
+                      hits[e[1]] = e
+
+              report['ipak'] = {
+                  'magic': magic.decode('ascii'), 'version': ver,
+                  'declaredBytes': declared_size, 'sectionCount': sc,
+                  'indexEntryCount': icount,
+              }
+
+              for name, semantic in targets:
+                  nh = t6.r_hash_string(name)
+                  row = {'name': name, 'semantic': semantic, 'nameHash': nh,
+                         'nameHashHex': f'{nh:08x}', 'found': nh in hits}
+                  if nh not in hits:
+                      report['targets'].append(row)
+                      continue
+                  e = hits[nh]
+                  iwi, blocks = extract(mm, data_sec, e)
+                  fmt, flags, w, h, d, gamma, sizes = t6.parse_iwi27(iwi)
+                  png, meta = t6.iwi_top_png(iwi, normal_semantic=(semantic == 5))
+                  safe = name.replace('/', '__').replace('~', '_tilde_')
+                  iwi_path = outdir / f'{safe}.iwi'
+                  png_path = outdir / f'{safe}.png'
+                  iwi_path.write_bytes(iwi)
+                  png_path.write_bytes(png)
+                  row.update({
+                      'dataHash': e[0], 'dataHashHex': f'{e[0]:08x}',
+                      'relativeOffset': e[2], 'rawStoredBytes': e[3],
+                      'blockCount': blocks,
+                      'iwiBytes': len(iwi), 'iwiSha256': hashlib.sha256(iwi).hexdigest(),
+                      'pngBytes': len(png), 'pngSha256': hashlib.sha256(png).hexdigest(),
+                      'format': fmt, 'flags': flags, 'width': w, 'height': h,
+                      'depth': d, 'gamma': gamma,
+                      'crc29Validated': True,
+                      'iwi27Validated': True,
+                      'iwiFile': iwi_path.name,
+                      'pngFile': png_path.name,
+                  })
+                  report['targets'].append(row)
+              mm.close()
+
+          (outdir / 'base_ipak_exact_name_recovery_report.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(report, indent=2, sort_keys=True))
+          if not any(r['found'] for r in report['targets']):
+              raise SystemExit('none of the exact target name hashes were present in base.ipak')
+          PY
+
+      - name: Upload recovered proof payloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-ipak-exact-texture-recovery
+          path: recovered/
+          if-no-files-found: error
+          retention-days: 1
