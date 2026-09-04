@@ -1,0 +1,62 @@
+{
+  "format": "t6-nuketown-real-texture-partial-v2-checkpoint",
+  "date": "2026-09-04",
+  "map": "mp_nuketown_2020",
+  "exporter": {
+    "path": "tools/t6_nuketown_ipak_partial_texture_export_v2.py",
+    "commit": "f2602eb0b920b06d8e78023661468514f480c415",
+    "localSha256": "4c2c9016f5c4a69d22bbb5bb8c0dbd8ce30dbf92cccfe2a9e9eb075dc3221e69"
+  },
+  "source": {
+    "inputGlb": {
+      "file": "mp_nuketown_2020_PLAYABLE_CORE_PLUS_ALL_STATIC_v6.glb",
+      "bytes": 33745604,
+      "sha256": "1e97fb62f148036a84abf781a29bbc723eef9b686fcc1ef6cbfcd351c01d0066"
+    },
+    "mapSpecificIpak": {
+      "file": "mp_nuketown_2020.ipak",
+      "bytes": 165543936,
+      "driveSourcePresent": true
+    },
+    "retainedMaterialCatalog": "NUKETOWN_327_MATERIALS_V1.json"
+  },
+  "output": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PARTIAL_v2.glb",
+    "bytes": 57146928,
+    "sha256": "7e66d511f18dace3d3b35889d034bbfd492e0694e3298a648fb40b8d422b3782",
+    "fullManifestSha256": "22481e3d8f9f2b33e3e976397142a2873cb84c7e0d9724d44336c44cf1b4824a"
+  },
+  "coverage": {
+    "glbMaterialCount": 639,
+    "retainedWorldMaterialIdentityMatches": 291,
+    "exactFirstLayerColorMaterialBindings": 70,
+    "exactFirstLayerNormalMaterialBindings": 33,
+    "uniqueEmbeddedRealImages": 103,
+    "decodeOrBindingFailures": 0
+  },
+  "proof": {
+    "selection": "Exact material identity plus exact retained Material texture semantic. Only the first texture-table entry for that semantic is eligible; unresolved first entries fail closed rather than substituting a later layer/decal.",
+    "ipakLookup": "T6 R_HashString(imageName) exact index lookup",
+    "containerDecode": "128-byte IPAK block headers, raw/LZO command decode, then CRC32 masked with 0x1fffffff checked against the IPAK index dataHash",
+    "imageDecode": "IWI version 27; BC1/DXT1 and BC3/DXT5 color; BC5/DXN normal XY with reconstructed positive Z; highest-resolution mip embedded as PNG",
+    "glbBinding": "Exact first-layer color maps bind to baseColorTexture and exact first normal maps bind to normalTexture on TEXCOORD_0 for the conservative preview path."
+  },
+  "validation": {
+    "glb20HeaderAndLength": "pass",
+    "singleBinChunk": "pass",
+    "bufferLengthMatchesBin": "pass",
+    "embeddedPngRangesAndSignatures": "103/103 pass",
+    "baseColorTextureMaterialCount": 70,
+    "normalTextureMaterialCount": 33
+  },
+  "explicitlyUnresolved": [
+    "shared base.ipak / mp.ipak images were intentionally omitted from the retained Nuketown upload set and are not currently found in connected Drive",
+    "packed GfxImage references whose exact image identity has not yet been physically resolved",
+    "later layered/decal compositor semantics",
+    "lightmap primary/secondary image composition",
+    "reflection probe images and final reflection composition",
+    "static-XModel-side material texture coverage outside the retained world material catalog",
+    "remaining special-material shading"
+  ],
+  "next": "Resolve packed GfxImage pointer identities fail-closed, then rerun this exporter before pursuing approximate substitutes."
+}
