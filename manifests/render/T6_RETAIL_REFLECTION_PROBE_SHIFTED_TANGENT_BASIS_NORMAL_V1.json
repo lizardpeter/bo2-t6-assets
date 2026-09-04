@@ -1,0 +1,105 @@
+{
+  "equations": {
+    "reflection": "cubeCoord=normalize(TEXCOORD0)-2*N*dot(N,normalize(TEXCOORD0))",
+    "surfaceNormal": "N=normalize(normalize(base)+NormalMap.x*tangent+NormalMap.y*(cross(normalize(base),tangent)*tangent.w))"
+  },
+  "examples": [
+    {
+      "baseSemantic": "TEXCOORD1",
+      "maps": [
+        "zm_tomb"
+      ],
+      "packing": "xyz",
+      "sampleInstructionIndex": 124,
+      "sha256": "0829db25adc9b88662f433077924cac401b2606d90bca4947d3f25f2207b19a3",
+      "tangentSemantic": "TEXCOORD2",
+      "xLeaves": [
+        [
+          "NormalMap",
+          0,
+          "x",
+          "SAMPLE"
+        ]
+      ],
+      "yLeaves": [
+        [
+          "NormalMap",
+          0,
+          "y",
+          "SAMPLE"
+        ]
+      ]
+    },
+    {
+      "baseSemantic": "TEXCOORD2",
+      "maps": [
+        "zm_tomb"
+      ],
+      "packing": "xyz",
+      "sampleInstructionIndex": 122,
+      "sha256": "14cddf1893061235486df58155d507996e3210c6bc8613ae91daa362879afff4",
+      "tangentSemantic": "TEXCOORD3",
+      "xLeaves": [
+        [
+          "NormalMap",
+          0,
+          "x",
+          "SAMPLE"
+        ]
+      ],
+      "yLeaves": [
+        [
+          "NormalMap",
+          0,
+          "y",
+          "SAMPLE"
+        ]
+      ]
+    },
+    {
+      "baseSemantic": "TEXCOORD2",
+      "maps": [
+        "zm_tomb"
+      ],
+      "packing": "xyz",
+      "sampleInstructionIndex": 131,
+      "sha256": "179ed14fe9eb2753e613c77a2fdba22291fd38d537a8ac1445e40c9cec7bb532",
+      "tangentSemantic": "TEXCOORD3",
+      "xLeaves": [
+        [
+          "NormalMap",
+          0,
+          "x",
+          "SAMPLE"
+        ]
+      ],
+      "yLeaves": [
+        [
+          "NormalMap",
+          0,
+          "y",
+          "SAMPLE"
+        ]
+      ]
+    }
+  ],
+  "format": "t6-retail-reflection-probe-shifted-tangent-basis-normal-v1",
+  "producer": "tools/t6_retail_reflection_probe_shifted_tangent_basis_normal_v1.py",
+  "proofBoundary": "Exhaustive retained-DXBC/RDEF proof for all 24 reflectionProbeSampler fetches whose reflect operands are a MAD-produced normalized vector against normalized TEXCOORD0.xyz. All 24 implement the same NormalMap.x/y tangent-basis surface-normal reconstruction, split evenly between base/tangent semantic pairs TEXCOORD1/TEXCOORD2 and TEXCOORD2/TEXCOORD3. Zero remain unclassified. Physical vertex semantics of those basis interpolators and camera/view semantics of TEXCOORD0 remain separate.",
+  "sources": {
+    "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
+    "tempMadClosure": "manifests/render/T6_RETAIL_REFLECTION_PROBE_TEMP_MAD_TEXCOORD1_CLOSURE_ARCHIVE_V1.json"
+  },
+  "summary": {
+    "baseTangentPatternCounts": {
+      "TEXCOORD1/TEXCOORD2": 12,
+      "TEXCOORD2/TEXCOORD3": 12
+    },
+    "patternRowsSha256": "1cb3e4e917d865164c8bf62aa4be08a1ebfc14d01a2cdc530a6e15f0fd62db56",
+    "shaderRowsSha256": "9ec5ceb39f0e707cf6c90824bd5f9362f00643a18e3de5260effaffe2bdf07ae",
+    "targetFetchCount": 24,
+    "targetShaderCount": 24,
+    "unclassifiedCount": 0,
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
