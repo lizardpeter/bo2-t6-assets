@@ -1,0 +1,144 @@
+name: base-ipak-r2-range-recovery
+
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/base-ipak-r2-range-recovery.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check pillow
+      - name: Range-recover exact base.ipak textures
+        shell: bash
+        run: |
+          mkdir -p recovered_range
+          python - <<'PY'
+          import ctypes, ctypes.util, hashlib, importlib.util, json, struct, urllib.request, zlib
+          from pathlib import Path
+
+          URL='https://r2.houseofkublai.com/bo2/zone/all/base.ipak'
+          OUT=Path('recovered_range')
+          targets=[
+            ('~-gnt_2020_plastic_cream_col',2),
+            ('~-gmetal_chrome_boat_c',2),
+            ('~-gmetal_chrome_col',2),
+            ('~-gnt_wood_fence',2),
+          ]
+
+          spec=importlib.util.spec_from_file_location('t6tex',Path('tools/t6_nuketown_ipak_partial_texture_export_v2.py'))
+          t6=importlib.util.module_from_spec(spec);spec.loader.exec_module(t6)
+
+          def get_range(start,end):
+            req=urllib.request.Request(URL,headers={'Range':f'bytes={start}-{end}','User-Agent':'bo2-t6-assets-range-recovery/1'})
+            with urllib.request.urlopen(req,timeout=120) as r:
+              if r.status != 206:
+                raise RuntimeError(f'Range request not honored: HTTP {r.status}')
+              cr=r.headers.get('Content-Range','')
+              data=r.read()
+            expected=end-start+1
+            if len(data)!=expected:
+              raise RuntimeError(f'range size mismatch {start}-{end}: {len(data)} != {expected}; {cr}')
+            return data,cr
+
+          head,head_cr=get_range(0,65535)
+          magic,ver,declared,sc=struct.unpack_from('<4sIII',head,0)
+          if magic!=b'KAPI' or ver!=0x50000:
+            raise ValueError((magic,hex(ver)))
+          need=16+16*sc
+          if need>len(head):
+            head,_=get_range(0,need-1)
+          sections=[struct.unpack_from('<IIII',head,16+16*i) for i in range(sc)]
+          ds=[s for s in sections if s[0]==2]; ix=[s for s in sections if s[0]==1]
+          if len(ds)!=1 or len(ix)!=1:raise ValueError('expected one data and index section')
+          data_sec=ds[0];_,ioff,isz,icount=ix[0]
+          index_bytes,_=get_range(ioff,ioff+icount*16-1)
+          wanted={t6.r_hash_string(n):(n,s) for n,s in targets}
+          hits={}
+          for i in range(icount):
+            e=struct.unpack_from('<IIII',index_bytes,16*i)
+            if e[1] in wanted:
+              if e[1] in hits:raise ValueError(f'duplicate target nameHash {e[1]:08x}')
+              hits[e[1]]=e
+
+          lib=ctypes.util.find_library('lzo2')
+          if not lib:raise RuntimeError('liblzo2 not found')
+          lzo=ctypes.CDLL(lib).lzo1x_decompress_safe
+          lzo.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t),ctypes.c_void_p]
+          lzo.restype=ctypes.c_int
+          def align(n,a):return (n+a-1)//a*a
+
+          def extract_segment(seg,abs_start,e):
+            data_hash,name_hash,rel_off,raw_size=e
+            abs_pos=abs_start;abs_end=abs_start+raw_size;out=bytearray();blocks=0
+            while abs_pos<abs_end:
+              abs_pos=align(abs_pos,0x80)
+              if abs_pos>=abs_end:break
+              pos=abs_pos-abs_start
+              hdr=seg[pos:pos+128]
+              if len(hdr)!=128:raise ValueError('truncated block header')
+              co=struct.unpack_from('<I',hdr,0)[0];file_off=co&0xffffff;cnt=(co>>24)&0xff
+              if cnt>31:raise ValueError('block command count')
+              cmds=[]
+              for i in range(cnt):
+                w=struct.unpack_from('<I',hdr,4+4*i)[0];cmds.append((w&0xffffff,(w>>24)&0xff))
+              if any(c in (0,1) for _,c in cmds) and file_off!=len(out):
+                raise ValueError(f'block offset mismatch {file_off} != {len(out)}')
+              p=pos+128
+              for sz,comp in cmds:
+                blob=seg[p:p+sz]
+                if len(blob)!=sz:raise ValueError('truncated command')
+                if comp==0:out.extend(blob)
+                elif comp==1:
+                  dst=ctypes.create_string_buffer(0x8000);n=ctypes.c_size_t(0x8000);src=ctypes.create_string_buffer(blob)
+                  rc=lzo(src,len(blob),dst,ctypes.byref(n),None)
+                  if rc!=0:raise ValueError(f'lzo error {rc}')
+                  out.extend(dst.raw[:n.value])
+                else:raise ValueError(f'unsupported compression {comp}')
+                p+=sz
+              abs_pos=abs_start+p;blocks+=1
+              if blocks>10000:raise ValueError('block runaway')
+            result=bytes(out);crc29=zlib.crc32(result)&0x1fffffff
+            if crc29!=data_hash:raise ValueError(f'CRC29 mismatch {crc29:08x}!={data_hash:08x}')
+            return result,blocks
+
+          report={'format':'t6-base-ipak-r2-http-range-recovery-v1','sourceUrl':URL,'declaredSourceBytes':declared,
+                  'headerContentRange':head_cr,'sectionCount':sc,'indexEntryCount':icount,'targets':[],'networkBytes':len(head)+len(index_bytes)}
+          for name,semantic in targets:
+            nh=t6.r_hash_string(name);row={'name':name,'semantic':semantic,'nameHash':nh,'nameHashHex':f'{nh:08x}','found':nh in hits}
+            if nh not in hits:
+              report['targets'].append(row);continue
+            e=hits[nh];abs_start=data_sec[1]+e[2];abs_end=abs_start+e[3]-1
+            seg,cr=get_range(abs_start,abs_end);report['networkBytes']+=len(seg)
+            iwi,blocks=extract_segment(seg,abs_start,e)
+            fmt,flags,w,h,d,gamma,sizes=t6.parse_iwi27(iwi)
+            png,meta=t6.iwi_top_png(iwi,normal_semantic=(semantic==5))
+            safe=name.replace('/','__').replace('~','_tilde_')
+            iwip=OUT/f'{safe}.iwi';pngp=OUT/f'{safe}.png';iwip.write_bytes(iwi);pngp.write_bytes(png)
+            row.update({'dataHash':e[0],'dataHashHex':f'{e[0]:08x}','relativeOffset':e[2],'rawStoredBytes':e[3],
+                        'contentRange':cr,'blockCount':blocks,'iwiBytes':len(iwi),'iwiSha256':hashlib.sha256(iwi).hexdigest(),
+                        'pngBytes':len(png),'pngSha256':hashlib.sha256(png).hexdigest(),'format':fmt,'flags':flags,
+                        'width':w,'height':h,'depth':d,'gamma':gamma,'crc29Validated':True,'iwi27Validated':True,
+                        'iwiFile':iwip.name,'pngFile':pngp.name})
+            report['targets'].append(row)
+          (OUT/'base_ipak_http_range_recovery_report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
+          if not any(r['found'] for r in report['targets']):raise SystemExit('no exact targets found')
+          PY
+      - name: Upload proof payloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-ipak-http-range-recovery
+          path: recovered_range/
+          if-no-files-found: error
+          retention-days: 1
