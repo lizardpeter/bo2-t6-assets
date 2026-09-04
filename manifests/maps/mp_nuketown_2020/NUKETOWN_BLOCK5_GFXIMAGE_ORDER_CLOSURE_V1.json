@@ -1,0 +1,29 @@
+{
+  "format": "t6-nuketown-block5-gfximage-order-closure-v1",
+  "directComponentAnchors": 86,
+  "serializerOrderPromotions": 9,
+  "finalMappedBlock5Pointers": 95,
+  "orderClosureRounds": [
+    {"round": 1, "added": 9, "intervalCount": 4}
+  ],
+  "leaveOneOutValidation": {
+    "singleHidden": {"recoverable": 80, "correct": 80, "wrong": 0},
+    "hiddenRun2": {"recoverable": 77, "correct": 77, "wrong": 0},
+    "hiddenRun3": {"recoverable": 75, "correct": 75, "wrong": 0},
+    "hiddenRun4": {"recoverable": 73, "correct": 73, "wrong": 0},
+    "hiddenRun5": {"recoverable": 71, "correct": 71, "wrong": 0}
+  },
+  "newMappings": [
+    {"block":5,"virtualOffset":71647448,"rawStart":84469556,"image":"~~-gairport_tilefloor_marble_~d8a7d661"},
+    {"block":5,"virtualOffset":71647464,"rawStart":84469687,"image":"airport_tilefloor_marble_nml"},
+    {"block":5,"virtualOffset":71647480,"rawStart":84469808,"image":"~-gairport_tilefloor_marble_col"},
+    {"block":5,"virtualOffset":71647496,"rawStart":84469932,"image":"decal_concrete_clean_line_c"},
+    {"block":5,"virtualOffset":71649436,"rawStart":84472803,"image":"~-gdecal_glue_c"},
+    {"block":5,"virtualOffset":71651404,"rawStart":84475471,"image":"~-gdecal_grunge_mold01_c"},
+    {"block":5,"virtualOffset":71652980,"rawStart":84477787,"image":"ch_concrete02_nml"},
+    {"block":5,"virtualOffset":71653012,"rawStart":84477897,"image":"~~-gch_concrete02_col-rgb&~-r~57cd62ad"},
+    {"block":5,"virtualOffset":71665580,"rawStart":84496302,"image":"~~-gpalstic_floor_tiles_indus~92ef1204"}
+  ],
+  "rule": "Within two already-proven block-5 GfxImage anchors, promote only when the number of unmatched packed GfxImage virtual offsets equals the number of unmatched inline GfxImage definitions in the corresponding raw interval. Pair strictly by monotonic serializer order. Any count mismatch fails closed.",
+  "proofBoundary": "This proof does not infer identities from name similarity, pointer distance, or raw-offset interpolation. It depends only on exact direct anchors, retained serializer order, and exact unmatched-count equality."
+}
