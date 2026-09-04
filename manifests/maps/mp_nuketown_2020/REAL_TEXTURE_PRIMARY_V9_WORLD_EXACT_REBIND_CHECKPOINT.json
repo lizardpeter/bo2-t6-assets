@@ -1,0 +1,80 @@
+{
+  "format": "t6-nuketown-real-texture-primary-v9-world-exact-rebind-checkpoint",
+  "date": "2026-09-04",
+  "map": "mp_nuketown_2020",
+  "tool": {
+    "path": "tools/t6_nuketown_world_texture_exact_rebind_v1.py",
+    "commit": "7ee320f6542ce00ca50d50769a62c746e9090021",
+    "localSha256": "e7d8b894b56c108f3aed99a30ee46d8ae18a311cfb3cb8ecd1676e0f941d2fb5"
+  },
+  "inputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v8.glb",
+    "bytes": 109412028,
+    "sha256": "76e19401e4f80872a847a51c962c35667922600cd4fe673f9f6c2baed8c8d50e"
+  },
+  "outputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v9.glb",
+    "bytes": 137711124,
+    "sha256": "c9e09d19b5f5c7db0616635db424a74b965ab3569a2fd653c333a0688e01eb5c"
+  },
+  "fullRunManifest": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v9_MANIFEST.json",
+    "sha256": "998a58f2b44c21d8219c448ac5aae96f7f3aa753ab2022ae8ba2a90872a2b7f5"
+  },
+  "inputs": {
+    "worldMaterialCatalog": {
+      "file": "NUKETOWN_327_MATERIALS_V1.json",
+      "sha256": "a606c095895a481ae6cef1bfdde0281bbc4e030ca1113e4fe1e3a1a3d2b6fd13"
+    },
+    "staticMaterialCatalog": {
+      "file": "NUKETOWN_STATIC_XMODEL_MATERIAL_CATALOG_V1.json",
+      "sha256": "3d812e1f59a56f1d6bba0bcc84de636abce678a52b12a6e78dc412286c074f08"
+    },
+    "block5OrderMap": {
+      "file": "NUKETOWN_BLOCK5_GFXIMAGE_ORDER_MAP_V1.json",
+      "sha256": "05afc08cceafdec46976ab619be058086db9ee737cbeb699cd27deab9e2b584c"
+    },
+    "mapIpak": {
+      "file": "mp_nuketown_2020.ipak",
+      "bytes": 165543936,
+      "sha256": "53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031"
+    }
+  },
+  "identityResolution": {
+    "packedPointerAnchors": 95,
+    "uniqueNamedGfxImageIdentities": 969,
+    "ambiguousNamedImageIdentities": 0,
+    "newExactPayloadsEmbedded": 84
+  },
+  "worldMaterialResult": {
+    "color": {
+      "exactContentBound": 73,
+      "previewRetainedUnverified": 38,
+      "packedUnresolved": 87,
+      "identityKnownNoLocalPayload": 93
+    },
+    "normal": {
+      "exactContentBound": 124,
+      "previewRetainedUnverified": 4,
+      "packedUnresolved": 78,
+      "identityKnownNoLocalPayload": 74,
+      "semanticAbsent": 11
+    }
+  },
+  "validation": {
+    "glbMaterialCount": 639,
+    "baseColorTextureMaterialCount": 248,
+    "normalTextureMaterialCount": 301,
+    "embeddedImageCount": 422,
+    "embeddedImageSignatureAndRangeValidation": "422/422 pass",
+    "bufferByteLength": "pass"
+  },
+  "importantCorrection": "The older GfxWorld preview path used image-name hash as sufficient IPAK identity and could retain same-name wrong-data variants. v9 rebinds exact content only when the retained GfxImage identity closes to the exact two-hash IPAK key, or to one unique same-dataHash payload with matching CRC and dimensions. Where exact bytes are not locally available, the old user-facing preview may remain but is explicitly marked unverified and is not counted as solved.",
+  "proofBoundary": "Exact and preview texture states are intentionally distinct. A visually present legacy texture is not promoted to retail-exact merely because its name resembles the expected GfxImage.",
+  "next": [
+    "locate or reconstruct shared IPAK containers for identity-known/no-local-payload materials",
+    "resolve the remaining packed first-color and first-normal GfxImage identities",
+    "remove or replace preview-unverified bindings as exact payload coverage increases",
+    "then integrate layered/decal composition and exact lightmap/reflection rendering"
+  ]
+}
