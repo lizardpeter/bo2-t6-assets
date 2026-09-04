@@ -1,0 +1,39 @@
+name: Reflection closure regressions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/t6_retail_reflection_probe_*'
+      - 'manifests/render/T6_RETAIL_REFLECTION_PROBE_CLOSURE_LEDGER_V2.json'
+      - '.github/workflows/reflection-closure-regressions.yml'
+  workflow_dispatch:
+
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile closure tools
+        run: |
+          python -m py_compile \
+            tools/t6_retail_reflection_probe_temp_component_normal_v1.py \
+            tools/t6_retail_reflection_probe_sphere_elec_packed_ps_probe_v2.py \
+            tools/t6_retail_reflection_probe_sphere_elec_paired_vs_probe_v2.py \
+            tools/t6_retail_reflection_probe_sphere_elec_tc2_tc0_physical_closure_v2.py \
+            tools/t6_retail_reflection_probe_residual_target_census_v1.py \
+            tools/t6_retail_reflection_probe_texcoord2_texcoord1_broad_v2.py \
+            tools/t6_retail_reflection_probe_residual_packed_ps_extension_v2.py \
+            tools/t6_retail_reflection_probe_residual_packed_ps_differential_v2.py \
+            tools/t6_retail_reflection_probe_final_closure_driver_v4.py
+      - name: Run corpus-free regressions
+        run: |
+          python tools/test_t6_retail_reflection_probe_temp_component_normal_v1.py
+          python tools/test_t6_retail_reflection_probe_residual_packed_ps_extension_v1.py
+          python tools/test_t6_retail_reflection_probe_residual_packed_ps_differential_v1.py
+          python tools/test_t6_retail_reflection_probe_final_closure_driver_v1.py
+          python tools/test_t6_retail_reflection_probe_final_closure_correction_v2.py
+          python tools/test_t6_retail_reflection_probe_final_closure_driver_v4.py
