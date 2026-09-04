@@ -1,0 +1,39 @@
+name: oat-nuketown-xasset-order
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-xasset-order.yml]
+permissions:
+  contents: read
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact FF and OAT
+        run: |
+          python -m pip install --disable-pip-version-check gdown
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat && tar -xzf oat-linux.tar.gz -C oat && chmod +x oat/Unlinker
+      - name: List exact top-level assets
+        run: |
+          oat/Unlinker --no-color --list mp_nuketown_2020.ff | tee xasset-list.txt
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('xasset-list.txt').read_text(errors='replace').splitlines()
+          # Retain raw listing; print context around known proof names for calibration.
+          names=['nt_2020_air_vent','dest_nt_nuked_male_01_d0','nt_2020_flag_nuclear_01','nt_2020_flag_nuclear_02','dest_nt_nuked_female_02_d0','dest_nt_nuked_female_03_d0','fxanim_mp_nuked2025_sprinkler_track_mod']
+          for n in names:
+            hits=[(i,l) for i,l in enumerate(t) if n in l]
+            print(n,hits[:5])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-xasset-order
+          path: xasset-list.txt
+          retention-days: 1
