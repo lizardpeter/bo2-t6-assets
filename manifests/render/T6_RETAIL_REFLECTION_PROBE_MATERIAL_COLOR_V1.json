@@ -1,0 +1,186 @@
+{
+  "directSampleSSources": [
+    {
+      "channels": "xyz",
+      "count": 140,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 2
+    },
+    {
+      "channels": "xyz",
+      "count": 40,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 3
+    },
+    {
+      "channels": "xyz",
+      "count": 40,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 4
+    },
+    {
+      "channels": "xyz",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss",
+      "resourceRegister": 6
+    },
+    {
+      "channels": "xyz",
+      "count": 60,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularAndGloss2",
+      "resourceRegister": 2
+    },
+    {
+      "channels": "xyz",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "SpecularGlossMap",
+      "resourceRegister": 1
+    },
+    {
+      "channels": "xyz",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "Specular_Color_Map",
+      "resourceRegister": 3
+    },
+    {
+      "channels": "xyz",
+      "count": 440,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 1
+    },
+    {
+      "channels": "xyz",
+      "count": 1008,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 2
+    },
+    {
+      "channels": "xyz",
+      "count": 86,
+      "opcode": "SAMPLE",
+      "resourceName": "specularMapSampler",
+      "resourceRegister": 3
+    },
+    {
+      "channels": "xyz",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "specular_map",
+      "resourceRegister": 1
+    },
+    {
+      "channels": "xyz",
+      "count": 20,
+      "opcode": "SAMPLE",
+      "resourceName": "specular_map",
+      "resourceRegister": 4
+    }
+  ],
+  "equation": {
+    "downstreamFromPriorProof": "reflectionFactor.rgb = saturate(P.rgb * (Qw - F) + F)",
+    "immediateFamilyBits": "3d23d70a",
+    "immediateFamilyValue": "~0.04",
+    "squaredFamily": "P.rgb = S.rgb * S.rgb"
+  },
+  "format": "t6-retail-reflection-probe-material-color-v1",
+  "mapCoverage": [
+    {
+      "map": "mp_nuketown_2020",
+      "reflectionProbeShaderCount": 1285,
+      "validDxbcCount": 1972
+    },
+    {
+      "map": "mp_raid",
+      "reflectionProbeShaderCount": 2063,
+      "validDxbcCount": 3064
+    },
+    {
+      "map": "mp_hijacked",
+      "reflectionProbeShaderCount": 1722,
+      "validDxbcCount": 2299
+    },
+    {
+      "map": "zm_prison",
+      "reflectionProbeShaderCount": 3158,
+      "validDxbcCount": 3920
+    },
+    {
+      "map": "zm_tomb",
+      "reflectionProbeShaderCount": 1979,
+      "validDxbcCount": 2839
+    }
+  ],
+  "producer": "tools/t6_retail_reflection_probe_material_color_v1.py",
+  "proofBoundary": "Direct retained-SM4 writer/component-identity proof for the Q-independent P operand in all 4,236 members of the separately proven LOD=4-4*x shared-parameter reflection family. Exactly 4,216 P values are produced by an RGB MUL whose two operands resolve lane-by-lane to the identical source value S, proving P.rgb=S.rgb*S.rgb. The remaining 20 are the exact immediate scalar 0x3d23d70a (~0.04). S first-writer classes and direct reflected texture names are counted exactly. This proof does not claim that the square is gamma/sRGB decoding, does not assign one universal physical semantic to derived S, and does not reconstruct original HLSL.",
+  "sFirstWriterCounts": [
+    {
+      "count": 40,
+      "firstWriter": "CB"
+    },
+    {
+      "count": 1750,
+      "firstWriter": "MAD"
+    },
+    {
+      "count": 132,
+      "firstWriter": "MOVC"
+    },
+    {
+      "count": 380,
+      "firstWriter": "MUL"
+    },
+    {
+      "count": 1914,
+      "firstWriter": "SAMPLE"
+    }
+  ],
+  "sources": {
+    "angularProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_ANGULAR_V1.json",
+    "expandedRetailMaps": {
+      "mp_hijacked": {
+        "file": "mp/mp_hijacked.expanded.bin",
+        "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"
+      },
+      "mp_nuketown_2020": {
+        "file": "mp/mp_nuketown_2020.expanded.bin",
+        "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+      },
+      "mp_raid": {
+        "file": "mp/mp_raid.expanded.bin",
+        "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"
+      },
+      "zm_prison": {
+        "file": "zm_prison.expanded.bin",
+        "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"
+      },
+      "zm_tomb": {
+        "file": "zm_tomb.expanded.bin",
+        "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"
+      }
+    },
+    "sharedParameterProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_SHARED_PARAMETER_V1.json"
+  },
+  "summary": {
+    "directSRowsSha256": "52c3b534c400d09afc773c5efcb6458ccd5f9dccc6c1dd5dd22af3a9b51e4a1e",
+    "directSampleSCount": 1914,
+    "immediateMaterialColorBits": "3d23d70a",
+    "immediateMaterialColorFetchCount": 20,
+    "materialColorSquareFailureCount": 0,
+    "retainedMapCount": 5,
+    "sFirstWriterCount": 4216,
+    "sFirstWriterRowsSha256": "dba9b35ea1092680fa3d1b84a13fd594286e72e547d6855f08947c4bfd3faad5",
+    "shaderRowsSha256": "4c0301cdeec58ce83e83f0e89e8d44d8f5a95e75d195e8c263f6cb45f26a2f42",
+    "sharedParameterFetchCount": 4236,
+    "squaredMaterialColorFetchCount": 4216,
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
