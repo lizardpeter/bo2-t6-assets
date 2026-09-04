@@ -1,0 +1,75 @@
+name: oat-nuketown-static-placement-dump-fast
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-static-placement-dump-fast.yml]
+permissions:
+  contents: read
+jobs:
+  dump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib make git wget python3-pip
+      - name: Clone and patch OpenAssetTools v0.33.0
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat
+          mkdir -p oat/src/ObjWriting/Game/T6/GfxWorldStaticPlacement
+          cp tools/t6_gfxworld_static_placement_oat_patch/GfxWorldStaticPlacementDumperT6.* oat/src/ObjWriting/Game/T6/GfxWorldStaticPlacement/
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('oat/src/ObjWriting/Game/T6/ObjWriterT6.cpp'); s=p.read_text()
+          anchor='#include "Game/T6/XModel/XModelDumperT6.h"\n'
+          inc='#include "GfxWorldStaticPlacement/GfxWorldStaticPlacementDumperT6.h"\n'
+          if inc not in s:
+              if anchor not in s: raise SystemExit('include anchor missing')
+              s=s.replace(anchor,anchor+inc)
+          old='    // REGISTER_DUMPER(AssetDumperGfxWorld, m_gfx_world)'
+          new='    RegisterAssetDumper(std::make_unique<gfx_world_static_placement::DumperT6>());'
+          if new not in s:
+              if old not in s: raise SystemExit('registration anchor missing')
+              s=s.replace(old,new)
+          p.write_text(s)
+          PY
+      - name: Build patched Unlinker only
+        run: |
+          cd oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j$(nproc) config=release_x86 Unlinker
+          test -x build/bin/Release_x86/Unlinker
+      - name: Fetch exact Nuketown FF
+        run: |
+          python3 -m pip install --break-system-packages --disable-pip-version-check gdown
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = 38472064
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+      - name: Dump and validate exact GfxWorld placements
+        run: |
+          mkdir -p placement_out
+          oat/build/bin/Release_x86/Unlinker --no-color --verbose --include-assets gfxworld --output-folder placement_out mp_nuketown_2020.ff | tee placement-run.log
+          test -f placement_out/gfxworld_static_placements/mp_nuketown_2020.json
+          python3 - <<'PY'
+          import hashlib,json,math
+          from collections import Counter
+          from pathlib import Path
+          p=Path('placement_out/gfxworld_static_placements/mp_nuketown_2020.json'); d=json.loads(p.read_text()); r=d['placements']
+          assert len(r)==d['smodelCount'] and all(x['model'] for x in r)
+          vals=lambda x:x['origin']+[x['scale'],x['cullDist']]+sum(x['axis'],[])+x['mins']+x['maxs']+x['lightingOrigin']
+          assert all(math.isfinite(v) for x in r for v in vals(x))
+          c=Counter(x['model'] for x in r); xs=[x['origin'][0] for x in r]; ys=[x['origin'][1] for x in r]; zs=[x['origin'][2] for x in r]
+          s={'format':'t6-nuketown-gfxworld-static-placement-dump-v1','sourceFf':{'bytes':38472064,'sha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'},'oatVersion':'v0.33.0','smodelCount':len(r),'uniqueModelCount':len(c),'originBounds':{'min':[min(xs),min(ys),min(zs)],'max':[max(xs),max(ys),max(zs)]},'topModels':c.most_common(50),'catalog':{'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()},'validation':{'rowCountMatches':True,'allNamed':True,'allFinite':True}}
+          Path('placement_out/GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json').write_text(json.dumps(s,indent=2,sort_keys=True)+'\n'); print(json.dumps(s,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-gfxworld-static-placement-fast-v1
+          path: |
+            placement_out/gfxworld_static_placements/mp_nuketown_2020.json
+            placement_out/GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json
+            placement-run.log
+          retention-days: 1
