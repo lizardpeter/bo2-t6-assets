@@ -79,6 +79,11 @@ class IPak:
                     rc=self.lzo(src,len(blob),dst,ctypes.byref(n),None)
                     if rc!=0: raise ValueError(f'lzo error {rc}')
                     out.extend(dst.raw[:n.value])
+                elif comp==0xCF:
+                    # Retail T6 padding/skip command: consume stored bytes but emit no output.
+                    pass
+                else:
+                    raise ValueError(f'unsupported IPAK compression command {comp:#x}')
                 p+=sz
             pos=p; blocks+=1
             if blocks>10000: raise ValueError('block runaway')
@@ -241,22 +246,21 @@ def build(glb:Path,materials_json:Path,ipak_path:Path,out:Path,manifest_path:Pat
             if not ent: continue
             try:
                 tex_idx,key,meta,e=embed_image(iname,semantic,t.get('samplerState'))
-            except (NotImplementedError,ValueError) as ex:
-                failures.append({'materialIndex':mi,'material':name,'image':iname,'semantic':semantic,'reason':str(ex)}); continue
-            pbr=gmat.setdefault('pbrMetallicRoughness',{})
+            except Exception as ex:
+                failures.append({'material':name,'kind':kind,'image':iname,'error':type(ex).__name__+': '+str(ex)}); continue
             if kind=='color':
-                pbr['baseColorFactor']=[1,1,1,1]; pbr['metallicFactor']=0; pbr['roughnessFactor']=1; pbr['baseColorTexture']={'index':tex_idx,'texCoord':0}; color_bound+=1
+                gmat.setdefault('pbrMetallicRoughness',{})['baseColorTexture']={'index':tex_idx,'texCoord':0}; color_bound+=1
             else:
                 gmat['normalTexture']={'index':tex_idx,'texCoord':0,'scale':1.0}; normal_bound+=1
             gmat.setdefault('extras',{}).setdefault('T6',{}).setdefault('realTextureBindings',[]).append({'kind':kind,'image':iname,'semantic':semantic,'samplerState':t.get('samplerState'),'sourceContainer':'mp_nuketown_2020.ipak'})
-            matrow[kind]={'image':iname,'nameHash':r_hash_string(iname),'dataHash':ent[0],'textureIndex':tex_idx,'pngSha256':key,**meta}
-        if len(matrow)>2: rows.append(matrow)
-    js.setdefault('extras',{}).setdefault('T6',{})['realTexturePartialV2']={'colorMaterialBindings':color_bound,'normalMaterialBindings':normal_bound,'uniqueEmbeddedImages':len(png_cache),'sourceIpak':ipak_path.name,'sourceMaterialCatalog':materials_json.name,'proofBoundary':'Exact first semantic colorMap/normalMap only when the first retained texture-table entry for that semantic is an inline named GfxImage present in the map-specific IPAK. BC1/BC3 color and BC5/DXN normal top mips are decoded. Missing shared-IPAK images, later layered/decal composition, lightmaps, reflections, and static-XModel material images remain explicit.'}
+            matrow[kind]={'image':iname,'textureIndex':tex_idx,'pngSha256':key,'iwiSha256':sha256(ipak.extract(iname)[0]),'format':meta['format'],'width':meta['width'],'height':meta['height'],'dataHash':e[0],'nameHash':e[1]}
+        if len(matrow)>2 or 'color' in matrow or 'normal' in matrow: rows.append(matrow)
+    js.setdefault('extras',{}).setdefault('T6',{})['realTextureExport']={'source':'mp_nuketown_2020.ipak','materialCatalog':materials_json.name,'boundColorMaterials':color_bound,'boundNormalMaterials':normal_bound,'uniqueEmbeddedTextures':len(png_cache),'proofBoundary':'First semantic-2/5 texture entry only. Exact inline GfxImage name must hash to an IPAK index entry; extracted IWI is CRC29 validated against that entry and decoded only for measured IWI27 BC formats.'}
     write_glb(out,js,binbuf)
-    manifest={'format':'t6-nuketown-ipak-partial-real-texture-export-v2','inputGlb':{'file':glb.name,'sha256':sha256(glb.read_bytes()),'bytes':glb.stat().st_size},'materialCatalog':{'file':materials_json.name,'sha256':sha256(materials_json.read_bytes()),'materialCount':len(mats)},'ipak':{'file':ipak_path.name,'sha256':sha256(ipak_path.read_bytes()),'bytes':ipak_path.stat().st_size,'indexEntries':len(ipak.by_name)},'outputGlb':{'file':out.name,'sha256':sha256(out.read_bytes()),'bytes':out.stat().st_size},'summary':{'colorBoundMaterials':color_bound,'normalBoundMaterials':normal_bound,'uniqueEmbeddedImages':len(png_cache),'failures':len(failures),'retainedWorldMaterialsInCatalog':sum(1 for m in js['materials'] if m.get('name') in by_name)},'bindings':rows,'failures':failures,'proofBoundary':'Real image-backed partial export. Bound images are selected by exact retained Material/GfxImage semantics and exact material identity; extracted from the exact map-specific IPAK by T6 R_HashString; block/LZO decoded; CRC-validated against the IPAK index; parsed as IWI27; BC1/BC3 colors and BC5/DXN normals decoded at the highest-resolution mip; embedded as PNG; then bound only to TEXCOORD_0 as a conservative first-layer preview. No later layer is substituted when the first semantic entry is unresolved.'}
+    manifest={'format':'t6-nuketown-real-texture-export-v2','input':{'glb':glb.name,'glbSha256':hashlib.sha256(glb.read_bytes()).hexdigest(),'materials':materials_json.name,'materialsSha256':hashlib.sha256(materials_json.read_bytes()).hexdigest(),'ipak':ipak_path.name,'ipakSha256':hashlib.sha256(ipak_path.read_bytes()).hexdigest()},'output':{'glb':out.name,'bytes':out.stat().st_size,'sha256':hashlib.sha256(out.read_bytes()).hexdigest()},'summary':{'boundColorMaterials':color_bound,'boundNormalMaterials':normal_bound,'uniqueEmbeddedTextures':len(png_cache),'failedExtractions':len(failures)},'materials':rows,'failures':failures,'proofBoundary':'Image bindings come only from exact retail Material first-semantic entries, exact GfxImage names, exact T6 name hashes, IPAK decompression with CRC29 validation, IWI27 parsing and BC1/BC3/BC5 decode. No filename-nearest matching, generated color guessing or placeholder textures are introduced.'}
     manifest_path.write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
     return manifest
 
 def main():
-    a=argparse.ArgumentParser(); a.add_argument('--glb',type=Path,required=True);a.add_argument('--materials',type=Path,required=True);a.add_argument('--ipak',type=Path,required=True);a.add_argument('--out',type=Path,required=True);a.add_argument('--manifest',type=Path,required=True);q=a.parse_args();m=build(q.glb,q.materials,q.ipak,q.out,q.manifest);print(json.dumps(m['summary'],indent=2));print(m['outputGlb'])
+    p=argparse.ArgumentParser();p.add_argument('--glb',type=Path,required=True);p.add_argument('--materials',type=Path,required=True);p.add_argument('--ipak',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--manifest',type=Path,required=True);a=p.parse_args();m=build(a.glb,a.materials,a.ipak,a.out,a.manifest);print(json.dumps(m['summary'],indent=2));print(json.dumps(m['output'],indent=2))
 if __name__=='__main__':main()
