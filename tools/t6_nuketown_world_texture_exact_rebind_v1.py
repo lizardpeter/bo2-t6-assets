@@ -1,186 +1,158 @@
 #!/usr/bin/env python3
-"""Rebind Nuketown GfxWorld first color/normal textures with exact T6 image identity.
+"""Rebind Nuketown GfxWorld first-layer textures using exact retail IPAK identity.
 
-This stage corrects the older name-hash-only preview path. For each retained
-world material it resolves the first color/normal image from an inline GfxImage
-or an already-proven packed-pointer alias. Streamed IPAK payloads are promoted
-as exact only when the retained image identity is uniquely known and the payload
-is found by exact (nameHash,dataHash) key, or by a unique dataHash alias with
-matching CRC and dimensions. $identitynormalmap is admitted only through the
-already-proven FastFile loader-address identity. If the exact payload is absent,
-an existing preview binding may remain for user-facing visibility but is marked
-explicitly as unverified rather than counted as solved.
+Exact streamed payloads require the T6 key pair (GfxImage.hash,
+GfxImage.streamedParts[0].hash).  A unique data-hash-only alias is admitted as
+exact-content evidence only after CRC and dimension validation.  Missing or
+unresolved payloads retain the prior preview binding but are explicitly marked
+unverified; they are not counted as exact.
 """
 from __future__ import annotations
 import argparse, collections, hashlib, importlib.util, json, struct
 from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
-STATIC=HERE/'t6_nuketown_static_xmodel_texture_apply_v2.py'
-spec=importlib.util.spec_from_file_location('statictex',STATIC)
-st=importlib.util.module_from_spec(spec);spec.loader.exec_module(st)
-base=st.base
-SEMANTICS=((2,'color'),(5,'normal'))
-IDENTITY_BLOCK=5;IDENTITY_OFFSET=514620;IDENTITY_NAME='$identitynormalmap'
+SBASE=HERE/'t6_nuketown_static_xmodel_texture_apply_v2.py'
+spec=importlib.util.spec_from_file_location('staticv2',SBASE);sv=importlib.util.module_from_spec(spec);spec.loader.exec_module(sv)
+base=sv.base
+IDENTITY=(5,514620);IDENTITY_NAME='$identitynormalmap'
 
-def sha_file(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+def first_sem(m,sem): return next((t for t in m.get('textures',[]) if t.get('semantic')==sem),None)
+def pkey(im):
+    p=(im or {}).get('pointer') or {}
+    if not (im or {}).get('inline') and p.get('kind')=='offset': return (p.get('block'),p.get('offset'))
+    return None
 
-def generated_components(name):
+def compounds(name):
     if not name.startswith('*') or '(' not in name or not name.endswith(')'):return None
     return name[name.find('(')+1:-1].split(':')
 
-def packed_key(im):
-    p=(im or {}).get('pointer') or {}
-    if not (im or {}).get('inline') and p.get('kind')=='offset':return (p.get('block'),p.get('offset'))
-    return None
-
-def build_component_anchors(mats):
-    by={m['name']:m for m in mats};anchors={};conflicts=[];aligned=0
-    for m in mats:
-        cs=generated_components(m['name'])
-        if not cs or not all(c in by for c in cs):continue
+def build_anchors(world):
+    wb={m['name']:m for m in world};anchors={};conf=[]
+    for m in world:
+        cs=compounds(m['name'])
+        if not cs or not all(c in wb for c in cs):continue
         for sem in sorted({t.get('semantic') for t in m.get('textures',[])}):
-            g=[t for t in m.get('textures',[]) if t.get('semantic')==sem];c=[]
-            for n in cs:c.extend(t for t in by[n].get('textures',[]) if t.get('semantic')==sem)
-            if len(g)!=len(c):continue
-            aligned+=len(g)
-            for a,b in zip(g,c):
-                for src,dst in ((a,b),(b,a)):
-                    si=src.get('image') or {};di=dst.get('image') or {};k=packed_key(si)
-                    n=di.get('name') if di.get('inline') else None
-                    if k is None or not n:continue
-                    old=anchors.get(k)
-                    if old is not None and old!=n:conflicts.append((k,old,n))
+            gen=[t for t in m.get('textures',[]) if t.get('semantic')==sem];cc=[]
+            for c in cs:cc.extend(t for t in wb[c].get('textures',[]) if t.get('semantic')==sem)
+            if len(gen)!=len(cc):continue
+            for g,e in zip(gen,cc):
+                for a,b in ((g,e),(e,g)):
+                    ai=a.get('image') or {};bi=b.get('image') or {};k=pkey(ai);n=bi.get('name') if bi.get('inline') else None
+                    if not k or not n:continue
+                    if k in anchors and anchors[k]!=n:conf.append((k,anchors[k],n))
                     else:anchors[k]=n
-    if conflicts:raise ValueError(f'component anchor conflicts {conflicts[:3]}')
-    return anchors,aligned
+    if conf:raise ValueError(f'component anchor conflicts: {conf[:3]}')
+    return anchors
 
-def load_order_map(path):
-    d=json.loads(path.read_text());out={}
-    for r in d.get('promotions',[]):
-        k=(r['block'],r['virtualOffset']);n=r['image']
-        if k in out and out[k]!=n:raise ValueError('order-map conflict')
-        out[k]=n
-    return out
-
-def global_image_identities(world_mats,static_doc):
-    ids=collections.defaultdict(set)
+def global_image_meta(stream,world,static):
+    meta=collections.defaultdict(set)
     def add(im):
-        if not (im or {}).get('inline') or not im.get('name'):return
-        dh=im.get('streamedPart0Hash29');nh=im.get('hash')
-        dims=(im.get('width'),im.get('height'),im.get('depth'))
-        ids[im['name']].add((nh,dh,dims))
-    for m in world_mats:
+        if not(im.get('inline') and im.get('name') and im.get('streaming') and im.get('streamedPartCount')):return
+        s=im.get('start')
+        dh=(struct.unpack_from('<I',stream,s+40)[0]&0x1fffffff) if s is not None else im.get('streamedPart0Hash29')
+        meta[im['name']].add((im.get('hash'),dh,(im.get('width'),im.get('height'),im.get('depth'))))
+    for m in world:
         for t in m.get('textures',[]):add(t.get('image') or {})
-    for m in static_doc.get('materials',[]):
-        for t in m.get('textures',[]):add(t.get('image') or {})
-    amb={n:sorted(v,key=str) for n,v in ids.items() if len(v)>1}
-    if amb:raise ValueError(f'ambiguous GfxImage identities: {list(amb.items())[:3]}')
-    return {n:next(iter(v)) for n,v in ids.items() if v}
+    for m in static:
+        if m.get('status')=='located':
+            for t in m.get('textures',[]):add(t.get('image') or {})
+    bad={n:v for n,v in meta.items() if len(v)>1}
+    if bad:raise ValueError(f'ambiguous global image identities: {list(bad.items())[:3]}')
+    return {n:next(iter(v)) for n,v in meta.items()}
 
-def first_sem(m,sem):return next((t for t in m.get('textures',[]) if t.get('semantic')==sem),None)
-
-def resolve_image(t,anchors,order_map,ids):
-    if not t:return None,'semantic-absent'
-    im=t.get('image') or {}
-    if im.get('inline') and im.get('name'):return im,'inline'
-    k=packed_key(im)
-    if not k:return None,'unresolved'
-    if k==(IDENTITY_BLOCK,IDENTITY_OFFSET):return {'name':IDENTITY_NAME,'identityNormal':True},'identitynormal'
-    n=anchors.get(k) or order_map.get(k)
-    if not n:return None,'packed-unresolved'
-    ident=ids.get(n)
-    if not ident:return None,'packed-name-no-identity'
-    nh,dh,dims=ident
-    return {'name':n,'hash':nh,'streamedPart0Hash29':dh,'width':dims[0],'height':dims[1],'depth':dims[2],'inline':False,'resolvedPackedPointer':{'block':k[0],'offset':k[1]}},'packed-anchor'
-
-def existing_identity_texture(js):
+def exact_existing_texture(js,name,dh):
     found=[]
     for ti,t in enumerate(js.get('textures',[])):
-        if t.get('name')!=IDENTITY_NAME:continue
+        if t.get('name')!=name:continue
         si=t.get('source')
         if not isinstance(si,int) or si>=len(js.get('images',[])):continue
         ex=((js['images'][si].get('extras') or {}).get('T6') or {})
-        if ex.get('identityResolution')=='loader-address-proof' and ex.get('block')==IDENTITY_BLOCK and ex.get('virtualOffset')==IDENTITY_OFFSET:found.append(ti)
-    if len(found)!=1:raise ValueError(f'identity texture count {found}')
+        if ex.get('ipakDataHash')==dh or ex.get('expectedStreamedDataHash')==dh or ex.get('streamedPartHash29')==dh:
+            found.append(ti)
+    return found[0] if found else None
+
+def identity_texture(js):
+    found=[]
+    for ti,t in enumerate(js.get('textures',[])):
+        if t.get('name')!=IDENTITY_NAME:continue
+        si=t.get('source');ex=((js['images'][si].get('extras') or {}).get('T6') or {}) if isinstance(si,int) and si<len(js.get('images',[])) else {}
+        if ex.get('identityResolution')=='loader-address-proof' and ex.get('block')==5 and ex.get('virtualOffset')==514620:found.append(ti)
+    if len(found)!=1:raise ValueError(f'expected one proven identity texture, got {found}')
     return found[0]
 
-def current_binding(g,kind):
-    if kind=='color':return (g.get('pbrMetallicRoughness') or {}).get('baseColorTexture')
-    return g.get('normalTexture')
-
-def bind(g,kind,ti):
-    if kind=='color':
-        p=g.setdefault('pbrMetallicRoughness',{});p['baseColorTexture']={'index':ti,'texCoord':0};p['baseColorFactor']=[1,1,1,1]
-    else:g['normalTexture']={'index':ti,'texCoord':0,'scale':1.0}
-
-def build(glb,world_path,static_path,order_path,ipak_path,out,manifest):
-    world=json.loads(world_path.read_text())['materials'];by={m['name']:m for m in world};static_doc=json.loads(static_path.read_text())
-    anchors,aligned=build_component_anchors(world);order=load_order_map(order_path);anchors.update({k:v for k,v in order.items() if k not in anchors})
-    ids=global_image_identities(world,static_doc)
-    js,binbuf=base.read_glb(glb);data,data_sec,by_pair,by_name,by_data,lzo=st.read_ipak(ipak_path);identity_ti=existing_identity_texture(js)
-    cache={};stats=collections.Counter();rows=[]
-    # Helpers copied from static stage's exact decode/write path.
-    images=js.setdefault('images',[]);textures=js.setdefault('textures',[]);samplers=js.setdefault('samplers',[]);bvs=js.setdefault('bufferViews',[]);sampler_cache={}
+def build(glb,world_path,static_path,order_path,stream_path,ipak_path,out,manifest):
+    world=json.loads(world_path.read_text())['materials'];wb={m['name']:m for m in world};static=json.loads(static_path.read_text())['materials'];stream=stream_path.read_bytes()
+    anchors=build_anchors(world)
+    order=json.loads(order_path.read_text())
+    for k,v in order.items():
+        key=(5,int(k));name=v['image']
+        if key in anchors and anchors[key]!=name:raise ValueError(f'order/component conflict {key}')
+        anchors[key]=name
+    meta=global_image_meta(stream,world,static)
+    js,binbuf=base.read_glb(glb);identity_ti=identity_texture(js)
+    data,data_sec,by_pair,by_name,by_data,lzo=sv.read_ipak(ipak_path)
+    images=js.setdefault('images',[]);textures=js.setdefault('textures',[]);samplers=js.setdefault('samplers',[]);bvs=js.setdefault('bufferViews',[])
+    cache={};sampler_cache={};rows=[];counts=collections.Counter();new_payloads=0
     def sampler_for(flags):
         key=(bool(flags&0x40),bool(flags&0x80))
         if key in sampler_cache:return sampler_cache[key]
         samplers.append({'magFilter':9729,'minFilter':9987,'wrapS':33071 if key[0] else 10497,'wrapT':33071 if key[1] else 10497});sampler_cache[key]=len(samplers)-1;return sampler_cache[key]
-    def add_payload(name,im,e,resolution):
-        key=(name,e[0])
-        if key in cache:return cache[key],resolution+'-reuse'
-        iwi=st.extract_entry(data,data_sec,e,lzo);fmt,flags,w,h,d,gamma,sizes=base.parse_iwi27(iwi)
-        if (w,h,d)!=(im['width'],im['height'],im['depth']):raise ValueError(f'{name}: dimensions {(w,h,d)} != {(im["width"],im["height"],im["depth"])}')
-        png,meta=st.iwi_top_png(iwi,normal_semantic=False)
-        # normal callers re-decode below because BC5 needs reconstructed Z
+    def resolve(m,sem):
+        t=first_sem(m,sem)
+        if not t:return {'state':'semantic-absent','texture':None}
+        im=t.get('image') or {}
+        if im.get('inline') and im.get('name'):
+            s=im['start'];return {'state':'identity-known','texture':t,'name':im['name'],'nh':im['hash'],'dh':struct.unpack_from('<I',stream,s+40)[0]&0x1fffffff,'dims':(im['width'],im['height'],im['depth']),'sourceKind':'inline'}
+        k=pkey(im)
+        if sem==5 and k==IDENTITY:return {'state':'identitynormal','texture':t,'name':IDENTITY_NAME,'ptr':k}
+        name=anchors.get(k)
+        if not name:return {'state':'packed-unresolved','texture':t,'ptr':k}
+        ident=meta.get(name)
+        if not ident:return {'state':'anchor-name-no-inline-identity','texture':t,'name':name,'ptr':k}
+        nh,dh,dims=ident;return {'state':'identity-known','texture':t,'name':name,'nh':nh,'dh':dh,'dims':dims,'sourceKind':'packed-anchor','ptr':k}
+    def ensure_payload(r,sem):
+        nonlocal new_payloads
+        if r['state']=='identitynormal':return identity_ti,'fastfile-identitynormal',None
+        if r['state']!='identity-known':return None,None,None
+        name,nh,dh,dims=r['name'],r['nh'],r['dh'],r['dims'];entry=by_pair.get((nh,dh));resolution='ipak-exact-pair'
+        if entry is None:
+            al=by_data.get(dh,[])
+            if len(al)!=1:return None,None,None
+            entry=al[0];resolution='ipak-unique-data-hash-alias'
+        iwi=sv.extract_entry(data,data_sec,entry,lzo);fmt,flags,w,h,d,gamma,sizes=base.parse_iwi27(iwi)
+        if (w,h,d)!=tuple(dims):raise ValueError(f'{name}: exact-content dimensions mismatch {(w,h,d)} != {dims}')
+        ti=exact_existing_texture(js,name,dh)
+        if ti is not None:return ti,'reuse-'+resolution,entry
+        key=(name,sem,entry[0])
+        if key in cache:return cache[key],resolution,entry
+        png,md=sv.iwi_top_png(iwi,normal_semantic=(sem==5));iwi_sha=hashlib.sha256(iwi).hexdigest();png_sha=hashlib.sha256(png).hexdigest()
         while len(binbuf)%4:binbuf.append(0)
         off=len(binbuf);binbuf.extend(png);bvs.append({'buffer':0,'byteOffset':off,'byteLength':len(png),'name':f'T6_{name}_world_exact_PNG'});bvi=len(bvs)-1
-        images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'source':ipak_path.name,'identityResolution':resolution,'ipakDataHash':e[0],'ipakNameHash':e[1],'expectedNameHash':im.get('hash'),'expectedStreamedDataHash':im.get('streamedPart0Hash29'),'iwiSha256':hashlib.sha256(iwi).hexdigest(),'pngSha256':hashlib.sha256(png).hexdigest(),**meta}}});ii=len(images)-1;si=sampler_for(meta['flags']);textures.append({'name':name,'sampler':si,'source':ii});ti=len(textures)-1;cache[key]=(ti,iwi,e,meta);return cache[key],resolution
-    # Need material names present in GLB, not all 327 catalog entries.
+        images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'source':ipak_path.name,'identityResolution':resolution,'ipakDataHash':entry[0],'ipakNameHash':entry[1],'expectedImageHash':nh,'expectedStreamedDataHash':dh,'iwiSha256':iwi_sha,'pngSha256':png_sha,**md}}});ii=len(images)-1;si=sampler_for(md['flags']);textures.append({'name':name,'sampler':si,'source':ii});ti=len(textures)-1;cache[key]=ti;new_payloads+=1;return ti,resolution,entry
     for mi,g in enumerate(js.get('materials',[])):
-        src=by.get(g.get('name'))
-        if not src:continue
-        for sem,kind in SEMANTICS:
-            t=first_sem(src,sem);im,state=resolve_image(t,anchors,order,ids);old=current_binding(g,kind)
-            if state=='semantic-absent':stats[(kind,'semantic-absent')]+=1;continue
-            if im is None:
-                stats[(kind,state)]+=1
-                if old is not None:g.setdefault('extras',{}).setdefault('T6',{}).setdefault('previewUnverifiedBindings',[]).append({'kind':kind,'reason':state,'previousBindingRetained':True})
-                continue
-            if state=='identitynormal':
-                bind(g,kind,identity_ti);resolution='fastfile-identitynormal';stats[(kind,'exact-content-bound')]+=1
+        m=wb.get(g.get('name'))
+        if not m:continue
+        for sem,kind in ((2,'color'),(5,'normal')):
+            r=resolve(m,sem);ti,resolution,entry=ensure_payload(r,sem)
+            old=((g.get('pbrMetallicRoughness') or {}).get('baseColorTexture') if kind=='color' else g.get('normalTexture'))
+            if ti is not None:
+                if kind=='color':
+                    p=g.setdefault('pbrMetallicRoughness',{});p['baseColorTexture']={'index':ti,'texCoord':0};p['baseColorFactor']=[1.0,1.0,1.0,1.0]
+                else:g['normalTexture']={'index':ti,'texCoord':0,'scale':1.0}
+                status='exact-content-bound';counts[(kind,status)]+=1
+                g.setdefault('extras',{}).setdefault('T6',{})[f'{kind}ExactWorldV1']={'image':r.get('name'),'identityResolution':resolution,'expectedDataHash':r.get('dh'),'runtimeKeyExact':('exact-pair' in resolution or resolution=='fastfile-identitynormal')}
             else:
-                name=im['name'];nh=im.get('hash') if im.get('hash') is not None else base.r_hash_string(name);dh=im.get('streamedPart0Hash29')
-                if dh is None:
-                    stats[(kind,'identity-known/no-local-payload')]+=1
-                    if old is not None:g.setdefault('extras',{}).setdefault('T6',{}).setdefault('previewUnverifiedBindings',[]).append({'kind':kind,'reason':'missing-streamed-data-hash','previousBindingRetained':True})
-                    continue
-                e=by_pair.get((nh,dh));resolution='ipak-exact-name+data-hash'
-                if e is None:
-                    aliases=by_data.get(dh,[])
-                    if len(aliases)==1:
-                        e=aliases[0];resolution='ipak-unique-data-hash-alias'
-                    else:
-                        stats[(kind,'identity-known/no-local-payload')]+=1
-                        if old is not None:g.setdefault('extras',{}).setdefault('T6',{}).setdefault('previewUnverifiedBindings',[]).append({'kind':kind,'reason':'exact-payload-absent','previousBindingRetained':True,'expectedDataHash':dh})
-                        continue
-                key=(name,e[0],kind)
-                if key in cache:ti=cache[key][0]
-                else:
-                    iwi=st.extract_entry(data,data_sec,e,lzo);fmt,flags,w,h,d,gamma,sizes=base.parse_iwi27(iwi)
-                    if (w,h,d)!=(im['width'],im['height'],im['depth']):raise ValueError(f'{name}: exact-content dimensions mismatch')
-                    png,meta=st.iwi_top_png(iwi,normal_semantic=(kind=='normal'))
-                    while len(binbuf)%4:binbuf.append(0)
-                    off=len(binbuf);binbuf.extend(png);bvs.append({'buffer':0,'byteOffset':off,'byteLength':len(png),'name':f'T6_{name}_world_exact_{kind}_PNG'});bvi=len(bvs)-1
-                    images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'source':ipak_path.name,'identityResolution':resolution,'ipakDataHash':e[0],'ipakNameHash':e[1],'expectedNameHash':nh,'expectedStreamedDataHash':dh,'iwiSha256':hashlib.sha256(iwi).hexdigest(),'pngSha256':hashlib.sha256(png).hexdigest(),**meta}}});ii=len(images)-1;si=sampler_for(meta['flags']);textures.append({'name':name,'sampler':si,'source':ii});ti=len(textures)-1;cache[key]=(ti,iwi,e,meta)
-                bind(g,kind,ti);stats[(kind,'exact-content-bound')]+=1
-            g.setdefault('extras',{}).setdefault('T6',{}).setdefault('worldExactBindings',[]).append({'kind':kind,'semantic':sem,'image':im.get('name'),'identityResolution':resolution})
-            rows.append({'materialIndex':mi,'material':g.get('name'),'kind':kind,'image':im.get('name'),'resolution':resolution})
-    js.setdefault('extras',{}).setdefault('T6',{})['worldTextureExactRebindV1']={'anchors':len(anchors),'uniqueImageIdentities':len(ids),'newPayloads':len(cache),'summary':{f'{a}:{b}':n for (a,b),n in stats.items()},'proofBoundary':'World first semantic textures are exact only on proven image identity plus exact IPAK pair or unique dataHash alias with CRC/dimensions, or the loader-address-proven identity normal. Existing old preview bindings are retained only when exact content is unavailable and are explicitly marked unverified.'}
-    base.write_glb(out,js,binbuf);j2,b2=base.read_glb(out)
-    if j2['buffers'][0]['byteLength']!=len(b2):raise ValueError('GLB buffer mismatch')
-    man={'format':'t6-nuketown-world-texture-exact-rebind-v1','inputGlb':{'file':glb.name,'bytes':glb.stat().st_size,'sha256':sha_file(glb)},'worldCatalog':{'file':world_path.name,'sha256':sha_file(world_path)},'staticCatalog':{'file':static_path.name,'sha256':sha_file(static_path)},'orderMap':{'file':order_path.name,'sha256':sha_file(order_path)},'ipak':{'file':ipak_path.name,'bytes':ipak_path.stat().st_size,'sha256':sha_file(ipak_path)},'outputGlb':{'file':out.name,'bytes':out.stat().st_size,'sha256':sha_file(out)},'summary':{'anchors':len(anchors),'uniqueImageIdentities':len(ids),'newPayloads':len(cache),**{f'{a}:{b}':n for (a,b),n in stats.items()}},'bindings':rows,'validation':{'glbReparse':'pass','bufferByteLengthMatches':'pass'},'proofBoundary':'Exact/preview distinction is preserved; old preview bindings are never counted as exact.'};manifest.write_text(json.dumps(man,indent=2,sort_keys=True)+'\n');return man
+                status='preview-retained-unverified' if old else r['state'];counts[(kind,status)]+=1
+                if old:g.setdefault('extras',{}).setdefault('T6',{})[f'{kind}LegacyPreviewStatus']='retained-unverified-no-exact-payload-in-local-ipak'
+            rows.append({'materialIndex':mi,'material':g.get('name'),'kind':kind,'resolutionState':r['state'],'image':r.get('name'),'expectedNameHash':r.get('nh'),'expectedDataHash':r.get('dh'),'bindingStatus':status,'bindingResolution':resolution,'oldTextureIndex':old.get('index') if old else None,'newTextureIndex':ti})
+    js.setdefault('extras',{}).setdefault('T6',{})['worldTextureExactRebindV1']={'anchors':len(anchors),'globalUniqueImageIdentities':len(meta),'newPayloads':new_payloads,'proofBoundary':'Exact first-layer GfxWorld rebind. Runtime-exact IPAK pair preferred; unique data-hash alias accepted only as exact-content after CRC/dimension checks. Missing/unresolved entries preserve prior preview binding but are explicitly unverified.'}
+    base.write_glb(out,js,binbuf);js2,bin2=base.read_glb(out)
+    if js2['buffers'][0]['byteLength']!=len(bin2):raise ValueError('GLB buffer mismatch')
+    doc={'format':'t6-nuketown-world-texture-exact-rebind-v1','input':{'file':glb.name,'bytes':glb.stat().st_size,'sha256':sha(glb)},'output':{'file':out.name,'bytes':out.stat().st_size,'sha256':sha(out)},'inputs':{'worldCatalog':{'file':world_path.name,'sha256':sha(world_path)},'staticCatalog':{'file':static_path.name,'sha256':sha(static_path)},'orderMap':{'file':order_path.name,'sha256':sha(order_path)},'expandedStream':{'file':stream_path.name,'sha256':sha(stream_path)},'ipak':{'file':ipak_path.name,'sha256':sha(ipak_path)}},'summary':{'anchors':len(anchors),'uniqueImageIdentities':len(meta),'newPayloads':new_payloads,'counts':{f'{k[0]}:{k[1]}':v for k,v in counts.items()}},'rows':rows,'proofBoundary':'Exact runtime IPAK key pair or unique exact-content data-hash alias with CRC+dimension validation. Unavailable/unresolved world bindings are retained only as preview and marked unverified.'}
+    manifest.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n');return doc
 
 def main():
-    a=argparse.ArgumentParser();a.add_argument('--glb',type=Path,required=True);a.add_argument('--world',type=Path,required=True);a.add_argument('--static',type=Path,required=True);a.add_argument('--order-map',type=Path,required=True);a.add_argument('--ipak',type=Path,required=True);a.add_argument('--out',type=Path,required=True);a.add_argument('--manifest',type=Path,required=True);q=a.parse_args();m=build(q.glb,q.world,q.static,q.order_map,q.ipak,q.out,q.manifest);print(json.dumps(m['summary'],indent=2));print(json.dumps(m['outputGlb'],indent=2))
+    a=argparse.ArgumentParser();a.add_argument('--glb',type=Path,required=True);a.add_argument('--world',type=Path,required=True);a.add_argument('--static',type=Path,required=True);a.add_argument('--order',type=Path,required=True);a.add_argument('--stream',type=Path,required=True);a.add_argument('--ipak',type=Path,required=True);a.add_argument('--out',type=Path,required=True);a.add_argument('--manifest',type=Path,required=True);q=a.parse_args();d=build(q.glb,q.world,q.static,q.order,q.stream,q.ipak,q.out,q.manifest);print(json.dumps(d['summary'],indent=2));print(json.dumps(d['output'],indent=2))
 if __name__=='__main__':main()
