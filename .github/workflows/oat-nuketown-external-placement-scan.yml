@@ -1,0 +1,158 @@
+name: oat-nuketown-external-placement-scan
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-external-placement-scan.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install x86 toolchain and Python dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+          python -m pip install --disable-pip-version-check gdown
+
+      - name: Fetch exact OAT headers and derive x86 layout
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common \
+            tools/t6_oat_gfxworld_layout_probe.cpp -o gfxworld-layout-probe
+          ./gfxworld-layout-probe > gfxworld-layout.json
+          python - <<'PY'
+          import json
+          p=json.load(open('gfxworld-layout.json'))
+          assert p['ptrSize']==4, p
+          for k in ('GfxWorld','GfxWorldDpvsStatic','GfxStaticModelInst','GfxStaticModelDrawInst','GfxPackedPlacement','XModel'):
+              assert p[k]['size']>0, (k,p[k])
+          print(json.dumps(p,indent=2))
+          PY
+
+      - name: Fetch exact retail Nuketown FF and stock OAT
+        run: |
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          test -n "$UNLINKER"
+          chmod +x "$UNLINKER"
+          echo "$UNLINKER" > unlinker-path.txt
+
+      - name: Recover frozen live GfxWorld placement arrays
+        run: |
+          UNLINKER=$(cat unlinker-path.txt)
+          mkdir -p probe_out
+          python tools/t6_oat_external_gfxworld_scan.py \
+            --layout gfxworld-layout.json \
+            --out gfxworld-static-placements-external.json \
+            --diag gfxworld-external-scan-diagnostics.json \
+            --timeout 30 \
+            -- \
+            "$UNLINKER" mp_nuketown_2020.ff --output-folder probe_out --model-format GLB --verbose
+
+      - name: Validate 2992 retail rows and exact 1943 playable subset
+        run: |
+          python - <<'PY'
+          import base64, collections, hashlib, json, zlib
+          from pathlib import Path
+
+          placements_path=Path('gfxworld-static-placements-external.json')
+          p=json.loads(placements_path.read_text())
+          assert p['format']=='t6-gfxworld-static-placement-external-v1'
+          assert p['smodelCount']==2992, p['smodelCount']
+          assert len(p['placements'])==2992
+          nulls=sum(r['model'] is None for r in p['placements'])
+          assert nulls==0, f'unresolved retail model names: {nulls}'
+
+          proof_path=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          proof=json.loads(zlib.decompress(base64.b64decode(proof_path.read_text())).decode())
+          names={r['xmodelName'] for r in proof['models']}
+          assert len(names)==297, len(names)
+
+          selected=[r for r in p['placements'] if r['model'] in names]
+          counts=collections.Counter(r['model'] for r in selected)
+          missing=sorted(names-set(counts))
+          assert len(selected)==1943, f'playable identity filter yielded {len(selected)}, expected 1943'
+          assert not missing, f'missing playable identities: {missing}'
+
+          # Validate every packed axis as an approximately orthonormal basis and every scale as finite/positive.
+          import math
+          worst_norm=0.0; worst_dot=0.0
+          for r in p['placements']:
+              assert math.isfinite(r['scale']) and r['scale']>0, (r['index'],r['scale'])
+              a=r['axis']
+              for v in a:
+                  norm=sum(x*x for x in v)
+                  worst_norm=max(worst_norm,abs(norm-1.0))
+              for i,j in ((0,1),(0,2),(1,2)):
+                  dot=sum(a[i][k]*a[j][k] for k in range(3))
+                  worst_dot=max(worst_dot,abs(dot))
+          assert worst_norm<0.01, worst_norm
+          assert worst_dot<0.01, worst_dot
+
+          summary={
+              'format':'t6-nuketown-external-gfxworld-placement-summary-v1',
+              'worldName':p['worldName'],
+              'surfaceCount':p['surfaceCount'],
+              'retailStaticCount':2992,
+              'resolvedRetailModelNames':2992-nulls,
+              'retailUniqueModelCount':len({r['model'] for r in p['placements']}),
+              'playableIdentityCount':len(names),
+              'playableSelectedPlacementCount':len(selected),
+              'playableModelsPresent':len(counts),
+              'missingPlayableModels':missing,
+              'maxAxisNormError':worst_norm,
+              'maxAxisOrthogonalityError':worst_dot,
+              'topPlayableFrequencies':counts.most_common(40),
+              'placementJsonSha256':hashlib.sha256(placements_path.read_bytes()).hexdigest(),
+              'layout':p['layout'],
+          }
+          Path('NUKETOWN_EXTERNAL_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json').write_text(json.dumps(summary,indent=2)+'\n')
+          Path('playable-static-placements-1943.json').write_text(json.dumps({
+              'format':'t6-nuketown-playable-static-placements-v1',
+              'source':'gfxworld-static-placements-external.json',
+              'count':len(selected),
+              'placements':selected,
+          },separators=(',',':'))+'\n')
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - name: Inventory recovered OAT GLBs
+        if: always()
+        run: |
+          find probe_out -type f -name '*_lod0.glb' -printf '%s %p\n' | sort > oat-lod0-files.txt || true
+          echo "LOD0 GLBs: $(wc -l < oat-lod0-files.txt)"
+          head -20 oat-lod0-files.txt || true
+          tail -20 oat-lod0-files.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-external-gfxworld-placement-v1
+          path: |
+            gfxworld-layout.json
+            gfxworld-static-placements-external.json
+            playable-static-placements-1943.json
+            NUKETOWN_EXTERNAL_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json
+            gfxworld-external-scan-diagnostics.json
+            oat-external-scan-target.log
+            oat-lod0-files.txt
+          if-no-files-found: warn
+          retention-days: 2
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-oat-lod0-glbs-external-scan-v1
+          path: probe_out/**/*_lod0.glb
+          if-no-files-found: warn
+          retention-days: 2
