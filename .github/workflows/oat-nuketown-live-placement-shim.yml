@@ -21,7 +21,7 @@ jobs:
           g++ -m32 -std=c++23 -DARCH_x86 -fPIC -shared \
             -Ioat-src/src/Common \
             tools/t6_oat_live_gfxworld_placement_shim.cpp \
-            -ldl -o libt6_gfxworld_placement.so
+            -pthread -o libt6_gfxworld_placement.so
           file libt6_gfxworld_placement.so
       - name: Fetch exact FF and stock OAT v0.33.0
         run: |
@@ -35,12 +35,17 @@ jobs:
       - name: Extract live GfxWorld placements
         run: |
           LD_PRELOAD="$PWD/libt6_gfxworld_placement.so" oat/Unlinker --no-color --list mp_nuketown_2020.ff > xasset-list-live.txt
-          test -s gfxworld-static-placements-live.json
+          test -s gfxworld-shim-loaded.txt
+          if [ ! -s gfxworld-static-placements-live.json ]; then
+            echo 'Placement dump missing. Scanner diagnostics:'
+            cat gfxworld-shim-debug.txt || true
+            exit 1
+          fi
           python - <<'PY'
           import base64, collections, json, zlib
           from pathlib import Path
           p=json.loads(Path('gfxworld-static-placements-live.json').read_text())
-          assert p['format']=='t6-gfxworld-static-placement-live-v1'
+          assert p['format']=='t6-gfxworld-static-placement-live-v2'
           assert p['smodelCount']==2992, p['smodelCount']
           assert len(p['placements'])==2992
           nulls=sum(r['model'] is None for r in p['placements'])
@@ -52,7 +57,7 @@ jobs:
           selected=[r for r in p['placements'] if r['model'] in names]
           counts=collections.Counter(r['model'] for r in selected)
           summary={
-            'format':'t6-nuketown-live-placement-summary-v1',
+            'format':'t6-nuketown-live-placement-summary-v2',
             'worldName':p['worldName'],
             'surfaceCount':p['surfaceCount'],
             'retailStaticCount':p['smodelCount'],
@@ -64,15 +69,19 @@ jobs:
             'topPlayableFrequencies':counts.most_common(30),
             'structSizes':p['structSizes'],
           }
-          Path('NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json').write_text(json.dumps(summary,indent=2)+'\n')
+          Path('NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V2.json').write_text(json.dumps(summary,indent=2)+'\n')
           print(json.dumps(summary,indent=2))
           assert len(selected)==1943, f'playable filter yielded {len(selected)}, expected 1943'
           assert set(counts)==names, f'missing {len(names-set(counts))} playable models'
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: nuketown-live-gfxworld-static-placements-v1
+          name: nuketown-live-gfxworld-static-placements-v2
           path: |
             gfxworld-static-placements-live.json
-            NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json
+            NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V2.json
+            gfxworld-shim-loaded.txt
+            gfxworld-shim-debug.txt
+          if-no-files-found: warn
           retention-days: 2
