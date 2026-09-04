@@ -1,0 +1,47 @@
+{
+  "format": "t6-nuketown-primary-scene-no-reflection-proxies-v1-normalized",
+  "input": {
+    "bytes": 63546384,
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PARTIAL_v5.glb",
+    "sha256": "7f986a04e0d14fb4f96ed7cf03ec612d11aa4460a8729a5a28c2ae9bd8658c2a"
+  },
+  "output": {
+    "bytes": 63546572,
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v6.glb",
+    "sha256": "f319bed17e2dde7a5db4f48b38895cc6ec2a30d65933314009ff63f8e9a80287"
+  },
+  "proofBoundary": "The source GLB remains the archival full static assembly. This primary-scene view removes only nodes classified as retail planar-reflection proxies by mirrored same-mesh evidence about the modal core horizontal plane, plus explicit retail XModel names containing _reflection. Node definitions remain in the GLB for provenance but are unreachable from primary static scene node 1.",
+  "regeneration": {
+    "tool": "tools/t6_nuketown_filter_reflection_proxies_v1.py"
+  },
+  "removedProxyEvidenceCount": 69,
+  "removedProxyEvidenceSha256": "09819ef40ee9c91a68ada18b4647c14702602b16a999230a8d1d601254e6379d",
+  "summary": {
+    "explicitReflectionAssetCount": 5,
+    "floorPlaneHorizontalTriangleCount": 1279,
+    "floorReflectionPlaneY": -1.4478,
+    "format": "t6-nuketown-reflection-proxy-filter-v1",
+    "note": "Proxy node definitions remain in the GLB for provenance but are unreachable from the primary scene graph. The unfiltered source GLB remains the full-fidelity archive artifact.",
+    "reflectionProxyNodesRemovedFromPrimaryScene": 69,
+    "sameMeshPairEvidenceCount": 64,
+    "staticChildrenAfter": 1874,
+    "staticChildrenBefore": 1943
+  },
+  "topHorizontalCorePlanes": [
+    {"triangleCount": 1279, "y": -1.4478},
+    {"triangleCount": 927, "y": -1.6256},
+    {"triangleCount": 328, "y": -1.6002},
+    {"triangleCount": 294, "y": -1.5875},
+    {"triangleCount": 271, "y": 1.8034},
+    {"triangleCount": 219, "y": -1.5113},
+    {"triangleCount": 210, "y": 2.8702},
+    {"triangleCount": 198, "y": 5.461},
+    {"triangleCount": 189, "y": -1.5621},
+    {"triangleCount": 183, "y": 2.8448}
+  ],
+  "validation": {
+    "bufferByteLengthMatches": "pass",
+    "glbReparse": "pass",
+    "primaryStaticChildCount": 1874
+  }
+}
