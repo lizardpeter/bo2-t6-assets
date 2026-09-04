@@ -258,6 +258,23 @@ def build(root:Path,producer_verifier:Path,coordinate_verifier:Path,mip_verifier
         'pointerRowsSha256':jhash(pointer_rows),'shaRowsSha256':jhash(sha_rows),
         'mapRowsSha256':jhash(map_rows),'introRowsSha256':jhash(sorted(intro_rows,key=lambda x:(x['map'],x['block'],x['offset'])))
     }
+
+    # Compact archival encoding; full forensic rows are pinned by the summary digests.
+    map_table=list(producer.PASS_MAPS)
+    shader_table=sorted(resolved_occ)
+    mi={m:i for i,m in enumerate(map_table)};si={h:i for i,h in enumerate(shader_table)}
+    pattern_table=[[4,5,1],[6,8,2]]
+    compact_ptr=[]
+    for r in pointer_rows:
+        pat=[r['introductionDirectSlot'],r['firstTargetSlot'],r['introductionDistance']]
+        compact_ptr.append([mi[r['map']],r['block'],r['offset'],r['targetPassOccurrenceCount'],
+                            si[r['vertexShaderSha256']],1 if r['structurallyAnchored'] else 0,
+                            pattern_table.index(pat)])
+    compact_counts=[[si[r['vertexShaderSha256']],r['resolvedTargetPassOccurrenceCount']] for r in sha_rows]
+    compact_maps=[[mi[r['map']],r['uniqueTargetPackedPointerCount'],r['targetPackedPassOccurrenceCount'],
+                   r['structurallyAnchoredPointerCount'],r['introductionOnlyPointerCount']] for r in map_rows]
+    intro_only_rows=[x for x in compact_ptr if not x[5]]
+
     return {
         'format':'t6-retail-reflection-probe-packed-vs-alias-v1',
         'producer':'tools/t6_retail_reflection_probe_packed_vs_alias_v1.py',
@@ -274,9 +291,16 @@ def build(root:Path,producer_verifier:Path,coordinate_verifier:Path,mip_verifier
             ],
             'resolvedProducerEquation':'TEXCOORD5.xyz = (dlights.worldMatrix * float4(POSITION.xyz,1)).xyz'
         },
-        'pointerAliases':pointer_rows,'resolvedVertexShaderCounts':sha_rows,'mapCoverage':map_rows,
+        'encoding':{
+            'mapTable':map_table,'vertexShaderTable':shader_table,'introductionPatternTable':pattern_table,
+            'pointerAliasColumns':['mapIndex','block','offset','targetPassOccurrenceCount','vertexShaderIndex','structurallyAnchored01','patternIndex'],
+            'resolvedCountColumns':['vertexShaderIndex','resolvedTargetPassOccurrenceCount'],
+            'mapCoverageColumns':['mapIndex','uniqueTargetPackedPointerCount','targetPackedPassOccurrenceCount','structurallyAnchoredPointerCount','introductionOnlyPointerCount']
+        },
+        'pointerAliases':compact_ptr,'resolvedVertexShaderCounts':compact_counts,'mapCoverage':compact_maps,
+        'introductionOnlyAliases':intro_only_rows,
         'summary':summary,
-        'proofBoundary':'Retained structural alias proof for the 5,612 packed paired-VS occurrences in the 4,086-shader surface-normal reflection subset. Sixty of 64 unique target packed block-5 pointers are independently anchored to exactly one direct VS SHA by cross-map equality of TechniqueSet name + slot + passIndex + worldVertFormat, with zero multi-SHA components. A same-TechniqueSet introduction grammar (direct slot 4 -> first packed slot 5 at distance 1, or direct slot 6 -> first packed slot 8 at distance 2) agrees with all 60 independent anchors before being used to resolve the four otherwise-unanchored pointers. All 64 pointer identities / 5,612 packed occurrences then resolve to the same 16 physically retained direct VS payloads, each rerun through the exact TEXCOORD5 producer proof. This does not directly dereference virtual block-5 offsets and does not assign camera/view semantics to dlights.worldMatrix.'
+        'proofBoundary':'Retained structural alias proof for the 5,612 packed paired-VS occurrences in the 4,086-shader surface-normal reflection subset. Sixty of 64 unique target packed block-5 pointers are independently anchored to exactly one direct VS SHA by cross-map equality of TechniqueSet name + slot + passIndex + worldVertFormat, with zero multi-SHA components. A same-TechniqueSet introduction grammar (direct slot 4 -> first packed slot 5 at distance 1, or direct slot 6 -> first packed slot 8 at distance 2) agrees with all 60 independent anchors before being used to resolve the four otherwise-unanchored pointers. All 64 pointer identities / 5,612 packed occurrences then resolve to the same 16 physically retained direct VS payloads, each rerun through the exact TEXCOORD5 producer proof. Compact manifest rows are backed by SHA-256 digests of the full forensic rows. This does not directly dereference virtual block-5 offsets and does not assign camera/view semantics to dlights.worldMatrix.'
     }
 
 def main():
