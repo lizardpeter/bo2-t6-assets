@@ -78,7 +78,9 @@ def broad_pass_events(root:Path,target:set[str],base):
  all_events={};blobs={};objects={};scan_rows=[]
  for mn,cfg in base.MAPS.items():
   d=(root/cfg['rel']).read_bytes();bs=base.front(d);rawrows=[]
+  # same strict candidate scan as base, but retain all candidates before GfxWorld.
   raw=base.scan_sets(d,bs,cfg['world'])
+  # base.scan_sets returns tuples in committed 75 verifier; normalize.
   for r in raw:
    if isinstance(r,tuple): rawrows.append({'start':r[0],'fmt':r[1],'name':r[2]})
    else: rawrows.append(r)
@@ -120,6 +122,7 @@ def prove_vs_tc3(base,b:bytes):
   a=[r for r,s in so.items() if s==sem]
   if len(a)!=1:raise ValueError('output semantic '+str(sem))
   return a[0]
+ # normal path: TC3 xyz must be MOV from normalized TEMP whose raw source leaves are NORMAL0 only.
  r=oreg(('TEXCOORD',3));ow=[base.latest(inst,w,len(inst),base.OUTPUT,r,c) for c in 'xyz']
  if any(x is None for x in ow) or len({x[0] for x in ow})!=1 or ow[0][2]!=54:raise ValueError('TC3 writer')
  O=ow[0][4];src=O[1] if len(O)>1 else None
@@ -132,6 +135,7 @@ def prove_vs_tc3(base,b:bytes):
  if vec is None:raise ValueError('TC3 normalize split')
  leaves=base.input_leaves(b,w,inst,nw[0][0],vec,si)
  if leaves!={('NORMAL',0)}:raise ValueError('TC3 normal leaves '+str(leaves))
+ # ensure raw transformed vector is three DP3s against cb3 rows 0,1,2.
  vr=vec['idx'][0];dps=[base.latest(inst,w,nw[0][0],base.TEMP,vr,c) for c in 'xyz']
  if any(x is None for x in dps) or [x[2] for x in dps]!=[16,16,16]:raise ValueError('TC3 world DP3')
  rows=[]
@@ -140,6 +144,7 @@ def prove_vs_tc3(base,b:bytes):
   if len(cbs)!=1 or cbs[0]['idx'][0]!=3:raise ValueError('TC3 world cb')
   rows.append(cbs[0]['idx'][1])
  if rows!=[0,1,2]:raise ValueError('TC3 world rows '+str(rows))
+ # position path: TC1 xyz traces POSITION0 only and is DP4 cb3 rows 0,1,2.
  rp=oreg(('TEXCOORD',1));pw=[base.latest(inst,w,len(inst),base.OUTPUT,rp,c) for c in 'xyz']
  if any(x is None for x in pw) or len({x[0] for x in pw})!=1 or pw[0][2]!=54:raise ValueError('TC1 writer')
  PO=pw[0][4];psrc=PO[1] if len(PO)>1 else None
@@ -168,6 +173,7 @@ def build(root:Path,base_path:Path,prior_alias_path:Path):
  base=load(base_path,'base75')
  target,grows,target_fetches=global_target(root,base);T=set(target)
  events,blobs,objects,scan_rows=broad_pass_events(root,T,base)
+ # all retained nodes joined by exact TechniqueSet/slot/pass/worldVertFormat identity across maps
  ds=DSU();by=collections.defaultdict(set)
  for mn,ev in events.items():
   for e in ev:
@@ -194,13 +200,16 @@ def build(root:Path,base_path:Path,prior_alias_path:Path):
   if len(s)==1:structural[p]=next(iter(s))
   elif len(s)>1:conf.append((p,sorted(s)))
  if conf:raise ValueError('structural conflicts '+str(conf))
+ # Hijacked pair must exact-anchor cross-map; Nuketown pair remains set-bounded.
  hij=[p for p in ptrs if p[1]=='mp_hijacked'];nuke=[p for p in ptrs if p[1]=='mp_nuketown_2020']
  if len(hij)!=2 or len(nuke)!=2 or any(p not in structural for p in hij) or any(p in structural for p in nuke):raise ValueError('pointer anchor split')
  direct_shas=sorted({h for _,h in direct})
  if len(direct_shas)!=EXPECTED_DIRECT_VS:raise ValueError('direct VS count')
  proofs=[prove_vs_tc3(base,blobs[h]) for h in direct_shas]
+ # Cross-map Hijacked anchors must land on the two direct Raid candidates.
  raid={h for mn,h in direct if mn=='mp_raid'}
  if {structural[p] for p in hij}!=raid:raise ValueError('Hijacked anchor candidates')
+ # Calibrate serializer differential from prior 64-pointer alias proof, then bound Nuketown pair.
  prior=json.loads(prior_alias_path.read_text());drifts=base.calibrate(root,prior,objects);maxd=max(drifts)
  if len(drifts)!=32 or maxd!=12:raise ValueError('calibration')
  np=sorted(p[3] for p in nuke);pd=np[1]-np[0]
@@ -212,6 +221,7 @@ def build(root:Path,base_path:Path,prior_alias_path:Path):
    if drift<=maxd:pairs.append((drift,a,b,od))
  nuke_direct={h for mn,h in direct if mn=='mp_nuketown_2020'}
  if len(pairs)!=1 or set(pairs[0][1:3])!=nuke_direct:raise ValueError('Nuketown candidate pair '+str(pairs))
+ # Every mapped PS has a target role exactly A=TC3.xyz, B=TC1.xyz.
  mapped_rows=[]
  for h in sorted(mapped):
   mm=[x for x in target[h]['roles'] if target_match(x)]
