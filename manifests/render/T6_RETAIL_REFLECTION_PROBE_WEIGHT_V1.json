@@ -1,7 +1,8 @@
 {
   "equation": {
     "alphaBiasBits": "358637bd",
-    "decodedProbeRgb": "probe.rgb * (probe.a + 1e-6)"
+    "decodedProbeRgb": "probe.rgb / (probe.a + 1e-6)",
+    "reciprocalNumeratorBits": "3f800000"
   },
   "firstMulPackingPatterns": [
     {
@@ -148,7 +149,7 @@
     }
   ],
   "producer": "tools/t6_retail_reflection_probe_weight_v1.py",
-  "proofBoundary": "Direct retained-SM4 proof over all 5,888 t15/s15 reflectionProbeSampler cube fetches in 5,868 unique reflected shaders. For each fetch, all semantic RGB sample components share the same first consumer MUL; its replicated scalar multiplier is produced by ADD of that exact same sample alpha and immediate 0x358637bd (~1e-6), proving decodedProbe.rgb = probe.rgb * (probe.a + 1e-6). A branch-aware lane-level value-taint then requires each probe x/y/z tag to be an ancestor of matching final o0.x/y/z, yielding 17,664 aligned RGB ancestry checks with zero failures. IF/ELSE states are union-merged as potential value dataflow; control dependence is not promoted to value ancestry. This does not yet simplify the later Fresnel/specular/material weighting between decoded probe RGB and final output, nor assign a physical meaning to every mip-control source.",
+  "proofBoundary": "Direct retained-SM4 proof over all 5,888 t15/s15 reflectionProbeSampler cube fetches in 5,868 unique reflected shaders. For each fetch, all semantic RGB sample components share the same first consumer MUL; its replicated scalar multiplier is produced by DIV of immediate 1.0 by an ADD of that exact same sample alpha and immediate 0x358637bd (~1e-6), proving decodedProbe.rgb = probe.rgb / (probe.a + 1e-6). A branch-aware lane-level value-taint then requires each probe x/y/z tag to be an ancestor of matching final o0.x/y/z, yielding 17,664 aligned RGB ancestry checks with zero failures. IF/ELSE states are union-merged as potential value dataflow; control dependence is not promoted to value ancestry. This does not yet simplify the later Fresnel/specular/material weighting between decoded probe RGB and final output, nor assign a physical meaning to every mip-control source.",
   "sources": {
     "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
     "expandedRetailMaps": {
@@ -186,6 +187,7 @@
     "firstRgbConsumerFailureCount": 0,
     "firstRgbConsumerMulCount": 5888,
     "outputTagCardinalityRowsSha256": "9a53f4e61a1a6c6c829fe5ed50bacc78813a4e6427b877c0e17650f01076247f",
+    "reciprocalNumeratorBits": "3f800000",
     "reflectionCubeFetchCount": 5888,
     "retainedMapCount": 5,
     "sampleBOpcodeCount": 9,
