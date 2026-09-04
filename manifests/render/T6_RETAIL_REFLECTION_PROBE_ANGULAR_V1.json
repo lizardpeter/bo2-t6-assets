@@ -1,0 +1,128 @@
+{
+  "angularCore": {
+    "C": "min(E, P)",
+    "D": "saturate(dot(U, -V))",
+    "E": "2^(-9.28 * D)",
+    "P": "a value subtree independent of D",
+    "minus9Point28Bits": "c1147ae1",
+    "pairIdentity": "U and V are the same two normalized writer values used by the reflection-coordinate construction"
+  },
+  "angularFactorShapes": [
+    {
+      "count": 4216,
+      "laneSkeletons": [
+        "mad_sat(P,add(neg(mad(P,C,P)),P),mad(P,C,P))",
+        "mad_sat(P,add(neg(mad(P,C,P)),P),mad(P,C,P))",
+        "mad_sat(P,add(neg(mad(P,C,P)),P),mad(P,C,P))"
+      ],
+      "shapeSha256": "68a3ca1b0207a8012c0f9dd8760eadcfa328f1768d61dc5240b3b2adfaa2e8d2"
+    },
+    {
+      "count": 1386,
+      "laneSkeletons": [
+        "mad(P,C,P)",
+        "mad(P,C,P)",
+        "mad(P,C,P)"
+      ],
+      "shapeSha256": "6cc8241a5800cd915304f8b6e96d16f98c0fdd49af25fc5d0a9d2315710bcbc4"
+    },
+    {
+      "count": 40,
+      "laneSkeletons": [
+        "min(mad(P,add(neg(mad(C,P,P)),P),mad(C,P,P)),P)",
+        "min(mad(P,add(neg(mad(C,P,P)),P),mad(C,P,P)),P)",
+        "min(mad(P,add(neg(mad(C,P,P)),P),mad(C,P,P)),P)"
+      ],
+      "shapeSha256": "009b5f1e5e328b5114948177fbfbe1cfcdd00a50c734ec72857651d0a8beb4ba"
+    },
+    {
+      "count": 20,
+      "laneSkeletons": [
+        "mad_sat(add(neg(mad(P,C,P)),P),P,mad(P,C,P))",
+        "mad_sat(add(neg(mad(P,C,P)),P),P,mad(P,C,P))",
+        "mad_sat(add(neg(mad(P,C,P)),P),P,mad(P,C,P))"
+      ],
+      "shapeSha256": "4ca15be8491c8e7d22704ac528608cdc6eac6d61fa2efc8ea32540369c7a772b"
+    },
+    {
+      "count": 20,
+      "laneSkeletons": [
+        "mad(add(neg(mad(C,P,P)),P),P,mad(C,P,P))",
+        "mad(add(neg(mad(C,P,P)),P),P,mad(C,P,P))",
+        "mad(add(neg(mad(C,P,P)),P),P,mad(C,P,P))"
+      ],
+      "shapeSha256": "db3563b44bdd270cd3a1a63db4a9c0da5a1b3a94f3f2d138dc0dd9b40db40bdb"
+    }
+  ],
+  "factorRootCounts": [
+    {"count": 110, "factorRoot": "direct_constant_buffer", "linkage": "unlinked"},
+    {"count": 20, "factorRoot": "direct_input", "linkage": "unlinked"},
+    {"count": 46, "factorRoot": "temp_mad", "linkage": "unlinked"},
+    {"count": 30, "factorRoot": "temp_mov", "linkage": "unlinked"},
+    {"count": 5642, "factorRoot": "temp_mad", "linkage": "linked"},
+    {"count": 40, "factorRoot": "temp_min", "linkage": "linked"}
+  ],
+  "format": "t6-retail-reflection-probe-angular-v1",
+  "mapCoverage": [
+    {"map": "mp_nuketown_2020", "reflectionProbeShaderCount": 1285, "validDxbcCount": 1972},
+    {"map": "mp_raid", "reflectionProbeShaderCount": 2063, "validDxbcCount": 3064},
+    {"map": "mp_hijacked", "reflectionProbeShaderCount": 1722, "validDxbcCount": 2299},
+    {"map": "zm_prison", "reflectionProbeShaderCount": 3158, "validDxbcCount": 3920},
+    {"map": "zm_tomb", "reflectionProbeShaderCount": 1979, "validDxbcCount": 2839}
+  ],
+  "mipLinkCrossTab": [
+    {"count": 59, "linkage": "linked", "mipClass": "affine:00000000:00000000"},
+    {"count": 1327, "linkage": "linked", "mipClass": "affine:3ef33333:00000000"},
+    {"count": 4236, "linkage": "linked", "mipClass": "affine:c0800000:40800000"},
+    {"count": 60, "linkage": "linked", "mipClass": "literal_lod:00000000"},
+    {"count": 30, "linkage": "unlinked", "mipClass": "affine:3e800000:3f400000"},
+    {"count": 9, "linkage": "unlinked", "mipClass": "literal_bias:c0400000"},
+    {"count": 39, "linkage": "unlinked", "mipClass": "literal_lod:00000000"},
+    {"count": 48, "linkage": "unlinked", "mipClass": "literal_lod:3f4ccccd"},
+    {"count": 40, "linkage": "unlinked", "mipClass": "literal_lod:4019999a"},
+    {"count": 40, "linkage": "unlinked", "mipClass": "literal_lod:40800000"}
+  ],
+  "producer": "tools/t6_retail_reflection_probe_angular_v1.py",
+  "proofBoundary": "Direct retained-SM4 value-ancestry proof over all 5,888 t15/s15 reflectionProbeSampler cube fetches. 5,682 fetches contain exactly one material-factor DP3 whose operands resolve by writer identity to the exact same two normalized values used by the proven reflection-coordinate construction; every such DP3 is saturated, negates its second vector, and feeds the exact chain MUL(-9.28) -> EXP (SM4 2^x) -> MIN before one of five D-dependent factor skeletons. The remaining 206 fetches contain no such writer-identical angular link and are kept as a separate family. U/V and P remain mathematical/dataflow labels only: this proof does not assign physical normal/view semantics to U/V, does not assert one universal gloss/roughness meaning for P, and does not reconstruct original HLSL.",
+  "shapeMipCrossTab": [
+    {"count": 40, "mipClass": "literal_lod:00000000", "shapeSha256": "009b5f1e5e328b5114948177fbfbe1cfcdd00a50c734ec72857651d0a8beb4ba"},
+    {"count": 20, "mipClass": "affine:c0800000:40800000", "shapeSha256": "4ca15be8491c8e7d22704ac528608cdc6eac6d61fa2efc8ea32540369c7a772b"},
+    {"count": 4216, "mipClass": "affine:c0800000:40800000", "shapeSha256": "68a3ca1b0207a8012c0f9dd8760eadcfa328f1768d61dc5240b3b2adfaa2e8d2"},
+    {"count": 59, "mipClass": "affine:00000000:00000000", "shapeSha256": "6cc8241a5800cd915304f8b6e96d16f98c0fdd49af25fc5d0a9d2315710bcbc4"},
+    {"count": 1327, "mipClass": "affine:3ef33333:00000000", "shapeSha256": "6cc8241a5800cd915304f8b6e96d16f98c0fdd49af25fc5d0a9d2315710bcbc4"},
+    {"count": 20, "mipClass": "literal_lod:00000000", "shapeSha256": "db3563b44bdd270cd3a1a63db4a9c0da5a1b3a94f3f2d138dc0dd9b40db40bdb"}
+  ],
+  "sources": {
+    "coordinateProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json",
+    "expandedRetailMaps": {
+      "mp_hijacked": {"file": "mp/mp_hijacked.expanded.bin", "sha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b"},
+      "mp_nuketown_2020": {"file": "mp/mp_nuketown_2020.expanded.bin", "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"},
+      "mp_raid": {"file": "mp/mp_raid.expanded.bin", "sha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8"},
+      "zm_prison": {"file": "zm_prison.expanded.bin", "sha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487"},
+      "zm_tomb": {"file": "zm_tomb.expanded.bin", "sha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219"}
+    },
+    "mipProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_MIP_V1.json",
+    "weightProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_WEIGHT_V1.json"
+  },
+  "summary": {
+    "angularDp3SatCount": 5682,
+    "angularExp2Count": 5682,
+    "angularFactorShapeCount": 5,
+    "angularFactorShapeCounts": [4216, 1386, 40, 20, 20],
+    "angularLinkedFetchCount": 5682,
+    "angularMinCount": 5682,
+    "angularMinus9Point28MulCount": 5682,
+    "angularNegatedSecondOperandCount": 5682,
+    "angularUnlinkedFetchCount": 206,
+    "factorRootRowsSha256": "a6b4794666c18d0b8368bd3c48c8c5bf541a2cadc04b350224084f65c99abac8",
+    "mipLinkRowsSha256": "42cf8c52470f2cf0bedcc8ade337984bed0b13c07791dbc5d50c15c4945543fe",
+    "reflectionCubeFetchCount": 5888,
+    "retainedMapCount": 5,
+    "shaderRowsSha256": "a0e843474cf8f46a143551d327791fae2fff989adffb40a02b14f666ff377df1",
+    "shapeMipRowsSha256": "b343fe54e69a99863fde23ccba7b4b481a4ea2fa03238afda9eb1f2f60649348",
+    "shapeRowsSha256": "6dba1ef84e88d9201946b7f478fe1ad22d29dfb137aaf3da2d3cada6148789b0",
+    "sharedNormalizedPairCheckCount": 5682,
+    "sharedNormalizedPairFailureCount": 0,
+    "uniqueReflectionProbeShaderCount": 5868
+  }
+}
