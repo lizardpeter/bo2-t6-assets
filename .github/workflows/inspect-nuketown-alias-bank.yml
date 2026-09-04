@@ -1,0 +1,45 @@
+name: inspect-nuketown-alias-bank
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/inspect-nuketown-alias-bank.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact target alias records
+        run: |
+          mkdir -p alias_inspect
+          python - <<'PY'
+          import base64,json,zlib
+          from pathlib import Path
+          p=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          doc=json.loads(zlib.decompress(base64.b64decode(p.read_text().strip())))
+          names={'~-gnt_2020_plastic_cream_col','~-gmetal_chrome_boat_c','~-gmetal_chrome_col','~-gnt_wood_fence'}
+          hits=[]
+          def walk(x,path='$'):
+            if isinstance(x,dict):
+              blob=json.dumps(x,sort_keys=True)
+              if any(n in blob for n in names): hits.append({'path':path,'value':x})
+              for k,v in x.items(): walk(v,f'{path}.{k}')
+            elif isinstance(x,list):
+              for i,v in enumerate(x): walk(v,f'{path}[{i}]')
+          walk(doc)
+          # Deduplicate exact JSON values while keeping shallowest path first.
+          seen=set();out=[]
+          for h in sorted(hits,key=lambda h:h['path'].count('.')+h['path'].count('[')):
+            key=json.dumps(h['value'],sort_keys=True)
+            if key in seen: continue
+            seen.add(key);out.append(h)
+          summary={'topLevelKeys':list(doc) if isinstance(doc,dict) else None,'hitCount':len(out),'hits':out}
+          Path('alias_inspect/target_alias_contexts.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-alias-target-contexts
+          path: alias_inspect/
+          retention-days: 1
