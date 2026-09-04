@@ -81,7 +81,10 @@ def extract_entry(data,data_sec,e,lzo):
                 rc=lzo(src,len(blob),dst,ctypes.byref(n),None)
                 if rc!=0: raise ValueError(f'lzo error {rc}')
                 out.extend(dst.raw[:n.value])
-            else: raise ValueError(f'unsupported IPAK compression command {comp}')
+            elif comp==0xCF:
+                # Retail T6 padding/skip command: consume stored bytes but emit no output.
+                pass
+            else: raise ValueError(f'unsupported IPAK compression command {comp:#x}')
             p+=sz
         pos=p; blocks+=1
         if blocks>10000: raise ValueError('IPAK block runaway')
