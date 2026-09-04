@@ -1,0 +1,75 @@
+{
+  "format": "t6-nuketown-real-texture-partial-v3-checkpoint",
+  "date": "2026-09-04",
+  "map": "mp_nuketown_2020",
+  "baseExporterCommit": "f2602eb0b920b06d8e78023661468514f480c415",
+  "v3DeltaCommit": "2b8d265cf7031b52d26d39eddb95a2eeec1eaebb",
+  "v3DeltaPath": "research/patches/t6_nuketown_ipak_partial_texture_export_v3.patch",
+  "localV3ScriptSha256": "c38d48d0c6524633c542eea67c22426e339e92cceee8916ac0fb8ef87589076e",
+  "input": {
+    "glb": {
+      "file": "mp_nuketown_2020_PLAYABLE_CORE_PLUS_ALL_STATIC_v6.glb",
+      "bytes": 33745604,
+      "sha256": "1e97fb62f148036a84abf781a29bbc723eef9b686fcc1ef6cbfcd351c01d0066"
+    },
+    "materialCatalog": "NUKETOWN_327_MATERIALS_V1.json",
+    "mapSpecificIpak": {
+      "file": "mp_nuketown_2020.ipak",
+      "bytes": 165543936
+    }
+  },
+  "output": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PARTIAL_v3.glb",
+    "bytes": 63520996,
+    "sha256": "31961afc76a0c92e3dde1542f2170eebd7fd88bd28e032efd65bd41b9f450250",
+    "fullManifestSha256": "fd24907380fb1c47a7acc492fb1313e8e59e62555f955aac8840fa5a05e5ff1b"
+  },
+  "exactTextureCoverage": {
+    "glbMaterials": 639,
+    "retainedWorldMaterialIdentityMatches": 291,
+    "realColorBoundMaterials": 107,
+    "realNormalBoundMaterials": 68,
+    "uniqueEmbeddedRealImages": 110,
+    "decodeOrBindingFailures": 0
+  },
+  "packedPointerProof": {
+    "generatedCompoundCount": 120,
+    "completeComponentCompoundCount": 106,
+    "alignedTextureEntryCount": 402,
+    "packedPointerToImageNameAnchors": 86,
+    "semanticCountMismatches": 0,
+    "anchorConflicts": 0,
+    "rule": "For a generated material whose component materials are all retained, texture rows are grouped by semantic and aligned in retained component order. A packed GfxImage pointer is named only when its aligned row is an inline named GfxImage. Any semantic-count mismatch or conflicting name fails closed."
+  },
+  "codecCoverage": {
+    "IWI": 27,
+    "color": ["BC1/DXT1", "BC2/DXT3", "BC3/DXT5"],
+    "normal": ["BC5/DXN XY with reconstructed positive Z"]
+  },
+  "validation": {
+    "GLB2HeaderAndTotalLength": "pass",
+    "singleBINChunk": "pass",
+    "bufferByteLength": "pass",
+    "embeddedPngSignatureAndBounds": "110/110 pass",
+    "realBaseColorTextureBindings": 107,
+    "realNormalTextureBindings": 68
+  },
+  "remainingWorldColorBreakdownAmong291": {
+    "presentInMapIpakAndBound": 107,
+    "exactImageNameKnownButPayloadAbsentFromMapIpak": 93,
+    "packedFirstColorImageStillUnresolved": 91
+  },
+  "remainingWorldNormalBreakdownAmong291": {
+    "presentInMapIpakAndBound": 68,
+    "exactImageNameKnownButPayloadAbsentFromMapIpak": 74,
+    "packedFirstNormalImageStillUnresolved": 138,
+    "materialsWithoutNormalSemantic": 11
+  },
+  "proofBoundary": "This is a real image-backed partial export, not a heuristic recolor. Every bound image is tied to exact retained Material semantics and exact image identity, extracted from the exact map-specific IPAK by T6 name hash, LZO/raw decoded, CRC-validated against the IPAK index, parsed as IWI27, decoded from its retained block-compression format, embedded in the GLB, and bound conservatively to TEXCOORD_0. Shared-IPAK payloads, unresolved packed image identities, multi-layer/decal shader composition, lightmaps, reflections, and model-side materials remain explicit.",
+  "next": [
+    "resolve the remaining packed GfxImage identities through exact serializer/alias evidence",
+    "recover shared base.ipak/mp.ipak payloads for the 93 already-named missing color images and 74 already-named missing normal images",
+    "extend exact texture extraction to the static-XModel-side material population",
+    "then integrate lightmaps/reflections and exact layered material composition"
+  ]
+}
