@@ -1,0 +1,52 @@
+{
+  "format": "t6-nuketown-base-ipak-43-exact-texture-recovery-v1",
+  "map": "mp_nuketown_2020",
+  "source": {
+    "url": "https://r2.houseofkublai.com/bo2/zone/all/base.ipak",
+    "bytes": 2614362112,
+    "indexEntryCount": 13366,
+    "access": "HTTP byte ranges"
+  },
+  "aliasBank": {
+    "file": "NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64",
+    "count": 81
+  },
+  "summary": {
+    "exactPairPresent": 43,
+    "validatedPayloads": 43,
+    "validatedWithoutCfSkip": 34,
+    "validatedWithCfSkip": 9,
+    "absentFromBaseIpak": 38,
+    "rejectedExactPairs": 0
+  },
+  "decoderContract": {
+    "command0": "raw",
+    "command1": "LZO1X",
+    "command0xCF": "skip/padding; consume stored bytes and emit no output",
+    "otherCommands": "fail closed"
+  },
+  "validation": {
+    "exactNameHashDataHashPair": "pass 43/43",
+    "crc29": "pass 43/43",
+    "iwi27Parse": "pass 43/43",
+    "retainedDimensions": "pass 43/43"
+  },
+  "cfSkipValidation": {
+    "payloadCount": 9,
+    "skipCommandCount": 9,
+    "skipBytes": 102016,
+    "networkBytes": 3265760,
+    "workflowRun": 33925404506,
+    "artifactId": 9956634516,
+    "artifactZipSha256": "4c567e881ea9ac81dd1abd88b954245ce2c2b4df422d57842da8166dd1213f44"
+  },
+  "retainedRecoveryBundle": {
+    "file": "NUKETOWN_BASE_IPAK_43_EXACT_TEXTURE_RECOVERY_V1.zip",
+    "bytes": 9157717,
+    "sha256": "3ab72056eaee7e43d8439ae512f192caebcfdef3b1c5edfe62198749869d054f",
+    "manifestSha256": "4d640327fc14ab7016288281e466b8f9943fa996142b35afbf802b795af07c02",
+    "googleDriveFileId": "11JBVuswm0U9gL1z7buZHyds1nDjHIRQg",
+    "googleDriveParentFolderId": "1m8xSpNf5OHJcAYfGAMo33V5_xDLTIfdD"
+  },
+  "proofBoundary": "No filename guessing, proximity substitution or same-name wrong-data fallback. A payload is admitted only from the exact retail (nameHash,dataHash) pair and independent CRC29, IWI27 and retained width/height/depth agreement. The 38 absent aliases remain absent from base.ipak and require another retail source tier."
+}
