@@ -1,0 +1,123 @@
+--- tools/t6_nuketown_ipak_partial_texture_export_v2.py
++++ tools/t6_nuketown_ipak_partial_texture_export_v3.py
+@@
+ IWI27=27
+ IWI_DXT1=0x0B
++IWI_DXT3=0x0C
+ IWI_DXT5=0x0D
+ IWI_DXN=0x0E
+@@
++def decode_bc2(src,w,h):
++    out=bytearray(w*h*4); p=0
++    for by in range((h+3)//4):
++        for bx in range((w+3)//4):
++            abits=int.from_bytes(src[p:p+8],'little')
++            c0,c1,cbits=struct.unpack_from('<HHI',src,p+8); p+=16
++            r0,g0,b0=rgb565(c0); r1,g1,b1=rgb565(c1)
++            cols=[(r0,g0,b0),(r1,g1,b1),((2*r0+r1)//3,(2*g0+g1)//3,(2*b0+b1)//3),((r0+2*r1)//3,(g0+2*g1)//3,(b0+2*b1)//3)]
++            for py in range(4):
++                y=by*4+py
++                if y>=h: continue
++                for px in range(4):
++                    x=bx*4+px
++                    if x>=w: continue
++                    i=py*4+px; ci=(cbits>>(2*i))&3; a4=(abits>>(4*i))&0xf; o=(y*w+x)*4
++                    out[o:o+4]=bytes((*cols[ci],a4*17))
++    return bytes(out)
++
+@@
+-    block_bytes=8 if fmt==IWI_DXT1 else 16 if fmt in (IWI_DXT5,IWI_DXN) else None
++    block_bytes=8 if fmt==IWI_DXT1 else 16 if fmt in (IWI_DXT3,IWI_DXT5,IWI_DXN) else None
+@@
+     if fmt==IWI_DXT1: rgba=decode_bc1(src,w,h)
++    elif fmt==IWI_DXT3: rgba=decode_bc2(src,w,h)
+     elif fmt==IWI_DXT5: rgba=decode_bc3(src,w,h)
+@@
+-def first_semantic_image(mat, semantic):
++def generated_components(name:str):
++    if not name.startswith('*') or '(' not in name or not name.endswith(')'):
++        return None
++    return name[name.find('(')+1:-1].split(':')
++
++def build_component_image_anchors(mats:list[dict]):
++    by_name={m['name']:m for m in mats}
++    anchors={}; conflicts=[]; aligned_entries=0; compound_count=0
++    complete_compounds=0; semantic_count_mismatches=[]
++    def packed_key(im):
++        p=(im or {}).get('pointer') or {}
++        if not (im or {}).get('inline') and p.get('kind')=='offset':
++            return (p.get('block'),p.get('offset'))
++        return None
++    def inline_name(im):
++        return (im or {}).get('name') if (im or {}).get('inline') else None
++    for m in mats:
++        cs=generated_components(m['name'])
++        if not cs: continue
++        compound_count+=1
++        if not all(c in by_name for c in cs): continue
++        complete_compounds+=1
++        for semantic in sorted({t.get('semantic') for t in m.get('textures',[])}):
++            gen=[t for t in m.get('textures',[]) if t.get('semantic')==semantic]
++            component_rows=[]
++            for c in cs:
++                component_rows.extend(t for t in by_name[c].get('textures',[]) if t.get('semantic')==semantic)
++            if len(gen)!=len(component_rows):
++                semantic_count_mismatches.append({'material':m['name'],'semantic':semantic,'generatedCount':len(gen),'componentCount':len(component_rows)})
++                continue
++            aligned_entries+=len(gen)
++            for g,e in zip(gen,component_rows):
++                gi=g.get('image') or {}; ei=e.get('image') or {}
++                for key,n in ((packed_key(gi),inline_name(ei)),(packed_key(ei),inline_name(gi))):
++                    if key is None or not n: continue
++                    old=anchors.get(key)
++                    if old is not None and old!=n:
++                        conflicts.append({'pointer':list(key),'old':old,'new':n,'material':m['name'],'semantic':semantic})
++                    else:
++                        anchors[key]=n
++    if semantic_count_mismatches:
++        raise ValueError(f'component semantic count mismatches: {semantic_count_mismatches[:3]}')
++    if conflicts:
++        raise ValueError(f'component image anchor conflicts: {conflicts[:3]}')
++    return anchors,{'generatedCompoundCount':compound_count,'completeComponentCompoundCount':complete_compounds,'alignedTextureEntryCount':aligned_entries,'packedPointerImageAnchorCount':len(anchors),'semanticCountMismatchCount':0,'anchorConflictCount':0}
++
++def first_semantic_image(mat, semantic, anchors):
+     # Fail closed: only the first texture-table entry for a semantic may be promoted.
+-    # If that first entry is packed/unresolved, a later layer/decal with the same semantic
+-    # must not be mistaken for the base layer.
++    # If packed, it is eligible only when the retained generated/component table proof
++    # resolves that exact block/offset identity to one unique inline GfxImage name.
+     for t in mat.get('textures',[]):
+         if t.get('semantic')!=semantic: continue
+         im=t.get('image') or {}
+-        if im.get('inline') and im.get('name'): return t,im
+-        return t,None
+-    return None,None
++        if im.get('inline') and im.get('name'):
++            return t,im,'inline'
++        p=im.get('pointer') or {}; key=(p.get('block'),p.get('offset'))
++        n=anchors.get(key) if p.get('kind')=='offset' else None
++        if n:
++            return t,{'inline':False,'name':n,'resolvedPackedPointer':{'block':key[0],'offset':key[1]}},'component-table-anchor'
++        return t,None,None
++    return None,None,None
+@@
+ def build(glb:Path,materials_json:Path,ipak_path:Path,out:Path,manifest_path:Path):
+     js,binbuf=read_glb(glb); mats=json.loads(materials_json.read_text())['materials']; by_name={m['name']:m for m in mats}; ipak=IPak(ipak_path)
++    anchors,anchor_proof=build_component_image_anchors(mats)
+@@
+-            t,im=first_semantic_image(src,semantic)
++            t,im,resolution=first_semantic_image(src,semantic,anchors)
+@@
+-            gmat.setdefault('extras',{}).setdefault('T6',{}).setdefault('realTextureBindings',[]).append({'kind':kind,'image':iname,'semantic':semantic,'samplerState':t.get('samplerState'),'sourceContainer':'mp_nuketown_2020.ipak'})
+-            matrow[kind]={'image':iname,'nameHash':r_hash_string(iname),'dataHash':ent[0],'textureIndex':tex_idx,'pngSha256':key,**meta}
++            gmat.setdefault('extras',{}).setdefault('T6',{}).setdefault('realTextureBindings',[]).append({'kind':kind,'image':iname,'semantic':semantic,'samplerState':t.get('samplerState'),'sourceContainer':'mp_nuketown_2020.ipak','identityResolution':resolution})
++            matrow[kind]={'image':iname,'identityResolution':resolution,'nameHash':r_hash_string(iname),'dataHash':ent[0],'textureIndex':tex_idx,'pngSha256':key,**meta}
+@@
+-    js.setdefault('extras',{}).setdefault('T6',{})['realTexturePartialV2']={'colorMaterialBindings':color_bound,'normalMaterialBindings':normal_bound,'uniqueEmbeddedImages':len(png_cache),'sourceIpak':ipak_path.name,'sourceMaterialCatalog':materials_json.name,'proofBoundary':'Exact first semantic colorMap/normalMap only when the first retained texture-table entry for that semantic is an inline named GfxImage present in the map-specific IPAK. BC1/BC3 color and BC5/DXN normal top mips are decoded. Missing shared-IPAK images, later layered/decal composition, lightmaps, reflections, and static-XModel material images remain explicit.'}
++    js.setdefault('extras',{}).setdefault('T6',{})['realTexturePartialV3']={'colorMaterialBindings':color_bound,'normalMaterialBindings':normal_bound,'uniqueEmbeddedImages':len(png_cache),'sourceIpak':ipak_path.name,'sourceMaterialCatalog':materials_json.name,'packedPointerAnchorProof':anchor_proof,'proofBoundary':'Exact first semantic colorMap/normalMap only when the first retained texture-table entry for that semantic is inline named or is resolved by the zero-conflict generated/component texture-table proof, and the named image exists in the map-specific IPAK. BC1/BC2/BC3 colors and BC5/DXN normal top mips are decoded. Missing shared-IPAK images, unresolved pointers, later layered/decal composition, lightmaps, reflections, and static-XModel material images remain explicit.'}
+@@
+-    manifest={'format':'t6-nuketown-ipak-partial-real-texture-export-v2',
++    manifest={'format':'t6-nuketown-ipak-partial-real-texture-export-v3',
+@@
+-    'proofBoundary':'Real image-backed partial export. Bound images are selected by exact retained Material/GfxImage semantics and exact material identity; extracted from the exact map-specific IPAK by T6 R_HashString; block/LZO decoded; CRC-validated against the IPAK index; parsed as IWI27; BC1/BC3 colors and BC5/DXN normals decoded at the highest-resolution mip; embedded as PNG; then bound only to TEXCOORD_0 as a conservative first-layer preview. No later layer is substituted when the first semantic entry is unresolved.'}
++    'packedPointerAnchorProof':anchor_proof,'proofBoundary':'Real image-backed partial export. Bound images are selected by exact retained Material/GfxImage semantics and exact material identity. Packed image identities are promoted only through zero-conflict generated/component semantic-table alignment across complete retained compounds; extracted from the exact map-specific IPAK by T6 R_HashString; block/LZO decoded; CRC-validated against the IPAK index; parsed as IWI27; BC1/BC2/BC3 colors and BC5/DXN normals decoded at the highest-resolution mip; embedded as PNG; then bound only to TEXCOORD_0 as a conservative first-layer preview. No later layer is substituted when the first semantic entry is unresolved.'}
