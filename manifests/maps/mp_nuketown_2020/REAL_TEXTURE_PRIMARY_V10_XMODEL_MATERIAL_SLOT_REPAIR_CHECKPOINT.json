@@ -1,0 +1,66 @@
+{
+  "format": "t6-nuketown-real-texture-primary-v10-xmodel-material-slot-repair-checkpoint",
+  "date": "2026-09-04",
+  "map": "mp_nuketown_2020",
+  "tool": {
+    "path": "tools/t6_nuketown_xmodel_material_slot_repair_v1.py",
+    "commit": "2d33d42b7de8f2fa7996637c6ead6ea57c0dd422",
+    "localSha256": "e74acf55e7a8a83aa63d56ceae495df6cde0c26e6e5570df105995e727ab2b90"
+  },
+  "proof": {
+    "storedPath": "manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64",
+    "storedCommit": "dc4e0a494c6c19f9955bdb4b7feebd07958f1a4e",
+    "storedBytes": 12185,
+    "storedSha256": "8403ad300491d678de7a81b1d0ca55ce8183601329d1799c7e90cff58a7fcf70",
+    "rawJsonBytes": 97761,
+    "rawJsonSha256": "e1704755fdf365eb97c47f517afe0173152ca4a3ae702b309cb4d02981380423",
+    "playableStaticModelCount": 297,
+    "playableLod0MaterialSlotCount": 538
+  },
+  "inputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v9.glb",
+    "bytes": 137711124,
+    "sha256": "c9e09d19b5f5c7db0616635db424a74b965ab3569a2fd653c333a0688e01eb5c"
+  },
+  "outputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v10.glb",
+    "bytes": 137712788,
+    "sha256": "92b576688e54f131e9c11b1726cb5d024729257cb6150ccaabdd59cbc0e8c607"
+  },
+  "fullRunManifest": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v10_MANIFEST.json",
+    "sha256": "e80c8909046e0b7baaa1803320ddd819d744b457e9b929e8c365746031a83dca"
+  },
+  "result": {
+    "validatedExistingNonGenericSlots": 341,
+    "repairedGenericSlots": 197,
+    "affectedMeshes": 122,
+    "affectedPlacedNodes": 593,
+    "genericPrimitiveReferencesAfter": 0,
+    "exactTargetMaterialIdentities": 90,
+    "identityOnlyMaterialsCreated": 3,
+    "repairedSlotsInheritingColorTexture": 51,
+    "repairedSlotsInheritingNormalTexture": 99,
+    "repairedSlotsInheritingAnyTexture": 108
+  },
+  "identityOnlyMaterials": [
+    "mc/color_black_shine",
+    "mc/mtl_nt_2020_flags_01",
+    "mlv/plaster_whitewall_01"
+  ],
+  "validation": {
+    "all341ExistingNonGenericSlotsMatchProof": true,
+    "materialOrderConflicts": 0,
+    "missingProofRowsForGenericMeshes": 0,
+    "genericPrimitiveReferencesAfter": 0,
+    "glbReparse": "pass",
+    "bufferByteLength": "pass"
+  },
+  "proofBoundary": "Only primitive slots whose old material name begins material_surface_ are rewritten. Existing non-generic slots must independently agree with the retained XModel LOD material sequence. Missing exact material objects are created as neutral identity-only shells; similarly named materials are never substituted.",
+  "next": [
+    "recover the three identity-only material records directly from the pinned FastFile",
+    "re-run exact streamed/inline texture binding on the repaired material assignments",
+    "continue packed GfxImage closure and base.ipak recovery",
+    "then add exact layered/decal/lightmap/reflection composition"
+  ]
+}
