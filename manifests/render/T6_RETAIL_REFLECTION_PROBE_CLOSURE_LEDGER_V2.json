@@ -1,0 +1,115 @@
+{
+  "format": "t6-retail-reflection-probe-closure-ledger-v2",
+  "totalFetchCount": 5888,
+  "correction": {
+    "supersedes": [
+      "manifests/render/T6_RETAIL_REFLECTION_PROBE_CLOSURE_LEDGER_V1.json",
+      "tools/t6_retail_reflection_probe_sphere_elec_physical_closure_v1.py"
+    ],
+    "reason": "The global census contains two distinct 24-fetch TEXCOORD0 populations. The already-closed shifted-TBN population is TEMP_OP50/TEXCOORD0; the unresolved named Tomb sphere-electric bank is TEXCOORD2/TEXCOORD0. V1 associated the sphere gate with the former and would therefore double-count an already closed 24-fetch population."
+  },
+  "preTempComponentBaseline": {
+    "closedFetchCount": 5808,
+    "components": [
+      {
+        "family": "TEMP_OP50/TEXCOORD5",
+        "closedFetchCount": 4086,
+        "primaryProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_SURFACE_NORMAL_V1.json"
+      },
+      {
+        "family": "TEMP_OP50/TEXCOORD1",
+        "closedFetchCount": 995,
+        "primaryProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_TEMP_MAD_TEXCOORD1_CLOSURE_ARCHIVE_V1.json"
+      },
+      {
+        "family": "TEXCOORD1/TEXCOORD5",
+        "closedFetchCount": 616,
+        "primaryProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_DIRECT_VERTEX_NORMAL_V1.json"
+      },
+      {
+        "family": "TEXCOORD1/TEXCOORD0",
+        "closedFetchCount": 11,
+        "primaryProof": "tools/t6_retail_reflection_probe_texcoord1_texcoord0_v1.py"
+      },
+      {
+        "family": "TEXCOORD2/TEXCOORD1",
+        "closedFetchCount": 54,
+        "sourcePopulationCount": 75,
+        "primaryProof": "tools/t6_retail_reflection_probe_texcoord2_texcoord1_broad_v1.py"
+      },
+      {
+        "family": "TEXCOORD3/TEXCOORD1",
+        "closedFetchCount": 22,
+        "sourcePopulationCount": 42,
+        "primaryProof": "tools/t6_retail_reflection_probe_texcoord3_texcoord1_v1.py"
+      },
+      {
+        "family": "TEMP_OP50/TEXCOORD0_SHIFTED_TBN",
+        "closedFetchCount": 24,
+        "primaryProof": "manifests/render/T6_RETAIL_REFLECTION_PROBE_SHIFTED_TANGENT_BASIS_NORMAL_V1.json",
+        "note": "Distinct from the unresolved named sphere-electric TEXCOORD2/TEXCOORD0 bank."
+      }
+    ],
+    "sumCheck": 5808
+  },
+  "tempComponentProof": {
+    "status": "independently-reproduced; durable verifier and synthetic regression checkpointed; newly generated corpus manifest pending pinned-corpus rerun",
+    "closedFetchCount": 15,
+    "families": {
+      "TEMP_MIXED_WRITER/TEXCOORD1": 6,
+      "TEMP_MIXED_WRITER/TEXCOORD3": 9
+    },
+    "scratchManifestSha256": "481a750d41b755f644b368e3b33145eaf5739f1f7a57594fdcee1b662023370d",
+    "verifier": "tools/t6_retail_reflection_probe_temp_component_normal_v1.py",
+    "verifierCommit": "266d52dc23d562f6086c6c13cc0f5714f06111fc",
+    "regression": "tools/test_t6_retail_reflection_probe_temp_component_normal_v1.py",
+    "regressionCommit": "0172ba7ab1eb5001696426de65f006b63a7fe34b"
+  },
+  "measuredClosure": {
+    "closedFetchCount": 5823,
+    "remainingFetchCount": 65,
+    "closedPercent": 98.89605978260869,
+    "sumCheck": "5808 + 15 = 5823"
+  },
+  "unresolvedFamilies": [
+    {
+      "family": "TEXCOORD2/TEXCOORD1",
+      "sourcePopulationCount": 75,
+      "alreadyClosedFetchCount": 54,
+      "remainingFetchCount": 21,
+      "exactPackedPsExtension": "tools/t6_retail_reflection_probe_residual_packed_ps_extension_v1.py",
+      "differentialFallback": "tools/t6_retail_reflection_probe_residual_packed_ps_differential_v1.py"
+    },
+    {
+      "family": "TEXCOORD3/TEXCOORD1",
+      "sourcePopulationCount": 42,
+      "alreadyClosedFetchCount": 22,
+      "remainingFetchCount": 20,
+      "exactPackedPsExtension": "tools/t6_retail_reflection_probe_residual_packed_ps_extension_v1.py",
+      "differentialFallback": "tools/t6_retail_reflection_probe_residual_packed_ps_differential_v1.py"
+    },
+    {
+      "family": "TEXCOORD2/TEXCOORD0",
+      "sourcePopulationCount": 24,
+      "alreadyClosedFetchCount": 0,
+      "remainingFetchCount": 24,
+      "specialBank": "pimp_shader_sw4_3d_zm_sphere_elec_*",
+      "correctedPhysicalClosureGate": "tools/t6_retail_reflection_probe_sphere_elec_tc2_tc0_physical_closure_v2.py",
+      "correctedPhysicalClosureGateCommit": "84e701d3dfad35d070780e4b7e37864f300be145",
+      "status": "packed-PS owner/paired-VS pipeline checkpointed; physical promotion pending pinned-corpus execution"
+    }
+  ],
+  "conditionalBoundary": {
+    "ifCorrectedSphereElectricGatePassesAndNoResidual41ExtensionPasses": {
+      "closedFetchCount": 5847,
+      "remainingFetchCount": 41,
+      "closedPercent": 99.30366847826087
+    },
+    "ifAllPendingFamiliesPass": {
+      "closedFetchCount": 5888,
+      "remainingFetchCount": 0,
+      "closedPercent": 100.0
+    }
+  },
+  "proofBoundary": "Accounting/provenance checkpoint only. The measured 5,823 closure includes the independently reproduced TEMP15 proof but does not count the 24 named sphere-electric TC2/TEXCOORD0 shaders or either residual direct-normal family beyond their already committed 54/75 and 22/42 subsets. The distinct 24-fetch shifted-TBN TEMP_OP50/TEXCOORD0 population is already part of the 5,808 baseline and must never be counted again as sphere-electric closure."
+}
