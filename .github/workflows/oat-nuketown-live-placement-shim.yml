@@ -1,0 +1,78 @@
+name: oat-nuketown-live-placement-shim
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-nuketown-live-placement-shim.yml]
+permissions:
+  contents: read
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install 32-bit compiler support
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+      - name: Fetch exact OAT source headers and compile live shim
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          g++ -m32 -std=c++23 -DARCH_x86 -fPIC -shared \
+            -Ioat-src/src/Common \
+            tools/t6_oat_live_gfxworld_placement_shim.cpp \
+            -ldl -o libt6_gfxworld_placement.so
+          file libt6_gfxworld_placement.so
+      - name: Fetch exact FF and stock OAT v0.33.0
+        run: |
+          python -m pip install --disable-pip-version-check gdown
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          wget -q https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz -O oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat && tar -xzf oat-linux.tar.gz -C oat && chmod +x oat/Unlinker
+      - name: Extract live GfxWorld placements
+        run: |
+          LD_PRELOAD="$PWD/libt6_gfxworld_placement.so" oat/Unlinker --no-color --list mp_nuketown_2020.ff > xasset-list-live.txt
+          test -s gfxworld-static-placements-live.json
+          python - <<'PY'
+          import base64, collections, json, zlib
+          from pathlib import Path
+          p=json.loads(Path('gfxworld-static-placements-live.json').read_text())
+          assert p['format']=='t6-gfxworld-static-placement-live-v1'
+          assert p['smodelCount']==2992, p['smodelCount']
+          assert len(p['placements'])==2992
+          nulls=sum(r['model'] is None for r in p['placements'])
+          assert nulls==0, f'unresolved live model names: {nulls}'
+          proof_path=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          proof=json.loads(zlib.decompress(base64.b64decode(proof_path.read_text())).decode())
+          names={r['xmodelName'] for r in proof['models']}
+          assert len(names)==297
+          selected=[r for r in p['placements'] if r['model'] in names]
+          counts=collections.Counter(r['model'] for r in selected)
+          summary={
+            'format':'t6-nuketown-live-placement-summary-v1',
+            'worldName':p['worldName'],
+            'surfaceCount':p['surfaceCount'],
+            'retailStaticCount':p['smodelCount'],
+            'resolvedModelNameCount':2992-nulls,
+            'playableIdentityCount':len(names),
+            'playableSelectedPlacementCount':len(selected),
+            'playableModelsPresent':len(counts),
+            'missingPlayableModels':sorted(names-set(counts)),
+            'topPlayableFrequencies':counts.most_common(30),
+            'structSizes':p['structSizes'],
+          }
+          Path('NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(json.dumps(summary,indent=2))
+          assert len(selected)==1943, f'playable filter yielded {len(selected)}, expected 1943'
+          assert set(counts)==names, f'missing {len(names-set(counts))} playable models'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-live-gfxworld-static-placements-v1
+          path: |
+            gfxworld-static-placements-live.json
+            NUKETOWN_LIVE_GFXWORLD_STATIC_PLACEMENT_SUMMARY_V1.json
+          retention-days: 2
