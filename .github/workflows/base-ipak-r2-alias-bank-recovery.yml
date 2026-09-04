@@ -1,0 +1,118 @@
+name: base-ipak-r2-alias-bank-recovery
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/base-ipak-r2-alias-bank-recovery.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check pillow
+      - name: Scan all 81 aliases against base.ipak
+        run: |
+          mkdir -p recovered_alias_bank
+          python - <<'PY'
+          import base64,ctypes,ctypes.util,hashlib,importlib.util,json,struct,urllib.request,zlib
+          from collections import defaultdict
+          from pathlib import Path
+          URL='https://r2.houseofkublai.com/bo2/zone/all/base.ipak';OUT=Path('recovered_alias_bank')
+          bankp=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          bank=json.loads(zlib.decompress(base64.b64decode(bankp.read_text().strip())))
+          aliases=bank['aliases']
+          spec=importlib.util.spec_from_file_location('t6tex',Path('tools/t6_nuketown_ipak_partial_texture_export_v2.py'))
+          t6=importlib.util.module_from_spec(spec);spec.loader.exec_module(t6)
+          def get_range(start,end):
+            req=urllib.request.Request(URL,headers={'Range':f'bytes={start}-{end}','User-Agent':'bo2-t6-assets-alias-bank-recovery/1'})
+            with urllib.request.urlopen(req,timeout=120) as r:
+              if r.status!=206:raise RuntimeError(f'Range not honored: {r.status}')
+              cr=r.headers.get('Content-Range','');b=r.read()
+            if len(b)!=end-start+1:raise RuntimeError(f'range length mismatch: {cr}')
+            return b,cr
+          head,hcr=get_range(0,65535);magic,ver,total,sc=struct.unpack_from('<4sIII',head,0)
+          if magic!=b'KAPI' or ver!=0x50000:raise ValueError('invalid IPAK')
+          secs=[struct.unpack_from('<IIII',head,16+16*i) for i in range(sc)];ds=[s for s in secs if s[0]==2];ix=[s for s in secs if s[0]==1]
+          if len(ds)!=1 or len(ix)!=1:raise ValueError('missing data/index')
+          data_sec=ds[0];_,ioff,isz,icount=ix[0];idx,_=get_range(ioff,ioff+icount*16-1)
+          by_name={};by_data=defaultdict(list)
+          for i in range(icount):
+            e=struct.unpack_from('<IIII',idx,16*i);by_data[e[0]].append(e)
+            if e[1] in by_name:raise ValueError(f'duplicate nameHash {e[1]:08x}')
+            by_name[e[1]]=e
+          lib=ctypes.util.find_library('lzo2');lzo=ctypes.CDLL(lib).lzo1x_decompress_safe
+          lzo.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t),ctypes.c_void_p];lzo.restype=ctypes.c_int
+          def align(n,a):return (n+a-1)//a*a
+          def extract(seg,start,e):
+            dh,nh,rel,raw=e;ap=start;ae=start+raw;out=bytearray();blocks=0
+            while ap<ae:
+              ap=align(ap,128)
+              if ap>=ae:break
+              p0=ap-start;hdr=seg[p0:p0+128];co=struct.unpack_from('<I',hdr,0)[0];fo=co&0xffffff;cnt=co>>24
+              if cnt>31:raise ValueError('command count')
+              cmds=[]
+              for j in range(cnt):
+                w=struct.unpack_from('<I',hdr,4+4*j)[0];cmds.append((w&0xffffff,w>>24))
+              if any(c in (0,1) for _,c in cmds) and fo!=len(out):raise ValueError(f'offset {fo}!={len(out)}')
+              p=p0+128
+              for sz,c in cmds:
+                blob=seg[p:p+sz]
+                if c==0:out.extend(blob)
+                elif c==1:
+                  dst=ctypes.create_string_buffer(0x8000);n=ctypes.c_size_t(0x8000);src=ctypes.create_string_buffer(blob)
+                  rc=lzo(src,len(blob),dst,ctypes.byref(n),None)
+                  if rc:raise ValueError(f'lzo {rc}')
+                  out.extend(dst.raw[:n.value])
+                else:raise ValueError(f'compression {c}')
+                p+=sz
+              ap=start+p;blocks+=1
+            b=bytes(out);crc=zlib.crc32(b)&0x1fffffff
+            if crc!=dh:raise ValueError(f'CRC29 {crc:08x}!={dh:08x}')
+            return b,blocks
+          cache={};rows=[];network=len(head)+len(idx);stats=defaultdict(int)
+          for a in aliases:
+            nh=int(a['hash']);dh=int(a['dataHash']);name=a['name'];expected=(int(a['width']),int(a['height']),int(a['depth']))
+            name_e=by_name.get(nh);data_es=by_data.get(dh,[]);method=None;e=None
+            if name_e is not None and name_e[0]==dh:
+              method='exact-nameHash+dataHash';e=name_e
+            elif len(data_es)==1:
+              method='unique-dataHash';e=data_es[0]
+            row={k:a.get(k) for k in ('name','hash','dataHash','semantic','width','height','depth','suffix','block','virtualOffset','slot')}
+            row.update({'nameHashHex':f'{nh:08x}','dataHashHex':f'{dh:08x}','nameHashPresent':name_e is not None,
+                        'dataHashCandidateCount':len(data_es),'recovered':False,'resolutionMethod':method})
+            if e is None:
+              row['reason']='no exact name+data pair and dataHash not uniquely present';rows.append(row);stats['missing']+=1;continue
+            key=(e[0],e[1],e[2],e[3])
+            if key not in cache:
+              start=data_sec[1]+e[2];end=start+e[3]-1;seg,cr=get_range(start,end);network+=len(seg);iwi,blocks=extract(seg,start,e)
+              fmt,flags,w,h,d,gamma,sizes=t6.parse_iwi27(iwi);cache[key]=(iwi,blocks,cr,fmt,flags,w,h,d,gamma)
+            iwi,blocks,cr,fmt,flags,w,h,d,gamma=cache[key]
+            if (w,h,d)!=expected:
+              row.update({'reason':f'dimension mismatch {(w,h,d)} != {expected}','actualDimensions':[w,h,d]});rows.append(row);stats['dimensionMismatch']+=1;continue
+            safe=f"{len(rows):03d}_{name.replace('/','__').replace('~','_tilde_')}"
+            ip=OUT/f'{safe}.iwi';ip.write_bytes(iwi);png_sha=None;png_name=None;png_bytes=0
+            try:
+              png,meta=t6.iwi_top_png(iwi,normal_semantic=(int(a['semantic'])==5));pp=OUT/f'{safe}.png';pp.write_bytes(png);png_sha=hashlib.sha256(png).hexdigest();png_name=pp.name;png_bytes=len(png)
+            except Exception as ex:
+              row['pngDecode']=f'skipped: {type(ex).__name__}: {ex}'
+            row.update({'recovered':True,'resolutionMethod':method,'ipakNameHash':e[1],'ipakNameHashHex':f'{e[1]:08x}',
+                        'relativeOffset':e[2],'rawStoredBytes':e[3],'contentRange':cr,'blockCount':blocks,'format':fmt,'flags':flags,'gamma':gamma,
+                        'iwiBytes':len(iwi),'iwiSha256':hashlib.sha256(iwi).hexdigest(),'pngFile':png_name,'pngBytes':png_bytes,'pngSha256':png_sha,
+                        'crc29Validated':True,'iwi27Validated':True,'dimensionsValidated':True,'iwiFile':ip.name})
+            rows.append(row);stats['recovered']+=1;stats[method]+=1
+          report={'format':'t6-nuketown-base-ipak-alias-bank-recovery-v1','sourceUrl':URL,'sourceBytes':total,'indexEntryCount':icount,
+                  'aliasBankCount':len(aliases),'networkBytes':network,'uniquePayloadsFetched':len(cache),'summary':dict(stats),'rows':rows}
+          (OUT/'BASE_IPAK_ALIAS_BANK_RECOVERY_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:report[k] for k in ('sourceBytes','indexEntryCount','aliasBankCount','networkBytes','uniquePayloadsFetched','summary')},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: base-ipak-alias-bank-recovery
+          path: recovered_alias_bank/
+          retention-days: 1
