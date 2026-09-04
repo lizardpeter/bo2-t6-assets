@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include "Game/T6/T6_Assets.h"
 
