@@ -1,0 +1,55 @@
+name: base-ipak-r2-alias-index-census
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/base-ipak-r2-alias-index-census.yml]
+permissions:
+  contents: read
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Census alias identities with HTTP ranges
+        run: |
+          mkdir -p census
+          python - <<'PY'
+          import base64,json,struct,urllib.request,zlib
+          from collections import defaultdict,Counter
+          from pathlib import Path
+          URL='https://r2.houseofkublai.com/bo2/zone/all/base.ipak'
+          bank=json.loads(zlib.decompress(base64.b64decode(Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64').read_text().strip())))
+          def rg(a,b):
+            q=urllib.request.Request(URL,headers={'Range':f'bytes={a}-{b}','User-Agent':'bo2-t6-assets-index-census/1'})
+            with urllib.request.urlopen(q,timeout=60) as r:
+              if r.status!=206:raise RuntimeError(r.status)
+              d=r.read()
+            if len(d)!=b-a+1:raise RuntimeError('range length')
+            return d
+          h=rg(0,65535);magic,ver,total,sc=struct.unpack_from('<4sIII',h,0);secs=[struct.unpack_from('<IIII',h,16+16*i) for i in range(sc)]
+          ix=[s for s in secs if s[0]==1][0];_,ioff,isz,n=ix;idx=rg(ioff,ioff+n*16-1)
+          byn={};byd=defaultdict(list)
+          for i in range(n):
+            e=struct.unpack_from('<IIII',idx,i*16);byn[e[1]]=e;byd[e[0]].append(e)
+          rows=[];c=Counter()
+          for a in bank['aliases']:
+            nh=int(a['hash']);dh=int(a['dataHash']);ne=byn.get(nh);des=byd.get(dh,[])
+            if ne is not None and ne[0]==dh: cls='exact-nameHash+dataHash'
+            elif len(des)==1: cls='unique-dataHash-only'
+            elif len(des)>1: cls='ambiguous-dataHash'
+            elif ne is not None: cls='nameHash-present-dataHash-mismatch'
+            else: cls='absent'
+            c[cls]+=1
+            rows.append({**a,'classification':cls,'nameHashHex':f'{nh:08x}','dataHashHex':f'{dh:08x}',
+                         'baseNameEntry':list(ne) if ne else None,'baseDataEntries':[list(x) for x in des]})
+          out={'format':'t6-nuketown-base-ipak-alias-index-census-v1','sourceUrl':URL,'sourceBytes':total,'indexEntryCount':n,
+               'aliasCount':len(bank['aliases']),'summary':dict(c),'rows':rows}
+          Path('census/BASE_IPAK_ALIAS_INDEX_CENSUS_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out['summary'],indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: base-ipak-alias-index-census
+          path: census/
+          retention-days: 1
