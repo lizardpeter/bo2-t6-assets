@@ -1,0 +1,67 @@
+{
+  "format": "t6-nuketown-real-texture-primary-v8-static-exact-pair-checkpoint",
+  "date": "2026-09-04",
+  "map": "mp_nuketown_2020",
+  "tool": {
+    "path": "tools/t6_nuketown_static_xmodel_texture_apply_v2.py",
+    "commit": "382253fd02d6e3ec7f3db0f7d82953b0ddf8aa94",
+    "sha256": "4d8fc784ce6e8c26a1a4133503cb5a79600dc268af5cf57c4802a1148e093ef0"
+  },
+  "inputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v7.glb",
+    "bytes": 63550184,
+    "sha256": "0c6d5d6d36be3a77a9bba7b824b4276360137e2e7eddee3df5ef06c461941f49"
+  },
+  "outputGlb": {
+    "file": "mp_nuketown_2020_PLAYABLE_CORE_REAL_TEXTURE_PRIMARY_v8.glb",
+    "bytes": 109412028,
+    "sha256": "76e19401e4f80872a847a51c962c35667922600cd4fe673f9f6c2baed8c8d50e"
+  },
+  "ipak": {
+    "file": "mp_nuketown_2020.ipak",
+    "bytes": 165543936,
+    "sha256": "53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031"
+  },
+  "staticMaterialCatalog": {
+    "file": "NUKETOWN_STATIC_XMODEL_MATERIAL_CATALOG_V1.json",
+    "sha256": "3d812e1f59a56f1d6bba0bcc84de636abce678a52b12a6e78dc412286c074f08",
+    "glbNonWorldMaterialCount": 348,
+    "fullyLocatedRetailMaterials": 341,
+    "unresolvedPlaceholders": 7
+  },
+  "exactPairRule": {
+    "description": "Streamed IPAK images are admitted only on exact equality of the T6 pair (GfxImage.hash, GfxImage.streamedParts[0].hash) with the IPAK index key (nameHash, dataHash).",
+    "crc29Required": true,
+    "exactDimensionsRequired": true,
+    "sameNameWrongDataVariantRejected": true
+  },
+  "result": {
+    "promotionCount": 310,
+    "colorPromotions": 137,
+    "normalPromotions": 173,
+    "identityNormalPromotions": 84,
+    "uniqueNewPayloads": 226,
+    "reusedExistingExactPayloads": 0,
+    "sameNameWrongDataVariantRejected": 35,
+    "finalGlbMaterialCount": 639,
+    "finalBaseColorTextureMaterialCount": 248,
+    "finalNormalTextureMaterialCount": 301,
+    "embeddedPngCount": 338,
+    "embeddedPngValidation": "338/338 signatures and buffer ranges valid"
+  },
+  "misses": {
+    "colorExactPairMissing": 178,
+    "colorNotInline": 26,
+    "normalExactPairMissing": 100,
+    "normalNotInline": 39,
+    "normalSemanticAbsent": 29
+  },
+  "importantCorrection": "Earlier map/world texture stages used image-name hash as a primary IPAK lookup and could select a same-name payload whose dataHash did not match the retained streamed-part hash. v8 does not repeat that behavior for static-XModel materials.",
+  "proofBoundary": "No material-name inference and no same-name IPAK fallback. Static Material records are exact-name located in the pinned FastFile. Streamed images require exact two-hash IPAK identity, CRC29 equality, and exact dimensions. Packed block5/514620 first normals reuse only the already loader-address-proven $identitynormalmap.",
+  "next": [
+    "audit and rebuild the older 291 GfxWorld texture bindings using the same exact two-hash IPAK rule",
+    "resolve shared-IPAK payloads that are exact identities but absent from mp_nuketown_2020.ipak",
+    "resolve remaining packed first-color and first-normal GfxImage identities",
+    "integrate layered/decal composition and lightmaps/reflections after exact payload identity is clean"
+  ]
+}
