@@ -4,7 +4,7 @@
 For every t15/s15 reflectionProbeSampler cube fetch in the five pinned retail
 worlds this verifier proves, directly from SM4 operands, that:
 
-    decodedProbe.rgb = probe.rgb * (probe.a + 1e-6)
+    decodedProbe.rgb = probe.rgb / (probe.a + 1e-6)
 
 is the first consumer of the sampled RGB values. It then executes a branch-aware
 value-dependency taint over the supported retained SM4 instruction population
@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse, collections, hashlib, importlib.util, json, struct
 from pathlib import Path
 
-OP_ADD=0; OP_DISCARD=13; OP_DP2=15; OP_DP3=16; OP_DP4=17; OP_ELSE=18; OP_ENDIF=21
+OP_ADD=0; OP_DISCARD=13; OP_DIV=14; OP_DP2=15; OP_DP3=16; OP_DP4=17; OP_ELSE=18; OP_ENDIF=21
 OP_IF=31; OP_MAD=50; OP_MOV=54; OP_MOVC=55; OP_MUL=56; OP_RET=62; OP_SINCOS=77
 TYPE_TEMP=0; TYPE_OUTPUT=2; TYPE_IMM32=4; TYPE_SAMPLER=6; TYPE_RESOURCE=7
 BIAS_BITS=0x358637bd
@@ -64,9 +64,22 @@ def storage_for_semantic(dst,res,semantic):
  if len(hits)!=1:raise ValueError(f'sample semantic channel {semantic} maps to {hits}')
  return hits[0]
 
+def writer_dests(op,O):
+ if op in DCL_OPS or op in (OP_RET,OP_ELSE,OP_ENDIF,OP_IF,OP_DISCARD):return []
+ if op==OP_SINCOS:return O[:2]
+ return O[:1]
+
+def latest_writer_any(c,inst,w,before_idx,reg,component):
+ for i in range(before_idx-1,-1,-1):
+  p,op,ln,tok=inst[i];O=parse_all(c,w,p,ln)
+  for d in writer_dests(op,O):
+   if d['type']==TYPE_TEMP and d['idx']==[reg] and component in d['comps']:
+    return i,p,op,d,O
+ return None
+
 def writer_same_sample(c,inst,w,before_idx,operand,component,sample_idx):
  if operand['type']!=TYPE_TEMP or len(operand['idx'])!=1 or not isinstance(operand['idx'][0],int):return False
- wr=c.latest_writer(inst,w,before_idx,operand['idx'][0],component)
+ wr=latest_writer_any(c,inst,w,before_idx,operand['idx'][0],component)
  return wr is not None and wr[0]==sample_idx
 
 def source_components_read(op,O,src_index):
@@ -136,13 +149,26 @@ def first_rgb_consumer(c,w,inst,sidx,sd,res):
  if len(candidates)!=1:raise ValueError('first RGB MUL sample/scalar split is not unique')
  sm,other,other_comp=candidates[0]
  if other['type']!=TYPE_TEMP or len(other['idx'])!=1 or not isinstance(other['idx'][0],int):raise ValueError('RGB decode multiplier is not TEMP scalar')
- aw=c.latest_writer(inst,w,j,other['idx'][0],other_comp)
- if aw is None or aw[2]!=OP_ADD:raise ValueError('RGB decode multiplier is not produced by ADD')
- ai,ap,aop,ad=aw;add,aq=c.parse_n(w,ap,3)
- if aq!=ap+inst[ai][2]:raise ValueError('RGB decode ADD operand length mismatch')
- adst,s1,s2=add
- if other_comp not in adst['comps']:raise ValueError('RGB multiplier component absent from ADD destination')
- pos=adst['comps'].index(other_comp);resolved=[]
+ dw=latest_writer_any(c,inst,w,j,other['idx'][0],other_comp)
+ if dw is None or dw[2]!=OP_DIV:raise ValueError('RGB decode multiplier is not produced by DIV')
+ di,dp,dop,dd,divops=dw
+ if len(divops)!=3:raise ValueError('RGB decode DIV does not have three operands')
+ ddst,numer,denom=divops
+ if other_comp not in ddst['comps']:raise ValueError('RGB multiplier component absent from DIV destination')
+ dpos=ddst['comps'].index(other_comp)
+ if numer['type']!=TYPE_IMM32 or numer['modifier'] is not None or imm32_bits(w,numer)!=0x3f800000:
+  raise ValueError('RGB decode reciprocal numerator is not immediate 1.0')
+ de=eff(denom,ddst['comps'])[dpos]
+ if denom['type']!=TYPE_TEMP or len(denom['idx'])!=1 or not isinstance(denom['idx'][0],int) or denom['modifier'] is not None:
+  raise ValueError('RGB decode reciprocal denominator is not direct TEMP scalar')
+ aw=latest_writer_any(c,inst,w,di,denom['idx'][0],de)
+ if aw is None or aw[2]!=OP_ADD:raise ValueError('RGB decode reciprocal denominator is not produced by ADD')
+ ai,ap,aop,ad,addops=aw
+ if di-ai!=1:raise ValueError('RGB decode ADD is not immediately before DIV')
+ if len(addops)!=3:raise ValueError('RGB decode ADD does not have three operands')
+ adst,s1,s2=addops
+ if de not in adst['comps']:raise ValueError('DIV denominator component absent from ADD destination')
+ pos=adst['comps'].index(de);resolved=[]
  for alpha,imm in ((s1,s2),(s2,s1)):
   if imm['type']!=TYPE_IMM32 or imm['modifier'] is not None:continue
   if imm32_bits(w,imm)!=BIAS_BITS:continue
@@ -153,7 +179,7 @@ def first_rgb_consumer(c,w,inst,sidx,sd,res):
   resolved.append((alpha,imm))
  if len(resolved)!=1:raise ValueError('RGB decode ADD is not same-sample alpha + 1e-6')
  return {'sampleIndex':sidx,'mulIndex':j,'mulDistance':j-sidx,'mulDest':md['comps'],'sampleMulSwizzle':sm['comps'],
-         'scalarMulSwizzle':other['comps'],'addIndex':ai,'formula':'probe.rgb * (probe.a + 1e-6)'}
+         'scalarMulSwizzle':other['comps'],'addIndex':ai,'divIndex':di,'formula':'probe.rgb / (probe.a + 1e-6)'}
 
 def dest_lanes(o):return list(o['comps']) if o['comps'] else ['x']
 def src_lane_tags(o,dlanes,state):
@@ -279,17 +305,17 @@ def build(root:Path,coordinate_verifier:Path=Path('tools/t6_retail_reflection_pr
  card_rows=[{'o0RgbTagCardinality':list(k),'shaderCount':v} for k,v in sorted(outcards.items())]
  summary={'retainedMapCount':5,'uniqueReflectionProbeShaderCount':len(all_ref),'reflectionCubeFetchCount':fetch_total,
           'sampleLOpcodeCount':sampleops['SAMPLE_L'],'sampleBOpcodeCount':sampleops['SAMPLE_B'],
-          'firstRgbConsumerMulCount':fetch_total,'firstRgbConsumerFailureCount':0,'alphaBiasBits':f'{BIAS_BITS:08x}',
+          'firstRgbConsumerMulCount':fetch_total,'firstRgbConsumerFailureCount':0,'alphaBiasBits':f'{BIAS_BITS:08x}','reciprocalNumeratorBits':'3f800000',
           'firstMulDistance3Count':distance[3],'firstMulDistance4Count':distance[4],
           'finalAlignedRgbAncestryCheckCount':ancestry,'finalAlignedRgbAncestryFailureCount':failures,
           'shaderRowsSha256':jhash(rows),'firstMulPackingRowsSha256':jhash(pack_rows),'outputTagCardinalityRowsSha256':jhash(card_rows)}
  return {'format':'t6-retail-reflection-probe-weight-v1','producer':'tools/t6_retail_reflection_probe_weight_v1.py',
-         'equation':{'decodedProbeRgb':'probe.rgb * (probe.a + 1e-6)','alphaBiasBits':f'{BIAS_BITS:08x}'},
+         'equation':{'decodedProbeRgb':'probe.rgb / (probe.a + 1e-6)','alphaBiasBits':f'{BIAS_BITS:08x}','reciprocalNumeratorBits':'3f800000'},
          'sources':{'coordinateProof':'manifests/render/T6_RETAIL_REFLECTION_PROBE_COORDINATE_V1.json','mipProof':'manifests/render/T6_RETAIL_REFLECTION_PROBE_MIP_V1.json',
                     'rdefGuard':'manifests/render/T6_RETAIL_REFLECTION_PROBE_RDEF_GUARD_V1.json',
                     'expandedRetailMaps':{n:{'file':rel,'sha256':sha} for n,(rel,sha) in g.SOURCES.items()}},
          'mapCoverage':map_rows,'firstMulPackingPatterns':pack_rows,'outputTagCardinalityPatterns':card_rows,'summary':summary,
-         'proofBoundary':'Direct retained-SM4 proof over all 5,888 t15/s15 reflectionProbeSampler cube fetches in 5,868 unique reflected shaders. For each fetch, all semantic RGB sample components share the same first consumer MUL; its replicated scalar multiplier is produced by ADD of that exact same sample alpha and immediate 0x358637bd (~1e-6), proving decodedProbe.rgb = probe.rgb * (probe.a + 1e-6). A branch-aware lane-level value-taint then requires each probe x/y/z tag to be an ancestor of matching final o0.x/y/z, yielding 17,664 aligned RGB ancestry checks with zero failures. IF/ELSE states are union-merged as potential value dataflow; control dependence is not promoted to value ancestry. This does not yet simplify the later Fresnel/specular/material weighting between decoded probe RGB and final output, nor assign a physical meaning to every mip-control source.'}
+         'proofBoundary':'Direct retained-SM4 proof over all 5,888 t15/s15 reflectionProbeSampler cube fetches in 5,868 unique reflected shaders. For each fetch, all semantic RGB sample components share the same first consumer MUL; its replicated scalar multiplier is produced by DIV of immediate 1.0 by an ADD of that exact same sample alpha and immediate 0x358637bd (~1e-6), proving decodedProbe.rgb = probe.rgb / (probe.a + 1e-6). A branch-aware lane-level value-taint then requires each probe x/y/z tag to be an ancestor of matching final o0.x/y/z, yielding 17,664 aligned RGB ancestry checks with zero failures. IF/ELSE states are union-merged as potential value dataflow; control dependence is not promoted to value ancestry. This does not yet simplify the later Fresnel/specular/material weighting between decoded probe RGB and final output, nor assign a physical meaning to every mip-control source.'}
 
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--root',type=Path,default=Path('/mnt/data/t6_xanim_corpus'));ap.add_argument('--coordinate-verifier',type=Path,default=Path('tools/t6_retail_reflection_probe_coordinate_v1.py'));ap.add_argument('--guard',type=Path,default=Path('tools/t6_retail_lightmap_secondary_rdef_guard_v1.py'));ap.add_argument('--out',type=Path,required=True);a=ap.parse_args();d=build(a.root,a.coordinate_verifier,a.guard);a.out.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n');print(json.dumps(d['summary'],indent=2,sort_keys=True))
