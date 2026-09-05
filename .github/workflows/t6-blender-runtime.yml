@@ -58,3 +58,5 @@ jobs:
           set -euxo pipefail
           "$BLENDER" --background --factory-startup \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v3.py
+
+# Validation branch intentionally touches the workflow so the pull_request run is inspectable.
