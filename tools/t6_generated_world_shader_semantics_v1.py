@@ -13,7 +13,10 @@ Important invariants:
 - The secondary-stream normal-transform word is stored as bytes
   [m00, m11, m01, m10]. The shader consumes logical
   [m00, m01, m10, m11] as UNORM8 and converts with value*2-1.
-- Diffuse A/B/M equations below are transcribed from retail compiled DXBC.
+- Layer color composition is an ordered A/B/M/T recurrence. The scalar weight
+  dispatcher is source-closed for ordinary alpha/vertex/x/threshold cases.
+  vN height weights remain exact per-shader DAGs and MUST be supplied by the
+  recipe; this module deliberately does not guess a universal height formula.
 - Layered specular state is an ordered XYZW recurrence. Blend steps lerp the
   previous state toward the layer specular sample with the exact RGB compositor
   weight. Threshold steps select layer-vs-previous with the exact RGB threshold
@@ -24,16 +27,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 WEIGHT_CHANNEL = {1: "G", 2: "B", 3: "A"}
 UV_ATTRIBUTE = {0: "TEXCOORD_0", 1: "TEXCOORD_2", 2: "TEXCOORD_3", 3: "TEXCOORD_4"}
 
 DIFFUSE_EQUATIONS = {
-    "add": "base.rgb + layer.rgb * layer.a * weight",
-    "blend": "base.rgb + (layer.rgb - base.rgb) * layer.a * weight",
-    "multiply": "base.rgb * (1 + weight * (layer.rgb - 1))",
+    "add": "prev.rgb + layer.rgb * exactWeight",
+    "blend": "prev.rgb + (layer.rgb - prev.rgb) * exactWeight",
+    "multiply": "prev.rgb * (1 + (layer.rgb - 1) * exactWeight)",
+    "threshold": "select(exactThresholdCondition, layer.rgb, prev.rgb)",
+}
+
+WEIGHT_DISPATCH = {
+    "add": "alpha_vertex",
+    "blend": "vN -> height; else xN -> vertex_only; else alpha_vertex",
+    "multiply": "vertex_only",
+    "threshold": "threshold_alpha_vertex",
 }
 
 SPECULAR_EQUATIONS = {
@@ -49,6 +60,7 @@ class GeneratedLayerToken:
     has_normal: bool
     has_specular: bool
     x_variant: bool
+    height_variant: bool
 
 
 def parse_generated_layer_tokens(technique_set: str) -> list[GeneratedLayerToken]:
@@ -57,14 +69,16 @@ def parse_generated_layer_tokens(technique_set: str) -> list[GeneratedLayerToken
     Examples:
       b1c1       -> blend layer 1
       b1c1n1s1   -> blend layer 1 + normal1 + specular1
-      b1c1n1x1   -> blend layer 1 + normal1, x1 normal weighting variant
+      b1c1n1x1   -> blend layer 1 + normal1, x1 vertex-only weighting variant
+      b1c1n1s1v1 -> blend layer 1 + exact per-shader height weighting
       m2c2       -> multiply layer 2
+      t2c2       -> threshold-select layer 2
 
     Layer-0 tokens are base-mode declarations and are deliberately ignored.
     """
     out: list[GeneratedLayerToken] = []
-    op_name = {"a": "add", "b": "blend", "m": "multiply"}
-    for m in re.finditer(r"(?:^|_)([abm])(\d+)c\2([^_]*)", technique_set):
+    op_name = {"a": "add", "b": "blend", "m": "multiply", "t": "threshold"}
+    for m in re.finditer(r"(?:^|_)([abmt])(\d+)c\2([^_]*)", technique_set):
         layer = int(m.group(2))
         if layer == 0:
             continue
@@ -76,9 +90,53 @@ def parse_generated_layer_tokens(technique_set: str) -> list[GeneratedLayerToken
                 has_normal=f"n{layer}" in tail,
                 has_specular=f"s{layer}" in tail,
                 x_variant=f"x{layer}" in tail,
+                height_variant=f"v{layer}" in tail,
             )
         )
     return out
+
+
+def layer_weight_class(token: GeneratedLayerToken) -> str:
+    """Source-closed scalar-weight dispatcher for one layer token."""
+    if token.operation == "add":
+        return "alpha_vertex"
+    if token.operation == "blend":
+        if token.height_variant:
+            return "height"
+        if token.x_variant:
+            return "vertex_only"
+        return "alpha_vertex"
+    if token.operation == "multiply":
+        return "vertex_only"
+    if token.operation == "threshold":
+        return "threshold_alpha_vertex"
+    raise ValueError(token.operation)
+
+
+def resolve_ordinary_layer_weight(
+    token: GeneratedLayerToken,
+    *,
+    vertex_weight: float,
+    layer_alpha: float,
+    exact_height_weight: float | None = None,
+):
+    """Resolve the scalar/condition for a source-closed layer step.
+
+    Height variants are never simplified. A caller must provide the exact
+    per-shader vN DAG result from its shader recipe.
+    """
+    cls = layer_weight_class(token)
+    if cls == "alpha_vertex":
+        return float(layer_alpha) * float(vertex_weight)
+    if cls == "vertex_only":
+        return float(vertex_weight)
+    if cls == "threshold_alpha_vertex":
+        return float(layer_alpha) * float(vertex_weight) >= 0.5
+    if cls == "height":
+        if exact_height_weight is None:
+            raise ValueError("vN height layer requires exact_height_weight from the retained shader recipe")
+        return float(exact_height_weight)
+    raise ValueError(cls)
 
 
 def unpack_normal_transform_bytes(raw4: bytes) -> tuple[int, int, int, int]:
@@ -111,21 +169,51 @@ def normal_layer_weight(vertex_weight: float, color_layer_alpha: float, x_varian
     return vertex_weight if x_variant else vertex_weight * color_layer_alpha
 
 
-def compose_diffuse(base, layer, weight: float, operation: str):
-    """Reference scalar/vector implementation of the retail A/B/M diffuse ops.
+def compose_diffuse_exact(previous, layer, *, operation: str, exact_weight=None, exact_threshold_condition=None):
+    """Apply one exact ordered RGB compositor step.
 
-    base/layer are 4-tuples; RGB is returned. Generated color composition is
-    performed in the encoded texture domain in the retail shader before an
-    explicit RGB square used by the later lighting path.
+    ``exact_weight`` is the post-dispatch scalar. For threshold mode the caller
+    supplies ``exact_threshold_condition`` instead. This API is the preferred
+    renderer contract because it also represents xN and vN correctly.
     """
     if operation == "add":
-        return tuple(base[i] + layer[i] * layer[3] * weight for i in range(3))
+        if exact_weight is None:
+            raise ValueError("add requires exact_weight")
+        return tuple(previous[i] + layer[i] * float(exact_weight) for i in range(3))
     if operation == "blend":
-        f = layer[3] * weight
-        return tuple(base[i] + (layer[i] - base[i]) * f for i in range(3))
+        if exact_weight is None:
+            raise ValueError("blend requires exact_weight")
+        w = float(exact_weight)
+        return tuple(previous[i] + (layer[i] - previous[i]) * w for i in range(3))
     if operation == "multiply":
-        return tuple(base[i] * (1.0 + weight * (layer[i] - 1.0)) for i in range(3))
+        if exact_weight is None:
+            raise ValueError("multiply requires exact_weight")
+        w = float(exact_weight)
+        return tuple(previous[i] * (1.0 + (layer[i] - 1.0) * w) for i in range(3))
+    if operation == "threshold":
+        if exact_threshold_condition is None:
+            raise ValueError("threshold requires exact_threshold_condition")
+        return tuple(layer[i] if bool(exact_threshold_condition) else previous[i] for i in range(3))
     raise ValueError(operation)
+
+
+def compose_diffuse(base, layer, weight: float, operation: str):
+    """Compatibility helper for ordinary non-vN layer cases.
+
+    ``weight`` is the raw per-vertex layer control and ``layer[3]`` is color
+    alpha. This helper is exact for ordinary A/B and M. It intentionally does
+    not represent xN B, vN B, or threshold steps; use
+    :func:`resolve_ordinary_layer_weight` + :func:`compose_diffuse_exact` there.
+    """
+    if operation == "add":
+        exact = layer[3] * weight
+    elif operation == "blend":
+        exact = layer[3] * weight
+    elif operation == "multiply":
+        exact = weight
+    else:
+        raise ValueError(operation)
+    return compose_diffuse_exact(base, layer, operation=operation, exact_weight=exact)
 
 
 def technique_uses_x0_specular_fallback(technique_set: str) -> bool:
