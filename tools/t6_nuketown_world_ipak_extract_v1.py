@@ -14,10 +14,13 @@ from pathlib import Path
 HERE=Path(__file__).resolve().parent
 REC_PATH=HERE/'t6_nuketown_ipak_streamhash_texture_recovery_v1.py'
 BASE_PATH=HERE/'t6_nuketown_ipak_partial_texture_export_v2.py'
+DEC_PATH=HERE/'t6_iwi27_png_v1.py'
 rspec=importlib.util.spec_from_file_location('t6_stream_recovery',REC_PATH)
 rec=importlib.util.module_from_spec(rspec); rspec.loader.exec_module(rec)
 bspec=importlib.util.spec_from_file_location('t6_texture_base',BASE_PATH)
 base=importlib.util.module_from_spec(bspec); bspec.loader.exec_module(base)
+dspec=importlib.util.spec_from_file_location('t6_iwi27_png',DEC_PATH)
+dec=importlib.util.module_from_spec(dspec); dspec.loader.exec_module(dec)
 
 ADMISSIBLE={'exact-pair','unique-data-hash'}
 
@@ -85,7 +88,7 @@ def build(manifest_path:Path,census_path:Path,ipak_path:Path,out_dir:Path,source
         if 5 in semantic_set: roles.append(('normal',True))
         if any(s!=5 for s in semantic_set) or not roles: roles.append(('colorlike',False))
         for role,is_normal in roles:
-            png,pmeta=base.iwi_top_png(iwi_bytes,normal_semantic=is_normal)
+            png,pmeta=dec.iwi_top_png(iwi_bytes,normal_semantic=is_normal)
             png_name=f'{stem}.{role}.png'
             (out_dir/png_name).write_bytes(png)
             variants.append({'role':role,'normalSemanticDecode':is_normal,'file':png_name,'bytes':len(png),'sha256':sha256(png),'decodeMeta':pmeta})
@@ -127,7 +130,7 @@ def build(manifest_path:Path,census_path:Path,ipak_path:Path,out_dir:Path,source
             'pngVariantCount':sum(len(r['pngVariants']) for r in rows),
         },
         'rows':rows,
-        'proofBoundary':'Every output payload originates from a census-admissible entry in the pinned retail IPAK. The chosen dataHash must equal the retained live streamedPart CRC29; extraction recomputes CRC29 over decompressed IWI bytes; IWI27 must parse; and width/height/depth must exactly equal the canonical live GfxImage. PNGs are derived only after these checks. No filename similarity or name-hash-only row is admitted.',
+        'proofBoundary':'Every output payload originates from a census-admissible entry in the pinned retail IPAK. The chosen dataHash must equal the retained live streamedPart CRC29; extraction recomputes CRC29 over decompressed IWI bytes; IWI27 must parse; and width/height/depth must exactly equal the canonical live GfxImage. BC1, BC2/DXT3, BC3 and BC5/DXN top mips are decoded only after those checks. No filename similarity or name-hash-only row is admitted.',
     }
     (out_dir/'TEXTURE_EXTRACTION_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
     return report
