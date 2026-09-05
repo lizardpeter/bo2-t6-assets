@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/nuketown-validated-texture-preview.yml
       - tools/t6_nuketown_validated_texture_preview_v1.py
+      - tools/t6_export_nonregression_gate_v1.py
+      - manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXPORT_NONREGRESSION_CONTRACT_V1.json
 permissions:
   contents: read
   actions: read
@@ -192,11 +194,19 @@ jobs:
           print(json.dumps(p,indent=2,sort_keys=True))
           PY
 
+      - name: Enforce retained v8-v12 non-regression floors
+        run: |
+          python tools/t6_export_nonregression_gate_v1.py \
+            --glb mp_nuketown_2020_VALIDATED_TEXTURE_PREVIEW_v1.glb \
+            --contract manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXPORT_NONREGRESSION_CONTRACT_V1.json \
+            --report NUKETOWN_EXPORT_NONREGRESSION_REPORT_V1.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: nuketown-validated-texture-preview-v1
           path: |
             mp_nuketown_2020_VALIDATED_TEXTURE_PREVIEW_v1.glb
             NUKETOWN_VALIDATED_TEXTURE_PREVIEW_V1.json
+            NUKETOWN_EXPORT_NONREGRESSION_REPORT_V1.json
           retention-days: 7
           compression-level: 0
