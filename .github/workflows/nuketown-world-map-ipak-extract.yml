@@ -54,7 +54,16 @@ jobs:
           git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_EXTRACTION_V1.json
           git diff --cached --check
           git commit -m 'Checkpoint validated Nuketown map texture extraction'
-          git push origin HEAD:base-ipak-r2-recovery
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin base-ipak-r2-recovery
+            if git push origin HEAD:base-ipak-r2-recovery; then
+              pushed=1
+              break
+            fi
+            sleep "$attempt"
+          done
+          test "$pushed" = 1
       - uses: actions/upload-artifact@v4
         with:
           name: nuketown-world-map-texture-bank-v1
