@@ -242,6 +242,7 @@ def normalize_generated_attributes(document: dict, raw: bytes) -> tuple[dict, by
 
     original_accessor_count = len(document.get("accessors", []))
     original_view_count = len(document.get("bufferViews", []))
+    original_raw_bytes = len(raw)
     original_raw_sha = hashlib.sha256(raw).hexdigest()
     transform_cache: dict[tuple[str, int], int] = {}
     transform_rows: list[dict] = []
@@ -358,7 +359,7 @@ def normalize_generated_attributes(document: dict, raw: bytes) -> tuple[dict, by
         "finalAccessorCount": len(document.get("accessors", [])),
         "originalBufferViewCount": original_view_count,
         "finalBufferViewCount": len(document.get("bufferViews", [])),
-        "originalRawBytes": len(raw) - sum(row["count"] * 4 for row in transform_rows),
+        "originalRawBytes": original_raw_bytes,
         "finalRawBytes": len(raw),
     }
     contract = {
