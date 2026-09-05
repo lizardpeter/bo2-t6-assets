@@ -92,6 +92,18 @@ def find_count_addresses(fd,regions,needle=EXPECTED_SMODELS):
             if len(b)<n:break
 
 
+def surface_material_snapshot(fd,W,world):
+    GW=W['GfxWorld']; DP=W['GfxWorldDpvsStatic']; S=W['GfxSurface']
+    surfaces=ptr(fd,world+GW['dpvs']+DP['surfaces'])
+    if not surfaces:return None
+    out=[]
+    for si in range(EXPECTED_SURFACES):
+        mp=ptr(fd,surfaces+si*S['size']+S['material'])
+        if not mp:return None
+        out.append(mp)
+    return tuple(out)
+
+
 def find_world(pid,fd,W,deadline,diag):
     count_off=W['GfxWorld']['dpvs']+W['GfxWorldDpvsStatic']['smodelCount']
     passes=0
@@ -106,7 +118,27 @@ def find_world(pid,fd,W,deadline,diag):
             name=cstr(fd,ptr(fd,world+W['GfxWorld']['name']))
             if not name or 'mp_nuketown_2020' not in name:continue
             if i32(fd,world+W['GfxWorld']['surfaceCount'])!=EXPECTED_SURFACES:continue
-            diag.update({'passes':passes+1,'raw2992HitsLastPass':raw,'candidateMapping':path,'worldName':name})
+
+            first=surface_material_snapshot(fd,W,world)
+            if first is None:continue
+            distinct=len(set(first))
+            if distinct!=EXPECTED_WORLD_MATERIALS:continue
+            time.sleep(0.01)
+            second=surface_material_snapshot(fd,W,world)
+            if second is None or second!=first:continue
+
+            diag.update({
+                'passes':passes+1,
+                'raw2992HitsLastPass':raw,
+                'candidateMapping':path,
+                'worldName':name,
+                'surfaceMaterialReadiness':{
+                    'surfaceCount':len(first),
+                    'nonNullMaterialPointers':len(first),
+                    'distinctMaterialPointers':distinct,
+                    'stableConsecutiveSnapshots':2,
+                },
+            })
             return world
         passes+=1;diag.update({'passes':passes,'raw2992HitsLastPass':raw});time.sleep(0.01)
     return None
