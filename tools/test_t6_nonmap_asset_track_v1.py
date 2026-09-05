@@ -14,6 +14,9 @@ def main() -> int:
     assert len(ASSET_TYPES) == len(set(ASSET_TYPES))
     assert classification("XMODEL")[1] == "usable"
     assert classification("XANIMPARTS")[1] == "usable"
+    assert classification("PHYSPRESET")[1] == "oat-dumpable"
+    assert classification("SOUND")[1] == "oat-dumpable"
+    assert classification("VEHICLEDEF")[1] == "oat-dumpable"
     assert classification("CHARACTER")[1] == "inventory-only"
     assert classification("MPBODY")[1] == "inventory-only"
     assert classification("GFXWORLD")[1] == "handled-by-map-track"
@@ -21,7 +24,8 @@ def main() -> int:
         category, status, tools = classification(asset_type)
         assert category
         assert status in {
-            "usable", "partial", "inventory-only", "open", "handled-by-map-track"
+            "usable", "oat-dumpable", "partial", "inventory-only", "open",
+            "handled-by-map-track"
         }
         assert isinstance(tools, list)
         if asset_type in MAP_ONLY:
