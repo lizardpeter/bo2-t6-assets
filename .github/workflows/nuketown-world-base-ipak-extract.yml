@@ -1,0 +1,55 @@
+name: nuketown-world-base-ipak-extract
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-base-ipak-extract.yml
+      - tools/t6_nuketown_world_base_ipak_extract_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact texture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check pillow
+      - name: Range-extract and validate all base-only live world payloads
+        run: |
+          python tools/t6_nuketown_world_base_ipak_extract_v1.py \
+            --manifest manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64 \
+            --base-census manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json \
+            --map-census manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json \
+            --out-dir world_base_texture_bank \
+            --expected 185
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.load(open('world_base_texture_bank/TEXTURE_EXTRACTION_V1.json')); s=d['summary']
+          assert s['baseAdditionalCandidates']==s['validatedPayloads']==185,s
+          assert s['exactPairPayloads']+s['uniqueDataHashPayloads']==185,s
+          assert all(r['crc29Validated'] and r['dimensionsValidated'] for r in d['rows'])
+          assert len(list(Path('world_base_texture_bank').glob('*.iwi')))==185
+          assert len(list(Path('world_base_texture_bank').glob('*.png')))==s['pngVariantCount']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+      - name: Persist extraction proof
+        run: |
+          cp world_base_texture_bank/TEXTURE_EXTRACTION_V1.json manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_EXTRACTION_V1.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_EXTRACTION_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint validated Nuketown base texture extraction'
+          git push origin HEAD:base-ipak-r2-recovery
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-world-base-texture-bank-v1
+          path: world_base_texture_bank/
+          retention-days: 7
