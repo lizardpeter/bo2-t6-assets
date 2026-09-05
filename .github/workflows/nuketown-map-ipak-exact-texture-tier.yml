@@ -1,0 +1,113 @@
+name: nuketown-map-ipak-exact-texture-tier
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-map-ipak-exact-texture-tier.yml
+      - tools/t6_local_ipak_exact_targets_extract_v1.py
+      - tools/t6_nuketown_static_append_exact_textures_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_REMAINING_ALIAS_TARGETS_V1.json
+permissions:
+  contents: read
+  actions: read
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install texture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 unzip
+          python -m pip install --disable-pip-version-check gdown pillow numpy
+      - name: Download accepted exact43 textured scene
+        uses: actions/download-artifact@v4
+        with:
+          name: nuketown-recovered-1943-static-scene-exact43-textured-v1
+          path: tier1
+          repository: lizardpeter/bo2-t6-assets
+          run-id: 33938822743
+          github-token: ${{ github.token }}
+      - name: Verify tier1 GLB
+        run: |
+          test "$(stat -c %s tier1/mp_nuketown_2020.recovered_1943_static_scene_exact43_textured_v1.glb)" = "21283372"
+          echo 'b73b0dd48459513e093ec26b6fc3465f2855d9bd6f03b15daea6dc0c69e23f32  tier1/mp_nuketown_2020.recovered_1943_static_scene_exact43_textured_v1.glb' | sha256sum -c -
+      - name: Fetch and verify retail map IPAK
+        run: |
+          gdown 1c_1AtuWrwlcOuqYfh7R2w8lUxWH1jgCC -O mp_nuketown_2020.ipak
+          test "$(stat -c %s mp_nuketown_2020.ipak)" = "165543936"
+          echo '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031  mp_nuketown_2020.ipak' | sha256sum -c -
+      - name: Extract only exact remaining map-IPAK targets
+        run: |
+          python tools/t6_local_ipak_exact_targets_extract_v1.py \
+            --ipak mp_nuketown_2020.ipak \
+            --targets manifests/maps/mp_nuketown_2020/NUKETOWN_REMAINING_ALIAS_TARGETS_V1.json \
+            --alias-bank manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64 \
+            --out-dir map_exact \
+            --expected-exact 22
+          python - <<'PY'
+          import json
+          p=json.load(open('map_exact/LOCAL_IPAK_EXACT_TARGETS_V1.json'))
+          s=p['summary']
+          assert (s['targetImages'],s['validated'],s['nameHashOnly'],s['dataHashOnly'],s['absent'])==(28,22,4,0,2),s
+          assert sum(1 for r in p['rows'] if r['status']=='validated' and r.get('pngFile'))==22
+          rejected=[r['name'] for r in p['rows'] if r['status']!='validated']
+          print('REJECTED/REMAINING',json.dumps(rejected,indent=2))
+          PY
+      - name: Append 28 exact map-IPAK bindings
+        run: |
+          python tools/t6_nuketown_static_append_exact_textures_v1.py \
+            --glb tier1/mp_nuketown_2020.recovered_1943_static_scene_exact43_textured_v1.glb \
+            --expected-input-sha b73b0dd48459513e093ec26b6fc3465f2855d9bd6f03b15daea6dc0c69e23f32 \
+            --targets manifests/maps/mp_nuketown_2020/NUKETOWN_REMAINING_ALIAS_TARGETS_V1.json \
+            --payload-report map_exact/LOCAL_IPAK_EXACT_TARGETS_V1.json \
+            --payload-dir map_exact \
+            --source-label mp_nuketown_2020.ipak \
+            --expected-bindings 28 \
+            --expected-colors 16 \
+            --expected-normals 12 \
+            --expected-unique 22 \
+            --expected-existing-images 30 \
+            --out mp_nuketown_2020.recovered_1943_static_scene_exact69_textured_v2.glb \
+            --manifest NUKETOWN_STATIC_MAP_IPAK_EXACT_TEXTURE_APPLY_V1.json
+      - name: Independently accept tier2 append-only output
+        run: |
+          python - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          def read(path):
+            b=Path(path).read_bytes();magic,ver,total=struct.unpack_from('<4sII',b,0);assert magic==b'glTF' and ver==2 and total==len(b)
+            off=12;js=None;binbuf=None
+            while off<len(b):
+              n,t=struct.unpack_from('<I4s',b,off);off+=8;chunk=b[off:off+n];off+=n
+              if t==b'JSON':js=json.loads(chunk.rstrip(b' \0'))
+              elif t==b'BIN\0':binbuf=bytes(chunk)
+            return b,js,binbuf
+          ib,ij,ibin=read('tier1/mp_nuketown_2020.recovered_1943_static_scene_exact43_textured_v1.glb')
+          ob,oj,obin=read('mp_nuketown_2020.recovered_1943_static_scene_exact69_textured_v2.glb')
+          assert hashlib.sha256(ib).hexdigest()=='b73b0dd48459513e093ec26b6fc3465f2855d9bd6f03b15daea6dc0c69e23f32'
+          assert oj['nodes']==ij['nodes'] and oj['meshes']==ij['meshes'] and oj['accessors']==ij['accessors']
+          assert oj['bufferViews'][:len(ij['bufferViews'])]==ij['bufferViews']
+          assert obin[:len(ibin)]==ibin
+          assert oj['images'][:len(ij['images'])]==ij['images'] and oj['textures'][:len(ij['textures'])]==ij['textures'] and oj['samplers'][:len(ij['samplers'])]==ij['samplers']
+          assert [m.get('name') for m in oj['materials']]==[m.get('name') for m in ij['materials']]
+          assert len(oj['materials'])==344 and len(oj['meshes'])==297 and len([n for n in oj['nodes'] if 'mesh' in n])==1943
+          assert len(oj['images'])==52 and len(oj['textures'])==52
+          m=json.load(open('NUKETOWN_STATIC_MAP_IPAK_EXACT_TEXTURE_APPLY_V1.json'));s=m['summary']
+          assert (s['promotionCount'],s['colorPromotions'],s['normalPromotions'],s['uniqueImageCount'])==(28,16,12,22),s
+          acceptance={'format':'t6-nuketown-static-exact69-texture-acceptance-v1','inputTier1Sha256':hashlib.sha256(ib).hexdigest(),'outputGlb':{'bytes':len(ob),'sha256':hashlib.sha256(ob).hexdigest()},'counts':{'materials':344,'meshDefinitions':297,'meshInstances':1943,'tier1Bindings':41,'tier2Bindings':28,'totalExactBindings':69,'tier1Images':30,'tier2Images':22,'totalImages':52,'remainingBindings':9,'remainingImages':6},'validation':{'nodesIdentity':'pass','meshesIdentity':'pass','accessorsIdentity':'pass','preexistingBufferViewsIdentity':'pass','tier1ImageTextureSamplerPrefixIdentity':'pass','tier1BinExactPrefix':'pass','materialNameOrderIdentity':'pass','outputReparse':'pass'}}
+          Path('NUKETOWN_STATIC_EXACT69_TEXTURE_ACCEPTANCE_V1.json').write_text(json.dumps(acceptance,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(acceptance,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-recovered-1943-static-scene-exact69-textured-v2
+          path: |
+            mp_nuketown_2020.recovered_1943_static_scene_exact69_textured_v2.glb
+            NUKETOWN_STATIC_MAP_IPAK_EXACT_TEXTURE_APPLY_V1.json
+            NUKETOWN_STATIC_EXACT69_TEXTURE_ACCEPTANCE_V1.json
+            map_exact/LOCAL_IPAK_EXACT_TARGETS_V1.json
+          if-no-files-found: warn
+          retention-days: 7
