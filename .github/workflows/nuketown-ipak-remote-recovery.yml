@@ -1,0 +1,64 @@
+name: Nuketown remote IPAK recovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/nuketown-ipak-remote-recovery.yml'
+      - 'tools/t6_nuketown_remote_ipak_recover_v1.py'
+      - 'manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect alias bank and remote IPAK endpoints
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, json, struct, urllib.error, urllib.request, zlib
+          from pathlib import Path
+
+          p=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          bank=json.loads(zlib.decompress(base64.b64decode(p.read_text().strip())))
+          print('ALIAS_BANK_TOP_TYPE', type(bank).__name__)
+          if isinstance(bank,dict):
+              print('ALIAS_BANK_TOP_KEYS', sorted(bank))
+              for k,v in bank.items():
+                  if isinstance(v,list):
+                      print('LIST', k, len(v))
+                      if v:
+                          print('FIRST_'+k, json.dumps(v[0], sort_keys=True)[:5000])
+                  elif isinstance(v,dict):
+                      print('DICT', k, sorted(v)[:80])
+                  else:
+                      print('SCALAR', k, repr(v)[:1000])
+          elif isinstance(bank,list):
+              print('ALIAS_BANK_LIST_LEN', len(bank))
+              if bank: print('FIRST', json.dumps(bank[0], sort_keys=True)[:5000])
+
+          urls=[
+              'https://r2.houseofkublai.com/bo2/zone/all/base.ipak',
+              'https://r2.houseofkublai.com/bo2/zone/all/mp.ipak',
+              'https://r2.houseofkublai.com/bo2/zone/all/so.ipak',
+              'https://r2.houseofkublai.com/bo2/zone/all/en_base.ipak',
+          ]
+          for url in urls:
+              req=urllib.request.Request(url,headers={'Range':'bytes=0-127','User-Agent':'bo2-t6-assets-range-probe/1'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      b=r.read()
+                      print('URL',url,'status',r.status,'range',r.headers.get('Content-Range'),'len',len(b),'magic',b[:4])
+                      if len(b)>=16 and b[:4]==b'KAPI':
+                          magic,ver,size,sc=struct.unpack_from('<4sIII',b,0)
+                          print('KAPI',url,'version',hex(ver),'declared_size',size,'section_count',sc)
+              except urllib.error.HTTPError as e:
+                  print('URL',url,'HTTP',e.code,e.reason)
+              except Exception as e:
+                  print('URL',url,'ERROR',type(e).__name__,str(e))
+          PY
