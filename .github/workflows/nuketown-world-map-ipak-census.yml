@@ -1,0 +1,43 @@
+name: nuketown-world-map-ipak-census
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-map-ipak-census.yml
+      - tools/t6_nuketown_world_local_ipak_census_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64
+permissions:
+  contents: write
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact retail Nuketown map IPAK
+        run: |
+          python -m pip install --disable-pip-version-check gdown
+          gdown 1c_1AtuWrwlcOuqYfh7R2w8lUxWH1jgCC -O mp_nuketown_2020.ipak
+          test "$(stat -c %s mp_nuketown_2020.ipak)" = "165543936"
+          echo '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031  mp_nuketown_2020.ipak' | sha256sum -c -
+      - name: Census all live streamed world images
+        run: |
+          python tools/t6_nuketown_world_local_ipak_census_v1.py \
+            --manifest manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64 \
+            --ipak mp_nuketown_2020.ipak \
+            --out manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+          python - <<'PY'
+          import json
+          d=json.load(open('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json'))
+          assert d['targetStreamedImageCount']==421
+          assert sum(d['summary'].values())==421
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+      - name: Checkpoint census
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint Nuketown world map-IPAK census'
+          git push origin HEAD:base-ipak-r2-recovery
