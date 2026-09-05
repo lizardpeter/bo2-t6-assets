@@ -55,15 +55,18 @@ jobs:
       - name: Cross-check exact role/name inventory against OAT material JSON
         run: |
           python - <<'PY'
-          import json,re
+          import json
           from pathlib import Path
           d=json.load(open('NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json'))
           assert d['materialCount']==327
           assert d['uniqueImageCount']==423
           assert len(d['images'])==423
+          assert d['ordinaryRetailImageCount']==422
+          assert d['runtimeCodeImageCount']==1
+          assert [x['image'] for x in d['runtimeCodeImages']]==[',shadow']
           assert all(x['imageHash'] is not None for x in d['images'])
           root=Path('oat_dump/materials')
-          checked=0; entries=0; semantic_mismatch=[]; image_mismatch=[]
+          checked=0; entries=0; image_mismatch=[]; runtime_name_normalizations=[]
           for m in d['materials']:
               n=m['name']
               if n.startswith('*'):
@@ -76,12 +79,24 @@ jobs:
               j=json.load(open(p)); jt=j.get('textures',[]); lt=m['textures']
               if len(jt)!=len(lt): raise SystemExit(f'{n}: texture count {len(jt)} != live {len(lt)}')
               for i,(a,b) in enumerate(zip(jt,lt)):
-                  if a.get('image')!=b['image']: image_mismatch.append((n,i,a.get('image'),b['image']))
+                  if a.get('image')==b['image']:
+                      continue
+                  proven_runtime_normalization=(
+                      n=='wpc/shadowcaster' and i==0 and
+                      a.get('image')=='shadow' and b['image']==',shadow' and
+                      b.get('identityClass')=='runtime-code-hash-zero' and
+                      b.get('imageHash')==0
+                  )
+                  if proven_runtime_normalization:
+                      runtime_name_normalizations.append((n,i,a.get('image'),b['image']))
+                  else:
+                      image_mismatch.append((n,i,a.get('image'),b['image']))
               checked+=1; entries+=len(lt)
           assert not image_mismatch, image_mismatch[:20]
+          assert runtime_name_normalizations==[('wpc/shadowcaster',0,'shadow',',shadow')],runtime_name_normalizations
           assert checked==327
-          assert entries==d['textureEntryCount']
-          print({'materials':checked,'textureEntries':entries,'uniqueImages':423,'imageOrderMismatches':0})
+          assert entries==d['textureEntryCount']==973
+          print({'materials':checked,'textureEntries':entries,'uniqueImages':423,'ordinaryRetailImages':422,'runtimeCodeImages':1,'imageOrderMismatches':0,'provenRuntimeNameNormalizations':runtime_name_normalizations})
           PY
       - name: Summarize recoverability primitives
         run: |
@@ -89,13 +104,19 @@ jobs:
           import json,collections
           d=json.load(open('NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json'))
           imgs=d['images']
-          print(json.dumps({
+          summary={
             'uniqueImages':len(imgs),
+            'ordinaryRetailImages':d['ordinaryRetailImageCount'],
+            'runtimeCodeImages':d['runtimeCodeImageCount'],
+            'runtimeCodeNames':[x['image'] for x in d['runtimeCodeImages']],
             'streamingFlags':dict(collections.Counter(x['streaming'] for x in imgs)),
             'streamedPartCounts':dict(collections.Counter(x['streamedPartCountRaw'] for x in imgs)),
             'streamedWithExactHash':sum(bool(x['streamedPart0']) for x in imgs),
             'nonstreaming':sum(not x['streamedPartCountRaw'] for x in imgs),
-          },indent=2))
+          }
+          assert summary['streamedWithExactHash']==421
+          assert summary['nonstreaming']==2
+          print(json.dumps(summary,indent=2))
           PY
       - uses: actions/upload-artifact@v4
         with:
