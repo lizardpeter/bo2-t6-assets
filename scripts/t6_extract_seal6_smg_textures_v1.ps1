@@ -5,7 +5,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Manifest = Join-Path $RepoRoot "manifests\nonmap\retail\seal6_smg_texture_keys_v3.json"
+$Manifest = Join-Path $RepoRoot "manifests\nonmap\retail\seal6_smg_exact_base_ipak_keys_v4.json"
 $Extractor = Join-Path $RepoRoot "tools\t6_ipak_exact_key_extract_v1.py"
 if (-not $BaseIpak) {
     if ($env:T6_GAME_ROOT) {
