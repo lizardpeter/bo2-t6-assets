@@ -1,0 +1,67 @@
+name: nuketown-patch-image-probe
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-patch-image-probe.yml
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install fetch dependency
+        run: python -m pip install --disable-pip-version-check gdown
+      - name: Fetch pinned patch_mp fastfile
+        run: |
+          gdown 1dCEslW6kfePKZfnkkmhFbkgMcIkWi1yx -O patch_mp.ff
+          test "$(stat -c %s patch_mp.ff)" = "3639168"
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  patch_mp.ff' | sha256sum -c -
+      - name: Run pinned OAT and inventory all emitted assets
+        run: |
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat patch_out
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          chmod +x "$UNLINKER"
+          "$UNLINKER" patch_mp.ff --output-folder patch_out --verbose > oat.log 2>&1
+          find patch_out -type f -printf '%P\n' | sort > PATCH_OUT_FILES.txt
+          python - <<'PY'
+          from pathlib import Path
+          roots=[]
+          for p in Path('patch_out').rglob('*'):
+              if p.is_file():
+                  roots.append(p.relative_to('patch_out').as_posix())
+          print('files',len(roots))
+          for s in roots[:1000]: print(s)
+          PY
+      - name: Search emitted payloads for unresolved Nuketown facade identities
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cov=json.load(open('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_COVERAGE_V1.json'))
+          missing=sorted({r['firstColor']['image'] for r in cov['materials'] if r.get('firstColor') and not r['firstColor'].get('validated')})
+          files=Path('PATCH_OUT_FILES.txt').read_text(errors='ignore').lower()
+          log=Path('oat.log').read_text(errors='ignore').lower()
+          blob=files+'\n'+log
+          rows=[]
+          for name in missing:
+              rows.append({'image':name,'literalSeenInOatOutput':name.lower() in blob})
+          out={'missingPrimaryColorIdentities':len(missing),'literalMatches':sum(r['literalSeenInOatOutput'] for r in rows),'rows':rows}
+          Path('PATCH_MP_UNRESOLVED_PRIMARY_MATCH_PROBE.json').write_text(json.dumps(out,indent=2)+'\n')
+          print(json.dumps(out,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-patch-image-probe
+          path: |
+            PATCH_OUT_FILES.txt
+            PATCH_MP_UNRESOLVED_PRIMARY_MATCH_PROBE.json
+            oat.log
+          if-no-files-found: warn
+          retention-days: 7
