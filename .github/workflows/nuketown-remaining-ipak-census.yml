@@ -1,0 +1,52 @@
+name: nuketown-remaining-ipak-census
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-remaining-ipak-census.yml
+      - tools/t6_remote_ipak_alias_census_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json.zlib.b64
+permissions:
+  contents: read
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Census exact remaining aliases in retail IPAK indices
+        run: |
+          python tools/t6_remote_ipak_alias_census_v1.py \
+            --role-plan manifests/maps/mp_nuketown_2020/NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json.zlib.b64 \
+            --source 'mp|https://r2.houseofkublai.com/bo2/zone/all/mp.ipak|348651520' \
+            --source 'so|https://r2.houseofkublai.com/bo2/zone/all/so.ipak|146538496' \
+            --source 'en_base|https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak|786432' \
+            --source 'mp_nuketown_2020|https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak|165543936' \
+            --source 'patch_mp|https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak' \
+            --out NUKETOWN_REMAINING_ALIAS_IPAK_CENSUS_V1.json
+      - name: Assert census boundary and print exact hits
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('NUKETOWN_REMAINING_ALIAS_IPAK_CENSUS_V1.json'))
+          assert p['remainingBindingCount']==37, p['remainingBindingCount']
+          assert p['remainingUniqueImageCount']==28, p['remainingUniqueImageCount']
+          print(json.dumps(p['summary'],indent=2))
+          for s in p['sources']:
+              print(json.dumps({k:s.get(k) for k in ('label','status','bytes','indexEntryCount','exactPairCount','nameHashOnlyCount','dataHashOnlyCount','networkBytes','error') if k in s},indent=2))
+          exact=[r for r in p['identities'] if r['exactSources']]
+          print('EXACT IMAGE COUNT',len(exact))
+          for r in exact:
+              print('EXACT',r['image'],r['exactSources'],'materials=',len(r['materials']),'roles=',r['roles'])
+          unresolved=[r for r in p['identities'] if not r['exactSources']]
+          print('UNRESOLVED IMAGE COUNT',len(unresolved))
+          for r in unresolved:
+              print('UNRESOLVED',r['image'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuketown-remaining-ipak-census-v1
+          path: NUKETOWN_REMAINING_ALIAS_IPAK_CENSUS_V1.json
+          if-no-files-found: warn
+          retention-days: 7
