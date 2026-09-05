@@ -7,6 +7,9 @@ All texture/image facts are read from the frozen OAT process after pointer fixup
   GfxWorld.smodelDrawInsts -> XModel -> Material** materialHandles
   -> MaterialTextureDef -> GfxImage -> GfxStreamedPartInfo
 
+The same frozen process also emits the authoritative 2,992 GfxWorld static placements,
+so placement and texture evidence cannot come from different runtime states.
+
 LOD0 material order is independently checked against the retained proof before any
 texture identity is emitted. Ordinary GfxImage.hash values must exactly equal T6
 R_HashString(name). No material-name or texture-name fuzzy matching is used.
@@ -27,6 +30,7 @@ import zlib
 from pathlib import Path
 
 import t6_oat_external_gfxworld_texture_scan as live
+import t6_oat_external_gfxworld_scan as placement_scan
 
 EXPECTED_SMODELS = 2992
 EXPECTED_PLAYABLE_MODELS = 297
@@ -210,7 +214,7 @@ def scan_texture(fd: int, T: dict, mp: int, mname: str):
     return textures
 
 
-def scan(fd: int, W: dict, T: dict, snapshot, proof: dict[str, dict]):
+def scan(fd: int, W: dict, T: dict, snapshot):
     MI = W['MaterialInfo']
     model_rows = []
     material_ptrs: dict[str, int] = {}
@@ -274,7 +278,8 @@ def scan(fd: int, W: dict, T: dict, snapshot, proof: dict[str, dict]):
             'The retained proof selects exactly 297 playable XModels and supplies their exact LOD0 material order. '
             'All emitted MaterialTextureDef/GfxImage identities are read from the frozen retail OAT process through '
             'the live XModel materialHandles pointers. Ordinary GfxImage.hash must equal T6 R_HashString(name); '
-            'streamed payload identity is live streamedParts[0].hash. No filename similarity or material fallback is used.'
+            'streamed payload identity is live streamedParts[0].hash. Placements are captured from the same frozen '
+            'GfxWorld state. No filename similarity or material fallback is used.'
         ),
     }
 
@@ -284,6 +289,7 @@ def main():
     ap.add_argument('--world-layout', type=Path, required=True)
     ap.add_argument('--texture-layout', type=Path, required=True)
     ap.add_argument('--proof', type=Path, required=True)
+    ap.add_argument('--placements-out', type=Path, required=True)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--diag', type=Path, required=True)
     ap.add_argument('--timeout', type=float, default=30)
@@ -335,15 +341,32 @@ def main():
         if not os.WIFSTOPPED(status):
             raise RuntimeError('child did not freeze')
         frozen = True
-        doc = scan(fd, W, T, snap, proof)
+
+        doc = scan(fd, W, T, snap)
         a.out.write_text(json.dumps(doc, indent=2, sort_keys=True) + '\n')
+
+        dp = world + W['GfxWorld']['dpvs']
+        hit = {
+            'insts': live.ptr(fd, dp + W['GfxWorldDpvsStatic']['smodelInsts']),
+            'draws': live.ptr(fd, dp + W['GfxWorldDpvsStatic']['smodelDrawInsts']),
+            'worldName': live.cstr(fd, live.ptr(fd, world + W['GfxWorld']['name'])),
+            'surfaceCount': live.i32(fd, world + W['GfxWorld']['surfaceCount']),
+        }
+        if not hit['insts'] or not hit['draws'] or not hit['worldName']:
+            raise RuntimeError(f'incomplete frozen placement roots: {hit}')
+        placements = placement_scan.dump_world(fd, W, hit, a.placements_out)
+        if placements.get('smodelCount') != EXPECTED_SMODELS or len(placements.get('placements', [])) != EXPECTED_SMODELS:
+            raise RuntimeError('frozen placement count changed')
+
         diag['summary'] = {
             k: doc[k] for k in (
                 'playableStaticModelCount', 'materialCount', 'textureEntryCount',
                 'uniqueImageCount', 'semanticEntryCounts'
             )
         }
+        diag['placementCount'] = len(placements['placements'])
         diag['outputSha256'] = hashlib.sha256(a.out.read_bytes()).hexdigest()
+        diag['placementsSha256'] = hashlib.sha256(a.placements_out.read_bytes()).hexdigest()
     finally:
         if fd is not None:
             os.close(fd)
