@@ -9,7 +9,6 @@ special T6 shader behavior silently.
 from __future__ import annotations
 import argparse, hashlib, json, struct
 from pathlib import Path
-from PIL import Image
 
 class ApplyError(RuntimeError):pass
 
@@ -45,7 +44,9 @@ def write_glb(path:Path,js:dict,binbuf:bytearray):
  path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(out)
 def load_json(p:Path):return json.loads(p.read_text(encoding='utf-8-sig'))
 def png_dims(p:Path):
- with Image.open(p) as im:return tuple(im.size)
+ b=p.read_bytes()
+ if len(b)<24 or b[:8]!=b'\x89PNG\r\n\x1a\n' or b[12:16]!=b'IHDR':raise ApplyError(f'invalid PNG: {p}')
+ return struct.unpack_from('>II',b,16)
 
 def main()->int:
  ap=argparse.ArgumentParser();ap.add_argument('--glb',type=Path,required=True);ap.add_argument('--binding-plan',type=Path,required=True);ap.add_argument('--materialized-manifest',type=Path,required=True);ap.add_argument('--out',type=Path,required=True);ap.add_argument('--manifest',type=Path,required=True);a=ap.parse_args()
@@ -74,27 +75,27 @@ def main()->int:
   key=(bool(flags&0x40),bool(flags&0x80))
   if key in sampler_cache:return sampler_cache[key]
   samplers.append({'magFilter':9729,'minFilter':9987,'wrapS':33071 if key[0] else 10497,'wrapT':33071 if key[1] else 10497,'extras':{'T6':{'iwiClampS':key[0],'iwiClampT':key[1]}}});sampler_cache[key]=len(samplers)-1;return sampler_cache[key]
- def texture_for(name:str):
-  if name in texture_cache:return texture_cache[name]
+ def texture_for(name:str,expected_key:dict|None=None):
+  if name in texture_cache:
+   row=texrows[name]
+   if expected_key is not None and (int(row['nameHash'])!=int(expected_key['nameHash']) or (int(row['dataHash'])&0x1fffffff)!=(int(expected_key['dataHash'])&0x1fffffff)):raise ApplyError(f'{name}: cached materialized exact key does not match binding plan')
+   return texture_cache[name]
   row=texrows.get(name)
   if row is None:raise ApplyError(f'{name}: not present in materialization manifest')
+  if expected_key is not None and (int(row['nameHash'])!=int(expected_key['nameHash']) or (int(row['dataHash'])&0x1fffffff)!=(int(expected_key['dataHash'])&0x1fffffff)):raise ApplyError(f'{name}: materialized exact key does not match binding plan')
   p=root/row['pngFile'];png=p.read_bytes()
   while len(binbuf)%4:binbuf.append(0)
-  off=len(binbuf);binbuf.extend(png);bvs.append({'buffer':0,'byteOffset':off,'byteLength':len(png),'name':f'T6_{name}_PNG'});bvi=len(bvs)-1
-  images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'retailIwiSha256':row['iwiSha256'],'pngSha256':row['pngSha256'],'nameHash':row['nameHash'],'dataHash':row['dataHash'],'crc29Validated':row.get('crc29Validated'),'exactKeyValidated':row.get('exactKeyValidated')}}});ii=len(images)-1
-  flags=int((row.get('iwi') or {}).get('flags',0));si=sampler_for(flags);textures.append({'name':name,'source':ii,'sampler':si});ti=len(textures)-1;texture_cache[name]=ti;embedded.append({'image':name,'textureIndex':ti,'pngBytes':len(png),'pngSha256':row['pngSha256']});return ti
+  off=len(binbuf);binbuf.extend(png);bvs.append({'buffer':0,'byteOffset':off,'byteLength':len(png),'name':f'T6_{name}_PNG'});bvi=len(bvs)-1;images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'retailIwiSha256':row['iwiSha256'],'pngSha256':row['pngSha256'],'nameHash':row['nameHash'],'dataHash':row['dataHash'],'crc29Validated':row.get('crc29Validated'),'exactKeyValidated':row.get('exactKeyValidated')}}});ii=len(images)-1;flags=int((row.get('iwi') or {}).get('flags',0));si=sampler_for(flags);textures.append({'name':name,'source':ii,'sampler':si});ti=len(textures)-1;texture_cache[name]=ti;embedded.append({'image':name,'textureIndex':ti,'pngBytes':len(png),'pngSha256':row['pngSha256']});return ti
  for name in sorted(used):
   pm=plan_mats[name];gm=gltf_mats[name_to_mi[name]];v=pm['gltfVisualization'];applied=[];bc=v.get('baseColor')
   if bc:
-   ti=texture_for(bc['image']);gm.setdefault('pbrMetallicRoughness',{})['baseColorTexture']={'index':ti,'texCoord':0};applied.append({'role':'baseColor','image':bc['image'],'mode':bc['mode'],'textureIndex':ti})
+   ti=texture_for(bc['image'],bc.get('exactStreamKey'));gm.setdefault('pbrMetallicRoughness',{})['baseColorTexture']={'index':ti,'texCoord':0};applied.append({'role':'baseColor','image':bc['image'],'mode':bc['mode'],'textureIndex':ti})
   nm=v.get('normal')
   if nm:
-   ti=texture_for(nm['image']);gm['normalTexture']={'index':ti,'texCoord':0,'scale':1.0};applied.append({'role':'normal','image':nm['image'],'mode':nm['mode'],'textureIndex':ti})
-  ex=gm.setdefault('extras',{}).setdefault('T6',{});ex['nativeMaterialSlots']=pm['slots'];ex['gltfVisualizationMapping']=v;ex['visualPbrTexturesBound']=bool(bc and nm);ex['nativeShaderGraphPreservedInBindingPlan']=True
-  bindings.append({'material':name,'materialIndex':name_to_mi[name],'shaderApproximation':v.get('shaderApproximation',False),'applied':applied})
+   ti=texture_for(nm['image'],nm.get('exactStreamKey'));gm['normalTexture']={'index':ti,'texCoord':0,'scale':1.0};applied.append({'role':'normal','image':nm['image'],'mode':nm['mode'],'textureIndex':ti})
+  ex=gm.setdefault('extras',{}).setdefault('T6',{});ex['nativeMaterialSlots']=pm['slots'];ex['gltfVisualizationMapping']=v;ex['visualPbrTexturesBound']=bool(bc and nm);ex['nativeShaderGraphPreservedInBindingPlan']=True;bindings.append({'material':name,'materialIndex':name_to_mi[name],'shaderApproximation':v.get('shaderApproximation',False),'applied':applied})
  js.setdefault('extras',{}).setdefault('T6',{})['materializedTextureApplyV1']={'bindingPlanSha256':sha_file(a.binding_plan),'materializationManifestSha256':sha_file(a.materialized_manifest),'usedMaterialCount':len(used),'boundMaterialCount':len(bindings),'uniqueEmbeddedPngCount':len(embedded),'nativeShaderGraphPolicy':'PBR visualization fields only; native slots preserved in material extras/binding sidecar'}
  write_glb(a.out,js,binbuf);js2,b2=read_glb(a.out)
  if js2['buffers'][0]['byteLength']!=len(b2):raise ApplyError('output GLB buffer length mismatch')
- outdoc={'format':'t6-gltf-materialized-texture-apply-v1','inputGlb':{'path':str(a.glb),'bytes':a.glb.stat().st_size,'sha256':sha_file(a.glb)},'bindingPlan':{'path':str(a.binding_plan),'sha256':sha_file(a.binding_plan)},'materialization':{'path':str(a.materialized_manifest),'sha256':sha_file(a.materialized_manifest)},'outputGlb':{'path':str(a.out),'bytes':a.out.stat().st_size,'sha256':sha_file(a.out)},'summary':{'usedMaterials':len(used),'boundMaterials':len(bindings),'uniqueEmbeddedPngs':len(embedded),'baseColorBindings':sum(any(x['role']=='baseColor' for x in b['applied']) for b in bindings),'normalBindings':sum(any(x['role']=='normal' for x in b['applied']) for b in bindings),'shaderApproximationMaterials':sum(bool(b['shaderApproximation']) for b in bindings)},'embeddedImages':embedded,'bindings':bindings,'validation':{'glbReparse':True,'bufferByteLengthMatches':True},'proofBoundary':'The source IWI remains authoritative retail pixel data. Embedded PNGs are verified top-mip derivatives. Only binding-plan-selected visualization roles are mapped into standard glTF PBR; native T6 shader slots are retained as metadata.'}
- a.manifest.parent.mkdir(parents=True,exist_ok=True);a.manifest.write_text(json.dumps(outdoc,indent=2,sort_keys=True)+'\n',encoding='utf-8');print(json.dumps(outdoc['summary'],indent=2,sort_keys=True));return 0
+ outdoc={'format':'t6-gltf-materialized-texture-apply-v1','inputGlb':{'path':str(a.glb),'bytes':a.glb.stat().st_size,'sha256':sha_file(a.glb)},'bindingPlan':{'path':str(a.binding_plan),'sha256':sha_file(a.binding_plan)},'materialization':{'path':str(a.materialized_manifest),'sha256':sha_file(a.materialized_manifest)},'outputGlb':{'path':str(a.out),'bytes':a.out.stat().st_size,'sha256':sha_file(a.out)},'summary':{'usedMaterials':len(used),'boundMaterials':len(bindings),'uniqueEmbeddedPngs':len(embedded),'baseColorBindings':sum(any(x['role']=='baseColor' for x in b['applied']) for b in bindings),'normalBindings':sum(any(x['role']=='normal' for x in b['applied']) for b in bindings),'shaderApproximationMaterials':sum(bool(b['shaderApproximation']) for b in bindings)},'embeddedImages':embedded,'bindings':bindings,'validation':{'glbReparse':True,'bufferByteLengthMatches':True},'proofBoundary':'The source IWI remains authoritative retail pixel data. Embedded PNGs are verified top-mip derivatives. Only binding-plan-selected visualization roles are mapped into standard glTF PBR; native T6 shader slots are retained as metadata.'};a.manifest.parent.mkdir(parents=True,exist_ok=True);a.manifest.write_text(json.dumps(outdoc,indent=2,sort_keys=True)+'\n',encoding='utf-8');print(json.dumps(outdoc['summary'],indent=2,sort_keys=True));return 0
 if __name__=='__main__':raise SystemExit(main())
