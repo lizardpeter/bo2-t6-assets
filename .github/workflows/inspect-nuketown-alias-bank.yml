@@ -10,36 +10,89 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract exact target alias records
+      - name: Normalize full alias bank and inspect retained texture evidence
         run: |
           mkdir -p alias_inspect
           python - <<'PY'
-          import base64,json,zlib
+          import base64,collections,hashlib,json,zlib
           from pathlib import Path
-          p=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
-          doc=json.loads(zlib.decompress(base64.b64decode(p.read_text().strip())))
-          names={'~-gnt_2020_plastic_cream_col','~-gmetal_chrome_boat_c','~-gmetal_chrome_col','~-gnt_wood_fence'}
-          hits=[]
+
+          bank_path=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          raw=zlib.decompress(base64.b64decode(bank_path.read_text().strip()))
+          doc=json.loads(raw)
+          print('TOP LEVEL TYPE',type(doc).__name__)
+          print('TOP LEVEL KEYS',list(doc) if isinstance(doc,dict) else None)
+          print('DECOMPRESSED SHA256',hashlib.sha256(raw).hexdigest())
+
+          # Collect shallow dicts that look like alias records. We intentionally
+          # infer by identity/hash fields rather than assuming a schema so this
+          # inspector remains useful if the archive format evolves.
+          records=[]
           def walk(x,path='$'):
             if isinstance(x,dict):
-              blob=json.dumps(x,sort_keys=True)
-              if any(n in blob for n in names): hits.append({'path':path,'value':x})
+              keys=set(x)
+              has_name=any(k.lower() in {'image','imagename','name','canonicalimage','aliasimage','targetimage'} for k in keys)
+              has_hash=any('hash' in k.lower() for k in keys)
+              if has_name and has_hash:
+                records.append({'path':path,'value':x})
               for k,v in x.items(): walk(v,f'{path}.{k}')
             elif isinstance(x,list):
               for i,v in enumerate(x): walk(v,f'{path}[{i}]')
           walk(doc)
-          # Deduplicate exact JSON values while keeping shallowest path first.
-          seen=set();out=[]
-          for h in sorted(hits,key=lambda h:h['path'].count('.')+h['path'].count('[')):
-            key=json.dumps(h['value'],sort_keys=True)
+
+          # Deduplicate identical dicts, shallowest path first.
+          seen=set(); unique=[]
+          for h in sorted(records,key=lambda h:(h['path'].count('.')+h['path'].count('['),h['path'])):
+            key=json.dumps(h['value'],sort_keys=True,separators=(',',':'))
             if key in seen: continue
-            seen.add(key);out.append(h)
-          summary={'topLevelKeys':list(doc) if isinstance(doc,dict) else None,'hitCount':len(out),'hits':out}
-          Path('alias_inspect/target_alias_contexts.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
-          print(json.dumps(summary,indent=2,sort_keys=True))
+            seen.add(key); unique.append(h)
+
+          keysets=collections.Counter(tuple(sorted(h['value'])) for h in unique)
+          print('ALIAS-LIKE UNIQUE DICTS',len(unique))
+          print('TOP KEYSETS')
+          for ks,n in keysets.most_common(12): print(n,ks)
+          print('FIRST RECORDS')
+          for h in unique[:12]: print(json.dumps(h,sort_keys=True))
+
+          # Exact target records called out in the historical boundary.
+          targets={'~-gnt_2020_plastic_cream_col','~-gmetal_chrome_boat_c','~-gmetal_chrome_col','~-gnt_wood_fence'}
+          target_hits=[]
+          for h in unique:
+            blob=json.dumps(h['value'],sort_keys=True)
+            if any(n in blob for n in targets): target_hits.append(h)
+
+          # Search retained map manifests for image/hash evidence that can seed
+          # exact payload reuse without any IPAK-name guessing.
+          evidence=[]
+          for p in Path('manifests/maps/mp_nuketown_2020').glob('*.json'):
+            try: x=json.loads(p.read_text())
+            except Exception: continue
+            text=json.dumps(x,sort_keys=True)
+            for h in unique:
+              v=h['value']
+              names=[str(val) for key,val in v.items() if isinstance(val,str) and ('image' in key.lower() or key.lower()=='name')]
+              if any(name and name in text for name in names):
+                evidence.append({'manifest':p.name,'aliasPath':h['path'],'alias':v})
+
+          out={
+            'format':'t6-nuketown-packed-image-alias-bank-inspection-v2',
+            'bankFile':bank_path.name,
+            'bankCompressedSha256':hashlib.sha256(bank_path.read_bytes()).hexdigest(),
+            'bankDecompressedSha256':hashlib.sha256(raw).hexdigest(),
+            'topLevelKeys':list(doc) if isinstance(doc,dict) else None,
+            'uniqueAliasLikeRecordCount':len(unique),
+            'keysets':[{'count':n,'keys':list(ks)} for ks,n in keysets.most_common()],
+            'records':unique,
+            'targetHits':target_hits,
+            'retainedManifestEvidence':evidence,
+          }
+          Path('alias_inspect/full_alias_bank_inspection.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print('TARGET HITS',len(target_hits))
+          for h in target_hits: print(json.dumps(h,sort_keys=True))
+          print('RETAINED MANIFEST EVIDENCE',len(evidence))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: nuketown-alias-target-contexts
+          name: nuketown-alias-bank-full-inspection
           path: alias_inspect/
-          retention-days: 1
+          retention-days: 2
