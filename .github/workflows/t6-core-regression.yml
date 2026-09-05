@@ -1,0 +1,35 @@
+name: t6-core-regression
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/t6-core-regression.yml
+      - tools/t6_ipak_core.py
+      - tools/t6_image_resolver_v1.py
+      - tools/t6_export_nonregression_gate_v1.py
+      - tools/t6_export_state_v1.py
+      - tools/test_t6_ipak_core.py
+      - tools/test_t6_image_resolver_v1.py
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native IPAK dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+      - name: Run universal container and image resolver regressions
+        run: |
+          PYTHONPATH=tools python tools/test_t6_ipak_core.py
+          PYTHONPATH=tools python tools/test_t6_image_resolver_v1.py
+      - name: Compile universal exporter guard modules
+        run: |
+          python -m py_compile \
+            tools/t6_ipak_core.py \
+            tools/t6_image_resolver_v1.py \
+            tools/t6_export_nonregression_gate_v1.py \
+            tools/t6_export_state_v1.py
