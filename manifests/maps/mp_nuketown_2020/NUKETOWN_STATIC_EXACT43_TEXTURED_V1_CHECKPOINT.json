@@ -1,0 +1,120 @@
+{
+  "format": "t6-nuketown-static-exact43-textured-checkpoint-v1",
+  "map": "mp_nuketown_2020",
+  "authoritativeInput": {
+    "file": "mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb",
+    "bytes": 17263196,
+    "sha256": "bc8f0c14518ccd15fabcdc0dd283dbecea410e0383c5057e4036ad1e95d8835b",
+    "meshDefinitions": 297,
+    "meshInstances": 1943,
+    "materials": 344,
+    "renderedPrimitiveInstances": 2790,
+    "renderedTriangles": 932451
+  },
+  "rolePlan": {
+    "file": "NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json",
+    "bytes": 375037,
+    "sha256": "b58f221445c46abaeea1baf57ba57b5e6e2486f375d8522d1cd8128049c4c575",
+    "aliasBackedBindings": 78,
+    "aliasBackedColorBindings": 52,
+    "aliasBackedNormalBindings": 26,
+    "exact43Bindings": 41,
+    "exact43ColorBindings": 28,
+    "exact43NormalBindings": 13,
+    "exact43UniqueImages": 30,
+    "exact43UniqueMaterials": 30,
+    "validation": {
+      "all344RetainedMaterialsResolvedExactly": true,
+      "firstSemanticOnly": true,
+      "aliasSemanticMatchesRetailRole": true,
+      "aliasSlotMatchesRetailTextureIndex": true,
+      "sameNameFallbacks": 0,
+      "filenameRoleInference": 0,
+      "laterSlotSubstitutions": 0,
+      "aliasConflicts": 0
+    }
+  },
+  "baseIpakRecovery": {
+    "url": "https://r2.houseofkublai.com/bo2/zone/all/base.ipak",
+    "sourceBytes": 2614362112,
+    "indexEntryCount": 13366,
+    "reportFile": "BASE_IPAK_EXACT_ALIAS_CF_SKIP_V1.json",
+    "reportBytes": 47933,
+    "reportSha256": "13acf7b0b68adf9d0c507cb403c70978be4669ec14b2953779bb1d18b5dedbbc",
+    "candidateCount": 43,
+    "validatedPayloads": 43,
+    "validatedWithCfSkip": 9,
+    "rejectedPayloads": 0,
+    "networkBytes": 4633056,
+    "decoderRule": "command 0=raw, 1=LZO, 0xCF=skip/padding; all other commands fail closed",
+    "validation": {
+      "exactNameHashDataHashPair": "pass 43/43",
+      "crc29": "pass 43/43",
+      "iwi27Parse": "pass 43/43",
+      "retainedDimensions": "pass 43/43",
+      "portablePngDecode": "pass 43/43"
+    }
+  },
+  "textureApply": {
+    "manifestFile": "NUKETOWN_STATIC_EXACT43_TEXTURE_APPLY_V1.json",
+    "manifestBytes": 36392,
+    "manifestSha256": "1ce7026c16f23b91299754970751ff02889aae998dedab720c301baa60a9e6b8",
+    "promotionCount": 41,
+    "colorPromotions": 28,
+    "normalPromotions": 13,
+    "uniqueImageCount": 30,
+    "validation": {
+      "authoritativeInputSha": "pass",
+      "nodePlacementIdentity": "pass",
+      "meshPrimitiveIdentity": "pass",
+      "accessorIdentity": "pass",
+      "preexistingBufferViewIdentity": "pass",
+      "originalBinPrefixIdentity": "pass",
+      "materialNameOrderIdentity": "pass",
+      "allPayloadPngSha256": "pass",
+      "allRolePlanNameDataHashPairs": "pass",
+      "sameNameFallbacks": 0,
+      "filenameRoleInference": 0,
+      "laterSlotSubstitutions": 0
+    }
+  },
+  "output": {
+    "file": "mp_nuketown_2020.recovered_1943_static_scene_exact43_textured_v1.glb",
+    "bytes": 21283372,
+    "sha256": "b73b0dd48459513e093ec26b6fc3465f2855d9bd6f03b15daea6dc0c69e23f32",
+    "materials": 344,
+    "meshDefinitions": 297,
+    "meshInstances": 1943,
+    "embeddedImages": 30,
+    "textures": 30
+  },
+  "independentAcceptance": {
+    "file": "NUKETOWN_STATIC_EXACT43_TEXTURE_ACCEPTANCE_V1.json",
+    "bytes": 727,
+    "sha256": "aa1a61a4fcceea1c0a92f66dc32b6e118fe411d7e3f7bff2507ef8dda2d22323",
+    "validation": {
+      "nodesIdentity": "pass",
+      "meshesIdentity": "pass",
+      "accessorsIdentity": "pass",
+      "preexistingBufferViewsIdentity": "pass",
+      "originalBinExactPrefix": "pass",
+      "materialNameOrderIdentity": "pass",
+      "outputReparse": "pass"
+    }
+  },
+  "reproduction": {
+    "workflow": ".github/workflows/nuketown-static-exact43-texture-integration.yml",
+    "workflowHeadSha": "13d36cfc415e4ee8b042003a2c2377ed61ab6bd4",
+    "workflowRunId": 33938822743,
+    "jobId": 101232007970,
+    "artifact": "nuketown-recovered-1943-static-scene-exact43-textured-v1",
+    "artifactId": 9961094714,
+    "artifactZipBytes": 9788534,
+    "artifactZipSha256": "acfadd26167a747d9e1c9e510e16fada8ad79f9d93bd80392b6e7838e16921f2",
+    "artifactExpiresAt": "2026-09-12T02:21:53Z",
+    "extractorToolCommit": "db91715b46f887e3183138da981e21759eed112d",
+    "applicatorToolCommit": "2461101be9891bf93c4f12c296e19c897e489b19",
+    "rolePlannerToolCommit": "ab4112707d5bb24c044f4dc308d9ecd119f38a54"
+  },
+  "proofBoundary": "The output is the authoritative 1943-instance static reconstruction with only 41 exact first-semantic color/normal bindings added. Every admitted texture identity is backed by the 81-alias retail cross-family proof and a freshly re-extracted base.ipak exact (nameHash,dataHash) payload passing CRC29, IWI27 and dimensions. Original nodes, meshes/primitives, accessors, material order, all pre-existing bufferViews, and the complete original BIN are unchanged; texture bytes are append-only. No same-name fallback, filename-role inference, proximity substitution or later-slot substitution is permitted."
+}
