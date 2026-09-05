@@ -1,0 +1,82 @@
+name: nuketown-recovered-1943-static-scene
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-recovered-1943-static-scene.yml
+      - tools/t6_nuketown_oat_static_scene_assemble_v1.py
+      - tools/t6_nuketown_static_scene_acceptance_v1.py
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download proven 1943 retail placement subset
+        run: |
+          mkdir placements
+          gh run download 33932945401 -n nuketown-playable-static-bounds-proof-v1 -D placements
+          test -s placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json
+          test -s placements/NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
+
+      - name: Download exact stock-OAT LOD0 model corpus
+        run: |
+          mkdir glbs
+          gh run download 33930524391 -n nuketown-oat-lod0-glbs-external-scan-v1 -D glbs
+          test "$(find glbs/model_export -type f -name '*_lod0.glb' | wc -l)" = "433"
+
+      - name: Assemble recovered static scene
+        run: |
+          python tools/t6_nuketown_oat_static_scene_assemble_v1.py \
+            --placements placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json \
+            --proof manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64 \
+            --model-dir glbs/model_export \
+            --out mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb \
+            --manifest NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json \
+            --expected 1943 \
+            --full-smodel-count 2992
+
+      - name: Independently verify emitted GLB accounting
+        run: |
+          python tools/t6_nuketown_static_scene_acceptance_v1.py \
+            mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb \
+            --summary NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json
+
+      - name: Verify exact placement membership survived assembly
+        run: |
+          python - <<'PY'
+          import json,struct
+          src=json.load(open('placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json'))
+          b=open('mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb','rb').read()
+          _,_,total=struct.unpack_from('<4sII',b,0); assert total==len(b)
+          n,t=struct.unpack_from('<I4s',b,12); assert t==b'JSON'
+          g=json.loads(b[20:20+n].rstrip(b' \0'))
+          expected=[int(r['index']) for r in src['placements']]
+          actual=[int(n['extras']['T6']['smodelIndex']) for n in g['nodes'] if 'mesh' in n]
+          assert actual==expected, (len(actual),len(expected))
+          assert len(actual)==1943 and len(set(actual))==1943
+          assert len(g['nodes'][0]['children'])==1943
+          assert g['extras']['T6']['fullGfxWorldSmodelCount']==2992
+          assert g['extras']['T6']['referencedPlayableXModels']==295
+          assert sorted(g['extras']['T6']['uninstantiatedDefinitionXModels'])==[
+              'mlv/nt_2020_vista_kiosk_blue',
+              'mlv/nt_2020_vista_ufo_01',
+          ]
+          print('exact placement membership: PASS')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-playable-static-oat-recovered-v1
+          path: |
+            mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb
+            NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json
+            NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json
+            placements/NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
+          retention-days: 7
