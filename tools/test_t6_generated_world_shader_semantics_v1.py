@@ -2,16 +2,18 @@
 """Small deterministic regression suite for the renderer-facing T6 layer contract."""
 from __future__ import annotations
 
-from math import isclose
+from math import isclose, sqrt
 
 from t6_generated_world_shader_semantics_v1 import (
     compose_diffuse,
     compose_diffuse_exact,
+    compose_normal_xy,
     compose_specular,
     decode_normal_transform,
     layer_weight_class,
     normal_layer_weight,
     parse_generated_layer_tokens,
+    reconstruct_layered_normal,
     resolve_ordinary_layer_weight,
     specular_baseline,
     technique_uses_x0_specular_fallback,
@@ -63,6 +65,32 @@ def main() -> int:
 
     assert isclose(normal_layer_weight(0.6, 0.25, False), 0.15)
     assert isclose(normal_layer_weight(0.6, 0.25, True), 0.6)
+    _close_tuple(
+        compose_normal_xy(None, (0.4, -0.2), operator="b", exact_rgb_weight=0.5),
+        (0.2, -0.1),
+    )
+    _close_tuple(
+        compose_normal_xy((0.2, -0.1), (-0.2, 0.3), operator="b", exact_rgb_weight=0.25),
+        (0.1, 0.0),
+    )
+    _close_tuple(
+        compose_normal_xy((0.2, -0.1), (-0.2, 0.3), operator="t", exact_rgb_threshold_condition=True),
+        (-0.2, 0.3),
+    )
+    _close_tuple(
+        compose_normal_xy((0.2, -0.1), (-0.2, 0.3), operator="t", exact_rgb_threshold_condition=False),
+        (0.2, -0.1),
+    )
+    diag = sqrt(0.5)
+    _close_tuple(
+        reconstruct_layered_normal(
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 0.0),
+        ),
+        (diag, 0.0, diag),
+    )
 
     base = (0.2, 0.4, 0.6, 1.0)
     layer = (0.8, 0.2, 0.4, 0.5)
