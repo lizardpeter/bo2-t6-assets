@@ -8,6 +8,7 @@ from pathlib import Path
 
 from t6_character_bundle_pipeline_v1 import safe_name, verify_xanim
 from t6_nonmap_asset_coverage_v1 import ASSET_TYPES, MAP_ONLY, classification
+from t6_nonmap_corpus_census_v1 import collect_inputs, safe as census_safe
 
 
 def main() -> int:
@@ -33,6 +34,7 @@ def main() -> int:
 
     assert safe_name("characters/usa/seal\\body") == "body"
     assert safe_name("***") == "asset"
+    assert census_safe("mp/common patch") == "mp_common_patch"
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -53,6 +55,21 @@ def main() -> int:
             pass
         else:
             raise AssertionError("bad XAnim format must fail closed")
+
+        zones = root / "zones"
+        nested = zones / "nested"
+        nested.mkdir(parents=True)
+        a = zones / "common.expanded"
+        b = nested / "mp_test.expanded"
+        ignored = nested / "notes.txt"
+        a.write_bytes(b"a")
+        b.write_bytes(b"b")
+        ignored.write_text("ignore", encoding="utf-8")
+
+        recursive = collect_inputs([zones, a], "*.expanded", True)
+        assert recursive == sorted({a.resolve(), b.resolve()}, key=lambda p: str(p).lower())
+        flat = collect_inputs([zones], "*.expanded", False)
+        assert flat == [a.resolve()]
 
     print("PASS: T6 non-map extraction track v1 regressions")
     return 0
