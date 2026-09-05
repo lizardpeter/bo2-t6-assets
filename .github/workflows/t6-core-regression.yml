@@ -6,10 +6,12 @@ on:
       - .github/workflows/t6-core-regression.yml
       - tools/t6_ipak_core.py
       - tools/t6_image_resolver_v1.py
+      - tools/t6_material_image_resolver_v1.py
       - tools/t6_export_nonregression_gate_v1.py
       - tools/t6_export_state_v1.py
       - tools/test_t6_ipak_core.py
       - tools/test_t6_image_resolver_v1.py
+      - tools/test_t6_material_image_resolver_v1.py
 permissions:
   contents: read
 jobs:
@@ -22,14 +24,16 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq liblzo2-2
-      - name: Run universal container and image resolver regressions
+      - name: Run universal container, image and material regressions
         run: |
           PYTHONPATH=tools python tools/test_t6_ipak_core.py
           PYTHONPATH=tools python tools/test_t6_image_resolver_v1.py
+          PYTHONPATH=tools python tools/test_t6_material_image_resolver_v1.py
       - name: Compile universal exporter guard modules
         run: |
           python -m py_compile \
             tools/t6_ipak_core.py \
             tools/t6_image_resolver_v1.py \
+            tools/t6_material_image_resolver_v1.py \
             tools/t6_export_nonregression_gate_v1.py \
             tools/t6_export_state_v1.py
