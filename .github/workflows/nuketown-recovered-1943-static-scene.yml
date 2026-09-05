@@ -4,79 +4,239 @@ on:
     branches: [base-ipak-r2-recovery]
     paths:
       - .github/workflows/nuketown-recovered-1943-static-scene.yml
+      - tools/t6_oat_gfxworld_layout_probe.cpp
+      - tools/t6_oat_external_gfxworld_scan.py
+      - tools/t6_nuketown_playable_static_bounds_filter_v1.py
       - tools/t6_nuketown_oat_static_scene_assemble_v1.py
       - tools/t6_nuketown_static_scene_acceptance_v1.py
+      - manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64
 permissions:
   contents: read
-  actions: read
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ github.token }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download proven 1943 retail placement subset
+      - name: Install exact recovery prerequisites
         run: |
-          mkdir placements
-          gh run download 33932945401 -n nuketown-playable-static-bounds-proof-v1 -D placements
-          test -s placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json
-          test -s placements/NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+          python -m pip install --disable-pip-version-check gdown
 
-      - name: Download exact stock-OAT LOD0 model corpus
+      - name: Fetch pinned OAT v0.33.0 source definitions and derive x86 layout
         run: |
-          mkdir glbs
-          gh run download 33930524391 -n nuketown-oat-lod0-glbs-external-scan-v1 -D glbs
-          test "$(find glbs/model_export -type f -name '*_lod0.glb' | wc -l)" = "433"
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common \
+            tools/t6_oat_gfxworld_layout_probe.cpp -o gfxworld-layout-probe
+          ./gfxworld-layout-probe > gfxworld-layout.json
+          python - <<'PY'
+          import json
+          p=json.load(open('gfxworld-layout.json'))
+          assert p['ptrSize']==4, p
+          expected={
+            'GfxWorld': {'size':1028,'name':0,'surfaceCount':16,'dpvs':784},
+            'GfxWorldDpvsStatic': {'size':116,'smodelCount':0,'smodelInsts':84,'smodelDrawInsts':92},
+            'GfxStaticModelInst': {'size':36,'mins':0,'maxs':12,'lightingOrigin':24},
+            'GfxStaticModelDrawInst': {'size':152,'cullDist':0,'placement':4,'model':56,'flags':60,'lightingHandle':68,'colorsIndex':70,'primaryLightIndex':96,'visibility':97,'reflectionProbeIndex':98,'smid':100},
+            'GfxPackedPlacement': {'size':52,'origin':0,'axis':12,'scale':48},
+            'XModel': {'size':248,'name':0},
+          }
+          for struct, fields in expected.items():
+              for field, value in fields.items():
+                  assert p[struct][field]==value, (struct,field,p[struct][field],value)
+          print(json.dumps(p,indent=2))
+          PY
 
-      - name: Assemble recovered static scene
+      - name: Fetch exact retail Nuketown FastFile and stock OAT binary
+        run: |
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+
+          curl -L --fail --retry 3 -o oat-linux.tar.gz \
+            https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          test -n "$UNLINKER"
+          chmod +x "$UNLINKER"
+          echo "$UNLINKER" > unlinker-path.txt
+
+      - name: Recover authoritative 2992 GfxWorld rows and OAT LOD0 model corpus
+        run: |
+          UNLINKER=$(cat unlinker-path.txt)
+          mkdir -p probe_out
+          python tools/t6_oat_external_gfxworld_scan.py \
+            --layout gfxworld-layout.json \
+            --out GFXWORLD_STATIC_PLACEMENTS_2992_V1.json \
+            --diag GFXWORLD_EXTERNAL_SCAN_DIAGNOSTICS_V1.json \
+            --timeout 30 \
+            -- \
+            "$UNLINKER" mp_nuketown_2020.ff \
+            --output-folder probe_out --model-format GLB --verbose
+
+          python - <<'PY'
+          import json,math
+          p=json.load(open('GFXWORLD_STATIC_PLACEMENTS_2992_V1.json'))
+          assert p['format']=='t6-gfxworld-static-placement-external-v1'
+          assert p['worldName']=='maps/mp/mp_nuketown_2020.d3dbsp', p['worldName']
+          assert p['surfaceCount']==5614, p['surfaceCount']
+          assert p['smodelCount']==2992 and len(p['placements'])==2992
+          assert all(r['model'] for r in p['placements'])
+          worst_norm=0.0; worst_dot=0.0
+          for r in p['placements']:
+              assert math.isfinite(r['scale']) and r['scale']>0
+              a=r['axis']
+              for v in a:
+                  worst_norm=max(worst_norm,abs(sum(x*x for x in v)-1.0))
+              for i,j in ((0,1),(0,2),(1,2)):
+                  worst_dot=max(worst_dot,abs(sum(a[i][k]*a[j][k] for k in range(3))))
+          assert worst_norm<0.01, worst_norm
+          assert worst_dot<0.01, worst_dot
+          print({'rows':len(p['placements']),'worstNorm':worst_norm,'worstDot':worst_dot})
+          PY
+          test "$(find probe_out/model_export -type f -name '*_lod0.glb' | wc -l)" = "433"
+
+      - name: Derive exact 2303 proof-identity candidate population
+        run: |
+          python - <<'PY'
+          import base64,hashlib,json,zlib
+          from pathlib import Path
+          source=Path('GFXWORLD_STATIC_PLACEMENTS_2992_V1.json')
+          p=json.loads(source.read_text())
+          proof_path=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          proof=json.loads(zlib.decompress(base64.b64decode(proof_path.read_text())).decode())
+          names={r['xmodelName'] for r in proof['models']}
+          assert len(names)==297
+          assert len(proof['models'])==297
+          assert sum(int(r['surfaceCount']) for r in proof['models'])==538
+          assert len({m for r in proof['models'] for m in r['materials']})==344
+          rows=[r for r in p['placements'] if r['model'] in names]
+          assert len(rows)==2303, len(rows)
+          assert {r['model'] for r in rows}==names
+          out={
+            'format':'t6-nuketown-playable-identity-placement-candidates-v1',
+            'sourcePlacementSha256':hashlib.sha256(source.read_bytes()).hexdigest(),
+            'playableIdentityCount':297,
+            'count':2303,
+            'placements':rows,
+          }
+          target=Path('NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json')
+          target.write_text(json.dumps(out,separators=(',',':'))+'\n')
+          digest=hashlib.sha256(target.read_bytes()).hexdigest()
+          assert digest=='1816ca5a84795a29b749d600573269dac0f06dc690c3cbcce8e19ecc33bd23cf', digest
+          print({'candidateCount':2303,'sha256':digest})
+          PY
+
+      - name: Reproduce exact 2303 to 1943 playable-bounds partition
+        run: |
+          python tools/t6_nuketown_playable_static_bounds_filter_v1.py \
+            --source NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json \
+            --selected-out NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json \
+            --excluded-out NUKETOWN_PLAYABLE_STATIC_EXCLUDED_360_V1.json \
+            --manifest-out NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json \
+            --half-extent 2500 \
+            --expected-source 2303 \
+            --expected-selected 1943 \
+            --expected-identities 297
+
+          echo 'b04aea6f480fe3c6b38648f99bba7b6c43a8541903e9d813ebef18d77e1cd85b  NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json' | sha256sum -c -
+          python - <<'PY'
+          import json
+          p=json.load(open('NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json'))
+          r=p['result']
+          assert r['selectedCount']==1943
+          assert r['excludedCount']==360
+          assert r['selectedIdentityCount']==295
+          assert r['selectedIndexListSha256']=='3678a63b2d6fc558ff3112fce0e42d2c7a9103ed9ce2bf455519cee88ebaca84'
+          assert r['excludedIndexListSha256']=='5194cfb47523e380dc2d6c0d9e66ccd79100eb94514a1caae7d988ca4f1326a0'
+          assert sorted(r['uninstantiatedDefinitionIdentities'])==[
+            'mlv/nt_2020_vista_kiosk_blue',
+            'mlv/nt_2020_vista_ufo_01',
+          ]
+          PY
+
+      - name: Assemble recovered 1943-static GLB from exact OAT definitions
         run: |
           python tools/t6_nuketown_oat_static_scene_assemble_v1.py \
-            --placements placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json \
+            --placements NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json \
             --proof manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64 \
-            --model-dir glbs/model_export \
+            --model-dir probe_out/model_export \
             --out mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb \
             --manifest NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json \
             --expected 1943 \
             --full-smodel-count 2992
 
-      - name: Independently verify emitted GLB accounting
+      - name: Independently verify emitted GLB and exact deterministic identity
         run: |
           python tools/t6_nuketown_static_scene_acceptance_v1.py \
             mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb \
             --summary NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json
 
-      - name: Verify exact placement membership survived assembly
-        run: |
+          test "$(stat -c %s mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb)" = "17263196"
+          echo 'bc8f0c14518ccd15fabcdc0dd283dbecea410e0383c5057e4036ad1e95d8835b  mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb' | sha256sum -c -
+
           python - <<'PY'
           import json,struct
-          src=json.load(open('placements/NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json'))
+          src=json.load(open('NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json'))
           b=open('mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb','rb').read()
           _,_,total=struct.unpack_from('<4sII',b,0); assert total==len(b)
           n,t=struct.unpack_from('<I4s',b,12); assert t==b'JSON'
           g=json.loads(b[20:20+n].rstrip(b' \0'))
           expected=[int(r['index']) for r in src['placements']]
           actual=[int(n['extras']['T6']['smodelIndex']) for n in g['nodes'] if 'mesh' in n]
-          assert actual==expected, (len(actual),len(expected))
+          assert actual==expected
           assert len(actual)==1943 and len(set(actual))==1943
           assert len(g['nodes'][0]['children'])==1943
           assert g['extras']['T6']['fullGfxWorldSmodelCount']==2992
           assert g['extras']['T6']['referencedPlayableXModels']==295
           assert sorted(g['extras']['T6']['uninstantiatedDefinitionXModels'])==[
-              'mlv/nt_2020_vista_kiosk_blue',
-              'mlv/nt_2020_vista_ufo_01',
+            'mlv/nt_2020_vista_kiosk_blue',
+            'mlv/nt_2020_vista_ufo_01',
           ]
-          print('exact placement membership: PASS')
+          print('exact placement membership and deterministic GLB identity: PASS')
+          PY
+
+      - name: Compare regenerated manifests to permanent checkpoints
+        run: |
+          python - <<'PY'
+          import json
+          generated=json.load(open('NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json'))
+          retained=json.load(open('manifests/maps/mp_nuketown_2020/NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json'))
+          assert generated['rule']==retained['rule']
+          assert generated['result']==retained['result']
+          assert generated['output']==retained['output']
+
+          generated=json.load(open('NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json'))
+          retained=json.load(open('manifests/maps/mp_nuketown_2020/NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json'))
+          assert generated['output']==retained['output']
+          assert generated['summary']==retained['summary']
+
+          generated=json.load(open('NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json'))
+          retained=json.load(open('manifests/maps/mp_nuketown_2020/NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json'))
+          assert generated==retained
+          print('permanent manifest checkpoints: PASS')
           PY
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: nuketown-playable-static-oat-recovered-v1
+          name: nuketown-playable-static-oat-recovered-selfcontained-v1
           path: |
             mp_nuketown_2020_PLAYABLE_STATIC_OAT_RECOVERED_v1.glb
+            GFXWORLD_STATIC_PLACEMENTS_2992_V1.json
+            GFXWORLD_EXTERNAL_SCAN_DIAGNOSTICS_V1.json
+            gfxworld-layout.json
+            NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json
+            NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json
+            NUKETOWN_PLAYABLE_STATIC_EXCLUDED_360_V1.json
+            NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
             NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_V1.json
             NUKETOWN_PLAYABLE_STATIC_OAT_RECOVERED_ACCEPTANCE_V1.json
-            placements/NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
+            oat-external-scan-target.log
+          if-no-files-found: warn
           retention-days: 7
