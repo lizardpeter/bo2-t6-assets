@@ -29,6 +29,7 @@ from t6_world_generated_attribute_contract_v1 import FORMAT as ATTRIBUTE_FORMAT
 
 bpy = v1.bpy
 BlenderLayerPreviewError = v1.BlenderLayerPreviewError
+_BASE_HEIGHT_PREFLIGHT = v4._height_identity_preflight
 
 
 def _root_attribute_preflight(input_path: Path) -> dict:
@@ -58,7 +59,7 @@ def _root_attribute_preflight(input_path: Path) -> dict:
 
 
 def _strict_height_identity_preflight(material: str, technique: str, recipe: dict, layer: int):
-    plan = v4._height_identity_preflight(material, technique, recipe, layer)
+    plan = _BASE_HEIGHT_PREFLIGHT(material, technique, recipe, layer)
     height = recipe[height_nodes.HEIGHT_DAG_KEY]
     constants = recipe[height_nodes.HEIGHT_CONSTANT_KEY]
     leaves = recipe[height_nodes.HEIGHT_LEAF_KEY]
