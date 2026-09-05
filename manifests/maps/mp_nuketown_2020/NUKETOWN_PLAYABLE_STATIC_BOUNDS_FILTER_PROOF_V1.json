@@ -1,0 +1,69 @@
+{
+  "format": "t6-nuketown-playable-static-bounds-filter-proof-v1",
+  "output": {
+    "bytes": 1175748,
+    "file": "NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json",
+    "sha256": "b04aea6f480fe3c6b38648f99bba7b6c43a8541903e9d813ebef18d77e1cd85b"
+  },
+  "proofBoundary": "This proves a deterministic 2303-to-1943 spatial partition of the independently recovered retail GfxWorld static placements. The 297-XModel material proof is definition-level, so definitions may remain uninstantiated after this crop. This does not by itself prove that the lost historical exporter used the same source code; it proves the recovered rule reproduces the retained 1943 playable-static cardinality from authoritative retail bounds without model-name heuristics.",
+  "result": {
+    "excludedCount": 360,
+    "excludedIndexListSha256": "5194cfb47523e380dc2d6c0d9e66ccd79100eb94514a1caae7d988ca4f1326a0",
+    "selectedBounds": {
+      "maxs": [2488.0, 2459.169189453125, 620.6002197265625],
+      "mins": [-2497.8623046875, -2495.0, -185.1756591796875],
+      "originMaxs": [2488.0, 2406.679931640625, 371.0],
+      "originMins": [-2477.919921875, -2483.0, -185.0]
+    },
+    "selectedCount": 1943,
+    "selectedIdentityCount": 295,
+    "selectedIndexListSha256": "3678a63b2d6fc558ff3112fce0e42d2c7a9103ed9ce2bf455519cee88ebaca84",
+    "topExcludedModels": [
+      ["nt_2020_vista_flagpole_01", 58],
+      ["nt_2020_vista_cart_01", 53],
+      ["nt_2020_vista_planter_01", 33],
+      ["nt_2020_foliage_hedge_boxy01", 25],
+      ["nt_2020_flag_nuclear_01", 16],
+      ["nt_2020_flag_nuclear_02", 16],
+      ["nt_2020_vista_speakers_01", 16],
+      ["nt_2020_vista_kiosk_01", 14],
+      ["nt_2020_foliage_hedge_boxy_3_set", 13],
+      ["foliage_hedge_gumdrop_1", 11],
+      ["nt_2020_vista_bldg_07_support", 11],
+      ["nt_2020_streetlight_01", 10],
+      ["mlv/nt_2020_vista_kiosk_02", 9],
+      ["nt_2020_vista_kiosk_04", 9],
+      ["t5_foliage_hedge_boxy01", 9],
+      ["nt_2020_vista_kiosk_04_brown", 8],
+      ["mlv/nt_tree_ficus_lrg_01_sway", 7],
+      ["nt_2020_vista_streetlight_01", 7],
+      ["nt_2020_vista_sign_01", 6],
+      ["berlin_patio_bench", 5],
+      ["mlv/nt_2020_vista_kiosk_blue", 5],
+      ["t5_foliage_hedge_rounded01", 5],
+      ["mlv/nt_2020_vista_kiosk_yellow", 3],
+      ["mlv/nt_2020_vista_ufo_01", 3],
+      ["mlv/nt_2020_vista_kiosk_green", 2],
+      ["mlv/nt_2020_vista_kiosk_red", 2],
+      ["nt_2020_foliage_hedge_boxy_2_set", 2],
+      ["nt_2020_flag_england_01", 1],
+      ["p_rus_angle_plate_bolt", 1]
+    ],
+    "uninstantiatedDefinitionIdentities": [
+      "mlv/nt_2020_vista_kiosk_blue",
+      "mlv/nt_2020_vista_ufo_01"
+    ]
+  },
+  "rule": {
+    "boundary": "inclusive",
+    "description": "Retain a candidate iff its authoritative GfxStaticModelInst AABB is fully contained in [-2500,+2500] on retail world X and Y. Z is not cropped.",
+    "fields": ["mins[0]", "maxs[0]", "mins[1]", "maxs[1]"],
+    "halfExtentGameUnitsXY": 2500.0
+  },
+  "source": {
+    "candidateCount": 2303,
+    "candidateIdentityCount": 297,
+    "file": "NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json",
+    "sha256": "1816ca5a84795a29b749d600573269dac0f06dc690c3cbcce8e19ecc33bd23cf"
+  }
+}
