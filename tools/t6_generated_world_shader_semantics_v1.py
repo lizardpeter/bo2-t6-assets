@@ -17,6 +17,9 @@ Important invariants:
   dispatcher is source-closed for ordinary alpha/vertex/x/threshold cases.
   vN height weights remain exact per-shader DAGs and MUST be supplied by the
   recipe; this module deliberately does not guess a universal height formula.
+- Layered normal XY state is composed with the same exact RGB weight/threshold
+  DAG, then reconstructed by the retail basis equation
+  Nraw = Nbase + Nx*Xbasis + Ny*Ybasis and normalized.
 - Layered specular state is an ordered XYZW recurrence. Blend steps lerp the
   previous state toward the layer specular sample with the exact RGB compositor
   weight. Threshold steps select layer-vs-previous with the exact RGB threshold
@@ -26,6 +29,7 @@ Important invariants:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import sqrt
 import re
 from typing import Sequence
 
@@ -45,6 +49,12 @@ WEIGHT_DISPATCH = {
     "blend": "vN -> height; else xN -> vertex_only; else alpha_vertex",
     "multiply": "vertex_only",
     "threshold": "threshold_alpha_vertex",
+}
+
+NORMAL_EQUATIONS = {
+    "blend": "prevNormalXY + (layerNormalXY - prevNormalXY) * exactRgbWeight",
+    "threshold": "select(exactRgbThresholdCondition, layerNormalXY, prevNormalXY)",
+    "reconstruct": "normalize(baseNormal + layeredNormalX*xBasis + layeredNormalY*yBasis)",
 }
 
 SPECULAR_EQUATIONS = {
@@ -169,6 +179,59 @@ def normal_layer_weight(vertex_weight: float, color_layer_alpha: float, x_varian
     return vertex_weight if x_variant else vertex_weight * color_layer_alpha
 
 
+def compose_normal_xy(
+    previous_xy: Sequence[float] | None,
+    layer_xy: Sequence[float],
+    *,
+    operator: str,
+    exact_rgb_weight: float | None = None,
+    exact_rgb_threshold_condition: bool | None = None,
+) -> tuple[float, float]:
+    """Apply the exact ordered layered-normal XY recurrence."""
+    if len(layer_xy) != 2:
+        raise ValueError("layer normal state must contain XY")
+    layer = (float(layer_xy[0]), float(layer_xy[1]))
+    prev = (0.0, 0.0) if previous_xy is None else tuple(float(v) for v in previous_xy)
+    if len(prev) != 2:
+        raise ValueError("previous normal state must contain XY")
+    if operator in ("b", "blend"):
+        if exact_rgb_weight is None:
+            raise ValueError("normal blend recurrence requires exact_rgb_weight")
+        w = float(exact_rgb_weight)
+        return tuple(prev[i] + (layer[i] - prev[i]) * w for i in range(2))
+    if operator in ("t", "threshold"):
+        if exact_rgb_threshold_condition is None:
+            raise ValueError("normal threshold recurrence requires exact_rgb_threshold_condition")
+        return layer if bool(exact_rgb_threshold_condition) else prev
+    raise ValueError(f"unsupported layered normal operator {operator!r}")
+
+
+def reconstruct_layered_normal(
+    base_normal: Sequence[float],
+    x_basis: Sequence[float],
+    y_basis: Sequence[float],
+    layered_xy: Sequence[float],
+) -> tuple[float, float, float]:
+    """Retail universal three-component reconstruction + normalization.
+
+    Direct retained DXBC proves:
+      raw = baseNormal + layeredX*xBasis + layeredY*yBasis
+      normal = raw * rsq(dot(raw, raw))
+    """
+    if any(len(v) != 3 for v in (base_normal, x_basis, y_basis)) or len(layered_xy) != 2:
+        raise ValueError("normal reconstruction expects 3D basis vectors and layered XY")
+    x, y = float(layered_xy[0]), float(layered_xy[1])
+    raw = tuple(
+        float(base_normal[i]) + x * float(x_basis[i]) + y * float(y_basis[i])
+        for i in range(3)
+    )
+    length2 = sum(v * v for v in raw)
+    if length2 <= 0.0:
+        raise ValueError("retail normal reconstruction produced a zero vector")
+    inv = 1.0 / sqrt(length2)
+    return tuple(v * inv for v in raw)
+
+
 def compose_diffuse_exact(previous, layer, *, operation: str, exact_weight=None, exact_threshold_condition=None):
     """Apply one exact ordered RGB compositor step.
 
@@ -285,4 +348,5 @@ def normalized_gltf_vertex_contract() -> dict:
         "TEXCOORD_4": "materialUV3",
         "_T6_LAYER_WEIGHTS": "retail generated-material control channels; G/B/A -> layers 1/2/3",
         "_T6_NORMAL_TRANSFORM_0": "logical UNORM8 [m00,m01,m10,m11]; shader decode attr*2-1",
+        "NORMAL/TANGENT": "retail decoded base normal/tangent basis retained in standard glTF attributes",
     }
