@@ -79,6 +79,7 @@ if ($CommonStream) {
 
 Write-Host "[2/6] Restore Stage 18D raw MP7 proofs from the pinned common_mp stream"
 $AttachmentProof = $null
+$RegeneratedRawXAnimProof = $null
 if ($CommonStream -and -not $SkipStage18DRawRegeneration) {
     $RootProof = Join-Path $RawProofDir "common_mp_weapon_roots_v2.json"
     & python $RawParserV2 $CommonStream `
@@ -99,6 +100,7 @@ if ($CommonStream -and -not $SkipStage18DRawRegeneration) {
         --raw-parser $RawParserV2 `
         --outdir $RawXAnimDir
     if ($LASTEXITCODE -ne 0) { throw "Stage 18D raw XAnim regeneration failed" }
+    $RegeneratedRawXAnimProof = Join-Path $RawXAnimDir "xanim_raw_proof.json"
     if (-not $Mp7RawXAnimJson) {
         $Mp7RawXAnimJson = Join-Path $RawXAnimDir "mp7_base_xanim_raw.json"
     }
@@ -159,16 +161,31 @@ if ($PlanExit -notin 0,2) { throw "Bundle planner failed with exit code $PlanExi
 
 Write-Host "[5/6] Verify regenerated raw MP7 canaries when present"
 if ($CommonStream -and -not $SkipStage18DRawRegeneration) {
-    $Regenerated = Get-Content -Raw (Join-Path $RawXAnimDir "xanim_raw_proof_summary.json") | ConvertFrom-Json
-    if ($Regenerated.expanded_stream_sha256 -ne $ExpectedCommonMpSha) {
+    if (-not (Test-Path $RegeneratedRawXAnimProof)) {
+        throw "Stage 18D raw XAnim proof was not emitted at the expected historical filename"
+    }
+    $Regenerated = Get-Content -Raw $RegeneratedRawXAnimProof | ConvertFrom-Json
+    if ([string]$Regenerated.expanded_stream_sha256 -ne $ExpectedCommonMpSha) {
         throw "Regenerated XAnim proof source SHA does not match benchmark common_mp SHA"
     }
-    if ([int]$Regenerated.mp7.base_viewmodel_records -ne [int]$SpecDoc.retainedRetailEvidence.mp7BaseViewmodelRecords) {
+    if ([int]$Regenerated.mp7_base_viewmodel_xanim_records -ne [int]$SpecDoc.retainedRetailEvidence.mp7BaseViewmodelRecords) {
         throw "Regenerated MP7 family count disagrees with retained benchmark"
     }
-    $Reload = $Regenerated.mp7.reload
-    if ([string]$Reload.serialized_sha256 -ne [string]$SpecDoc.retainedRetailEvidence.reloadCanary.serializedSha256) {
-        throw "Regenerated viewmodel_mp7_reload SHA disagrees with retained canary"
+    if (-not [bool]$Regenerated.mp7_all_walk_status_exact) {
+        throw "Regenerated MP7 raw XAnim family contains a non-exact walk"
+    }
+    if (-not [bool]$Regenerated.mp7_consecutive_boundaries_exact) {
+        throw "Regenerated MP7 raw XAnim family has a non-exact consecutive boundary"
+    }
+    $Reload = $Regenerated.mp7_reload_canary
+    if (-not $Reload -or [string]$Reload.name -ne "viewmodel_mp7_reload") {
+        throw "Regenerated MP7 reload canary is absent or has the wrong identity"
+    }
+    if ([int]$Reload.raw_struct_offset -ne [int]$SpecDoc.retainedRetailEvidence.reloadCanary.rawStructOffset) {
+        throw "Regenerated viewmodel_mp7_reload raw offset disagrees with retained canary"
+    }
+    if ([string]$Reload.walk.exact_serialized_sha256 -ne [string]$SpecDoc.retainedRetailEvidence.reloadCanary.serializedSha256) {
+        throw "Regenerated viewmodel_mp7_reload serialized SHA disagrees with retained canary"
     }
     if (-not (Test-Path $AttachmentProof)) {
         throw "Stage 18D attachment XModel proof was not emitted"
@@ -185,6 +202,7 @@ Write-Host ("Model class gate: {0}" -f $Summary.summary.modelClassGate)
 Write-Host ("Normalized animation gate: {0}" -f $Summary.summary.normalizedAnimationGate)
 Write-Host ("Ready for bundle export: {0}" -f $Summary.summary.readyForBundleExport)
 if ($AttachmentProof) { Write-Host ("Raw MP7 attachment-model proof: {0}" -f $AttachmentProof) }
+if ($RegeneratedRawXAnimProof) { Write-Host ("Raw MP7 XAnim proof: {0}" -f $RegeneratedRawXAnimProof) }
 Write-Host ("Outputs: {0}" -f $OutRoot)
 
 # Exit 2 means the pipeline ran correctly but the benchmark still has explicit
