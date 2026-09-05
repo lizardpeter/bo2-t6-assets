@@ -7,18 +7,26 @@ on:
       - 'tools/t6_blender_generated_layer_preview_v1.py'
       - 'tools/t6_blender_generated_layer_preview_v2.py'
       - 'tools/t6_blender_generated_layer_preview_v3.py'
+      - 'tools/t6_blender_generated_layer_preview_v4.py'
+      - 'tools/t6_blender_height_dag_nodes_v1.py'
+      - 'tools/t6_generated_height_weight_dag_v1.py'
       - 'tools/t6_generated_shader_recipe_contract_v1.py'
       - 'tools/t6_generated_world_shader_semantics_v1.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v3.py'
+      - 'tools/test_t6_blender_generated_layer_preview_runtime_v4.py'
   pull_request:
     paths:
       - '.github/workflows/t6-blender-runtime.yml'
       - 'tools/t6_blender_generated_layer_preview_v1.py'
       - 'tools/t6_blender_generated_layer_preview_v2.py'
       - 'tools/t6_blender_generated_layer_preview_v3.py'
+      - 'tools/t6_blender_generated_layer_preview_v4.py'
+      - 'tools/t6_blender_height_dag_nodes_v1.py'
+      - 'tools/t6_generated_height_weight_dag_v1.py'
       - 'tools/t6_generated_shader_recipe_contract_v1.py'
       - 'tools/t6_generated_world_shader_semantics_v1.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v3.py'
+      - 'tools/test_t6_blender_generated_layer_preview_runtime_v4.py'
   workflow_dispatch:
 
 jobs:
@@ -52,9 +60,16 @@ jobs:
           "$blender" --version
           echo "BLENDER=$blender" >> "$GITHUB_ENV"
 
-      - name: Run actual Blender importer and adapter
+      - name: Run v3 actual Blender importer and adapter regression
         shell: bash
         run: |
           set -euxo pipefail
           "$BLENDER" --background --factory-startup \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v3.py
+
+      - name: Run v4 actual Blender vN DAG importer and adapter regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          "$BLENDER" --background --factory-startup \
+            --python tools/test_t6_blender_generated_layer_preview_runtime_v4.py
