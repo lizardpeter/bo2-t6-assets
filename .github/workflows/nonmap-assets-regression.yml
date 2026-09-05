@@ -1,0 +1,37 @@
+name: Non-map asset regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - 'tools/t6_*'
+      - 'tools/test_t6_*'
+      - 'manifests/nonmap/**'
+      - 'research/T6_NONMAP*'
+      - 'research/T6_PROGRESS_*FIRST_PERSON*'
+      - '.github/workflows/nonmap-assets-regression.yml'
+  pull_request:
+    paths:
+      - 'tools/t6_*'
+      - 'tools/test_t6_*'
+      - 'manifests/nonmap/**'
+      - 'research/T6_NONMAP*'
+      - 'research/T6_PROGRESS_*FIRST_PERSON*'
+
+permissions:
+  contents: read
+
+jobs:
+  python-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Core non-map regressions
+        run: python tools/test_t6_nonmap_asset_track_v1.py
+      - name: First-person benchmark regressions
+        run: python tools/test_t6_first_person_bundle_v1.py
