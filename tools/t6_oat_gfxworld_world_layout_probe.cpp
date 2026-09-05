@@ -42,18 +42,18 @@ int main() {
     std::printf("\"_end\":0},");
 
     std::printf("\"GfxSurface\":{\"size\":%zu,", sizeof(T6::GfxSurface));
-    OFF(T6::GfxSurface, mins);
-    OFF(T6::GfxSurface, vertexDataOffset0);
-    OFF(T6::GfxSurface, maxs);
-    OFF(T6::GfxSurface, vertexDataOffset1);
-    OFF(T6::GfxSurface, firstVertex);
-    OFF(T6::GfxSurface, himipRadiusInvSq);
-    OFF(T6::GfxSurface, vertexCount);
     OFF(T6::GfxSurface, tris);
     OFF(T6::GfxSurface, material);
     std::printf("\"_end\":0},");
 
     std::printf("\"srfTriangles_t\":{\"size\":%zu,", sizeof(T6::srfTriangles_t));
+    OFF(T6::srfTriangles_t, mins);
+    OFF(T6::srfTriangles_t, vertexDataOffset0);
+    OFF(T6::srfTriangles_t, maxs);
+    OFF(T6::srfTriangles_t, vertexDataOffset1);
+    OFF(T6::srfTriangles_t, firstVertex);
+    OFF(T6::srfTriangles_t, himipRadiusInvSq);
+    OFF(T6::srfTriangles_t, vertexCount);
     OFF(T6::srfTriangles_t, triCount);
     OFF(T6::srfTriangles_t, baseIndex);
     std::printf("\"_end\":0},");
