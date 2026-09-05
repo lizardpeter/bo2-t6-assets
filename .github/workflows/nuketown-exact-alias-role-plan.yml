@@ -22,164 +22,105 @@ jobs:
           gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
           test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
           echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
-          curl -L --fail --retry 3 -o oat-linux.tar.gz \
-            https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
           echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
-          mkdir oat
-          tar -xzf oat-linux.tar.gz -C oat
+          mkdir oat && tar -xzf oat-linux.tar.gz -C oat
           UNLINKER=$(find oat -type f -name Unlinker | head -1)
-          test -n "$UNLINKER"
-          chmod +x "$UNLINKER"
+          test -n "$UNLINKER" && chmod +x "$UNLINKER"
           echo "$UNLINKER" > unlinker-path.txt
       - name: Dump retail assets with OAT
         run: |
           UNLINKER=$(cat unlinker-path.txt)
           mkdir probe_out
           "$UNLINKER" mp_nuketown_2020.ff --output-folder probe_out --model-format GLB --verbose > oat-role-plan.log 2>&1
-          echo "JSON count: $(find probe_out -type f -name '*.json' | wc -l)"
-          echo "Material-like paths:"
-          find probe_out -type f -name '*.json' | grep -E '/material|/materials' | head -30 || true
-      - name: Derive exact retained-material alias role plan
+          test "$(find probe_out/materials -type f -name '*.json' | wc -l)" -gt 0
+      - name: Derive exact first-semantic alias role plan
         run: |
           python - <<'PY'
           import base64,collections,hashlib,json,zlib
           from pathlib import Path
-
           root=Path('manifests/maps/mp_nuketown_2020')
-          def zjson(name):
-              return json.loads(zlib.decompress(base64.b64decode((root/name).read_text().strip())))
+          def zjson(name): return json.loads(zlib.decompress(base64.b64decode((root/name).read_text().strip())))
           bank=zjson('NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
           exact=zjson('NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64')
           proof=zjson('T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
           retained={m for model in proof['models'] for m in model['materials']}
           assert len(retained)==344
-          exact43={r['name'] for r in exact['rows']}
-          assert len(exact43)==43
-          aliases={a['name']:a for a in bank['aliases']}
-          assert len(aliases)==81 and bank['conflictCount']==0
+          aliases={a['name']:a for a in bank['aliases']}; assert len(aliases)==81 and bank['conflictCount']==0
+          exact43={r['name'] for r in exact['rows']}; assert len(exact43)==43
 
-          # Index all OAT T6 material JSONs by several exact identities. No fuzzy
-          # or basename-only match is accepted when identities conflict.
-          candidates=collections.defaultdict(list)
-          material_docs=[]
-          for p in Path('probe_out').rglob('*.json'):
+          # Exact OAT path identity: probe_out/materials/<Material.name>.json.
+          # No basename fallback is permitted.
+          material_root=Path('probe_out/materials')
+          material_docs={}
+          for p in material_root.rglob('*.json'):
               try: doc=json.loads(p.read_text())
               except Exception: continue
               if doc.get('_game')!='t6' or doc.get('_type')!='material': continue
-              rel=p.as_posix()
-              identities=set()
-              for key in ('name','_name','asset','assetName'):
-                  value=doc.get(key)
-                  if isinstance(value,str) and value: identities.add(value)
-              # OAT dumps normally use .../materials/<asset>.json or
-              # .../material/<asset>.json; preserve subdirectories after marker.
-              parts=p.with_suffix('').parts
-              for marker in ('materials','material'):
-                  if marker in parts:
-                      i=max(j for j,x in enumerate(parts) if x==marker)
-                      if i+1<len(parts): identities.add('/'.join(parts[i+1:]))
-              rec={'path':str(p),'doc':doc,'identities':sorted(identities)}
-              material_docs.append(rec)
-              for identity in identities: candidates[identity].append(rec)
+              identity=p.relative_to(material_root).with_suffix('').as_posix()
+              if identity in material_docs: raise SystemExit(f'duplicate material identity {identity}')
+              material_docs[identity]={'path':str(p),'doc':doc}
 
-          def exact_material(name):
-              hits=candidates.get(name,[])
-              if len(hits)==1: return hits[0]
-              if len(hits)>1:
-                  payloads={json.dumps(h['doc'],sort_keys=True,separators=(',',':')) for h in hits}
-                  if len(payloads)==1: return hits[0]
-                  raise SystemExit(f'conflicting OAT material JSONs for {name}: {[h["path"] for h in hits]}')
-              return None
+          def first_semantic(textures, semantic):
+              return next(((i,t) for i,t in enumerate(textures) if str(t.get('semantic') or '')==semantic), None)
 
-          rows=[]; unresolved=[]; texture_rows=[]
+          bindings=[]; all_first=[]; unresolved=[]; non_alias_first=[]
+          role_specs=(('colorMap','baseColorTexture',2),('normalMap','normalTexture',5))
           for material in sorted(retained):
-              rec=exact_material(material)
+              rec=material_docs.get(material)
               if rec is None:
                   unresolved.append(material); continue
               textures=rec['doc'].get('textures',[])
-              if not isinstance(textures,list):
-                  raise SystemExit(f'{material}: textures not list')
-              for ti,t in enumerate(textures):
-                  image=str(t.get('image') or '')
-                  semantic=str(t.get('semantic') or '')
-                  texture_rows.append({'material':material,'materialJson':rec['path'],'textureIndex':ti,'semantic':semantic,'image':image,'name':t.get('name'),'samplerState':t.get('samplerState')})
-                  if image not in aliases: continue
-                  if semantic=='colorMap': role='baseColorTexture'
-                  elif semantic=='normalMap': role='normalTexture'
-                  else: role=None
-                  a=aliases[image]
-                  rows.append({
-                      'material':material,'materialJson':rec['path'],'textureIndex':ti,
-                      'materialSemantic':semantic,'gltfRole':role,'image':image,
-                      'aliasHash':a['hash'],'aliasDataHash':a['dataHash'],
-                      'aliasSlot':a.get('slot'),'aliasSemantic':a.get('semantic'),
-                      'baseIpakExact43':image in exact43,
-                      'aliasRecord':a,
-                  })
+              if not isinstance(textures,list): raise SystemExit(f'{material}: textures is not a list')
+              for oat_sem,role,raw_sem in role_specs:
+                  hit=first_semantic(textures,oat_sem)
+                  if hit is None: continue
+                  ti,t=hit; image=str(t.get('image') or '')
+                  row={'material':material,'materialJson':rec['path'],'textureIndex':ti,'oatSemantic':oat_sem,'rawSemantic':raw_sem,'gltfRole':role,'image':image,'samplerState':t.get('samplerState')}
+                  all_first.append(row)
+                  alias=aliases.get(image)
+                  if alias is None:
+                      non_alias_first.append(row); continue
+                  # Independent cross-check: alias-bank raw semantic/slot must
+                  # agree with the first retail OAT texture-table occurrence.
+                  if int(alias['semantic'])!=raw_sem:
+                      raise SystemExit(f'{material} {role}: alias semantic {alias["semantic"]} != {raw_sem}')
+                  if int(alias['slot'])!=ti:
+                      raise SystemExit(f'{material} {role}: alias slot {alias["slot"]} != OAT textureIndex {ti}')
+                  row.update({'aliasHash':alias['hash'],'aliasDataHash':alias['dataHash'],'aliasVirtualOffset':alias['virtualOffset'],'aliasBlock':alias['block'],'baseIpakExact43':image in exact43,'aliasEvidence':alias.get('evidence',[])})
+                  bindings.append(row)
 
-          # Fail closed on duplicate role candidates per material. Multiple alias
-          # images in unrelated material semantics are retained but not promoted.
-          promotable=[r for r in rows if r['gltfRole']]
-          role_groups=collections.defaultdict(list)
-          for r in promotable: role_groups[(r['material'],r['gltfRole'])].append(r)
-          ambiguous={f'{m}|{role}':rs for (m,role),rs in role_groups.items() if len(rs)!=1}
-          if ambiguous:
-              raise SystemExit('ambiguous exact alias role candidates: '+json.dumps(ambiguous,sort_keys=True))
-
-          availability=bank.get('availability')
-          # Expose every alias top-level key/value relevant to availability so the
-          # historic 22 embedded-exact subset can be identified without guessing.
-          alias_meta=[]
-          for a in bank['aliases']:
-              alias_meta.append({k:v for k,v in a.items() if k not in ('evidence',)})
-
-          def counts(seq):
-              c=collections.Counter(r['gltfRole'] for r in seq)
-              return {'bindings':len(seq),'baseColorTexture':c['baseColorTexture'],'normalTexture':c['normalTexture']}
-
-          exact43_rows=[r for r in promotable if r['baseIpakExact43']]
+          def counts(rows):
+              c=collections.Counter(r['gltfRole'] for r in rows)
+              return {'bindings':len(rows),'baseColorTexture':c['baseColorTexture'],'normalTexture':c['normalTexture'],'uniqueImages':len({r['image'] for r in rows}),'uniqueMaterials':len({r['material'] for r in rows})}
+          exact_rows=[r for r in bindings if r['baseIpakExact43']]
+          missing_rows=[r for r in bindings if not r['baseIpakExact43']]
           report={
-              'format':'t6-nuketown-exact-alias-role-plan-v1',
+              'format':'t6-nuketown-exact-alias-role-plan-v2',
               'source':{
                   'retailFfSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
-                  'oatRelease':'v0.33.0',
-                  'aliasBankCompressedSha256':hashlib.sha256((root/'NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64').read_bytes()).hexdigest(),
-                  'exact43ProofCompressedSha256':hashlib.sha256((root/'NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64').read_bytes()).hexdigest(),
+                  'oatRelease':'v0.33.0','oatReleaseSha256':'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864',
+                  'aliasBankDecompressedSha256':'81da675a887dbeb1f54e1450781db46345c0ba81d5a02eee0a32569d6a85ea0e',
               },
-              'retainedMaterialCount':len(retained),
-              'oatMaterialJsonCount':len(material_docs),
-              'resolvedRetainedMaterialCount':len(retained)-len(unresolved),
-              'unresolvedRetainedMaterials':unresolved,
-              'aliasBankAvailability':availability,
-              'aliasMetadata':alias_meta,
-              'allAliasMaterialRoleCounts':counts(promotable),
-              'baseIpakExact43MaterialRoleCounts':counts(exact43_rows),
-              'bindings':promotable,
-              'allAliasTextureOccurrences':rows,
-              'proofBoundary':'Roles come only from exact OAT T6 Material textures[].semantic: colorMap -> baseColorTexture, normalMap -> normalTexture. Alias identity must equal textures[].image exactly. No basename, suffix, same-name, or semantic inference is used.',
+              'retainedMaterialCount':len(retained),'oatMaterialJsonCount':len(material_docs),
+              'resolvedRetainedMaterialCount':len(retained)-len(unresolved),'unresolvedRetainedMaterials':unresolved,
+              'aliasBankAvailability':bank['availability'],
+              'firstSemanticRoleCount':counts(all_first),'aliasBackedFirstSemanticRoleCount':counts(bindings),
+              'baseIpakExact43FirstSemanticRoleCount':counts(exact_rows),'aliasBackedButNotBaseExact43Count':counts(missing_rows),
+              'bindings':bindings,'baseIpakExact43Bindings':exact_rows,'nonAliasFirstSemanticRoles':non_alias_first,
+              'proofBoundary':'For each exact retained Material identity, mirror the historical v8 rule: select only the first retail texture-table colorMap (raw semantic 2) and first normalMap (raw semantic 5). Promotion exists only if that exact first image is an 81-bank alias; the bank raw semantic and slot must independently equal the OAT semantic role and texture index. No filename suffix, basename, same-name, or later-slot substitution is allowed.',
           }
-          Path('NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
-          print(json.dumps({
-              'retained':report['retainedMaterialCount'],
-              'oatMaterialJsonCount':report['oatMaterialJsonCount'],
-              'resolvedRetained':report['resolvedRetainedMaterialCount'],
-              'unresolved':report['unresolvedRetainedMaterials'],
-              'availability':availability,
-              'allAliasRoles':report['allAliasMaterialRoleCounts'],
-              'exact43Roles':report['baseIpakExact43MaterialRoleCounts'],
-          },indent=2))
-          print('ALIAS METADATA SAMPLE')
-          print(json.dumps(alias_meta[:8],indent=2))
-          print('EXACT43 ROLE BINDINGS')
-          for r in exact43_rows:
-              print(r['gltfRole'],r['material'],r['image'])
+          out=Path('NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V2.json'); out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:report[k] for k in ('retainedMaterialCount','resolvedRetainedMaterialCount','unresolvedRetainedMaterials','firstSemanticRoleCount','aliasBackedFirstSemanticRoleCount','baseIpakExact43FirstSemanticRoleCount','aliasBackedButNotBaseExact43Count')},indent=2))
+          print('EXACT43 FIRST-SEMANTIC BINDINGS')
+          for r in exact_rows: print(r['gltfRole'],r['material'],r['image'])
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nuketown-exact-alias-role-plan-v1
+          name: nuketown-exact-alias-role-plan-v2
           path: |
-            NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json
+            NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V2.json
             oat-role-plan.log
           if-no-files-found: warn
           retention-days: 3
