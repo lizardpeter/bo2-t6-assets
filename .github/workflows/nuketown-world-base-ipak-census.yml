@@ -1,0 +1,102 @@
+name: nuketown-world-base-ipak-census
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-base-ipak-census.yml
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+permissions:
+  contents: write
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Range-read shared retail base IPAK index and census live world images
+        run: |
+          python - <<'PY'
+          import base64,json,struct,urllib.request,zlib
+          from collections import defaultdict
+          from pathlib import Path
+
+          URL='https://r2.houseofkublai.com/bo2/zone/all/base.ipak'
+          MAN=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64')
+          MAP=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json')
+          OUT=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json')
+
+          def rg(a,b):
+              req=urllib.request.Request(URL,headers={'Range':f'bytes={a}-{b}','User-Agent':'bo2-t6-assets-world-base-census/1'})
+              with urllib.request.urlopen(req,timeout=90) as r:
+                  if r.status!=206: raise RuntimeError(f'range not honored: HTTP {r.status}')
+                  d=r.read(); cr=r.headers.get('Content-Range','')
+              if len(d)!=b-a+1: raise RuntimeError(f'range length mismatch: {cr}')
+              return d,cr
+
+          doc=json.loads(zlib.decompress(base64.b64decode(MAN.read_text().strip())))
+          targets=[]
+          for im in doc['images']:
+              p=im.get('streamedPart0')
+              if p:
+                  targets.append({'image':im['image'],'nameHash':int(im['imageHash']),'dataHash29':int(p['hash29']),'width':int(im['width']),'height':int(im['height']),'depth':int(im['depth'])})
+          assert len(targets)==421
+
+          head,hcr=rg(0,65535)
+          magic,ver,total,sc=struct.unpack_from('<4sIII',head,0)
+          assert magic==b'KAPI' and ver==0x50000
+          secs=[struct.unpack_from('<IIII',head,16+16*i) for i in range(sc)]
+          ix=[s for s in secs if s[0]==1]; ds=[s for s in secs if s[0]==2]
+          assert len(ix)==len(ds)==1
+          _,ioff,isz,n=ix[0]; assert n*16<=isz
+          raw,icr=rg(ioff,ioff+n*16-1)
+          entries=[struct.unpack_from('<IIII',raw,16*i) for i in range(n)]
+          by_pair=defaultdict(list); by_data=defaultdict(list); by_name=defaultdict(list)
+          for e in entries:
+              dh,nh,rel,size=e; by_pair[(nh,dh)].append(e); by_data[dh].append(e); by_name[nh].append(e)
+
+          rows=[]; counts=defaultdict(int)
+          for t in targets:
+              exact=by_pair[(t['nameHash'],t['dataHash29'])]; data=by_data[t['dataHash29']]; name=by_name[t['nameHash']]
+              if len(exact)==1: state='exact-pair'; chosen=exact[0]
+              elif len(exact)>1: state='ambiguous-exact-pair'; chosen=None
+              elif len(data)==1: state='unique-data-hash'; chosen=data[0]
+              elif len(data)>1: state='ambiguous-data-hash'; chosen=None
+              elif name: state='name-hash-only'; chosen=None
+              else: state='absent'; chosen=None
+              counts[state]+=1
+              rows.append({**t,'state':state,'chosenEntry':list(chosen) if chosen else None,'exactPairCount':len(exact),'dataHashEntryCount':len(data),'nameHashEntryCount':len(name),'dataHashAvailableNameHashes':sorted({int(e[1]) for e in data})})
+
+          mapdoc=json.loads(MAP.read_text()); maprows={r['image']:r for r in mapdoc['rows']}
+          union=[]; union_counts=defaultdict(int)
+          for r in rows:
+              mr=maprows[r['image']]
+              m_ok=mr['state'] in ('exact-pair','unique-data-hash')
+              b_ok=r['state'] in ('exact-pair','unique-data-hash')
+              if m_ok: state='map-covered'
+              elif b_ok: state='base-additional'
+              else: state='unresolved'
+              union_counts[state]+=1
+              union.append({'image':r['image'],'mapState':mr['state'],'baseState':r['state'],'unionState':state})
+
+          report={
+              'format':'t6-nuketown-live-world-base-ipak-census-v1',
+              'source':{'url':URL,'bytes':total,'indexEntryCount':n,'headContentRange':hcr,'indexContentRange':icr,'networkBytes':len(head)+len(raw)},
+              'targetStreamedImageCount':421,
+              'summary':dict(sorted(counts.items())),
+              'mapPlusBaseUnionSummary':dict(sorted(union_counts.items())),
+              'rows':rows,
+              'union':union,
+              'proofBoundary':'The target set is the 421 streamed GfxImages from the canonical frozen retail GfxWorld manifest. Shared base.ipak census admission requires one exact nameHash+dataHash pair or one unique streamed-part dataHash. Name-hash-only hits are non-admissible. The union marks only images not already covered by the retail map IPAK as base additions. Payload promotion still requires byte extraction, recomputed CRC29, IWI parse, and retained dimension validation.'
+          }
+          OUT.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'base':report['summary'],'mapPlusBase':report['mapPlusBaseUnionSummary'],'source':report['source']},indent=2,sort_keys=True))
+          PY
+      - name: Checkpoint base census
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint Nuketown world base-IPAK census'
+          git push origin HEAD:base-ipak-r2-recovery
