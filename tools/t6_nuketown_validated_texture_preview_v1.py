@@ -19,12 +19,15 @@ from typing import Any
 
 PNG_MIME = "image/png"
 
+
 class PreviewError(RuntimeError):
     pass
+
 
 def align4(buf: bytearray) -> None:
     while len(buf) % 4:
         buf.append(0)
+
 
 def read_glb(path: Path) -> tuple[dict[str, Any], bytearray]:
     b = path.read_bytes()
@@ -47,6 +50,7 @@ def read_glb(path: Path) -> tuple[dict[str, Any], bytearray]:
         raw = bytearray(b[pos + 8:pos + 8 + blen])
     return g, raw
 
+
 def write_glb(path: Path, g: dict[str, Any], raw: bytearray) -> None:
     align4(raw)
     g["buffers"] = [{"byteLength": len(raw)}]
@@ -61,6 +65,7 @@ def write_glb(path: Path, g: dict[str, Any], raw: bytearray) -> None:
     if raw:
         out += struct.pack("<I4s", len(raw), b"BIN\0") + raw
     path.write_bytes(out)
+
 
 def load_bank(bank_dir: Path) -> dict[str, dict[str, Any]]:
     proof_path = bank_dir / "TEXTURE_EXTRACTION_V1.json"
@@ -94,6 +99,7 @@ def load_bank(bank_dir: Path) -> dict[str, dict[str, Any]]:
         out[image] = rec
     return out
 
+
 def append_png(g: dict[str, Any], raw: bytearray, png_path: Path, label: str,
                cache: dict[str, int]) -> int:
     payload = png_path.read_bytes()
@@ -124,14 +130,17 @@ def append_png(g: dict[str, Any], raw: bytearray, png_path: Path, label: str,
     cache[key] = ti
     return ti
 
+
 def make_identity_normal(path: Path) -> None:
     from PIL import Image
     im = Image.new("RGBA", (1, 1), (128, 128, 255, 255))
     im.save(path, format="PNG", optimize=False)
 
+
 def material_name(m: dict[str, Any]) -> str:
     t6 = (m.get("extras") or {}).get("T6") or {}
     return str(t6.get("sourceMaterial") or m.get("name") or "")
+
 
 def attach_validated_world_textures(
     g: dict[str, Any],
@@ -155,6 +164,7 @@ def attach_validated_world_textures(
         "colorBindings": 0,
         "normalBindings": 0,
         "visuallyCompleteBindings": 0,
+        "physicallyBoundColorAndNormal": 0,
         "unmatchedMaterialNames": [],
     }
 
@@ -206,13 +216,20 @@ def attach_validated_world_textures(
         if bound_normal:
             stats["normalBindings"] += 1
         if bound_color and bound_normal:
+            stats["physicallyBoundColorAndNormal"] += 1
+        # Coverage semantics treat a material with no primary normal slot as
+        # complete once its validated primary color is bound. Requiring a
+        # normal texture on such a material incorrectly undercounts completion.
+        if bound_color and (bound_normal or not n):
             stats["visuallyCompleteBindings"] += 1
 
     return stats
 
+
 def shift_texture_ref(d: dict[str, Any] | None, tex_off: int) -> None:
     if d is not None and "index" in d:
         d["index"] = int(d["index"]) + tex_off
+
 
 def merge_static_into_world(world_g: dict[str, Any], world_bin: bytearray,
                             static_g: dict[str, Any], static_bin: bytearray) -> dict[str, Any]:
@@ -328,6 +345,7 @@ def merge_static_into_world(world_g: dict[str, Any], world_bin: bytearray,
         "staticBufferBytesAdded": len(static_bin),
     }
 
+
 def copy_exact_bindings_to_static_materials(g: dict[str, Any], world_material_count: int) -> dict[str, int]:
     world: dict[str, dict[str, Any]] = {}
     for m in g.get("materials", [])[:world_material_count]:
@@ -349,6 +367,7 @@ def copy_exact_bindings_to_static_materials(g: dict[str, Any], world_material_co
             m["normalTexture"] = deepcopy(src["normalTexture"])
             stats["normalInherited"] += 1
     return stats
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -380,6 +399,8 @@ def main() -> None:
         raise PreviewError(f"world color binding count changed: {tex_stats}")
     if tex_stats["normalBindings"] != 300:
         raise PreviewError(f"world normal binding count changed: {tex_stats}")
+    if tex_stats["physicallyBoundColorAndNormal"] != 251:
+        raise PreviewError(f"world color+normal physical binding count changed: {tex_stats}")
     if tex_stats["visuallyCompleteBindings"] != 259:
         raise PreviewError(f"world complete binding count changed: {tex_stats}")
 
@@ -419,6 +440,7 @@ def main() -> None:
         "worldMaterials": 327,
         "worldPrimaryColorBound": tex_stats["colorBindings"],
         "worldPrimaryNormalBound": tex_stats["normalBindings"],
+        "worldPrimaryColorAndNormalPhysicallyBound": tex_stats["physicallyBoundColorAndNormal"],
         "worldPrimaryColorNormalComplete": tex_stats["visuallyCompleteBindings"],
         "sceneTopLevelNodes": len(scene_nodes),
         "worldTopLevelNodes": 340,
@@ -430,6 +452,7 @@ def main() -> None:
     }
     args.proof.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n")
     print(json.dumps(proof, indent=2, sort_keys=True))
+
 
 if __name__ == "__main__":
     main()
