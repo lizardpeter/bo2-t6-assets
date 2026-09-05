@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Targeted direct-retail T6 PC32 XModel identity probe.
 
-This is deliberately a *probe*, not a guessed all-XModel scanner.  Given an
+This is deliberately a *probe*, not a guessed all-XModel scanner. Given an
 expanded T6 XFile and exact target identities, it finds inline-named 248-byte
 XModel records and validates their fixed PC32 structure and every top-level
 zone pointer against the declared XFile block sizes.
@@ -14,7 +14,7 @@ Why targeted first:
 - a hit is promoted only when the bytes immediately preceding the exact name
   form a structurally valid retail XModel record.
 
-Packed/reused XModel names are not guessed.  They are reported unresolved and
+Packed/reused XModel names are not guessed. They are reported unresolved and
 remain a separate generic catalog problem.
 """
 from __future__ import annotations
@@ -88,6 +88,15 @@ def read_f32(data: bytes, off: int) -> float:
     return struct.unpack_from("<f", data, off)[0]
 
 
+def _decode_packed(rawmod, value: int, block_sizes: list[int]) -> dict[str, Any]:
+    """Support both retained raw-parser APIs without changing pointer semantics."""
+    if hasattr(rawmod, "decode_zone_pointer"):
+        return dict(rawmod.decode_zone_pointer(value, block_sizes))
+    if hasattr(rawmod, "zone_pointer"):
+        return dict(rawmod.zone_pointer(value, block_sizes))
+    raise RuntimeError("raw parser must expose decode_zone_pointer(value, blocks) or zone_pointer(value, blocks)")
+
+
 def decode_pointer(rawmod, value: int, block_sizes: list[int]) -> dict[str, Any]:
     if value == 0:
         return {"kind": "null", "raw": "0x00000000", "valid": True}
@@ -95,7 +104,7 @@ def decode_pointer(rawmod, value: int, block_sizes: list[int]) -> dict[str, Any]
         return {"kind": "following", "raw": "0xFFFFFFFF", "valid": True}
     if value == INSERT:
         return {"kind": "insert", "raw": "0xFFFFFFFE", "valid": True}
-    dec = dict(rawmod.decode_zone_pointer(value, block_sizes))
+    dec = _decode_packed(rawmod, value, block_sizes)
     valid = bool(dec.get("valid_for_declared_block_size", dec.get("valid", False)))
     dec.update({"raw": f"0x{value:08X}", "valid": valid})
     return dec
@@ -244,7 +253,7 @@ def probe_name(data: bytes, target: dict[str, Any], rawmod, block_sizes: list[in
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stream", type=Path, required=True, help="expanded retail T6 XFile")
-    ap.add_argument("--raw-parser", type=Path, required=True, help="tools/t6_raw_xasset_inventory.py or compatible parser")
+    ap.add_argument("--raw-parser", type=Path, required=True, help="parser exposing parse_front and zone_pointer/decode_zone_pointer")
     ap.add_argument("--targets", type=Path, required=True, help="JSON list or benchmark spec containing models[]")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
