@@ -86,6 +86,16 @@ namespace
         out << '"';
         return out.str();
     }
+
+    void WriteNullableImageName(std::ostream& out, const T6::GfxImage* image)
+    {
+        if (!image)
+        {
+            out << "null";
+            return;
+        }
+        out << JsonString(image->name);
+    }
 } // namespace
 
 namespace gfx_world_lightmap
@@ -100,20 +110,25 @@ namespace gfx_world_lightmap
             con::error("Cannot dump null T6 GfxWorld asset \"{}\"", asset.m_name);
             return;
         }
-        if (world->lightmapCount < 0)
+
+        // Pinned OAT T6_Assets.h stores the lightmap array in GfxWorld::draw,
+        // not directly in GfxWorld. Keep this indirection explicit so the
+        // patch matches the exact upstream structure it claims to target.
+        const auto& draw = world->draw;
+        if (draw.lightmapCount < 0)
         {
             con::error(
-                "T6 GfxWorld \"{}\" has invalid negative lightmapCount {}",
+                "T6 GfxWorld \"{}\" has invalid negative draw.lightmapCount {}",
                 asset.m_name,
-                world->lightmapCount);
+                draw.lightmapCount);
             return;
         }
-        if (world->lightmapCount > 0 && !world->lightmaps)
+        if (draw.lightmapCount > 0 && !draw.lightmaps)
         {
             con::error(
-                "T6 GfxWorld \"{}\" has lightmapCount {} but null lightmaps",
+                "T6 GfxWorld \"{}\" has draw.lightmapCount {} but null draw.lightmaps",
                 asset.m_name,
-                world->lightmapCount);
+                draw.lightmapCount);
             return;
         }
 
@@ -128,41 +143,47 @@ namespace gfx_world_lightmap
         out << "  \"format\": \"t6-gfxworld-lightmap-catalog-v1\",\n";
         out << "  \"map\": " << JsonString(asset.m_name.c_str()) << ",\n";
         out << "  \"source\": {\n";
-        out << "    \"kind\": \"OpenAssetTools loaded T6::GfxWorld\",\n";
+        out << "    \"kind\": \"OpenAssetTools loaded T6::GfxWorld::draw\",\n";
         out << "    \"assetName\": " << JsonString(asset.m_name.c_str()) << ",\n";
-        out << "    \"policy\": \"exact in-memory GfxWorld.lightmaps[] GfxImage identities; no renderer semantics inferred\"\n";
+        out << "    \"policy\": \"exact in-memory GfxWorld.draw.lightmaps[] GfxImage identities; null retail roles preserved; no renderer semantics inferred\"\n";
         out << "  },\n";
-        out << "  \"lightmapCount\": " << world->lightmapCount << ",\n";
+        out << "  \"lightmapCount\": " << draw.lightmapCount << ",\n";
         out << "  \"lightmaps\": [\n";
 
-        for (int i = 0; i < world->lightmapCount; ++i)
+        for (int i = 0; i < draw.lightmapCount; ++i)
         {
-            const auto& lightmap = world->lightmaps[i];
-            if (!lightmap.primary || !lightmap.secondary)
+            const auto& lightmap = draw.lightmaps[i];
+
+            // A null GfxImage pointer is a real nullable role in retained T6
+            // data and is therefore archived as JSON null. A non-null image
+            // with no name is not a stable archival identity and fails closed.
+            if (lightmap.primary && !lightmap.primary->name)
             {
                 con::error(
-                    "T6 GfxWorld \"{}\" lightmap {} has null {} image",
+                    "T6 GfxWorld \"{}\" lightmap {} has non-null unnamed primary image",
                     asset.m_name,
-                    i,
-                    !lightmap.primary ? "primary" : "secondary");
+                    i);
                 return;
             }
-            if (!lightmap.primary->name || !lightmap.secondary->name)
+            if (lightmap.secondary && !lightmap.secondary->name)
             {
                 con::error(
-                    "T6 GfxWorld \"{}\" lightmap {} has unnamed {} image",
+                    "T6 GfxWorld \"{}\" lightmap {} has non-null unnamed secondary image",
                     asset.m_name,
-                    i,
-                    !lightmap.primary->name ? "primary" : "secondary");
+                    i);
                 return;
             }
 
             out << "    {\n";
             out << "      \"index\": " << i << ",\n";
-            out << "      \"primaryImage\": " << JsonString(lightmap.primary->name) << ",\n";
-            out << "      \"secondaryImage\": " << JsonString(lightmap.secondary->name) << "\n";
+            out << "      \"primaryImage\": ";
+            WriteNullableImageName(out, lightmap.primary);
+            out << ",\n";
+            out << "      \"secondaryImage\": ";
+            WriteNullableImageName(out, lightmap.secondary);
+            out << "\n";
             out << "    }";
-            if (i + 1 != world->lightmapCount)
+            if (i + 1 != draw.lightmapCount)
                 out << ',';
             out << "\n";
         }
@@ -171,9 +192,9 @@ namespace gfx_world_lightmap
         out << "}\n";
 
         con::info(
-            "Dumped T6 GfxWorld lightmap catalog \"{}\": {} primary/secondary pairs -> {}",
+            "Dumped T6 GfxWorld lightmap catalog \"{}\": {} nullable primary/secondary pairs -> {}",
             asset.m_name,
-            world->lightmapCount,
+            draw.lightmapCount,
             outputName);
     }
 } // namespace gfx_world_lightmap
