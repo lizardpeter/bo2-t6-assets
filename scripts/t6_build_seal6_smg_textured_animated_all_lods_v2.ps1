@@ -19,7 +19,9 @@ function Require-File([string]$Path,[string]$Label) {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 function Run-With([string]$Exe,[string[]]$Args) {
-    & $Exe @Args
+    # Send child-process output to the host, not to the PowerShell function's
+    # success-output stream. This keeps Resolve-TexturePython's return scalar.
+    & $Exe @Args | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Stage failed ($LASTEXITCODE): $Exe $($Args -join ' ')" }
 }
 function Test-TexturePython([string]$Exe) {
