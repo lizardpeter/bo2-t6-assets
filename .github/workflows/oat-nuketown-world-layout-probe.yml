@@ -1,0 +1,31 @@
+name: oat-nuketown-world-layout-probe
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - tools/t6_oat_gfxworld_world_layout_probe.cpp
+      - .github/workflows/oat-nuketown-world-layout-probe.yml
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install x86 compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+      - name: Pin OAT v0.33.0 and compile world layout probe
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common \
+            tools/t6_oat_gfxworld_world_layout_probe.cpp -o world-layout-probe
+          ./world-layout-probe | tee GFXWORLD_WORLD_LAYOUT_X86_V1.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gfxworld-world-layout-x86-v1
+          path: GFXWORLD_WORLD_LAYOUT_X86_V1.json
+          retention-days: 7
