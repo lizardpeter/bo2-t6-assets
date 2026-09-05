@@ -1,0 +1,63 @@
+name: nuketown-1943-playable-bounds-proof
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-1943-playable-bounds-proof.yml
+      - tools/t6_nuketown_playable_static_bounds_filter_v1.py
+permissions:
+  contents: read
+  actions: read
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact 2303 candidate population
+        run: |
+          mkdir candidate
+          gh run download 33930814005 -n nuketown-playable-identity-candidates-2303-v1 -D candidate
+          test -s candidate/NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json
+      - name: Prove exact retail-bounds playable partition
+        run: |
+          python tools/t6_nuketown_playable_static_bounds_filter_v1.py \
+            --source candidate/NUKETOWN_PLAYABLE_IDENTITY_CANDIDATES_2303_V1.json \
+            --selected-out NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json \
+            --excluded-out NUKETOWN_PLAYABLE_STATIC_EXCLUDED_360_V1.json \
+            --manifest-out NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json \
+            --half-extent 2500 \
+            --expected-source 2303 \
+            --expected-selected 1943 \
+            --expected-identities 297
+      - name: Regression-check retained definition-level proof boundary
+        run: |
+          python - <<'PY'
+          import base64,json,zlib
+          proof=json.loads(zlib.decompress(base64.b64decode(open('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64').read())).decode())
+          assert len(proof['models'])==297
+          assert sum(int(r['surfaceCount']) for r in proof['models'])==538
+          assert len({m for r in proof['models'] for m in r['materials']})==344
+          result=json.load(open('NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json'))['result']
+          assert result['selectedCount']==1943
+          assert result['excludedCount']==360
+          # The retained 297/538/344 proof describes imported mesh definitions,
+          # not placement membership; spatial cropping is therefore allowed to
+          # leave definition meshes uninstantiated without contradicting it.
+          assert result['selectedIdentityCount']==295
+          assert sorted(result['uninstantiatedDefinitionIdentities'])==[
+              'mlv/nt_2020_vista_kiosk_blue',
+              'mlv/nt_2020_vista_ufo_01',
+          ]
+          print(json.dumps(result,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-playable-static-bounds-proof-v1
+          path: |
+            NUKETOWN_PLAYABLE_STATIC_PLACEMENTS_1943_V1.json
+            NUKETOWN_PLAYABLE_STATIC_EXCLUDED_360_V1.json
+            NUKETOWN_PLAYABLE_STATIC_BOUNDS_FILTER_PROOF_V1.json
+          retention-days: 7
