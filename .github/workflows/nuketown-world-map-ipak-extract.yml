@@ -1,0 +1,61 @@
+name: nuketown-world-map-ipak-extract
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-map-ipak-extract.yml
+      - tools/t6_nuketown_world_ipak_extract_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact texture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2
+          python -m pip install --disable-pip-version-check gdown pillow
+      - name: Fetch exact retail Nuketown map IPAK
+        run: |
+          gdown 1c_1AtuWrwlcOuqYfh7R2w8lUxWH1jgCC -O mp_nuketown_2020.ipak
+          test "$(stat -c %s mp_nuketown_2020.ipak)" = "165543936"
+          echo '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031  mp_nuketown_2020.ipak' | sha256sum -c -
+      - name: Extract and independently validate all admissible map payloads
+        run: |
+          python tools/t6_nuketown_world_ipak_extract_v1.py \
+            --manifest manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64 \
+            --census manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json \
+            --ipak mp_nuketown_2020.ipak \
+            --out-dir world_map_texture_bank \
+            --source-label mp_nuketown_2020.ipak \
+            --expected 171
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.load(open('world_map_texture_bank/TEXTURE_EXTRACTION_V1.json')); s=d['summary']
+          assert s['admissibleRows']==s['validatedPayloads']==171,s
+          assert s['exactPairPayloads']==169 and s['uniqueDataHashPayloads']==2,s
+          assert all(r['crc29Validated'] and r['dimensionsValidated'] for r in d['rows'])
+          assert len(list(Path('world_map_texture_bank').glob('*.iwi')))==171
+          assert len(list(Path('world_map_texture_bank').glob('*.png')))==s['pngVariantCount']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+      - name: Persist extraction proof
+        run: |
+          cp world_map_texture_bank/TEXTURE_EXTRACTION_V1.json manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_EXTRACTION_V1.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_EXTRACTION_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint validated Nuketown map texture extraction'
+          git push origin HEAD:base-ipak-r2-recovery
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-world-map-texture-bank-v1
+          path: world_map_texture_bank/
+          retention-days: 7
