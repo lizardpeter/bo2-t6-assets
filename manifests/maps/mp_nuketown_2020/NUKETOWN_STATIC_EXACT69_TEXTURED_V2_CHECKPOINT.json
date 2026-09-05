@@ -1,0 +1,112 @@
+{
+  "format": "t6-nuketown-static-exact69-textured-checkpoint-v2",
+  "map": "mp_nuketown_2020",
+  "tier1": {
+    "bindings": 41,
+    "images": 30,
+    "inputGlbSha256": "bc8f0c14518ccd15fabcdc0dd283dbecea410e0383c5057e4036ad1e95d8835b",
+    "outputGlbSha256": "b73b0dd48459513e093ec26b6fc3465f2855d9bd6f03b15daea6dc0c69e23f32",
+    "checkpointCommit": "7a95e900942e08e24575c6d68bb1d24113b4c648"
+  },
+  "mapIpak": {
+    "file": "mp_nuketown_2020.ipak",
+    "bytes": 165543936,
+    "sha256": "53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031",
+    "indexEntries": 677,
+    "remainingTargetImagesBeforeTier": 28,
+    "validatedExactPairs": 22,
+    "nameHashOnlyRejected": 4,
+    "dataHashOnlyRejected": 0,
+    "absent": 2,
+    "extractionReport": {
+      "file": "LOCAL_IPAK_EXACT_TARGETS_V1.json",
+      "bytes": 27105,
+      "sha256": "fe08aea3d03709506d7379532c63a1ac6cb00cfab741818573da32c46f8610eb"
+    }
+  },
+  "tier2": {
+    "bindingsAdded": 28,
+    "colorBindingsAdded": 16,
+    "normalBindingsAdded": 12,
+    "uniqueImagesAdded": 22,
+    "applyManifest": {
+      "file": "NUKETOWN_STATIC_MAP_IPAK_EXACT_TEXTURE_APPLY_V1.json",
+      "bytes": 26262,
+      "sha256": "6c41d4e16f00a525ab200e09478bec845a3fc3e27e03eaf22ced108bb300f873"
+    },
+    "validation": {
+      "inputSha": "pass",
+      "nodePlacementIdentity": "pass",
+      "meshPrimitiveIdentity": "pass",
+      "accessorIdentity": "pass",
+      "preexistingBufferViewIdentity": "pass",
+      "preexistingImageTextureSamplerPrefixIdentity": "pass",
+      "inputBinExactPrefix": "pass",
+      "materialNameOrderIdentity": "pass",
+      "payloadPngSha256": "pass",
+      "nameDataHashPairs": "pass",
+      "sameNameFallbacks": 0,
+      "filenameRoleInference": 0
+    }
+  },
+  "output": {
+    "file": "mp_nuketown_2020.recovered_1943_static_scene_exact69_textured_v2.glb",
+    "bytes": 26283632,
+    "sha256": "3b5573aa06414e41eacda87bc6b9563e84c35c5fa2ebdcf0802cd852c5889471",
+    "materials": 344,
+    "meshDefinitions": 297,
+    "meshInstances": 1943,
+    "totalExactBindings": 69,
+    "totalEmbeddedImages": 52,
+    "remainingBindings": 9,
+    "remainingImages": 6
+  },
+  "independentAcceptance": {
+    "file": "NUKETOWN_STATIC_EXACT69_TEXTURE_ACCEPTANCE_V1.json",
+    "bytes": 900,
+    "sha256": "20be868eb2d883d88093023fd623935169e7b7493d9652ebb924eb9978717369",
+    "validation": {
+      "nodesIdentity": "pass",
+      "meshesIdentity": "pass",
+      "accessorsIdentity": "pass",
+      "preexistingBufferViewsIdentity": "pass",
+      "tier1ImageTextureSamplerPrefixIdentity": "pass",
+      "tier1BinExactPrefix": "pass",
+      "materialNameOrderIdentity": "pass",
+      "outputReparse": "pass"
+    }
+  },
+  "remaining": {
+    "bindings": 9,
+    "images": 6,
+    "identities": [
+      "nt_2020_concrete_pattern_02_n",
+      "~-gnt_2020_concrete_pattern_02_c",
+      "~-gnt_2020_plastic_cream_col",
+      "~-gnt_2020_plastic_yellow_col",
+      "~-gnt_2020_wall_orange_ext_c",
+      "~-gnt_wood_fence"
+    ],
+    "mapIpakNameHashOnly": {
+      "nt_2020_concrete_pattern_02_n": 72942123,
+      "~-gnt_2020_concrete_pattern_02_c": 109640111,
+      "~-gnt_2020_plastic_cream_col": 206102043,
+      "~-gnt_2020_plastic_yellow_col": 288854453
+    },
+    "mapIpakAbsent": ["~-gnt_2020_wall_orange_ext_c", "~-gnt_wood_fence"]
+  },
+  "reproduction": {
+    "workflow": ".github/workflows/nuketown-map-ipak-exact-texture-tier.yml",
+    "workflowHeadSha": "62bb253266e3d1686eabf81a27614d945034ad6f",
+    "workflowRunId": 33939333866,
+    "jobId": 101233494872,
+    "artifact": "nuketown-recovered-1943-static-scene-exact69-textured-v2",
+    "artifactId": 9961257786,
+    "artifactZipBytes": 14724012,
+    "artifactZipSha256": "494c76bb57774803e47d5e78d33051eed3f5d2ba1ff2ce1bb5f9002a46de9897",
+    "artifactExpiresAt": "2026-09-12T02:32:22Z",
+    "extractorCommit": "0ab4210fe4fe9bd71f923fefe3afdc4aaa595184",
+    "applicatorCommit": "31afa014191c6939f55aeb56fc6885c0f65e9d7f"
+  },
+  "proofBoundary": "Tier 2 admits only exact remaining (nameHash,dataHash) pairs present in the SHA-pinned retail mp_nuketown_2020.ipak. Four same-name different-dataHash entries and two absent entries are explicitly rejected. The tier-1 GLB nodes, meshes, accessors, pre-existing bufferViews, 30-image texture tier, samplers, and complete BIN remain unchanged as prefixes; the 22 new payloads are append-only."
+}
