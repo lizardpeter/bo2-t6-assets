@@ -3,8 +3,13 @@
 
 T6 multiplayer playeranim tables can bind an XAnim authored on a superset rig to
 an XModel that lacks some of those controls. v8 preserves v7's proven transform
-semantics while filtering only animation tracks whose exact ScriptString/name is
-absent from the target skeleton. No replacement bones or guessed aliases exist.
+semantics while filtering only animation tracks whose resolved ScriptString text
+is absent from the target skeleton. No replacement bones or guessed aliases exist.
+
+Serialized ScriptString numeric IDs are zone-local. Therefore numeric IDs are only
+comparable when the XModel and XAnim are proven to come from the same expanded
+zone/ScriptString table. Across different zones, exact resolved text/name is the
+binding identity and numeric differences are recorded rather than rejected.
 """
 from __future__ import annotations
 
@@ -17,6 +22,19 @@ from t6_xanim_gltf_export_v3 import ExportError
 from t6_xanim_skinned_gltf_export_v7 import export as export_v7
 
 BINDING_PROOF = "manifests/nonmap/retail/seal6_smg_playeranim_core_v1.json"
+
+
+def _source_expanded_sha(doc: dict) -> str | None:
+    value = doc.get("expandedSha256")
+    if isinstance(value, str) and value:
+        return value.lower()
+    source = doc.get("source")
+    if isinstance(source, dict):
+        for key in ("expandedSha256", "expanded_stream_sha256", "expandedStreamSha256"):
+            value = source.get(key)
+            if isinstance(value, str) and value:
+                return value.lower()
+    return None
 
 
 def bind_xanim_to_skeleton(skeleton_doc: dict, xanim_doc: dict) -> tuple[dict, dict]:
@@ -35,8 +53,13 @@ def bind_xanim_to_skeleton(skeleton_doc: dict, xanim_doc: dict) -> tuple[dict, d
     if not isinstance(tracks, list):
         raise ExportError("XAnim has no boneTracks/tracks array")
 
+    skeleton_sha = _source_expanded_sha(skeleton_doc)
+    xanim_sha = _source_expanded_sha(xanim_doc)
+    same_table = bool(skeleton_sha and xanim_sha and skeleton_sha == xanim_sha)
+
     seen = set()
     bound, unbound = [], []
+    numeric_mismatches = []
     for track in tracks:
         name = track.get("name")
         if not isinstance(name, str) or not name:
@@ -48,12 +71,21 @@ def bind_xanim_to_skeleton(skeleton_doc: dict, xanim_doc: dict) -> tuple[dict, d
         if bone is None:
             unbound.append({"name": name, "scriptString": track.get("scriptString")})
             continue
+
         tsid = track.get("scriptString")
         bsid = bone.get("scriptStringId")
         if tsid is not None and bsid is not None and int(tsid) != int(bsid):
-            raise ExportError(
-                f"ScriptString mismatch for exact-name binding {name!r}: {tsid} != {bsid}"
-            )
+            mismatch = {
+                "name": name,
+                "xanimScriptString": int(tsid),
+                "xmodelScriptString": int(bsid),
+            }
+            if same_table:
+                raise ExportError(
+                    f"same-table ScriptString mismatch for exact-name binding {name!r}: "
+                    f"{tsid} != {bsid}"
+                )
+            numeric_mismatches.append(mismatch)
         bound.append(track)
 
     if tracks and not bound:
@@ -62,12 +94,21 @@ def bind_xanim_to_skeleton(skeleton_doc: dict, xanim_doc: dict) -> tuple[dict, d
     filtered = copy.deepcopy(xanim_doc)
     filtered[key] = copy.deepcopy(bound)
     stats = {
-        "policy": "exact ScriptString/name intersection; animation-only tracks omitted",
+        "policy": (
+            "exact resolved ScriptString text/name intersection; animation-only tracks omitted; "
+            "numeric ScriptString IDs compared only within the same serialized zone table"
+        ),
         "originalTrackCount": len(tracks),
         "boundTrackCount": len(bound),
         "unboundTrackCount": len(unbound),
         "unboundTracks": unbound,
         "skeletonBoneCount": len(bones),
+        "skeletonSourceExpandedSha256": skeleton_sha,
+        "xanimSourceExpandedSha256": xanim_sha,
+        "sameSerializedScriptStringTable": same_table,
+        "numericIdComparison": "enforced" if same_table else "not-comparable-cross-zone",
+        "crossZoneNumericIdMismatchCount": 0 if same_table else len(numeric_mismatches),
+        "crossZoneNumericIdMismatchSamples": [] if same_table else numeric_mismatches[:16],
         "noFabricatedBones": True,
         "noTrackNameAliases": True,
         "proofManifest": BINDING_PROOF,
