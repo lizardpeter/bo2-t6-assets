@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
 """Attach exact paired-VS layered-normal basis proof to canonical T6 recipes.
 
-This is the recipe/artifact trust-boundary companion to
-`t6_generated_layered_normal_vs_basis_probe_v2.py`.
-
-Only generated recipes that actually contain secondary normal-bearing layers are
-augmented.  A profile is accepted only when the canonical recipe's exact paired
-VS and PS SHA-256 identities match the v2 proof and all three physical basis
-roles are closed:
-
-    base = world NORMAL0 / PS TEXCOORD1
-    X    = world TANGENT0 / PS TEXCOORD3
-    Y    = cross(normal,tangent) * TANGENT0.w / PS TEXCOORD2
-
-The resulting attachment is deliberately compact and renderer-facing.  It does
-not add a normal-map sample decode equation and it does not guess transform-slot
-ownership; v14/recovery-v6 already carries `normalTransformBindingsV1` for that.
+Only recipes with secondary normal-bearing layers are augmented.  Accepted v2
+profiles must match the recipe's exact paired VS/PS SHA-256 identities and close:
+base=world NORMAL0/PS TC1, X=world TANGENT0/PS TC3, and
+Y=cross(normal,tangent)*TANGENT0.w/PS TC2.  Normal-map sample decode remains a
+separate proof boundary.  v14 recovery supplies transform-slot ownership.
 """
 from __future__ import annotations
 
@@ -31,8 +21,7 @@ from t6_generated_layered_normal_playback_v1 import (
     LayeredNormalPlaybackError,
     resolve_exact_basis_profile,
 )
-from t6_generated_shader_recipe_contract_v1 import validate_manifest
-
+from t6_generated_shader_recipe_contract_v1 import validate_manifest, validate_recipe
 
 FORMAT = "t6-generated-layered-normal-basis-recipe-v1"
 ATTACHMENT_KEY = "layeredNormalBasisV1"
@@ -56,11 +45,7 @@ def _secondary_normal_layers(recipe: dict) -> list[int]:
         raise LayeredNormalBasisAttachError(
             f"{recipe.get('material')!r}: canonical recipe lacks layerProgram"
         )
-    layers = sorted(
-        int(step["layerIndex"])
-        for step in program
-        if bool(step.get("hasNormal"))
-    )
+    layers = sorted(int(step["layerIndex"]) for step in program if bool(step.get("hasNormal")))
     if len(layers) != len(set(layers)):
         raise LayeredNormalBasisAttachError(
             f"{recipe.get('material')!r}: duplicate secondary normal layer"
@@ -68,16 +53,14 @@ def _secondary_normal_layers(recipe: dict) -> list[int]:
     return layers
 
 
-def _normal_binding_crosscheck(recipe: dict, expected_layers: list[int]) -> dict:
+def _normal_binding_crosscheck(recipe: dict, expected_layers: list[int]) -> None:
     binding = recipe.get(NORMAL_BINDING_KEY)
     if not expected_layers:
-        if binding is not None:
-            rows = binding.get("secondaryNormalBindings", []) if isinstance(binding, dict) else None
-            if rows not in ([], None):
-                raise LayeredNormalBasisAttachError(
-                    f"{recipe.get('material')!r}: normal binding exists for a recipe with no secondary normals"
-                )
-        return {}
+        if isinstance(binding, dict) and binding.get("secondaryNormalBindings") not in ([], None):
+            raise LayeredNormalBasisAttachError(
+                f"{recipe.get('material')!r}: normal binding exists for recipe with no secondary normals"
+            )
+        return
     if not isinstance(binding, dict):
         raise LayeredNormalBasisAttachError(
             f"{recipe.get('material')!r}: secondary normals require v14 normalTransformBindingsV1"
@@ -94,43 +77,44 @@ def _normal_binding_crosscheck(recipe: dict, expected_layers: list[int]) -> dict
         )
     for row in rows:
         mode = str(row.get("mode") or "")
-        if mode not in ("direct", "transform2x2"):
-            raise LayeredNormalBasisAttachError(
-                f"{recipe.get('material')!r}: unsupported normal transform mode {mode!r}"
-            )
         if mode == "direct":
             if row.get("transformSlot") is not None or row.get("attribute") is not None:
                 raise LayeredNormalBasisAttachError(
-                    f"{recipe.get('material')!r}: direct normal layer carries a transform attribute"
+                    f"{recipe.get('material')!r}: direct normal layer carries transform metadata"
                 )
-        else:
+        elif mode == "transform2x2":
             slot = int(row.get("transformSlot", -1))
-            expected_attribute = f"_T6_NORMAL_TRANSFORM_{slot}"
-            if slot not in (0, 1) or str(row.get("attribute") or "") != expected_attribute:
+            if slot not in (0, 1) or str(row.get("attribute") or "") != f"_T6_NORMAL_TRANSFORM_{slot}":
                 raise LayeredNormalBasisAttachError(
                     f"{recipe.get('material')!r}: malformed transform2x2 binding {row}"
                 )
-    return binding
+        else:
+            raise LayeredNormalBasisAttachError(
+                f"{recipe.get('material')!r}: unsupported normal transform mode {mode!r}"
+            )
 
 
 def build_attachment(recipe: dict, basis_proof: dict) -> dict | None:
-    layers = _secondary_normal_layers(recipe)
-    _normal_binding_crosscheck(recipe, layers)
+    canonical = validate_recipe(recipe)
+    layers = _secondary_normal_layers(canonical)
+    _normal_binding_crosscheck(canonical, layers)
     if not layers:
         return None
     try:
-        profile = resolve_exact_basis_profile(recipe, basis_proof)
+        profile = resolve_exact_basis_profile(canonical, basis_proof)
     except LayeredNormalPlaybackError as exc:
         raise LayeredNormalBasisAttachError(
-            f"{recipe.get('material')!r}: exact paired-VS normal basis rejected: {exc}"
+            f"{canonical.get('material')!r}: exact paired-VS normal basis rejected: {exc}"
         ) from exc
-
     roles = copy.deepcopy(profile["directRoleMatches"])
     algebra = copy.deepcopy(profile["binormalAlgebra"])
+    source_sha = str(basis_proof.get("summary", {}).get("profilesV2Sha256") or "")
+    if not source_sha:
+        raise LayeredNormalBasisAttachError("v2 basis proof lacks profilesV2Sha256")
     payload = {
         "format": FORMAT,
-        "material": str(recipe.get("material") or ""),
-        "techniqueSet": str(recipe.get("techniqueSet") or ""),
+        "material": canonical["material"],
+        "techniqueSet": canonical["techniqueSet"],
         "vertexShaderSha256": str(profile["vertexShaderSha256"]),
         "pixelShaderSha256": str(profile["pixelShaderSha256"]),
         "secondaryNormalLayers": layers,
@@ -142,18 +126,12 @@ def build_attachment(recipe: dict, basis_proof: dict) -> dict | None:
         "directRoleMatches": roles,
         "binormalAlgebra": algebra,
         "sourceBasisProofFormat": BASIS_PROOF_FORMAT,
-        "sourceBasisProfilesSha256": str(
-            basis_proof.get("summary", {}).get("profilesV2Sha256") or ""
-        ),
+        "sourceBasisProfilesSha256": source_sha,
         "proofBoundary": (
-            "exact canonical paired VS/PS identity + v2 direct NORMAL0/TANGENT0 output roles + exact "
-            "TC2 cross(normal,tangent)*TANGENT0.w algebra; normal sample decode remains separate"
+            "exact canonical paired VS/PS identity + v2 direct NORMAL0/TANGENT0 roles + exact TC2 "
+            "cross(normal,tangent)*TANGENT0.w algebra; normal sample decode remains separate"
         ),
     }
-    if not payload["material"] or not payload["techniqueSet"]:
-        raise LayeredNormalBasisAttachError("canonical recipe has empty material/TechniqueSet")
-    if not payload["sourceBasisProfilesSha256"]:
-        raise LayeredNormalBasisAttachError("v2 basis proof lacks profilesV2Sha256")
     payload["attachmentSha256"] = _jhash({
         "material": payload["material"],
         "techniqueSet": payload["techniqueSet"],
@@ -162,12 +140,12 @@ def build_attachment(recipe: dict, basis_proof: dict) -> dict | None:
         "secondaryNormalLayers": layers,
         "directRoleMatches": roles,
         "binormalAlgebra": algebra,
-        "sourceBasisProfilesSha256": payload["sourceBasisProfilesSha256"],
+        "sourceBasisProfilesSha256": source_sha,
     })
     return payload
 
 
-def attach_manifest(recipe_manifest: dict, basis_proof: dict) -> tuple[dict, dict]:
+def _validate_proof(basis_proof: dict) -> None:
     if basis_proof.get("format") != BASIS_PROOF_FORMAT:
         raise LayeredNormalBasisAttachError(
             f"unsupported basis proof {basis_proof.get('format')!r}"
@@ -176,29 +154,52 @@ def attach_manifest(recipe_manifest: dict, basis_proof: dict) -> tuple[dict, dic
         raise LayeredNormalBasisAttachError(
             "basis proof does not close all three physical roles across its target population"
         )
+
+
+def attach_manifest(recipe_manifest: dict, basis_proof: dict) -> tuple[dict, dict]:
+    _validate_proof(basis_proof)
+    # First validate the input population, then attach to the actual serialized
+    # rows. validate_manifest returns deep copies and therefore must not be used
+    # as the mutation target.
+    canonical = validate_manifest(recipe_manifest)
     out = copy.deepcopy(recipe_manifest)
-    validated = validate_manifest(out)
+    raw_rows = out.get("materials")
+    if not isinstance(raw_rows, list):
+        raise LayeredNormalBasisAttachError("recipe manifest materials must be a list")
+    raw_by_name = {str(row.get("material") or ""): row for row in raw_rows if isinstance(row, dict)}
+    if set(raw_by_name) != set(canonical):
+        raise LayeredNormalBasisAttachError("serialized/canonical recipe material sets disagree")
+
     normal_material_count = 0
-    attachment_hashes = []
-    for material, recipe in validated.items():
+    attachment_hashes: list[str] = []
+    for material, recipe in canonical.items():
+        target = raw_by_name[material]
         attachment = build_attachment(recipe, basis_proof)
         if attachment is None:
-            recipe.pop(ATTACHMENT_KEY, None)
+            target.pop(ATTACHMENT_KEY, None)
             continue
         normal_material_count += 1
-        recipe[ATTACHMENT_KEY] = attachment
+        target[ATTACHMENT_KEY] = attachment
         attachment_hashes.append(attachment["attachmentSha256"])
 
-    # validate_manifest returns the same row objects from `out`; assert that the
-    # attachment survived and no material identity was silently remapped.
+    # Revalidate serialized rows and prove the attachment is physically present
+    # after canonicalization rather than only having existed on a temporary copy.
     checked = validate_manifest(out)
-    for material, recipe in checked.items():
-        layers = _secondary_normal_layers(recipe)
-        attachment = recipe.get(ATTACHMENT_KEY)
+    serialized_again = {
+        str(row.get("material") or ""): row for row in out["materials"] if isinstance(row, dict)
+    }
+    for material, canonical_row in checked.items():
+        layers = _secondary_normal_layers(canonical_row)
+        attachment = serialized_again[material].get(ATTACHMENT_KEY)
         if layers:
             if not isinstance(attachment, dict) or attachment.get("material") != material:
                 raise LayeredNormalBasisAttachError(
-                    f"{material!r}: basis attachment missing after canonical validation"
+                    f"{material!r}: basis attachment missing from serialized manifest"
+                )
+            rebuilt = build_attachment(canonical_row, basis_proof)
+            if rebuilt != attachment:
+                raise LayeredNormalBasisAttachError(
+                    f"{material!r}: serialized basis attachment is not deterministic"
                 )
         elif attachment is not None:
             raise LayeredNormalBasisAttachError(
@@ -220,18 +221,12 @@ def attach_manifest(recipe_manifest: dict, basis_proof: dict) -> tuple[dict, dic
 
 
 def attach_gltf(document: dict, basis_proof: dict) -> dict:
-    """Attach exact basis profiles to recipes already embedded in a v14+ glTF."""
-    if basis_proof.get("format") != BASIS_PROOF_FORMAT:
-        raise LayeredNormalBasisAttachError(
-            f"unsupported basis proof {basis_proof.get('format')!r}"
-        )
-    if not bool(basis_proof.get("summary", {}).get("allThreeBasisRolesExact")):
-        raise LayeredNormalBasisAttachError("basis proof is not globally exact")
+    _validate_proof(basis_proof)
     materials = document.get("materials")
     if not isinstance(materials, list):
         raise LayeredNormalBasisAttachError("glTF has no materials list")
     generated = normal = attached = 0
-    hashes = []
+    hashes: list[str] = []
     for gltf_material in materials:
         name = str(gltf_material.get("name") or "")
         if not name.startswith("*"):
@@ -243,12 +238,9 @@ def attach_gltf(document: dict, basis_proof: dict) -> dict:
             raise LayeredNormalBasisAttachError(
                 f"generated glTF material {name!r} lacks canonical {CANONICAL_RECIPE_KEY}"
             )
-        if str(recipe.get("material") or "") != name:
-            raise LayeredNormalBasisAttachError(
-                f"generated glTF material {name!r} recipe identity disagrees"
-            )
-        layers = _secondary_normal_layers(recipe)
-        attachment = build_attachment(recipe, basis_proof)
+        canonical = validate_recipe(recipe, expected_material=name)
+        layers = _secondary_normal_layers(canonical)
+        attachment = build_attachment(canonical, basis_proof)
         if layers:
             normal += 1
             if attachment is None:
@@ -267,12 +259,12 @@ def attach_gltf(document: dict, basis_proof: dict) -> dict:
         "attachmentSetSha256": _jhash(sorted(hashes)),
         "sourceBasisProfilesSha256": str(basis_proof["summary"]["profilesV2Sha256"]),
     }
+    if attached != normal:
+        raise LayeredNormalBasisAttachError("glTF secondary-normal basis attachment accounting mismatch")
     document.setdefault("extras", {}).setdefault("T6", {})["layeredNormalBasisAttachment"] = {
         "format": FORMAT,
         "stats": stats,
-        "policy": (
-            "exact paired-VS/PS basis profile attached only to canonical generated recipes with secondary normals"
-        ),
+        "policy": "exact paired-VS/PS basis profile attached only to generated recipes with secondary normals",
     }
     return stats
 
