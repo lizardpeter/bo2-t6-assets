@@ -1,0 +1,94 @@
+{
+  "format": "t6-export-nonregression-contract-v1",
+  "asset": "maps/mp/mp_nuketown_2020.d3dbsp + retained playable static XModels",
+  "genericMaterialPrefixes": [
+    "material_surface_"
+  ],
+  "materialPartitions": {
+    "world": {
+      "start": 0,
+      "end": 327
+    },
+    "static": {
+      "start": 327
+    }
+  },
+  "rules": [
+    {
+      "name": "retain exact 340 world groups plus 1943 playable static placements",
+      "path": "scene.topLevelNodes",
+      "op": "eq",
+      "value": 2283
+    },
+    {
+      "name": "final consumer scene stays flat",
+      "path": "scene.topLevelNodesWithChildren",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "name": "retain all 327 world materials",
+      "path": "partitions.world.materialCount",
+      "op": "eq",
+      "value": 327
+    },
+    {
+      "name": "retain the 344 recovered static material identities",
+      "path": "partitions.static.materialCount",
+      "op": "ge",
+      "value": 344
+    },
+    {
+      "name": "never regress newer validated world primary-color coverage",
+      "path": "partitions.world.baseColorTexturedMaterials",
+      "op": "ge",
+      "value": 259
+    },
+    {
+      "name": "never regress newer validated world primary-normal coverage",
+      "path": "partitions.world.normalTexturedMaterials",
+      "op": "ge",
+      "value": 300
+    },
+    {
+      "name": "preserve at least the v8 exact-pair static color tier",
+      "path": "partitions.static.baseColorTexturedMaterials",
+      "op": "ge",
+      "value": 137
+    },
+    {
+      "name": "preserve at least the v8 exact-pair static normal tier",
+      "path": "partitions.static.normalTexturedMaterials",
+      "op": "ge",
+      "value": 173
+    },
+    {
+      "name": "preserve v10 exact XModel material-slot repair",
+      "path": "partitions.static.genericPrimitiveReferences",
+      "op": "eq",
+      "value": 0
+    },
+    {
+      "name": "preserve v11 retail alpha-mode population",
+      "path": "materials.nonOpaqueMaterials",
+      "op": "ge",
+      "value": 85
+    },
+    {
+      "name": "preserve v11 retail double-sided population",
+      "path": "materials.doubleSidedMaterials",
+      "op": "ge",
+      "value": 35
+    }
+  ],
+  "evidence": {
+    "worldGeometry": "5,614 surfaces / 340 groups exact live GfxWorld proof",
+    "worldTextureCoverage": "NUKETOWN_WORLD_TEXTURE_COVERAGE_V1.json",
+    "staticExactPair": "REAL_TEXTURE_PRIMARY_V8_STATIC_EXACT_PAIR_CHECKPOINT.json",
+    "worldExactRebind": "REAL_TEXTURE_PRIMARY_V9_WORLD_EXACT_REBIND_CHECKPOINT.json",
+    "staticSlotRepair": "REAL_TEXTURE_PRIMARY_V10_XMODEL_MATERIAL_SLOT_REPAIR_CHECKPOINT.json",
+    "renderState": "T6_NUKETOWN_PRIMARY_V11_RENDER_STATE_CHECKPOINT_V1.json",
+    "materialClosure": "T6_NUKETOWN_PRIMARY_V12_THREE_MATERIAL_TEXTURE_CLOSURE_V1.json"
+  },
+  "policy": "This is fixture data, not production exporter logic. New proofs may raise floors; they must never silently lower them. The material-index partition is a compatibility adapter for the current combined preview layout and should be replaced by explicit asset-class tags in the universal exporter IR."
+}
