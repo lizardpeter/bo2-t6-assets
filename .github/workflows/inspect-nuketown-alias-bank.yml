@@ -22,11 +22,11 @@ jobs:
           doc=json.loads(raw)
           print('TOP LEVEL TYPE',type(doc).__name__)
           print('TOP LEVEL KEYS',list(doc) if isinstance(doc,dict) else None)
+          print('ALIAS COUNT FIELD',doc.get('aliasCount'))
+          print('CONFLICT COUNT FIELD',doc.get('conflictCount'))
+          print('AVAILABILITY',json.dumps(doc.get('availability'),sort_keys=True))
           print('DECOMPRESSED SHA256',hashlib.sha256(raw).hexdigest())
 
-          # Collect shallow dicts that look like alias records. We intentionally
-          # infer by identity/hash fields rather than assuming a schema so this
-          # inspector remains useful if the archive format evolves.
           records=[]
           def walk(x,path='$'):
             if isinstance(x,dict):
@@ -40,7 +40,6 @@ jobs:
               for i,v in enumerate(x): walk(v,f'{path}[{i}]')
           walk(doc)
 
-          # Deduplicate identical dicts, shallowest path first.
           seen=set(); unique=[]
           for h in sorted(records,key=lambda h:(h['path'].count('.')+h['path'].count('['),h['path'])):
             key=json.dumps(h['value'],sort_keys=True,separators=(',',':'))
@@ -48,39 +47,55 @@ jobs:
             seen.add(key); unique.append(h)
 
           keysets=collections.Counter(tuple(sorted(h['value'])) for h in unique)
+          semantic_counts=collections.Counter((h['value'].get('semantic'),h['value'].get('slot')) for h in unique)
           print('ALIAS-LIKE UNIQUE DICTS',len(unique))
+          print('SEMANTIC/SLOT COUNTS',sorted((str(k),v) for k,v in semantic_counts.items()))
           print('TOP KEYSETS')
           for ks,n in keysets.most_common(12): print(n,ks)
           print('FIRST RECORDS')
           for h in unique[:12]: print(json.dumps(h,sort_keys=True))
 
-          # Exact target records called out in the historical boundary.
           targets={'~-gnt_2020_plastic_cream_col','~-gmetal_chrome_boat_c','~-gmetal_chrome_col','~-gnt_wood_fence'}
           target_hits=[]
           for h in unique:
             blob=json.dumps(h['value'],sort_keys=True)
             if any(n in blob for n in targets): target_hits.append(h)
 
-          # Search retained map manifests for image/hash evidence that can seed
-          # exact payload reuse without any IPAK-name guessing.
+          # Inventory all retained map manifests, including compressed JSON,
+          # for exact alias identity/hash mentions. This is evidence discovery;
+          # it never promotes a same-name match by itself.
           evidence=[]
-          for p in Path('manifests/maps/mp_nuketown_2020').glob('*.json'):
-            try: x=json.loads(p.read_text())
-            except Exception: continue
+          manifest_dir=Path('manifests/maps/mp_nuketown_2020')
+          for p in manifest_dir.iterdir():
+            if not p.is_file(): continue
+            x=None
+            try:
+              if p.suffix=='.json': x=json.loads(p.read_text())
+              elif p.name.endswith('.json.zlib.b64'):
+                x=json.loads(zlib.decompress(base64.b64decode(p.read_text().strip())))
+            except Exception: pass
+            if x is None: continue
             text=json.dumps(x,sort_keys=True)
             for h in unique:
               v=h['value']
               names=[str(val) for key,val in v.items() if isinstance(val,str) and ('image' in key.lower() or key.lower()=='name')]
-              if any(name and name in text for name in names):
-                evidence.append({'manifest':p.name,'aliasPath':h['path'],'alias':v})
+              hashvals=[str(val) for key,val in v.items() if 'hash' in key.lower() and isinstance(val,(str,int))]
+              name_hit=any(name and name in text for name in names)
+              hash_hit=any(hv and hv in text for hv in hashvals)
+              if name_hit or hash_hit:
+                evidence.append({'manifest':p.name,'aliasPath':h['path'],'nameHit':name_hit,'hashHit':hash_hit,'alias':v})
 
           out={
-            'format':'t6-nuketown-packed-image-alias-bank-inspection-v2',
+            'format':'t6-nuketown-packed-image-alias-bank-inspection-v3',
             'bankFile':bank_path.name,
             'bankCompressedSha256':hashlib.sha256(bank_path.read_bytes()).hexdigest(),
             'bankDecompressedSha256':hashlib.sha256(raw).hexdigest(),
             'topLevelKeys':list(doc) if isinstance(doc,dict) else None,
+            'aliasCount':doc.get('aliasCount'),
+            'conflictCount':doc.get('conflictCount'),
+            'availability':doc.get('availability'),
             'uniqueAliasLikeRecordCount':len(unique),
+            'semanticSlotCounts':[{'semantic':k[0],'slot':k[1],'count':v} for k,v in sorted(semantic_counts.items())],
             'keysets':[{'count':n,'keys':list(ks)} for ks,n in keysets.most_common()],
             'records':unique,
             'targetHits':target_hits,
@@ -90,6 +105,8 @@ jobs:
           print('TARGET HITS',len(target_hits))
           for h in target_hits: print(json.dumps(h,sort_keys=True))
           print('RETAINED MANIFEST EVIDENCE',len(evidence))
+          by_manifest=collections.Counter(e['manifest'] for e in evidence)
+          print('EVIDENCE BY MANIFEST',by_manifest.most_common(20))
           PY
       - uses: actions/upload-artifact@v4
         with:
