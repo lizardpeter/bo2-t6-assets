@@ -6,10 +6,13 @@ from math import isclose
 
 from t6_generated_world_shader_semantics_v1 import (
     compose_diffuse,
+    compose_diffuse_exact,
     compose_specular,
     decode_normal_transform,
+    layer_weight_class,
     normal_layer_weight,
     parse_generated_layer_tokens,
+    resolve_ordinary_layer_weight,
     specular_baseline,
     technique_uses_x0_specular_fallback,
     transform_layer_normal_xy,
@@ -23,12 +26,32 @@ def _close_tuple(actual, expected, eps=1e-9):
 
 
 def main() -> int:
-    tokens = parse_generated_layer_tokens("lit_sm_r0c0n0x0_b1c1n1s1v1_b2c2n2s2v2_m3c3")
-    assert [(x.layer, x.operation, x.has_normal, x.has_specular, x.x_variant) for x in tokens] == [
-        (1, "blend", True, True, False),
-        (2, "blend", True, True, False),
-        (3, "multiply", False, False, False),
+    tokens = parse_generated_layer_tokens("lit_sm_r0c0n0x0_b1c1n1s1v1_b2c2n2s2x2_m3c3")
+    assert [(x.layer, x.operation, x.has_normal, x.has_specular, x.x_variant, x.height_variant) for x in tokens] == [
+        (1, "blend", True, True, False, True),
+        (2, "blend", True, True, True, False),
+        (3, "multiply", False, False, False, False),
     ]
+    assert [layer_weight_class(x) for x in tokens] == ["height", "vertex_only", "vertex_only"]
+
+    threshold = parse_generated_layer_tokens("lit_sm_r0c0n0_t1c1n1s1")[0]
+    assert threshold.operation == "threshold"
+    assert layer_weight_class(threshold) == "threshold_alpha_vertex"
+    assert resolve_ordinary_layer_weight(threshold, vertex_weight=0.8, layer_alpha=0.7) is True
+    assert resolve_ordinary_layer_weight(threshold, vertex_weight=0.5, layer_alpha=0.7) is False
+
+    ordinary_blend = parse_generated_layer_tokens("lit_sm_r0c0n0_b1c1")[0]
+    assert isclose(resolve_ordinary_layer_weight(ordinary_blend, vertex_weight=0.6, layer_alpha=0.25), 0.15)
+    x_blend = parse_generated_layer_tokens("lit_sm_r0c0n0_b1c1x1")[0]
+    assert isclose(resolve_ordinary_layer_weight(x_blend, vertex_weight=0.6, layer_alpha=0.25), 0.6)
+    height_blend = parse_generated_layer_tokens("lit_sm_r0c0n0_b1c1v1")[0]
+    try:
+        resolve_ordinary_layer_weight(height_blend, vertex_weight=0.6, layer_alpha=0.25)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("height layer accepted a guessed non-DAG weight")
+    assert isclose(resolve_ordinary_layer_weight(height_blend, vertex_weight=0.6, layer_alpha=0.25, exact_height_weight=0.42), 0.42)
 
     raw = bytes((255, 255, 128, 128))
     assert unpack_normal_transform_bytes(raw) == (255, 128, 128, 255)
@@ -46,6 +69,9 @@ def main() -> int:
     _close_tuple(compose_diffuse(base, layer, 0.25, "add"), (0.3, 0.425, 0.65))
     _close_tuple(compose_diffuse(base, layer, 0.25, "blend"), (0.275, 0.375, 0.575))
     _close_tuple(compose_diffuse(base, layer, 0.25, "multiply"), (0.19, 0.32, 0.51))
+    _close_tuple(compose_diffuse_exact(base, layer, operation="blend", exact_weight=0.6), (0.56, 0.28, 0.48))
+    _close_tuple(compose_diffuse_exact(base, layer, operation="threshold", exact_threshold_condition=True), layer[:3])
+    _close_tuple(compose_diffuse_exact(base, layer, operation="threshold", exact_threshold_condition=False), base[:3])
 
     assert technique_uses_x0_specular_fallback("lit_sm_r0c0x0_b1c1n1s1")
     assert technique_uses_x0_specular_fallback("lit_sm_r0c0n0x0_b1c1s1")
