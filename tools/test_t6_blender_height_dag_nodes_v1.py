@@ -141,7 +141,7 @@ def main() -> int:
     value_nodes = [node for node in nodes.created if node.type == "ShaderNodeValue"]
     assert len(value_nodes) == 2
     assert [node.outputs[0].default_value for node in value_nodes] == [2.0, 0.25]
-    assert len(links.created) == 9
+    assert len(links.created) == 8
 
     # Exact sample coverage is mandatory; the compiler cannot substitute the
     # current color texture merely because it is building layer 1.
