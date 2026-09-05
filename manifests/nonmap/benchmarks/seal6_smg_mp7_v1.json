@@ -9,7 +9,8 @@
     "noFallbackModels": true,
     "noFallbackAnimations": true,
     "noInferredTextureNames": true,
-    "noInferredSoundOrFxIdentity": true
+    "noInferredSoundOrFxIdentity": true,
+    "noImplicitBasePatchWinner": true
   },
   "retainedRetailEvidence": {
     "commonMpExpandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
@@ -24,7 +25,23 @@
       "boneTrackCount": 76,
       "notifyCount": 17,
       "serializedSha256": "371936182a1a71a25d391da7d6a224aabea2d5d0aeae1fdfaed414dbc67b373a"
-    }
+    },
+    "weaponDefinitionLayering": {
+      "internalName": "mp7_mp",
+      "baseLayer": "common_mp",
+      "baseInventory": "manifests/weapons/stage18c/clean_mp_loadout_arsenal.csv",
+      "knownOverrideLayer": "common_patch_mp",
+      "overrideInventory": "manifests/weapons/stage18c/common_patch_mp_weapon_overrides.csv",
+      "knownOverrideIndex": 7,
+      "fullPrecedenceRule": [
+        "common_mp",
+        "common_patch_mp",
+        "patch_mp"
+      ],
+      "status": "common_patch_mp override is retained evidence; final dependency graph must resolve the winning definition through the full precedence chain rather than copying common_mp base fields"
+    },
+    "rawAttachmentModelProofProducer": "tools/stage18d_attachment_unique_models.py",
+    "rawAttachmentModelProofExpectedOutput": "attachment_unique_xmodel_proof.json"
   },
   "discoveryEvidence": [
     {
@@ -53,7 +70,7 @@
         "weapon muzzle/shell FX identities",
         "MP7 player/NPC sound identities"
       ],
-      "proofStatus": "candidate dependency source; every dependency must be re-resolved from retained retail T6 assets"
+      "proofStatus": "candidate dependency source; every dependency must be re-resolved from retained retail T6 assets and the MP definition must honor common_mp -> common_patch_mp -> patch_mp precedence"
     }
   ],
   "models": [
@@ -164,7 +181,8 @@
     "all 23 retained MP7 family XAnims normalized and compatibility-checked against the appropriate first-person skeleton",
     "required core animations export through current v7 runtime-binding semantics",
     "material -> image dependencies retained exactly for every model surface",
-    "weapon definition dependency graph retained from a retail T6 WeaponVariantDef/WeaponDef path",
+    "MP7 winning weapon definition and dependency graph resolved through common_mp -> common_patch_mp -> patch_mp with no implicit base-layer winner",
+    "raw WeaponAttachmentUnique -> XModel edges retained for MP7 attachment/model dependencies",
     "FX and audio identities re-resolved from retail assets rather than inherited from external dumps",
     "bundle loads independently in Blender or another glTF consumer with hashes/counts archived"
   ]
