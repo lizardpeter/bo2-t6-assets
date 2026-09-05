@@ -21,7 +21,10 @@ param(
     [string]$Mp7RawXAnimJson,
 
     [Parameter(Mandatory=$false)]
-    [string]$NormalizedMp7XAnimRoot
+    [string]$NormalizedMp7XAnimRoot,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipStage18DRawRegeneration
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,10 +32,14 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Spec = Join-Path $RepoRoot "manifests/nonmap/benchmarks/seal6_smg_mp7_v1.json"
 $RawParser = Join-Path $RepoRoot "tools/t6_raw_xasset_inventory.py"
+$RawParserV2 = Join-Path $RepoRoot "tools/t6_raw_xasset_inventory_v2.py"
 $CorpusProbeTool = Join-Path $RepoRoot "tools/t6_xmodel_target_corpus_probe_v1.py"
 $OatCatalogTool = Join-Path $RepoRoot "tools/t6_oat_xmodel_catalog_v1.py"
 $MaterialEdgeTool = Join-Path $RepoRoot "tools/t6_oat_xmodel_material_edges_v1.py"
 $PlannerTool = Join-Path $RepoRoot "tools/t6_first_person_bundle_plan_v1.py"
+$Stage18DXAnimTool = Join-Path $RepoRoot "tools/stage18d_xanim_raw.py"
+$Stage18DAttachmentTool = Join-Path $RepoRoot "tools/stage18d_attachment_unique_models.py"
+$CanonicalRootCsv = Join-Path $RepoRoot "manifests/weapons/stage18c/clean_mp_loadout_arsenal.csv"
 
 if (-not $ExpandedRoot) {
     throw "Set -ExpandedRoot or T6_EXPANDED_ROOT to the directory containing retained expanded T6 XFiles. Raw .ff files are not silently treated as expanded streams."
@@ -41,9 +48,15 @@ $ExpandedRoot = (Resolve-Path $ExpandedRoot).Path
 $OutRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $OutRoot))
 $ProbeDir = Join-Path $OutRoot "xmodel_probes"
 $OatDir = Join-Path $OutRoot "oat"
-New-Item -ItemType Directory -Force -Path $OutRoot, $ProbeDir, $OatDir | Out-Null
+$RawProofDir = Join-Path $OutRoot "stage18d_raw"
+$RawXAnimDir = Join-Path $RawProofDir "xanim"
+$RawAttachmentDir = Join-Path $RawProofDir "attachment_models"
+New-Item -ItemType Directory -Force -Path $OutRoot, $ProbeDir, $OatDir, $RawProofDir, $RawXAnimDir, $RawAttachmentDir | Out-Null
 
-Write-Host "[1/4] Direct retail XModel target corpus probe"
+$SpecDoc = Get-Content -Raw $Spec | ConvertFrom-Json
+$ExpectedCommonMpSha = [string]$SpecDoc.retainedRetailEvidence.commonMpExpandedSha256
+
+Write-Host "[1/6] Direct retail XModel target corpus probe"
 $CorpusSummary = Join-Path $OutRoot "xmodel_corpus_probe_v1.json"
 & python $CorpusProbeTool $ExpandedRoot `
     --glob "*.expanded" `
@@ -54,6 +67,44 @@ $CorpusSummary = Join-Path $OutRoot "xmodel_corpus_probe_v1.json"
     --out $CorpusSummary
 $CorpusExit = $LASTEXITCODE
 if ($CorpusExit -notin 0,2) { throw "XModel corpus probe failed with exit code $CorpusExit" }
+
+$Corpus = Get-Content -Raw $CorpusSummary | ConvertFrom-Json
+$CommonSource = $Corpus.sources | Where-Object { $_.sha256 -eq $ExpectedCommonMpSha } | Select-Object -First 1
+$CommonStream = if ($CommonSource) { [string]$CommonSource.path } else { $null }
+if ($CommonStream) {
+    Write-Host ("Pinned common_mp expanded stream found: {0}" -f $CommonStream)
+} else {
+    Write-Warning ("Pinned common_mp expanded SHA {0} was not found under ExpandedRoot; Stage 18D raw MP7 regeneration will remain unavailable." -f $ExpectedCommonMpSha)
+}
+
+Write-Host "[2/6] Restore Stage 18D raw MP7 proofs from the pinned common_mp stream"
+$AttachmentProof = $null
+if ($CommonStream -and -not $SkipStage18DRawRegeneration) {
+    $RootProof = Join-Path $RawProofDir "common_mp_weapon_roots_v2.json"
+    & python $RawParserV2 $CommonStream `
+        --roots $CanonicalRootCsv `
+        --out $RootProof
+    if ($LASTEXITCODE -ne 0) { throw "v2 raw common_mp root proof failed" }
+
+    & python $Stage18DAttachmentTool `
+        --stream $CommonStream `
+        --raw-parser $RawParserV2 `
+        --roots $RootProof `
+        --outdir $RawAttachmentDir
+    if ($LASTEXITCODE -ne 0) { throw "Stage 18D WeaponAttachmentUnique -> XModel regeneration failed" }
+    $AttachmentProof = Join-Path $RawAttachmentDir "attachment_unique_xmodel_proof.json"
+
+    & python $Stage18DXAnimTool `
+        --stream $CommonStream `
+        --raw-parser $RawParserV2 `
+        --outdir $RawXAnimDir
+    if ($LASTEXITCODE -ne 0) { throw "Stage 18D raw XAnim regeneration failed" }
+    if (-not $Mp7RawXAnimJson) {
+        $Mp7RawXAnimJson = Join-Path $RawXAnimDir "mp7_base_xanim_raw.json"
+    }
+} elseif ($SkipStage18DRawRegeneration) {
+    Write-Host "Stage 18D raw regeneration explicitly skipped."
+}
 
 $OatCatalogs = @()
 function Add-OatCatalog {
@@ -80,11 +131,11 @@ function Add-OatCatalog {
     if ($EdgeExit -notin 0,2) { throw "XModel material-edge extraction failed for $ZoneName with exit code $EdgeExit" }
 }
 
-Write-Host "[2/4] Optional pinned-OAT model classification/material edges"
+Write-Host "[3/6] Optional pinned-OAT model classification/material edges"
 Add-OatCatalog -DumpRoot $OatFactionSealsRoot -ZoneName "faction_seals_mp" -SourceSha256 $FactionSealsSourceSha256
 Add-OatCatalog -DumpRoot $OatCommonMpRoot -ZoneName "common_mp" -SourceSha256 $CommonMpSourceSha256
 
-Write-Host "[3/4] Build strict first-person bundle plan"
+Write-Host "[4/6] Build strict first-person bundle plan"
 $PlannerArgs = @(
     $PlannerTool,
     "--spec", $Spec,
@@ -106,15 +157,34 @@ if ($NormalizedMp7XAnimRoot) {
 $PlanExit = $LASTEXITCODE
 if ($PlanExit -notin 0,2) { throw "Bundle planner failed with exit code $PlanExit" }
 
-Write-Host "[4/4] Benchmark checkpoint"
+Write-Host "[5/6] Verify regenerated raw MP7 canaries when present"
+if ($CommonStream -and -not $SkipStage18DRawRegeneration) {
+    $Regenerated = Get-Content -Raw (Join-Path $RawXAnimDir "xanim_raw_proof_summary.json") | ConvertFrom-Json
+    if ($Regenerated.expanded_stream_sha256 -ne $ExpectedCommonMpSha) {
+        throw "Regenerated XAnim proof source SHA does not match benchmark common_mp SHA"
+    }
+    if ([int]$Regenerated.mp7.base_viewmodel_records -ne [int]$SpecDoc.retainedRetailEvidence.mp7BaseViewmodelRecords) {
+        throw "Regenerated MP7 family count disagrees with retained benchmark"
+    }
+    $Reload = $Regenerated.mp7.reload
+    if ([string]$Reload.serialized_sha256 -ne [string]$SpecDoc.retainedRetailEvidence.reloadCanary.serializedSha256) {
+        throw "Regenerated viewmodel_mp7_reload SHA disagrees with retained canary"
+    }
+    if (-not (Test-Path $AttachmentProof)) {
+        throw "Stage 18D attachment XModel proof was not emitted"
+    }
+    Write-Host "Stage 18D MP7 raw animation and attachment-model proofs reproduced against the pinned stream."
+}
+
+Write-Host "[6/6] Benchmark checkpoint"
 $Summary = Get-Content -Raw (Join-Path $OutRoot "bundle_plan_v1.json") | ConvertFrom-Json
-$Corpus = Get-Content -Raw $CorpusSummary | ConvertFrom-Json
 Write-Host ("Expanded streams scanned: {0}" -f $Corpus.summary.streamsScanned)
 Write-Host ("Required XModels found somewhere: {0}/{1}" -f $Corpus.summary.resolvedRequiredTargets, $Corpus.summary.requiredTargets)
 Write-Host ("Retail identity gate: {0}" -f $Summary.summary.retailIdentityGate)
 Write-Host ("Model class gate: {0}" -f $Summary.summary.modelClassGate)
 Write-Host ("Normalized animation gate: {0}" -f $Summary.summary.normalizedAnimationGate)
 Write-Host ("Ready for bundle export: {0}" -f $Summary.summary.readyForBundleExport)
+if ($AttachmentProof) { Write-Host ("Raw MP7 attachment-model proof: {0}" -f $AttachmentProof) }
 Write-Host ("Outputs: {0}" -f $OutRoot)
 
 # Exit 2 means the pipeline ran correctly but the benchmark still has explicit
