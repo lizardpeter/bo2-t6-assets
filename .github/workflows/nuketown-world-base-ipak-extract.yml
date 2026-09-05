@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/nuketown-world-base-ipak-extract.yml
       - tools/t6_nuketown_world_base_ipak_extract_v1.py
+      - tools/t6_iwi27_png_v1.py
       - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json
       - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
 permissions:
@@ -19,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq liblzo2-2
-          python -m pip install --disable-pip-version-check pillow
+          python -m pip install --disable-pip-version-check pillow numpy
       - name: Range-extract and validate all base-only live world payloads
         run: |
           python tools/t6_nuketown_world_base_ipak_extract_v1.py \
