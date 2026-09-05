@@ -1,0 +1,53 @@
+{
+  "format": "t6-xasset-header-alias-resolver-v1",
+  "authority": "retail expanded T6 XAssetList layout + zone-pointer arithmetic",
+  "loaderRule": "VIRTUAL front allocations: ScriptString pointer table/strings, dependency pointer table/strings, aligned 8-byte XAsset array; XAsset.header is +4 in each row",
+  "sources": {
+    "common_mp": {
+      "expandedBytes": 206493911,
+      "expandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+      "scriptStringCount": 1189,
+      "dependencyCount": 0,
+      "assetCount": 6082,
+      "assetArrayVirtualBase": 24916,
+      "assetArrayRawOffset": 24977,
+      "assetBodyRawOffset": 73633
+    },
+    "faction_seals_mp": {
+      "expandedBytes": 6245916,
+      "expandedSha256": "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30",
+      "scriptStringCount": 136,
+      "dependencyCount": 0,
+      "assetCount": 33,
+      "assetArrayVirtualBase": 2356,
+      "assetArrayRawOffset": 2417,
+      "assetBodyRawOffset": 2681
+    }
+  },
+  "summary": {
+    "references": 15,
+    "xassetHeaderSlots": 8,
+    "laterVirtualAliases": 7,
+    "exactHeaderSlotsWithImageType": 8
+  },
+  "xassetHeaderSlots": [
+    {"sourceZone":"common_mp","material":"mc/mtl_gen_eye_cornea","slotIndex":0,"semanticName":"colorMap","pointerRaw":"0xa00119d1","virtualOffset":72144,"assetIndex":5903,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_gen_eye_cornea","slotIndex":1,"semanticName":"normalMap","pointerRaw":"0xa00119d9","virtualOffset":72152,"assetIndex":5904,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_insidemouth","slotIndex":0,"semanticName":"colorMap","pointerRaw":"0xa0011a29","virtualOffset":72232,"assetIndex":5914,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_insidemouth","slotIndex":1,"semanticName":"specularMap","pointerRaw":"0xa0011a31","virtualOffset":72240,"assetIndex":5915,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_insidemouth","slotIndex":2,"semanticName":"normalMap","pointerRaw":"0xa0011a39","virtualOffset":72248,"assetIndex":5916,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_insidemouth","slotIndex":3,"semanticName":"colorMap","pointerRaw":"0xa0011a41","virtualOffset":72256,"assetIndex":5917,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_mp_datapad","slotIndex":1,"semanticName":"normalMap","pointerRaw":"0xa0011a69","virtualOffset":72296,"assetIndex":5922,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"},
+    {"sourceZone":"common_mp","material":"mc/mtl_c_gen_mp_datapad","slotIndex":2,"semanticName":"colorMap","pointerRaw":"0xa0011a71","virtualOffset":72304,"assetIndex":5923,"assetTypeIndex":8,"assetType":"IMAGE","headerRaw":"0xffffffff"}
+  ],
+  "laterVirtualAliases": [
+    {"sourceZone":"common_mp","material":"mc/mtl_gen_eye_cornea","slotIndex":2,"semanticName":"colorMap","pointerRaw":"0xa0f0f5ed","virtualOffset":15791596},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_c_usa_milcas_mcknight_head_camo","slotIndex":3,"semanticName":"normalMap","pointerRaw":"0xa03374c5","virtualOffset":3372228},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_c_usa_mp_seal6_smg_arms","slotIndex":0,"semanticName":"colorMap","pointerRaw":"0xa040a7dd","virtualOffset":4237276},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_c_usa_mp_seal6_smg_arms","slotIndex":2,"semanticName":"normalMap","pointerRaw":"0xa040a9b5","virtualOffset":4237748},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_gen_eye_iris_green","slotIndex":0,"semanticName":"colorMap","pointerRaw":"0xa0337691","virtualOffset":3372688},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_gen_eye_iris_green","slotIndex":1,"semanticName":"specularMap","pointerRaw":"0xa03376a1","virtualOffset":3372704},
+    {"sourceZone":"faction_seals_mp","material":"mc/mtl_gen_eye_iris_green","slotIndex":2,"semanticName":"normalMap","pointerRaw":"0xa03376b1","virtualOffset":3372720}
+  ],
+  "proofBoundary": "xasset-header-slot is proven only when the packed VIRTUAL offset lands exactly on an in-range XAsset.header field. Later VIRTUAL aliases remain unresolved here."
+}
