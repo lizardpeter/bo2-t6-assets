@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Source-backed semantics for T6 generated/layered GfxWorld materials.
 
-This module intentionally contains no Nuketown-specific names or offsets.  It
-encodes rules recovered from retail T6 MaterialTechniqueSet names, world vertex
-streams, and compiled DXBC shaders so map exporters/renderers can share one
-contract.
+This module intentionally contains no map-specific names or offsets. It encodes
+rules recovered from retail T6 MaterialTechniqueSet names, world vertex streams,
+and compiled DXBC shaders so map exporters/renderers can share one contract.
 
 Important invariants:
 - GfxPackedWorldVertex COLOR is shader layer-control data for generated world
@@ -12,15 +11,20 @@ Important invariants:
 - TEXCOORD_1 in the normalized glTF contract is reserved for T6 lightmap UV.
   Secondary material UVs are TEXCOORD_2/3/4.
 - The secondary-stream normal-transform word is stored as bytes
-  [m00, m11, m01, m10].  The shader consumes logical
+  [m00, m11, m01, m10]. The shader consumes logical
   [m00, m01, m10, m11] as UNORM8 and converts with value*2-1.
 - Diffuse A/B/M equations below are transcribed from retail compiled DXBC.
+- Layered specular state is an ordered XYZW recurrence. Blend steps lerp the
+  previous state toward the layer specular sample with the exact RGB compositor
+  weight. Threshold steps select layer-vs-previous with the exact RGB threshold
+  condition. This recurrence is proven across all retained layered-specular
+  shaders and is not a generic PBR approximation.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 WEIGHT_CHANNEL = {1: "G", 2: "B", 3: "A"}
@@ -30,6 +34,11 @@ DIFFUSE_EQUATIONS = {
     "add": "base.rgb + layer.rgb * layer.a * weight",
     "blend": "base.rgb + (layer.rgb - base.rgb) * layer.a * weight",
     "multiply": "base.rgb * (1 + weight * (layer.rgb - 1))",
+}
+
+SPECULAR_EQUATIONS = {
+    "b": "prevSpecRGBA + (layerSpecRGBA - prevSpecRGBA) * exactRgbWeight",
+    "t": "select(exactRgbThresholdCondition, layerSpecRGBA, prevSpecRGBA)",
 }
 
 
@@ -105,7 +114,7 @@ def normal_layer_weight(vertex_weight: float, color_layer_alpha: float, x_varian
 def compose_diffuse(base, layer, weight: float, operation: str):
     """Reference scalar/vector implementation of the retail A/B/M diffuse ops.
 
-    base/layer are 4-tuples; RGB is returned.  Generated color composition is
+    base/layer are 4-tuples; RGB is returned. Generated color composition is
     performed in the encoded texture domain in the retail shader before an
     explicit RGB square used by the later lighting path.
     """
@@ -117,6 +126,66 @@ def compose_diffuse(base, layer, weight: float, operation: str):
     if operation == "multiply":
         return tuple(base[i] * (1.0 + weight * (layer[i] - 1.0)) for i in range(3))
     raise ValueError(operation)
+
+
+def technique_uses_x0_specular_fallback(technique_set: str) -> bool:
+    """Return whether the no-base-spec fallback takes base color alpha.
+
+    Retained slot-4 shaders prove that missing base specular maps begin with
+    RGB=(0.2,0.2,0.2). The W channel begins from base color alpha for x0
+    techniques and from 0 otherwise.
+    """
+    return re.search(r"(?:^|_)r0c0(?:n0)?x0(?:_|$)", technique_set) is not None
+
+
+def specular_baseline(
+    *,
+    base_specular: Sequence[float] | None,
+    base_color_alpha: float,
+    technique_set: str,
+) -> tuple[float, float, float, float]:
+    """Construct the source-closed initial XYZW layered-specular state."""
+    if base_specular is not None:
+        if len(base_specular) != 4:
+            raise ValueError("base_specular must contain exactly four channels")
+        return tuple(float(v) for v in base_specular)
+    return (
+        0.2,
+        0.2,
+        0.2,
+        float(base_color_alpha) if technique_uses_x0_specular_fallback(technique_set) else 0.0,
+    )
+
+
+def compose_specular(
+    previous: Sequence[float],
+    layer_specular: Sequence[float],
+    *,
+    operator: str,
+    exact_rgb_weight: float | None = None,
+    exact_rgb_threshold_condition: bool | None = None,
+) -> tuple[float, float, float, float]:
+    """Apply one exact ordered layered-specular XYZW recurrence step.
+
+    ``operator='b'`` requires the already-resolved exact RGB compositor weight.
+    ``operator='t'`` requires the already-resolved exact RGB threshold condition.
+    Keeping those as explicit inputs prevents an adapter from silently guessing
+    a per-shader weight/threshold DAG that has not been attached to its recipe.
+    """
+    if len(previous) != 4 or len(layer_specular) != 4:
+        raise ValueError("specular states must contain exactly four channels")
+    prev = tuple(float(v) for v in previous)
+    layer = tuple(float(v) for v in layer_specular)
+    if operator == "b":
+        if exact_rgb_weight is None:
+            raise ValueError("blend specular recurrence requires exact_rgb_weight")
+        w = float(exact_rgb_weight)
+        return tuple(prev[i] + (layer[i] - prev[i]) * w for i in range(4))
+    if operator == "t":
+        if exact_rgb_threshold_condition is None:
+            raise ValueError("threshold specular recurrence requires exact_rgb_threshold_condition")
+        return layer if bool(exact_rgb_threshold_condition) else prev
+    raise ValueError(f"unsupported layered specular operator {operator!r}")
 
 
 def normalized_gltf_vertex_contract() -> dict:
