@@ -1,0 +1,19 @@
+name: runner-smoke-ubuntu-latest
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/runner-smoke-ubuntu-latest.yml
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner proof
+        run: |
+          uname -a
+          python --version
+          echo "ubuntu-latest runner assigned successfully"
