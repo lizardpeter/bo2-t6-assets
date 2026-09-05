@@ -1,0 +1,45 @@
+{
+  "format": "t6-nuketown-v22-oat-full-role-checkpoint-v1",
+  "map": "mp_nuketown_2020",
+  "candidate": {
+    "file": "mp_nuketown_2020_OAT_SEMANTIC_TEXTURED_PRIMARY_RENDERSTATE_FLAT_WINDING_ROLEFIX_MAPENT_ANIM_CARS_OAT_FULLROLES_LEAN_v22.glb",
+    "bytes": 248674604,
+    "sha256": "a963127223cb6b52035d2fbd6d23fe43d49b71950f0f7fe801222904f31bf3c5"
+  },
+  "materialTextureClosure": {
+    "usedMaterials": 647,
+    "exactOatRoleReferences": 1757,
+    "roleReferencesWithExactRetainedDds": 1752,
+    "roleReferencesMissingDds": 5,
+    "roleRefsExistingStandardTextureIdentity": 1396,
+    "roleRefsRawEmbeddedDds": 356,
+    "distinctRawDdsEmbedded": 224,
+    "distinctMissingImages": 3,
+    "missingExactImages": [
+      {"image":"$black","referenceCount":1,"materials":["mc/mtl_nt_2020_plastic_black"]},
+      {"image":"global_normal_flat_16x16","referenceCount":3,"materials":["mc/metal_exterior_karma","mc/mtl_p6_rug_modern02","mc/plastic_fluorescent_cover_off"]},
+      {"image":"shadow","referenceCount":1,"materials":["wpc/shadowcaster"]}
+    ]
+  },
+  "gltf": {
+    "images": 747,
+    "textures": 747,
+    "bufferViews": 24335,
+    "invalidTextureSources": 0,
+    "externalImageCount": 0
+  },
+  "nonRegression": {
+    "pass": true,
+    "failureCount": 0,
+    "baseline": "T6_NUKETOWN_V18_NONREGRESSION_BASELINE_V1.json"
+  },
+  "independentValidation": {
+    "trimeshLoadSucceeded": true,
+    "loadedType": "Scene",
+    "geometryCount": 3397,
+    "graphNodeCount": 6136
+  },
+  "tool": "tools/t6_gltf_oat_full_role_lean_embed_v1.py",
+  "policy": "Every exact OAT texture input available for all used materials is represented. Existing standard glTF texture identities are reused; otherwise original DDS bytes are embedded losslessly in GLB bufferViews. Core visible bindings are unchanged. Missing source identities are not fabricated.",
+  "next": "Source-close engine/builtin $black and global_normal_flat_16x16 if exact T6 evidence is recovered; shadow is shadow-only. Then reconstruct T6 layered/generated material compositor and continue MapEnt animations."
+}
