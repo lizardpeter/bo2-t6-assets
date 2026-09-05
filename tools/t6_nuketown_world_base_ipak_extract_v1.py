@@ -10,8 +10,11 @@ IPAK_BLOCK=0x80
 ADMISSIBLE={'exact-pair','unique-data-hash'}
 HERE=Path(__file__).resolve().parent
 BASE_PATH=HERE/'t6_nuketown_ipak_partial_texture_export_v2.py'
+DEC_PATH=HERE/'t6_iwi27_png_v1.py'
 spec=importlib.util.spec_from_file_location('t6_texture_base',BASE_PATH)
 base=importlib.util.module_from_spec(spec); spec.loader.exec_module(base)
+dspec=importlib.util.spec_from_file_location('t6_iwi27_png',DEC_PATH)
+dec=importlib.util.module_from_spec(dspec); dspec.loader.exec_module(dec)
 
 
 def sha256(b:bytes)->str: return hashlib.sha256(b).hexdigest()
@@ -28,10 +31,8 @@ def rg(start:int,end:int)->tuple[bytes,str]:
 
 def load_canonical(path:Path)->dict:
     return json.loads(zlib.decompress(base64.b64decode(path.read_text().strip())))
-
 def safe_name(name:str)->str:
     s=re.sub(r'[^A-Za-z0-9_.-]+','_',name).strip('._'); return s or 'image'
-
 def image_semantics(doc:dict)->dict[str,list[int]]:
     out=defaultdict(set)
     for m in doc['materials']:
@@ -127,11 +128,11 @@ def main():
         if any(s!=5 for s in ss) or not roles: roles.append(('colorlike',False))
         variants=[]
         for role,is_normal in roles:
-            png,pmeta=base.iwi_top_png(iwi,normal_semantic=is_normal); fn=f'{stem}.{role}.png'; (a.out_dir/fn).write_bytes(png)
+            png,pmeta=dec.iwi_top_png(iwi,normal_semantic=is_normal); fn=f'{stem}.{role}.png'; (a.out_dir/fn).write_bytes(png)
             variants.append({'role':role,'normalSemanticDecode':is_normal,'file':fn,'bytes':len(png),'sha256':sha256(png),'decodeMeta':pmeta})
         rows.append({'image':name,'state':r['state'],'retainedNameHash':int(r['nameHash']),'retainedDataHash29':int(r['dataHash29']),'ipakEntry':list(e),'contentRange':cr,'semanticSet':ss,'dimensions':[w,h,d],'format':fmt,'flags':flags,'gamma':gamma,'iwiFile':iwif,'iwiBytes':len(iwi),'iwiSha256':sha256(iwi),'crc29Validated':True,'dimensionsValidated':True,'pngVariants':variants})
 
-    report={'format':'t6-nuketown-live-world-base-ipak-texture-extraction-v1','source':{'url':URL,'bytes':ix['total'],'indexEntryCount':len(entries),'headContentRange':ix['headRange'],'indexContentRange':ix['indexRange'],'headSha256':sha256(ix['head']),'indexSha256':sha256(ix['indexRaw']),'networkBytes':network},'summary':{'baseAdditionalCandidates':len(candidates),'validatedPayloads':len(rows),'exactPairPayloads':sum(r['state']=='exact-pair' for r in rows),'uniqueDataHashPayloads':sum(r['state']=='unique-data-hash' for r in rows),'normalSemanticImages':sum(5 in r['semanticSet'] for r in rows),'colorlikeSemanticImages':sum(any(s!=5 for s in r['semanticSet']) for r in rows),'pngVariantCount':sum(len(r['pngVariants']) for r in rows)},'rows':rows,'proofBoundary':'Only live images not already covered by the pinned map IPAK are extracted. Each base.ipak row must remain census-admissible against a freshly range-read retail base index. Its streamed dataHash must equal the canonical retained CRC29; decompressed bytes must recompute that CRC29; IWI27 must parse; retained dimensions must match exactly; only then are PNG variants emitted.'}
+    report={'format':'t6-nuketown-live-world-base-ipak-texture-extraction-v1','source':{'url':URL,'bytes':ix['total'],'indexEntryCount':len(entries),'headContentRange':ix['headRange'],'indexContentRange':ix['indexRange'],'headSha256':sha256(ix['head']),'indexSha256':sha256(ix['indexRaw']),'networkBytes':network},'summary':{'baseAdditionalCandidates':len(candidates),'validatedPayloads':len(rows),'exactPairPayloads':sum(r['state']=='exact-pair' for r in rows),'uniqueDataHashPayloads':sum(r['state']=='unique-data-hash' for r in rows),'normalSemanticImages':sum(5 in r['semanticSet'] for r in rows),'colorlikeSemanticImages':sum(any(s!=5 for s in r['semanticSet']) for r in rows),'pngVariantCount':sum(len(r['pngVariants']) for r in rows)},'rows':rows,'proofBoundary':'Only live images not already covered by the pinned map IPAK are extracted. Each base.ipak row must remain census-admissible against a freshly range-read retail base index. Its streamed dataHash must equal the canonical retained CRC29; decompressed bytes must recompute that CRC29; IWI27 must parse; retained dimensions must match exactly; BC1, BC2/DXT3, BC3 and BC5/DXN top mips are decoded only then.'}
     (a.out_dir/'TEXTURE_EXTRACTION_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); print(json.dumps(report['summary'],indent=2,sort_keys=True)); print('networkBytes',network)
 
 if __name__=='__main__': main()
