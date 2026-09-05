@@ -51,7 +51,18 @@ jobs:
             mp_nuketown_2020.world_normalized_live_v1.json \
             mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb
           test "$(stat -c %s mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb)" = "16387024"
-          echo '4aee1bf27fbd75259da504350d6f5a2e2cf41512b44305cff2c9642e2e14bd02  mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb' | sha256sum -c -
+          sha256sum mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb
+          python - <<'PY'
+          import json,struct
+          b=open('mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb','rb').read()
+          n,t=struct.unpack_from('<I4s',b,12); assert t==b'JSON'
+          g=json.loads(b[20:20+n].rstrip(b' \0'))
+          s=g['extras']['T6']['exportStats']
+          assert s['groupCount']==340 and s['primitiveCount']==5614
+          assert s['vertexCount']==146764 and s['triangleCount']==100280
+          assert len(g['materials'])==327 and len(g['scenes'][0]['nodes'])==340
+          assert all('children' not in n for n in g['nodes'])
+          PY
 
       - name: Re-extract and validate 171 exact map IPAK textures
         run: |
@@ -95,7 +106,6 @@ jobs:
           g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common \
             tools/t6_oat_gfxworld_layout_probe.cpp -o gfxworld-layout-probe
           ./gfxworld-layout-probe > gfxworld-layout.json
-
           gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
           test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
           echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
@@ -107,7 +117,6 @@ jobs:
           UNLINKER=$(find oat -type f -name Unlinker | head -1)
           test -n "$UNLINKER"
           chmod +x "$UNLINKER"
-
           mkdir -p probe_out
           python tools/t6_oat_external_gfxworld_scan.py \
             --layout gfxworld-layout.json \
@@ -118,7 +127,6 @@ jobs:
             "$UNLINKER" mp_nuketown_2020.ff \
             --output-folder probe_out --model-format GLB --verbose
           test "$(find probe_out/model_export -type f -name '*_lod0.glb' | wc -l)" = "433"
-
           python - <<'PY'
           import base64,hashlib,json,zlib
           from pathlib import Path
