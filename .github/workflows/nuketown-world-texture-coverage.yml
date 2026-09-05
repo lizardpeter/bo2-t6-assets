@@ -1,0 +1,39 @@
+name: nuketown-world-texture-coverage
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-texture-coverage.yml
+      - tools/t6_nuketown_world_texture_coverage_v1.py
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_EXTRACTION_V1.json
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64
+permissions:
+  contents: write
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Measure first-layer material coverage
+        run: |
+          python tools/t6_nuketown_world_texture_coverage_v1.py \
+            --manifest manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64 \
+            --map-census manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json \
+            --base-extraction manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_EXTRACTION_V1.json \
+            --out manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_COVERAGE_V1.json
+      - name: Persist coverage proof safely
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_COVERAGE_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint validated Nuketown world texture coverage'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin base-ipak-r2-recovery
+            if git push origin HEAD:base-ipak-r2-recovery; then pushed=1; break; fi
+            sleep "$attempt"
+          done
+          test "$pushed" = 1
