@@ -1,0 +1,63 @@
+{
+  "format": "t6-nuketown-v18-visual-baseline-checkpoint-v1",
+  "date": "2026-09-05",
+  "map": "mp_nuketown_2020",
+  "canonicalCandidate": {
+    "file": "mp_nuketown_2020_OAT_SEMANTIC_TEXTURED_PRIMARY_RENDERSTATE_FLAT_WINDING_ROLEFIX_v18.glb",
+    "bytes": 191793772,
+    "sha256": "f7e805c14df67169a2b90e99ae60eff3a247bc9ee631df699255b4aff5246bd2"
+  },
+  "nonRegressionBaseline": {
+    "file": "T6_NUKETOWN_V18_NONREGRESSION_BASELINE_V1.json",
+    "bytes": 169540,
+    "sha256": "a1f7f32a16f18350533ff88e468e5dbe521624339656f584cec4ac7b501dbbb1",
+    "guard": "tools/t6_gltf_nonregression_guard_v1.py"
+  },
+  "floors": {
+    "meshCount": 298,
+    "sceneRootCount": 1875,
+    "usedMaterialCount": 635,
+    "baseColorBoundUsedMaterialCount": 633,
+    "normalBoundUsedMaterialCount": 594,
+    "primitiveCount": 3381,
+    "triangleCount": 404136,
+    "embeddedImageCount": 724
+  },
+  "hardZeroCeilings": {
+    "genericPrimitiveReferences": 0,
+    "externalImageUris": 0,
+    "invalidTextureSources": 0,
+    "invalidEmbeddedImages": 0
+  },
+  "retailInvariants": {
+    "reflectionProxyNodesRemovedFromPrimaryScene": 69,
+    "trianglesRewoundToGltfFrontFace": 404136,
+    "retailRenderStateMaterialsResolved": 635,
+    "staticMaterialProofValidatedExistingSlots": 341,
+    "staticMaterialProofRepairedGenericSlots": 197,
+    "genericPrimitiveReferencesAfterRepair": 0
+  },
+  "exactRoleTextureState": {
+    "v18ExactRoleChanges": 5,
+    "knownExactRolePayloadsStillMissing": 5,
+    "missingPayloadIdentities": [
+      "shadow",
+      "$black",
+      "global_normal_flat_16x16"
+    ],
+    "policy": "No missing engine/builtin payload is fabricated; exact OAT shader-role identity is required before binding."
+  },
+  "validation": {
+    "v18SelfGuard": "pass",
+    "v16NegativeControl": {
+      "result": "correctly rejected",
+      "failures": [
+        "embeddedImageCount 722 < 724",
+        "normalBoundUsedMaterialCount 592 < 594",
+        "lost normal bindings for mlv/glass_clear_wall_opaque_white and wpc/glass_clear_wall_opaque_white",
+        "missing triangleWindingFixV1 invariant"
+      ]
+    }
+  },
+  "policy": "Every later Nuketown candidate must pass the v18 non-regression baseline before it can replace v18. New content is permitted. Loss of already-proven nodes, materials, bindings, winding state, reflection filtering, or structural validity requires an explicit reviewed new baseline and written justification; it may never happen silently."
+}
