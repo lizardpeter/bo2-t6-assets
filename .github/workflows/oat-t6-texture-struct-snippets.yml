@@ -1,0 +1,25 @@
+name: oat-t6-texture-struct-snippets
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths: [.github/workflows/oat-t6-texture-struct-snippets.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print exact pinned OAT T6 texture structs
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          H=oat-src/src/Common/Game/T6/T6_Assets.h
+          echo '=== MaterialTextureDef ==='
+          grep -n -A28 -B8 'struct MaterialTextureDef$' "$H" | head -45
+          echo '=== GfxImage ==='
+          grep -n -A80 -B15 'struct GfxImage$' "$H" | head -110
+          echo '=== StreamedPart ==='
+          grep -n -A35 -B10 'GfxImageStreamedPart' "$H" | head -80
+          echo '=== Material ==='
+          grep -n -A90 -B10 'struct Material$' "$H" | head -120
