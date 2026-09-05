@@ -1,0 +1,129 @@
+name: nuketown-live-static-xmodel-texture-roles
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - tools/t6_oat_external_static_xmodel_texture_scan.py
+      - tools/t6_oat_static_xmodel_texture_layout_probe.cpp
+      - .github/workflows/nuketown-live-static-xmodel-texture-roles.yml
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+          python -m pip install --disable-pip-version-check gdown
+      - name: Pin OAT and compile exact x86 layouts
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common tools/t6_oat_gfxworld_world_layout_probe.cpp -o world-layout-probe
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common tools/t6_oat_texture_layout_probe.cpp -o texture-layout-probe
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common tools/t6_oat_static_xmodel_texture_layout_probe.cpp -o static-layout-probe
+          ./world-layout-probe > GFXWORLD_WORLD_LAYOUT_X86_V1.json
+          ./texture-layout-probe > T6_TEXTURE_LAYOUT_X86_V1.json
+          ./static-layout-probe > T6_STATIC_XMODEL_LAYOUT_X86_V1.json
+          python - <<'PY'
+          import json
+          w=json.load(open('GFXWORLD_WORLD_LAYOUT_X86_V1.json'))
+          t=json.load(open('T6_TEXTURE_LAYOUT_X86_V1.json'))
+          x=json.load(open('T6_STATIC_XMODEL_LAYOUT_X86_V1.json'))
+          assert w['ptrSize']==t['ptrSize']==x['ptrSize']==4
+          assert x['XModel']['size']==248
+          assert x['GfxStaticModelDrawInst']['size']==152
+          assert t['MaterialTextureDef']['size']==16
+          print(x)
+          PY
+      - name: Fetch exact retail Nuketown FF and stock OAT
+        run: |
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat oat_dump
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          test -n "$UNLINKER" && chmod +x "$UNLINKER"
+          echo "$UNLINKER" > unlinker-path.txt
+      - name: Freeze retail statics and recover exact XModel material image identities
+        run: |
+          UNLINKER=$(cat unlinker-path.txt)
+          python tools/t6_oat_external_static_xmodel_texture_scan.py \
+            --world-layout GFXWORLD_WORLD_LAYOUT_X86_V1.json \
+            --xmodel-layout T6_STATIC_XMODEL_LAYOUT_X86_V1.json \
+            --texture-layout T6_TEXTURE_LAYOUT_X86_V1.json \
+            --out NUKETOWN_STATIC_XMODEL_TEXTURE_IDENTITIES_LIVE_V1.json \
+            --diag NUKETOWN_STATIC_XMODEL_TEXTURE_IDENTITIES_LIVE_V1_DIAGNOSTICS.json \
+            --timeout 30 \
+            -- \
+            "$UNLINKER" mp_nuketown_2020.ff --output-folder oat_dump --model-format GLB --verbose
+      - name: Intersect live scan with retained 297/344 playable-static proof
+        run: |
+          python - <<'PY'
+          import base64,hashlib,json,zlib
+          from pathlib import Path
+          live=json.load(open('NUKETOWN_STATIC_XMODEL_TEXTURE_IDENTITIES_LIVE_V1.json'))
+          assert live['staticDrawInstanceCount']==2992
+          proof_path=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          proof_raw=zlib.decompress(base64.b64decode(proof_path.read_text().strip()))
+          proof=json.loads(proof_raw)
+          assert len(proof['models'])==297
+          wanted_models={r['xmodelName'] for r in proof['models']}
+          wanted_materials={m for r in proof['models'] for m in r['materials']}
+          assert len(wanted_models)==297 and len(wanted_materials)==344
+          live_models={m['name'] for m in live['models']}
+          live_by={m['name']:m for m in live['materials']}
+          missing_models=sorted(wanted_models-live_models)
+          missing_materials=sorted(wanted_materials-live_by.keys())
+          assert not missing_models, missing_models[:20]
+          assert not missing_materials, missing_materials[:20]
+          rows=[]
+          for name in sorted(wanted_materials):
+              src=live_by[name]
+              roles={}
+              for sem in ('2','5'):
+                  t=(src.get('firstSemantic') or {}).get(sem)
+                  if t is None: continue
+                  part=t.get('streamedPart0')
+                  roles['color' if sem=='2' else 'normal']={
+                      'semantic':int(sem),'slot':t['slot'],'samplerState':t['samplerState'],
+                      'image':t['image'],'imageHash':t['imageHash'],
+                      'width':t['width'],'height':t['height'],'depth':t['depth'],
+                      'streaming':t['streaming'],'streamedPartCountRaw':t['streamedPartCountRaw'],
+                      'streamedPart0Hash':None if part is None else part['hash'],
+                      'streamedPart0Hash29':None if part is None else part['hash29'],
+                      'identityClass':t['identityClass'],'hashValidation':t['hashValidation'],
+                  }
+              rows.append({'material':name,'textureCount':src['textureCount'],'roles':roles})
+          color=sum('color' in r['roles'] for r in rows); normal=sum('normal' in r['roles'] for r in rows)
+          streamed=sum(1 for r in rows for v in r['roles'].values() if v['streamedPart0Hash29'] is not None)
+          doc={
+            'format':'t6-nuketown-playable-static-live-primary-texture-roles-v1',
+            'map':'mp_nuketown_2020',
+            'sourceLiveScanSha256':hashlib.sha256(Path('NUKETOWN_STATIC_XMODEL_TEXTURE_IDENTITIES_LIVE_V1.json').read_bytes()).hexdigest(),
+            'sourcePlayableProofRawSha256':hashlib.sha256(proof_raw).hexdigest(),
+            'playableXModelCount':297,'playableMaterialCount':344,
+            'materialsWithFirstColor':color,'materialsWithFirstNormal':normal,
+            'streamedPrimaryRoleCount':streamed,
+            'rows':rows,
+            'validation':{'all297PlayableModelsPresent':True,'all344PlayableMaterialsPresent':True,'ordinaryImageNameHashesValidatedByLiveScanner':True},
+            'proofBoundary':'Role identity is read from live frozen retail XModel.materialHandles -> MaterialTextureDef -> GfxImage. This file does not infer or substitute payloads; streamed payload selection requires the recorded (imageHash,streamedPart0Hash29) pair.'
+          }
+          Path('NUKETOWN_PLAYABLE_STATIC_LIVE_TEXTURE_ROLES_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:doc[k] for k in ('playableXModelCount','playableMaterialCount','materialsWithFirstColor','materialsWithFirstNormal','streamedPrimaryRoleCount')},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-playable-static-live-texture-roles-v1
+          path: |
+            T6_STATIC_XMODEL_LAYOUT_X86_V1.json
+            NUKETOWN_PLAYABLE_STATIC_LIVE_TEXTURE_ROLES_V1.json
+            NUKETOWN_STATIC_XMODEL_TEXTURE_IDENTITIES_LIVE_V1_DIAGNOSTICS.json
+          retention-days: 7
