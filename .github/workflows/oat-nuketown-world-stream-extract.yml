@@ -1,0 +1,82 @@
+name: oat-nuketown-world-stream-extract
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - tools/t6_oat_gfxworld_world_layout_probe.cpp
+      - tools/t6_oat_external_gfxworld_world_scan.py
+      - .github/workflows/oat-nuketown-world-stream-extract.yml
+permissions:
+  contents: read
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+          python -m pip install --disable-pip-version-check gdown
+      - name: Pin OAT source and derive exact x86 world layout
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common \
+            tools/t6_oat_gfxworld_world_layout_probe.cpp -o world-layout-probe
+          ./world-layout-probe > GFXWORLD_WORLD_LAYOUT_X86_V1.json
+      - name: Fetch exact retail Nuketown FastFile and stock OAT
+        run: |
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          test -n "$UNLINKER"
+          chmod +x "$UNLINKER"
+          echo "$UNLINKER" > unlinker-path.txt
+      - name: Freeze loaded GfxWorld and copy exact world draw streams
+        run: |
+          UNLINKER=$(cat unlinker-path.txt)
+          mkdir -p world_raw oat_dump
+          python tools/t6_oat_external_gfxworld_world_scan.py \
+            --layout GFXWORLD_WORLD_LAYOUT_X86_V1.json \
+            --out-dir world_raw \
+            --diag world_raw/GFXWORLD_WORLD_SCAN_DIAGNOSTICS_V1.json \
+            --timeout 30 \
+            -- \
+            "$UNLINKER" mp_nuketown_2020.ff --output-folder oat_dump --model-format GLB --verbose
+      - name: Fail-closed world extraction validation
+        run: |
+          python - <<'PY'
+          import json,struct
+          from pathlib import Path
+          s=json.load(open('world_raw/GFXWORLD_WORLD_STREAM_EXTRACTION_V1.json'))
+          assert s['surfaceCount']==5614
+          assert s['vertexCount']==146764
+          assert s['vd0Bytes']==5285088
+          assert s['vd1Bytes']==33764
+          assert s['indexCount']==300840
+          assert s['observedWorldVertFormats']==[0,1,2,3,6], s['observedWorldVertFormats']
+          assert s['nullMaterialPointers']==0 and s['nullTechniqueSets']==0
+          surf=json.load(open('world_raw/gfxworld.surfaces.json'))
+          assert len(surf['surfaces'])==5614
+          assert all(r['triCount']>0 for r in surf['surfaces'])
+          assert all(0<=r['baseIndex'] and r['baseIndex']+3*r['triCount']<=300840 for r in surf['surfaces'])
+          idx=Path('world_raw/gfxworld.indices.bin').read_bytes()
+          assert len(idx)==601680
+          vals=struct.unpack('<'+'H'*(len(idx)//2),idx)
+          assert len(vals)==300840
+          print(json.dumps(s,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-gfxworld-live-streams-v1
+          path: |
+            GFXWORLD_WORLD_LAYOUT_X86_V1.json
+            world_raw/
+          retention-days: 7
