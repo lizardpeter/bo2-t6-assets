@@ -2,15 +2,17 @@
 """Backward-compatible T6 raw XAsset inventory adapter v2.
 
 Extends tools/t6_raw_xasset_inventory.py without changing its proven v1 byte
-semantics.  v2 adds the two interfaces needed by later Stage 18D dependency
-resolvers:
+semantics. v2 restores the richer interfaces required by later retained Stage
+18D dependency/animation tools:
 
 - `parse_front(...)["assets"]`: every top-level XAsset header with exact raw
   type/header fields and decoded zone-pointer metadata.
+- `parse_front(...)["script_strings"]`: the complete indexed ScriptString table
+  used by XAnim bone/notetrack resolution.
 - `decode_zone_pointer(...)`: compatibility alias exposing the historical
-  `valid_for_declared_block_size` spelling expected by retained tools.
+  `valid_for_declared_block_size` spelling.
 
-The physical stream cursor/layout remains exactly the v1 parser's layout.  This
+The physical stream cursor/layout remains exactly the v1 parser's layout. This
 adapter never walks asset bodies or invents names from header proximity.
 """
 from __future__ import annotations
@@ -58,6 +60,37 @@ def zone_pointer(value: int, blocks: list[int]) -> dict:
     return decode_zone_pointer(value, blocks)
 
 
+def _read_script_strings(data: bytes) -> list[str | None]:
+    if len(data) < 64:
+        raise ValueError("expanded stream too small for T6 XAssetList")
+    count, strings_ptr = struct.unpack_from("<II", data, 40)
+    if count == 0:
+        return []
+    if strings_ptr != PTR_FOLLOWING:
+        raise ValueError("ScriptStringList pointer is not inline FOLLOWING")
+    table = 64
+    table_end = table + count * 4
+    if table_end > len(data):
+        raise ValueError("ScriptString pointer table outside expanded stream")
+    raw_ptrs = struct.unpack_from(f"<{count}I", data, table)
+    pos = table_end
+    strings: list[str | None] = []
+    for index, raw in enumerate(raw_ptrs):
+        if raw == 0:
+            strings.append(None)
+            continue
+        if raw != PTR_FOLLOWING:
+            raise ValueError(
+                f"ScriptString[{index}] uses unsupported serialized pointer 0x{raw:08X}"
+            )
+        end = data.find(b"\0", pos)
+        if end < 0:
+            raise ValueError(f"unterminated ScriptString[{index}] at {pos}")
+        strings.append(data[pos:end].decode("latin1"))
+        pos = end + 1
+    return strings
+
+
 def _asset_rows(data: bytes, asset_array: int, asset_count: int, blocks: list[int]) -> list[dict]:
     end = asset_array + asset_count * 8
     if asset_array < 0 or end > len(data):
@@ -85,7 +118,16 @@ def parse_front(data: bytes) -> dict:
     blocks = list(out.get("_blocks", []))
     if len(blocks) != 8:
         raise ValueError("v1 parser did not retain the eight T6 block sizes")
+    script_strings = _read_script_strings(data)
+    if len(script_strings) != int(out["script_string_count"]):
+        raise ValueError("ScriptString count mismatch with v1 parser")
     assets = _asset_rows(data, int(out["asset_array_raw_offset"]), int(out["asset_count"]), blocks)
+    out["script_strings"] = script_strings
+    out["script_string_validation"] = {
+        "count": len(script_strings),
+        "nullCount": sum(value is None for value in script_strings),
+        "allIndicesPreserved": True,
+    }
     out["assets"] = assets
     out["asset_header_summary"] = {
         "count": len(assets),
@@ -191,6 +233,7 @@ def main() -> int:
         "weapon_variant_def_pc32_fixed_size": WVD_SIZE,
         "physical_stream_alignment_rule": "destination XBlock alignment consumes no source bytes",
         "baseParser": str(BASE_PATH.name),
+        "restoredInterfaces": ["assets", "script_strings", "decode_zone_pointer"],
     }
     if args.roots:
         names = root_names(args.roots)
@@ -207,6 +250,7 @@ def main() -> int:
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({
         "expanded_sha256": hashlib.sha256(data).hexdigest(),
+        "script_string_validation": result["script_string_validation"],
         "asset_count": result["asset_count"],
         "asset_header_summary": result["asset_header_summary"],
         "weapon_variant_root_summary": result.get("weapon_variant_root_summary"),
