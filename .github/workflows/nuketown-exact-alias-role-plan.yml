@@ -4,6 +4,7 @@ on:
     branches: [base-ipak-r2-recovery]
     paths:
       - .github/workflows/nuketown-exact-alias-role-plan.yml
+      - tools/t6_nuketown_exact_alias_role_plan_v1.py
       - manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64
       - manifests/maps/mp_nuketown_2020/NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64
       - manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64
@@ -28,99 +29,37 @@ jobs:
           UNLINKER=$(find oat -type f -name Unlinker | head -1)
           test -n "$UNLINKER" && chmod +x "$UNLINKER"
           echo "$UNLINKER" > unlinker-path.txt
-      - name: Dump retail assets with OAT
+      - name: Dump retail materials with bounded retries
         run: |
           UNLINKER=$(cat unlinker-path.txt)
-          mkdir probe_out
-          "$UNLINKER" mp_nuketown_2020.ff --output-folder probe_out --model-format GLB --verbose > oat-role-plan.log 2>&1
-          test "$(find probe_out/materials -type f -name '*.json' | wc -l)" -gt 0
-      - name: Derive exact first-semantic alias role plan
+          mkdir -p probe_out
+          : > oat-role-plan.log
+          for attempt in 1 2 3; do
+            echo "=== OAT attempt $attempt ===" | tee -a oat-role-plan.log
+            set +e
+            "$UNLINKER" mp_nuketown_2020.ff --output-folder probe_out --model-format GLB --verbose >> oat-role-plan.log 2>&1
+            rc=$?
+            set -e
+            echo "attempt $attempt exit=$rc materialJsonCount=$(find probe_out/materials -type f -name '*.json' 2>/dev/null | wc -l)" | tee -a oat-role-plan.log
+            if [ "$rc" -eq 0 ]; then break; fi
+          done
+          # Deliberately do not gate on OAT exit status here. The planner below
+          # is the authoritative completeness check: all 344 exact retained
+          # Material identities must exist and cross-validate or the job fails.
+      - name: Derive and regression-check exact first-semantic alias role plan
         run: |
-          python - <<'PY'
-          import base64,collections,hashlib,json,zlib
-          from pathlib import Path
-          root=Path('manifests/maps/mp_nuketown_2020')
-          def zjson(name): return json.loads(zlib.decompress(base64.b64decode((root/name).read_text().strip())))
-          bank=zjson('NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
-          exact=zjson('NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64')
-          proof=zjson('T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
-          retained={m for model in proof['models'] for m in model['materials']}
-          assert len(retained)==344
-          aliases={a['name']:a for a in bank['aliases']}; assert len(aliases)==81 and bank['conflictCount']==0
-          exact43={r['name'] for r in exact['rows']}; assert len(exact43)==43
-
-          # Exact OAT path identity: probe_out/materials/<Material.name>.json.
-          # No basename fallback is permitted.
-          material_root=Path('probe_out/materials')
-          material_docs={}
-          for p in material_root.rglob('*.json'):
-              try: doc=json.loads(p.read_text())
-              except Exception: continue
-              if doc.get('_game')!='t6' or doc.get('_type')!='material': continue
-              identity=p.relative_to(material_root).with_suffix('').as_posix()
-              if identity in material_docs: raise SystemExit(f'duplicate material identity {identity}')
-              material_docs[identity]={'path':str(p),'doc':doc}
-
-          def first_semantic(textures, semantic):
-              return next(((i,t) for i,t in enumerate(textures) if str(t.get('semantic') or '')==semantic), None)
-
-          bindings=[]; all_first=[]; unresolved=[]; non_alias_first=[]
-          role_specs=(('colorMap','baseColorTexture',2),('normalMap','normalTexture',5))
-          for material in sorted(retained):
-              rec=material_docs.get(material)
-              if rec is None:
-                  unresolved.append(material); continue
-              textures=rec['doc'].get('textures',[])
-              if not isinstance(textures,list): raise SystemExit(f'{material}: textures is not a list')
-              for oat_sem,role,raw_sem in role_specs:
-                  hit=first_semantic(textures,oat_sem)
-                  if hit is None: continue
-                  ti,t=hit; image=str(t.get('image') or '')
-                  row={'material':material,'materialJson':rec['path'],'textureIndex':ti,'oatSemantic':oat_sem,'rawSemantic':raw_sem,'gltfRole':role,'image':image,'samplerState':t.get('samplerState')}
-                  all_first.append(row)
-                  alias=aliases.get(image)
-                  if alias is None:
-                      non_alias_first.append(row); continue
-                  # Independent cross-check: alias-bank raw semantic/slot must
-                  # agree with the first retail OAT texture-table occurrence.
-                  if int(alias['semantic'])!=raw_sem:
-                      raise SystemExit(f'{material} {role}: alias semantic {alias["semantic"]} != {raw_sem}')
-                  if int(alias['slot'])!=ti:
-                      raise SystemExit(f'{material} {role}: alias slot {alias["slot"]} != OAT textureIndex {ti}')
-                  row.update({'aliasHash':alias['hash'],'aliasDataHash':alias['dataHash'],'aliasVirtualOffset':alias['virtualOffset'],'aliasBlock':alias['block'],'baseIpakExact43':image in exact43,'aliasEvidence':alias.get('evidence',[])})
-                  bindings.append(row)
-
-          def counts(rows):
-              c=collections.Counter(r['gltfRole'] for r in rows)
-              return {'bindings':len(rows),'baseColorTexture':c['baseColorTexture'],'normalTexture':c['normalTexture'],'uniqueImages':len({r['image'] for r in rows}),'uniqueMaterials':len({r['material'] for r in rows})}
-          exact_rows=[r for r in bindings if r['baseIpakExact43']]
-          missing_rows=[r for r in bindings if not r['baseIpakExact43']]
-          report={
-              'format':'t6-nuketown-exact-alias-role-plan-v2',
-              'source':{
-                  'retailFfSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
-                  'oatRelease':'v0.33.0','oatReleaseSha256':'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864',
-                  'aliasBankDecompressedSha256':'81da675a887dbeb1f54e1450781db46345c0ba81d5a02eee0a32569d6a85ea0e',
-              },
-              'retainedMaterialCount':len(retained),'oatMaterialJsonCount':len(material_docs),
-              'resolvedRetainedMaterialCount':len(retained)-len(unresolved),'unresolvedRetainedMaterials':unresolved,
-              'aliasBankAvailability':bank['availability'],
-              'firstSemanticRoleCount':counts(all_first),'aliasBackedFirstSemanticRoleCount':counts(bindings),
-              'baseIpakExact43FirstSemanticRoleCount':counts(exact_rows),'aliasBackedButNotBaseExact43Count':counts(missing_rows),
-              'bindings':bindings,'baseIpakExact43Bindings':exact_rows,'nonAliasFirstSemanticRoles':non_alias_first,
-              'proofBoundary':'For each exact retained Material identity, mirror the historical v8 rule: select only the first retail texture-table colorMap (raw semantic 2) and first normalMap (raw semantic 5). Promotion exists only if that exact first image is an 81-bank alias; the bank raw semantic and slot must independently equal the OAT semantic role and texture index. No filename suffix, basename, same-name, or later-slot substitution is allowed.',
-          }
-          out=Path('NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V2.json'); out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
-          print(json.dumps({k:report[k] for k in ('retainedMaterialCount','resolvedRetainedMaterialCount','unresolvedRetainedMaterials','firstSemanticRoleCount','aliasBackedFirstSemanticRoleCount','baseIpakExact43FirstSemanticRoleCount','aliasBackedButNotBaseExact43Count')},indent=2))
-          print('EXACT43 FIRST-SEMANTIC BINDINGS')
-          for r in exact_rows: print(r['gltfRole'],r['material'],r['image'])
-          PY
+          python tools/t6_nuketown_exact_alias_role_plan_v1.py \
+            --material-root probe_out/materials \
+            --proof manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64 \
+            --alias-bank manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64 \
+            --exact43-proof manifests/maps/mp_nuketown_2020/NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64 \
+            --out NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nuketown-exact-alias-role-plan-v2
+          name: nuketown-exact-alias-role-plan-v1
           path: |
-            NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V2.json
+            NUKETOWN_EXACT_ALIAS_ROLE_PLAN_V1.json
             oat-role-plan.log
           if-no-files-found: warn
           retention-days: 3
