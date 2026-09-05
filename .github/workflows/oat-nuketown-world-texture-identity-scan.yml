@@ -1,0 +1,108 @@
+name: oat-nuketown-world-texture-identity-scan
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - tools/t6_oat_gfxworld_world_layout_probe.cpp
+      - tools/t6_oat_texture_layout_probe.cpp
+      - tools/t6_oat_external_gfxworld_texture_scan.py
+      - .github/workflows/oat-nuketown-world-texture-identity-scan.yml
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib gcc-multilib
+          python -m pip install --disable-pip-version-check gdown
+      - name: Pin OAT and compile exact x86 layouts
+        run: |
+          git clone --branch v0.33.0 --depth 1 https://github.com/Laupetin/OpenAssetTools.git oat-src
+          test "$(git -C oat-src rev-parse HEAD)" = "7d027e8f89118196713e955b0e11f8404149c54d"
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common tools/t6_oat_gfxworld_world_layout_probe.cpp -o world-layout-probe
+          g++ -m32 -std=c++23 -DARCH_x86 -Ioat-src/src/Common tools/t6_oat_texture_layout_probe.cpp -o texture-layout-probe
+          ./world-layout-probe > GFXWORLD_WORLD_LAYOUT_X86_V1.json
+          ./texture-layout-probe > T6_TEXTURE_LAYOUT_X86_V1.json
+          cat T6_TEXTURE_LAYOUT_X86_V1.json
+      - name: Fetch exact retail Nuketown FF and stock OAT
+        run: |
+          gdown 1NuNJcsDBDwvIyaRDTLvYO4ySVWPeQYCh -O mp_nuketown_2020.ff
+          test "$(stat -c %s mp_nuketown_2020.ff)" = "38472064"
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  mp_nuketown_2020.ff' | sha256sum -c -
+          curl -L --fail --retry 3 -o oat-linux.tar.gz https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz
+          echo 'aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864  oat-linux.tar.gz' | sha256sum -c -
+          mkdir oat oat_dump
+          tar -xzf oat-linux.tar.gz -C oat
+          UNLINKER=$(find oat -type f -name Unlinker | head -1)
+          test -n "$UNLINKER" && chmod +x "$UNLINKER"
+          echo "$UNLINKER" > unlinker-path.txt
+      - name: Freeze retail world and recover exact material/image identities
+        run: |
+          UNLINKER=$(cat unlinker-path.txt)
+          python tools/t6_oat_external_gfxworld_texture_scan.py \
+            --world-layout GFXWORLD_WORLD_LAYOUT_X86_V1.json \
+            --texture-layout T6_TEXTURE_LAYOUT_X86_V1.json \
+            --out NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json \
+            --diag NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1_DIAGNOSTICS.json \
+            --timeout 30 \
+            -- \
+            "$UNLINKER" mp_nuketown_2020.ff --output-folder oat_dump --model-format GLB --verbose
+      - name: Cross-check exact role/name inventory against OAT material JSON
+        run: |
+          python - <<'PY'
+          import json,re
+          from pathlib import Path
+          d=json.load(open('NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json'))
+          assert d['materialCount']==327
+          assert d['uniqueImageCount']==423
+          assert len(d['images'])==423
+          assert all(x['imageHash'] is not None for x in d['images'])
+          root=Path('oat_dump/materials')
+          checked=0; entries=0; semantic_mismatch=[]; image_mismatch=[]
+          for m in d['materials']:
+              n=m['name']
+              if n.startswith('*'):
+                  token=n[1:].split('(',1)[0]
+                  p=root/'generated'/('_'+token+'.json')
+              else:
+                  p=root/(n+'.json')
+              if not p.exists():
+                  raise SystemExit(f'missing exact OAT material JSON: {n} -> {p}')
+              j=json.load(open(p)); jt=j.get('textures',[]); lt=m['textures']
+              if len(jt)!=len(lt): raise SystemExit(f'{n}: texture count {len(jt)} != live {len(lt)}')
+              for i,(a,b) in enumerate(zip(jt,lt)):
+                  if a.get('image')!=b['image']: image_mismatch.append((n,i,a.get('image'),b['image']))
+              checked+=1; entries+=len(lt)
+          assert not image_mismatch, image_mismatch[:20]
+          assert checked==327
+          assert entries==d['textureEntryCount']
+          print({'materials':checked,'textureEntries':entries,'uniqueImages':423,'imageOrderMismatches':0})
+          PY
+      - name: Summarize recoverability primitives
+        run: |
+          python - <<'PY'
+          import json,collections
+          d=json.load(open('NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json'))
+          imgs=d['images']
+          print(json.dumps({
+            'uniqueImages':len(imgs),
+            'streamingFlags':dict(collections.Counter(x['streaming'] for x in imgs)),
+            'streamedPartCounts':dict(collections.Counter(x['streamedPartCountRaw'] for x in imgs)),
+            'streamedWithExactHash':sum(bool(x['streamedPart0']) for x in imgs),
+            'nonstreaming':sum(not x['streamedPartCountRaw'] for x in imgs),
+          },indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-world-texture-identities-live-v1
+          path: |
+            T6_TEXTURE_LAYOUT_X86_V1.json
+            NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.json
+            NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1_DIAGNOSTICS.json
+            NUKETOWN_WORLD_TEXTURE_IDENTITIES_LIVE_V1.target.log
+          retention-days: 7
