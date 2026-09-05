@@ -1,0 +1,122 @@
+name: nuketown-live-world-geometry-export
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - tools/t6_world_vertex_audit_live_v1.py
+      - .github/workflows/nuketown-live-world-geometry-export.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact frozen retail GfxWorld streams
+        run: |
+          mkdir -p input
+          gh run download 33940645863 -n nuketown-gfxworld-live-streams-v1 -D input
+          test -s input/world_raw/gfxworld.surfaces.json
+          test -s input/world_raw/gfxworld.vd0.bin
+          test -s input/world_raw/gfxworld.vd1.bin
+          test -s input/world_raw/gfxworld.indices.bin
+          echo '7a5be06b14564a2dafd065d77204ff808e7cbbaac1ab0f06f1c6ef3f3e29ca76  input/world_raw/gfxworld.vd0.bin' | sha256sum -c -
+          echo '77018ac13744f39244f29ce2c4cce0f0eb1204071a679654bd4eb67374537897  input/world_raw/gfxworld.vd1.bin' | sha256sum -c -
+          echo '70344c3cfbc8eb12a2e29b37deb55b5767a33b5b97beb3681215bf393c346fa7  input/world_raw/gfxworld.indices.bin' | sha256sum -c -
+
+      - name: Rebuild zero-error world vertex proof directly from live material formats
+        run: |
+          python tools/t6_world_vertex_audit_live_v1.py \
+            --map mp_nuketown_2020 \
+            --surfaces input/world_raw/gfxworld.surfaces.json \
+            --vd0 input/world_raw/gfxworld.vd0.bin \
+            --vd1 input/world_raw/gfxworld.vd1.bin \
+            --out T6_NUKETOWN_WORLD_VERTEX_PROOF_LIVE_V1.json
+          python - <<'PY'
+          import json
+          p=json.load(open('T6_NUKETOWN_WORLD_VERTEX_PROOF_LIVE_V1.json'))
+          assert p['surfaceCount']==5614
+          assert p['uniqueVertexGroups']==340
+          assert p['badGroupCount']==0, p['badGroups'][:10]
+          assert p['observedFormatGroupCounts']=={'0':220,'1':95,'2':7,'3':17,'6':1}, p['observedFormatGroupCounts']
+          assert p['vd0Bytes']==5285088 and p['vd1Bytes']==33764
+          print('live vertex proof: PASS')
+          PY
+
+      - name: Normalize exact retail world mesh
+        run: |
+          python tools/t6_world_mesh_normalize_v1.py \
+            --surfaces input/world_raw/gfxworld.surfaces.json \
+            --vd0 input/world_raw/gfxworld.vd0.bin \
+            --vd1 input/world_raw/gfxworld.vd1.bin \
+            --indices input/world_raw/gfxworld.indices.bin \
+            --vertex-proof T6_NUKETOWN_WORLD_VERTEX_PROOF_LIVE_V1.json \
+            --out mp_nuketown_2020.world_normalized_live_v1.json
+          python - <<'PY'
+          import json
+          w=json.load(open('mp_nuketown_2020.world_normalized_live_v1.json'))
+          s=w['stats']
+          assert s['surfaceCount']==5614
+          assert s['vertexGroupCount']==340
+          assert s['serializedVertexCount']==146764
+          assert s['topVertexCount']==146764
+          assert s['inputIndexCount']==300840
+          assert s['worldVertFormatGroupCounts']=={'0':220,'1':95,'2':7,'3':17,'6':1}
+          assert s['referencedIndexCount']==s['triangleCount']*3
+          assert s['uniqueReferencedIndexPositions']<=300840
+          assert s['triangleCount']>0
+          print(json.dumps(s,indent=2))
+          PY
+
+      - name: Export full 5614-surface geometry GLB
+        run: |
+          python tools/t6_world_gltf_export_v1.py \
+            mp_nuketown_2020.world_normalized_live_v1.json \
+            mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb \
+            | tee WORLD_GLTF_EXPORT_V1.log
+
+      - name: Independently inspect full world GLB
+        run: |
+          python - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          p=Path('mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb')
+          b=p.read_bytes(); magic,ver,total=struct.unpack_from('<4sII',b,0)
+          assert magic==b'glTF' and ver==2 and total==len(b)
+          n,t=struct.unpack_from('<I4s',b,12); assert t==b'JSON'
+          g=json.loads(b[20:20+n].rstrip(b' \0'))
+          stats=g['extras']['T6']['exportStats']
+          assert stats['groupCount']==340
+          assert stats['primitiveCount']==5614
+          assert stats['vertexCount']==146764
+          assert len(g['materials'])==327
+          assert len(g['meshes'])==340
+          assert len(g['nodes'])==340
+          assert len(g['scenes'][0]['nodes'])==340
+          assert all('children' not in n for n in g['nodes'])
+          assert stats['triangleCount']>0
+          summary={
+            'format':'t6-nuketown-full-world-geometry-live-v1',
+            'file':p.name,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),
+            'groups':340,'surfaces':5614,'sourceVertices':146764,
+            'materials':327,'triangles':stats['triangleCount'],
+            'boundsMeters':stats['boundsMeters'],
+            'blenderHierarchy':'flat world nodes; no mega-root parenting',
+          }
+          Path('NUKETOWN_FULL_WORLD_GEOMETRY_LIVE_V1.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-full-gfxworld-geometry-live-v1
+          path: |
+            mp_nuketown_2020.GFXWORLD_FULL_GEOMETRY_LIVE_v1.glb
+            NUKETOWN_FULL_WORLD_GEOMETRY_LIVE_V1.json
+            T6_NUKETOWN_WORLD_VERTEX_PROOF_LIVE_V1.json
+            WORLD_GLTF_EXPORT_V1.log
+          retention-days: 7
