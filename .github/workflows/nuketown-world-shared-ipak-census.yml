@@ -1,0 +1,103 @@
+name: nuketown-world-shared-ipak-census
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-world-shared-ipak-census.yml
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json
+permissions:
+  contents: write
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe remaining live world images in shared retail IPAKs
+        run: |
+          python - <<'PY'
+          import json,struct,urllib.error,urllib.request
+          from collections import defaultdict
+          from pathlib import Path
+
+          BASE=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_BASE_IPAK_CENSUS_V1.json')
+          OUT=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_SHARED_IPAK_CENSUS_V1.json')
+          SOURCES=[
+              ('mp','https://r2.houseofkublai.com/bo2/zone/all/mp.ipak'),
+              ('so','https://r2.houseofkublai.com/bo2/zone/all/so.ipak'),
+              ('en_base','https://r2.houseofkublai.com/bo2/zone/all/en_base.ipak'),
+          ]
+
+          base=json.loads(BASE.read_text())
+          base_rows={r['image']:r for r in base['rows']}
+          unresolved=[u['image'] for u in base['union'] if u['unionState']=='unresolved']
+          assert len(unresolved)==65
+          targets=[base_rows[n] for n in unresolved]
+
+          def rg(url,a,b):
+              q=urllib.request.Request(url,headers={'Range':f'bytes={a}-{b}','User-Agent':'bo2-t6-assets-world-shared-census/1'})
+              with urllib.request.urlopen(q,timeout=60) as r:
+                  if r.status!=206: raise RuntimeError(f'range not honored: HTTP {r.status}')
+                  d=r.read(); cr=r.headers.get('Content-Range','')
+              if len(d)!=b-a+1: raise RuntimeError(f'range length mismatch: {cr}')
+              return d,cr
+
+          reports=[]
+          remaining=set(unresolved)
+          resolved_by={}
+          for label,url in SOURCES:
+              rec={'label':label,'url':url}
+              try:
+                  head,hcr=rg(url,0,65535)
+                  magic,ver,total,sc=struct.unpack_from('<4sIII',head,0)
+                  if magic!=b'KAPI' or ver!=0x50000: raise ValueError(f'invalid T6 IPAK {magic!r} {ver:#x}')
+                  secs=[struct.unpack_from('<IIII',head,16+16*i) for i in range(sc)]
+                  ix=[s for s in secs if s[0]==1]; ds=[s for s in secs if s[0]==2]
+                  if len(ix)!=1 or len(ds)!=1: raise ValueError('expected one index and one data section')
+                  _,ioff,isz,n=ix[0]
+                  if n*16>isz: raise ValueError('index exceeds section')
+                  raw,icr=rg(url,ioff,ioff+n*16-1)
+                  entries=[struct.unpack_from('<IIII',raw,16*i) for i in range(n)]
+                  by_pair=defaultdict(list); by_data=defaultdict(list); by_name=defaultdict(list)
+                  for e in entries:
+                      dh,nh,rel,size=e; by_pair[(nh,dh)].append(e); by_data[dh].append(e); by_name[nh].append(e)
+                  rows=[]; counts=defaultdict(int); additions=[]
+                  for t in targets:
+                      nh=int(t['nameHash']); dh=int(t['dataHash29'])
+                      exact=by_pair[(nh,dh)]; data=by_data[dh]; name=by_name[nh]
+                      if len(exact)==1: state='exact-pair'; chosen=exact[0]
+                      elif len(exact)>1: state='ambiguous-exact-pair'; chosen=None
+                      elif len(data)==1: state='unique-data-hash'; chosen=data[0]
+                      elif len(data)>1: state='ambiguous-data-hash'; chosen=None
+                      elif name: state='name-hash-only'; chosen=None
+                      else: state='absent'; chosen=None
+                      counts[state]+=1
+                      if t['image'] in remaining and state in ('exact-pair','unique-data-hash'):
+                          remaining.remove(t['image']); resolved_by[t['image']]=label; additions.append(t['image'])
+                      rows.append({'image':t['image'],'nameHash':nh,'dataHash29':dh,'width':t['width'],'height':t['height'],'depth':t['depth'],'state':state,'chosenEntry':list(chosen) if chosen else None,'exactPairCount':len(exact),'dataHashEntryCount':len(data),'nameHashEntryCount':len(name)})
+                  rec.update({'status':'scanned','bytes':total,'indexEntryCount':n,'headContentRange':hcr,'indexContentRange':icr,'networkBytes':len(head)+len(raw),'summary':dict(sorted(counts.items())),'newUnionAdditions':len(additions),'newUnionImages':sorted(additions),'rows':rows})
+              except Exception as exc:
+                  rec.update({'status':'unavailable','error':f'{type(exc).__name__}: {exc}','newUnionAdditions':0,'newUnionImages':[]})
+              reports.append(rec)
+
+          union={
+              'mapCovered':171,
+              'baseAdditional':185,
+              'sharedAdditional':len(resolved_by),
+              'totalCovered':356+len(resolved_by),
+              'unresolved':len(remaining),
+              'coverageFraction':(356+len(resolved_by))/421,
+          }
+          assert union['totalCovered']+union['unresolved']==421
+          report={'format':'t6-nuketown-live-world-shared-ipak-census-v1','inputUnresolvedCount':65,'sources':reports,'resolvedBySource':dict(sorted(resolved_by.items())),'remainingImages':sorted(remaining),'unionSummary':union,'proofBoundary':'Only the 65 images unresolved after the exact retail map IPAK plus shared base.ipak census are considered. A shared container resolves an image only through one exact nameHash+streamedPart-dataHash pair or one unique dataHash entry. Name-only and ambiguous hits remain rejected. Payload extraction and CRC29/IWI/dimension verification are still required before GLB binding.'}
+          OUT.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'unionSummary':union,'sources':[{k:r.get(k) for k in ('label','status','bytes','indexEntryCount','summary','newUnionAdditions','error') if k in r} for r in reports]},indent=2,sort_keys=True))
+          PY
+      - name: Checkpoint shared-container census
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_SHARED_IPAK_CENSUS_V1.json
+          git diff --cached --check
+          git commit -m 'Checkpoint Nuketown world shared-IPAK census'
+          git push origin HEAD:base-ipak-r2-recovery
