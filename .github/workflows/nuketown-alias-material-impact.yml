@@ -1,0 +1,106 @@
+name: nuketown-alias-material-impact
+on:
+  push:
+    branches: [base-ipak-r2-recovery]
+    paths:
+      - .github/workflows/nuketown-alias-material-impact.yml
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64
+      - manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64
+      - manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Intersect exact payload aliases with retained material definitions
+        run: |
+          python - <<'PY'
+          import base64,collections,hashlib,json,zlib
+          from pathlib import Path
+
+          root=Path('manifests/maps/mp_nuketown_2020')
+          def zjson(name):
+              return json.loads(zlib.decompress(base64.b64decode((root/name).read_text().strip())))
+
+          bank=zjson('NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          exact=zjson('NUKETOWN_BASE_IPAK_EXACT43_PROOF_V1.json.zlib.b64')
+          proof=zjson('T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V2.json.zlib.b64')
+          materials={m for model in proof['models'] for m in model['materials']}
+          assert len(materials)==344
+          exact_names={r['name'] for r in exact['rows']}
+          assert len(exact_names)==43
+          by_name={a['name']:a for a in bank['aliases']}
+          assert exact_names <= set(by_name)
+
+          def binding_class(alias):
+              s=int(alias['semantic'])
+              if s==5: return 'normal'
+              if s==2: return 'color-like'
+              return 'non-pbr-semantic'
+
+          rows=[]
+          for a in bank['aliases']:
+              matched=[]
+              seen=set()
+              for ev_i,ev in enumerate(a.get('evidence',[])):
+                  for role in ('inlineMaterial','packedMaterial'):
+                      mat=ev.get(role)
+                      if mat in materials and mat not in seen:
+                          seen.add(mat)
+                          matched.append({'material':mat,'evidenceIndex':ev_i,'evidenceRole':role})
+              rows.append({
+                  'name':a['name'],'hash':a['hash'],'dataHash':a['dataHash'],
+                  'semantic':a['semantic'],'slot':a['slot'],'suffix':a['suffix'],
+                  'bindingClass':binding_class(a),
+                  'baseIpakExact43':a['name'] in exact_names,
+                  'retainedMaterialUseCount':len(matched),
+                  'retainedMaterialUses':matched,
+                  'evidence':a.get('evidence',[]),
+              })
+
+          def summarize(sub):
+              aliases=list(sub)
+              counts=collections.Counter(r['bindingClass'] for r in aliases)
+              uses=collections.Counter()
+              material_sets=collections.defaultdict(set)
+              for r in aliases:
+                  uses[r['bindingClass']]+=r['retainedMaterialUseCount']
+                  for u in r['retainedMaterialUses']:
+                      material_sets[r['bindingClass']].add(u['material'])
+              return {
+                  'aliasCount':len(aliases),
+                  'aliasCountsByClass':dict(sorted(counts.items())),
+                  'materialUseCountsByClass':dict(sorted(uses.items())),
+                  'uniqueRetainedMaterialsByClass':{k:len(v) for k,v in sorted(material_sets.items())},
+                  'aliasesWithNoRetainedMaterialUse':sum(not r['retainedMaterialUses'] for r in aliases),
+              }
+
+          exact_rows=[r for r in rows if r['baseIpakExact43']]
+          exact_pbr=[r for r in exact_rows if r['bindingClass'] in ('color-like','normal')]
+          all_pbr=[r for r in rows if r['bindingClass'] in ('color-like','normal')]
+          report={
+              'format':'t6-nuketown-alias-material-impact-v1',
+              'retainedMaterialCount':len(materials),
+              'aliasBankCount':len(rows),
+              'baseIpakExactAliasCount':len(exact_rows),
+              'allAliases':summarize(rows),
+              'allPbrRelevantAliases':summarize(all_pbr),
+              'baseIpakExactAliases':summarize(exact_rows),
+              'baseIpakExactPbrRelevantAliases':summarize(exact_pbr),
+              'rows':rows,
+              'proofBoundary':'A material use is emitted only when the exact material string from an alias cross-family evidence record occurs in the retained 344-material definition proof. Semantic 5 is classified as normal. Semantic 2 is reported as color-like but is not yet forced into baseColorTexture; semantic 8 is kept separate. No same-name fallback is used.',
+          }
+          Path('NUKETOWN_ALIAS_MATERIAL_IMPACT_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:report[k] for k in ('allPbrRelevantAliases','baseIpakExactAliases','baseIpakExactPbrRelevantAliases')},indent=2))
+          print('EXACT PBR USES')
+          for r in exact_pbr:
+              if r['retainedMaterialUses']:
+                  print(r['bindingClass'],r['name'],'=>',[u['material'] for u in r['retainedMaterialUses']])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-alias-material-impact-v1
+          path: NUKETOWN_ALIAS_MATERIAL_IMPACT_V1.json
+          retention-days: 2
