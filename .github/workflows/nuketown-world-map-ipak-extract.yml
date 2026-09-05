@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/nuketown-world-map-ipak-extract.yml
       - tools/t6_nuketown_world_ipak_extract_v1.py
+      - tools/t6_iwi27_png_v1.py
       - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_MAP_IPAK_CENSUS_V1.json
       - manifests/maps/mp_nuketown_2020/NUKETOWN_WORLD_TEXTURE_IDENTITIES_CANONICAL_V1.json.zlib.b64
 permissions:
@@ -19,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq liblzo2-2
-          python -m pip install --disable-pip-version-check gdown pillow
+          python -m pip install --disable-pip-version-check gdown pillow numpy
       - name: Fetch exact retail Nuketown map IPAK
         run: |
           gdown 1c_1AtuWrwlcOuqYfh7R2w8lUxWH1jgCC -O mp_nuketown_2020.ipak
