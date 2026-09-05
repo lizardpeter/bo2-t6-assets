@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Resolve a T6 first-person benchmark against retained retail evidence.
 
-The planner joins three independently checkable things:
-  benchmark spec -> exact XModel target probes -> exact/normalized XAnim records.
+The planner joins independently checkable evidence:
+  benchmark spec
+    -> exact raw XModel target probes
+    -> provenance-pinned OAT T6 XModel descriptors/classification
+    -> exact/normalized XAnim records.
 
-It never promotes external discovery references.  A model is retail-resolved only
-when a t6-xmodel-target-probe-v1 input contains status=exact_inline_xmodel for the
-exact name.  An animation is retail-resolved only when it occurs in an explicitly
-supplied XAnim JSON artifact (raw proof output or normalized XAnim sidecar).
-
-This is intentionally a closure planner rather than an exporter.  Its output is
-a machine-readable list of what can be exported now and what exact dependency is
-still missing.
+External discovery references in the benchmark never count as retail proof.
+Direct raw probes and OAT catalogs only count when tied to retained retail source
+hashes.  `viewhands` classification is accepted from pinned OAT because that
+classification is derived from native XModel structure, not filename heuristics.
 """
 from __future__ import annotations
 
@@ -84,10 +83,54 @@ def load_model_probes(paths: list[Path]) -> tuple[dict[str, list[dict[str, Any]]
             if not isinstance(name, str):
                 continue
             evidence = dict(row)
-            evidence["probePath"] = str(path)
-            evidence["retailStreamSha256"] = source.get("sha256")
+            evidence.update({
+                "evidenceKind": "direct-raw-xmodel",
+                "probePath": str(path),
+                "retailStreamSha256": source.get("sha256"),
+            })
             by_name.setdefault(name, []).append(evidence)
     return by_name, sources
+
+
+def load_oat_xmodels(paths: list[Path]) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    sources = []
+    for path in paths:
+        doc = read_json(path)
+        if doc.get("format") != "t6-oat-xmodel-catalog-v1":
+            raise ValueError(f"{path}: not t6-oat-xmodel-catalog-v1")
+        source = doc.get("source", {})
+        source_sha = source.get("retailSourceSha256")
+        if not isinstance(source_sha, str) or len(source_sha) != 64:
+            raise ValueError(f"{path}: OAT catalog lacks pinned retail source SHA-256")
+        sources.append({
+            "path": str(path),
+            "sha256": sha256(path),
+            "zoneName": source.get("zoneName"),
+            "retailSourceSha256": source_sha,
+            "oatCommit": doc.get("producer", {}).get("commit"),
+        })
+        for row in doc.get("models", []):
+            name = row.get("name")
+            if not isinstance(name, str):
+                continue
+            evidence = dict(row)
+            evidence.update({
+                "evidenceKind": "pinned-oat-xmodel",
+                "catalogPath": str(path),
+                "retailStreamSha256": source_sha,
+                "zoneName": source.get("zoneName"),
+            })
+            by_name.setdefault(name, []).append(evidence)
+    return by_name, sources
+
+
+def merge_evidence(*sources: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for source in sources:
+        for name, rows in source.items():
+            out.setdefault(name, []).extend(rows)
+    return out
 
 
 def load_xanims(paths: list[Path]) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
@@ -106,11 +149,12 @@ def load_xanims(paths: list[Path]) -> tuple[dict[str, list[dict[str, Any]]], lis
         useful = [r for r in records if r["name"].startswith("viewmodel_") or str(r["record"].get("format", "")).startswith("t6-xanim")]
         if not useful:
             continue
-        sources.append({"path": str(path), "sha256": sha256(path), "namedRecordCount": len(useful)})
+        source_hash = sha256(path)
+        sources.append({"path": str(path), "sha256": source_hash, "namedRecordCount": len(useful)})
         for item in useful:
             evidence = {
                 "source": item["source"],
-                "sourceSha256": sha256(path),
+                "sourceSha256": source_hash,
                 "format": item["record"].get("format"),
                 "rawStructOffset": item["record"].get("raw_struct_offset", item["record"].get("rawStructOffset")),
                 "numframes": item["record"].get("numframes", item["record"].get("numFrames")),
@@ -122,10 +166,28 @@ def load_xanims(paths: list[Path]) -> tuple[dict[str, list[dict[str, Any]]], lis
     return by_name, sources
 
 
+EXPECTED_OAT_TYPES = {
+    "viewhands": {"viewhands"},
+    "human-third-person": {"animated"},
+}
+
+
+def class_validation(expected_class: str | None, hits: list[dict[str, Any]]) -> dict[str, Any]:
+    allowed = EXPECTED_OAT_TYPES.get(expected_class or "")
+    oat_types = sorted({h.get("type") for h in hits if h.get("evidenceKind") == "pinned-oat-xmodel" and h.get("type")})
+    if allowed is None:
+        return {"required": False, "status": "not-required", "oatTypes": oat_types}
+    if not oat_types:
+        return {"required": True, "status": "unvalidated", "allowedOatTypes": sorted(allowed), "oatTypes": []}
+    ok = all(t in allowed for t in oat_types)
+    return {"required": True, "status": "validated" if ok else "contradiction", "allowedOatTypes": sorted(allowed), "oatTypes": oat_types}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec", type=Path, required=True)
     ap.add_argument("--xmodel-probe", type=Path, action="append", default=[])
+    ap.add_argument("--oat-xmodel-catalog", type=Path, action="append", default=[])
     ap.add_argument("--xanim-json", type=Path, action="append", default=[])
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
@@ -133,22 +195,33 @@ def main() -> int:
     spec = read_json(args.spec)
     if spec.get("format") != "t6-first-person-benchmark-spec-v1":
         raise ValueError("unsupported benchmark spec")
-    model_evidence, model_sources = load_model_probes(args.xmodel_probe)
+    raw_models, raw_model_sources = load_model_probes(args.xmodel_probe)
+    oat_models, oat_model_sources = load_oat_xmodels(args.oat_xmodel_catalog)
+    model_evidence = merge_evidence(raw_models, oat_models)
     xanim_evidence, xanim_sources = load_xanims(args.xanim_json)
 
     model_rows = []
     for target in spec.get("models", []):
         name = target["name"]
         hits = model_evidence.get(name, [])
+        expected_class = target.get("expectedClass")
+        class_check = class_validation(expected_class, hits)
+        raw_hit = any(h.get("evidenceKind") == "direct-raw-xmodel" for h in hits)
+        oat_hit = any(h.get("evidenceKind") == "pinned-oat-xmodel" for h in hits)
+        source_hashes = {h.get("retailStreamSha256") for h in hits if h.get("retailStreamSha256")}
         model_rows.append({
             "role": target.get("role"),
             "name": name,
             "required": bool(target.get("required", True)),
-            "expectedClass": target.get("expectedClass"),
+            "expectedClass": expected_class,
             "status": "retail-resolved" if hits else "unresolved",
+            "directRawEvidence": raw_hit,
+            "oatEvidence": oat_hit,
+            "crossValidatedRawAndOat": raw_hit and oat_hit,
+            "classValidation": class_check,
             "retailEvidenceCount": len(hits),
             "retailEvidence": hits,
-            "requiresSourcePrecedenceSelection": len({h.get("retailStreamSha256") for h in hits}) > 1,
+            "requiresSourcePrecedenceSelection": len(source_hashes) > 1,
         })
 
     anim_spec = spec.get("animations", {})
@@ -171,14 +244,21 @@ def main() -> int:
     family_count_ok = len(family_names) >= expected_family_count if expected_family_count else True
     normalized_core = [r["name"] for r in core_rows if r["hasNormalizedXAnim"]]
     duplicate_layer_models = [r["name"] for r in model_rows if r["requiresSourcePrecedenceSelection"]]
+    class_unvalidated = [r["name"] for r in model_rows if r["required"] and r["classValidation"]["status"] == "unvalidated"]
+    class_contradictions = [r["name"] for r in model_rows if r["required"] and r["classValidation"]["status"] == "contradiction"]
 
     identity_gate = not unresolved_models and not unresolved_core and family_count_ok
+    model_class_gate = not class_unvalidated and not class_contradictions
     normalized_animation_gate = len(normalized_core) == len(core_rows) and bool(core_rows)
-    ready_for_bundle_export = identity_gate and normalized_animation_gate and not duplicate_layer_models
+    ready_for_bundle_export = identity_gate and model_class_gate and normalized_animation_gate and not duplicate_layer_models
 
     next_actions = []
     if unresolved_models:
-        next_actions.append({"action": "probe-retail-xmodels", "identities": unresolved_models})
+        next_actions.append({"action": "probe-or-dump-retail-xmodels", "identities": unresolved_models})
+    if class_unvalidated:
+        next_actions.append({"action": "run-pinned-oat-xmodel-catalog-for-structural-classification", "identities": class_unvalidated})
+    if class_contradictions:
+        next_actions.append({"action": "investigate-model-classification-contradiction", "identities": class_contradictions})
     if duplicate_layer_models:
         next_actions.append({"action": "resolve-base-patch-precedence", "identities": duplicate_layer_models})
     if unresolved_core:
@@ -188,7 +268,7 @@ def main() -> int:
     missing_normalized = [r["name"] for r in core_rows if r["status"] == "retail-resolved" and not r["hasNormalizedXAnim"]]
     if missing_normalized:
         next_actions.append({"action": "normalize-retail-xanims", "identities": missing_normalized})
-    if identity_gate:
+    if identity_gate and model_class_gate:
         next_actions.append({"action": "run-character-bundle-export", "note": "export model/skeleton/material sidecars and v7 animations; dependency gates remain separate"})
 
     out = {
@@ -198,10 +278,16 @@ def main() -> int:
             "externalDiscoveryEvidenceNeverCountsAsRetailResolution": True,
             "exactModelIdentityRequired": True,
             "exactAnimationIdentityRequired": True,
+            "oatCatalogRequiresPinnedRetailSourceHash": True,
+            "viewhandsClassificationUsesNativeOatStructuralRule": True,
             "patchLayerDuplicatesRemainExplicit": True,
             "normalizedXAnimRequiredBeforeBundleAnimationExport": True,
         },
-        "sources": {"xmodelProbes": model_sources, "xanimArtifacts": xanim_sources},
+        "sources": {
+            "rawXmodelProbes": raw_model_sources,
+            "oatXmodelCatalogs": oat_model_sources,
+            "xanimArtifacts": xanim_sources,
+        },
         "models": model_rows,
         "animations": {
             "familyPrefix": prefix,
@@ -217,12 +303,15 @@ def main() -> int:
             "requiredModels": sum(r["required"] for r in model_rows),
             "resolvedRequiredModels": sum(r["required"] and r["status"] == "retail-resolved" for r in model_rows),
             "unresolvedRequiredModels": unresolved_models,
+            "classUnvalidatedModels": class_unvalidated,
+            "classContradictions": class_contradictions,
             "requiredCoreAnimations": len(core_rows),
             "resolvedCoreAnimations": sum(r["status"] == "retail-resolved" for r in core_rows),
             "normalizedCoreAnimations": len(normalized_core),
             "unresolvedCoreAnimations": unresolved_core,
             "familyCountSatisfied": family_count_ok,
             "retailIdentityGate": identity_gate,
+            "modelClassGate": model_class_gate,
             "normalizedAnimationGate": normalized_animation_gate,
             "readyForBundleExport": ready_for_bundle_export,
         },
