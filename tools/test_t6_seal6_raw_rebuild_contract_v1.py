@@ -32,7 +32,7 @@ def main() -> int:
         "t6_xmodel_skeleton_normalize_v3.py",
         "t6_xmodel_mesh_normalize_v4.py",
         "t6_xanim_normalize_v1.py",
-        "t6_build_seal6_smg_textured_animated_all_lods_v3.ps1",
+        "t6_build_seal6_smg_textured_animated_all_lods_v4.ps1",
         FACTION_EXPANDED,
         COMMON_EXPANDED,
         "FactionExpandedBytes = 6245916",
@@ -48,6 +48,7 @@ def main() -> int:
         "SEAL6_FULL_RETAIL_BLENDER.zip",
         "t6-seal6-full-retail-rebuild-v1",
         "fastFilesPromotedByExpandedIdentity",
+        "ipakImagesPromotedByExactContentIdentity",
     ]
     missing = [x for x in required if x not in text]
     assert not missing, f"raw rebuild script missing required contract tokens: {missing}"
@@ -58,7 +59,7 @@ def main() -> int:
         assert f"frames={frames}" in text
         assert digest in text
 
-    # FastFile outer wrappers can differ across source packages.  Both zones are
+    # FastFile outer wrappers can differ across source packages. Both zones are
     # promoted only after exact decrypt/decompress reproduction of the pinned
     # expanded XFile identity; raw hashes remain provenance, never semantic IDs.
     assert "FactionRawSha256 = Get-Sha256" in text
@@ -67,6 +68,12 @@ def main() -> int:
     assert "Assert-FileIdentity $CommonMpFastfile" not in text
     assert "Assert-FileIdentity $FactionExpanded $FactionExpandedBytes $FactionExpandedSha256" in text
     assert "Assert-FileIdentity $CommonExpanded $CommonExpandedBytes $CommonExpandedSha256" in text
+
+    # IPAK container hashes remain provenance. The v4 package builder is the
+    # content-authoritative 42/42 exact-key + CRC/IWI gate across both repos.
+    assert "all-LOD v4 builder" in text
+    assert "ipakImagesPromotedByExactContentIdentity=$true" in text
+    assert "unique exact (retail filename hash, streamed dataHash)" in text
 
     # Never regress to old model normalizers or single-IPAK packaging.
     assert "t6_xmodel_mesh_normalize_v1.py" not in text
