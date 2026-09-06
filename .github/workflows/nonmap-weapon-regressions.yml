@@ -1,0 +1,42 @@
+name: Non-map weapon regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_virtual_front_map_v1.py"
+      - "tools/test_t6_virtual_front_map_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
+      - ".github/workflows/nonmap-weapon-regressions.yml"
+  pull_request:
+    paths:
+      - "tools/t6_virtual_front_map_v1.py"
+      - "tools/test_t6_virtual_front_map_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
+      - ".github/workflows/nonmap-weapon-regressions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: VIRTUAL front allocation mapper
+        run: python tools/test_t6_virtual_front_map_v1.py
+      - name: WEAPON structural probe v1
+        run: python tools/test_t6_weapon_xasset_structural_probe_v1.py
+      - name: WEAPON packed-front identity probe v2
+        run: python tools/test_t6_weapon_xasset_structural_probe_v2.py
