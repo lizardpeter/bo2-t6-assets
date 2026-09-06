@@ -1,0 +1,44 @@
+name: T6 GfxImage PC32 layout probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_gfximage_pc32_layout_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build exact 32-bit T6 GfxImage layout probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          cat >/tmp/layout.cpp <<'CPP'
+          #include <cstddef>
+          #include <cstdio>
+          #define ARCH_x86 1
+          #include "Game/T6/T6_Assets.h"
+          using namespace T6;
+          #define P(T,F) std::printf("%-30s +%zu\n", #T "." #F, offsetof(T,F))
+          int main(){
+            std::printf("GfxStreamedPartInfo size=%zu align=%zu\n",sizeof(GfxStreamedPartInfo),alignof(GfxStreamedPartInfo));
+            P(GfxStreamedPartInfo,levelCount); P(GfxStreamedPartInfo,levelSize); P(GfxStreamedPartInfo,hash);
+            std::printf("GfxImage size=%zu align=%zu\n",sizeof(GfxImage),alignof(GfxImage));
+            P(GfxImage,texture); P(GfxImage,mapType); P(GfxImage,semantic); P(GfxImage,category); P(GfxImage,flags);
+            P(GfxImage,picmip); P(GfxImage,track); P(GfxImage,cardMemory); P(GfxImage,width); P(GfxImage,height); P(GfxImage,depth);
+            P(GfxImage,hash); P(GfxImage,baseSize); P(GfxImage,pixels); P(GfxImage,streamedParts); P(GfxImage,streamedPartCount);
+            P(GfxImage,loadedSize); P(GfxImage,skippedMipLevels); P(GfxImage,name);
+            std::printf("GfxImageLoadDef size=%zu align=%zu\n",sizeof(GfxImageLoadDef),alignof(GfxImageLoadDef));
+            P(GfxImageLoadDef,resourceSize); P(GfxImageLoadDef,data);
+          }
+          CPP
+          g++ -m32 -std=c++20 -I/tmp/oat/src/Common /tmp/layout.cpp -o /tmp/layout
+          /tmp/layout
