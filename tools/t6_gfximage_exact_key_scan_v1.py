@@ -11,6 +11,10 @@ A strong streamed-image hit requires all of:
 A zero-metadata alias shell is retained separately when the fixed record is
 zero-filled apart from its inline-name pointer/hash area. It is not promoted to
 an IPAK key.
+
+Important: the byte before an inline GfxImage name is part of GfxImage.hash and
+is *not* required to be NUL. Exactness is established by the terminating NUL plus
+the validated 80-byte fixed record immediately preceding the string.
 """
 from __future__ import annotations
 import argparse, hashlib, json, struct
@@ -29,7 +33,7 @@ def sha(b:bytes)->str:return hashlib.sha256(b).hexdigest()
 
 def _exact_cstring(data:bytes,pos:int,name:str)->bool:
     b=name.encode('latin1')
-    return data[pos:pos+len(b)]==b and pos+len(b)<len(data) and data[pos+len(b)]==0 and (pos==0 or data[pos-1]==0)
+    return data[pos:pos+len(b)]==b and pos+len(b)<len(data) and data[pos+len(b)]==0
 
 def classify_at(data:bytes,name_start:int,name:str):
     st=name_start-GFXIMAGE_FIXED
