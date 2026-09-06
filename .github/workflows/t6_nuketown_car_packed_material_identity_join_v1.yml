@@ -1,0 +1,64 @@
+name: T6 Nuketown car packed Material identity join v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car_packed_material_identity_join_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Search retained exact material proofs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,zlib
+          from pathlib import Path
+          targets={12967476,12967480,40852396,40852400,40852404,40852408,40852412,40852428,40852432}
+          report={'format':'t6-nuketown-car-packed-material-identity-join-v1','targets':sorted(targets),'sources':[],'hits':[]}
+          for p in sorted(Path('manifests').rglob('*.json.zlib.b64')):
+              try:
+                  raw=zlib.decompress(base64.b64decode(p.read_bytes().strip()))
+                  obj=json.loads(raw)
+              except Exception:
+                  continue
+              report['sources'].append({'file':str(p),'format':obj.get('format'),'bytes':len(raw)})
+              # Generic recursive walk: record any dict containing a target integer and nearby identity-like fields.
+              stack=[([],obj)]
+              while stack:
+                  path,node=stack.pop()
+                  if isinstance(node,dict):
+                      vals=[]
+                      for k,v in node.items():
+                          if isinstance(v,int) and v in targets: vals.append((k,v))
+                          elif isinstance(v,str):
+                              try:
+                                  iv=int(v,0)
+                                  if iv in targets: vals.append((k,iv))
+                              except Exception: pass
+                      if vals:
+                          compact={k:v for k,v in node.items() if k.lower() in ('material','packedmaterial','name','identity','virtualoffset','offset','address','slot','surfaceindex','xassetindex','inlineMaterial'.lower()) or isinstance(v,(str,int,bool))}
+                          report['hits'].append({'file':str(p),'jsonPath':'/'.join(map(str,path)),'targets':[{'field':k,'value':v} for k,v in vals],'record':compact})
+                      for k,v in node.items(): stack.append((path+[k],v))
+                  elif isinstance(node,list):
+                      for i,v in enumerate(node): stack.append((path+[i],v))
+          # Also list exact packed binding Material names related to cars/vehicles.
+          bp=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
+          bind=json.loads(zlib.decompress(base64.b64decode(bp.read_bytes().strip())))
+          report['carLikePackedBindings']=[m for m in bind.get('materials',[]) if any(s in (m.get('material') or '').lower() for s in ('car','vehicle','veh_','auto','tire','glass','chrome'))]
+          Path('/tmp/join.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('TARGET_HITS',json.dumps(report['hits'],indent=2,sort_keys=True))
+          print('CARLIKE_BINDINGS',json.dumps(report['carLikePackedBindings'],indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR_PACKED_MATERIAL_IDENTITY_JOIN_V1
+          path: /tmp/join.json
+          if-no-files-found: error
