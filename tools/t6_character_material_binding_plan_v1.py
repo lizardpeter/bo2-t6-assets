@@ -5,7 +5,7 @@ Inputs remain independently authoritative. This compiler only joins evidence:
 - MaterialTextureDef slots from expanded retail material serialization;
 - exact XAsset-header and MaterialTextureDef VIRTUAL alias proofs;
 - exact comma-import -> full GfxImage resolution;
-- exact streamed (nameHash,dataHash) extraction targets;
+- exact streamed image identity using retail-derived IPAK filename hash + dataHash;
 - exact XModel materialHandles[] surface ownership;
 - the normalized XModel LOD table.
 
@@ -13,6 +13,11 @@ The T6 shader graph is not collapsed into PBR silently. Standard Diffuse_Map and
 Normal_Map slots are selected when their exact slot-name hashes are present.
 Special shaders are retained with all dependencies and any fallback glTF binding
 is explicitly marked visualization-only.
+
+Historical retained texture manifests contain a field named `nameHashHex` that is
+upstream GfxImage evidence, not the IPAK filename hash. The filename hash used for
+IPAK identity is therefore always derived from the exact retail image name with
+the same R_HashString algorithm used by t6_ipak_iwi_materialize_v3.py.
 """
 from __future__ import annotations
 import argparse, hashlib, json
@@ -28,6 +33,11 @@ def sha(p:Path)->str:return hashlib.sha256(p.read_bytes()).hexdigest()
 def norm_mat(s:str)->str:return s[1:] if s.startswith(',') else s
 def u32(v):return int(v,0) if isinstance(v,str) else int(v)
 def load(path:Path):return json.loads(path.read_text(encoding='utf-8-sig'))
+def r_hash_string(s:str)->int:
+ h=0
+ for c in s.encode('latin1'):
+  h=((33*h)^(c|0x20))&0xffffffff
+ return h
 
 def main()->int:
  ap=argparse.ArgumentParser()
@@ -70,7 +80,9 @@ def main()->int:
  exact_rows=keys.get('exactBaseIpakKeys',keys.get('exactStreamKeyImages',[]));exact={}
  for r in exact_rows:
   name=r.get('image') or r.get('name');sp=r.get('streamedPart0') or {}
-  exact[name]={'nameHash':u32(r.get('nameHash',r.get('nameHashHex'))),'dataHash':u32(sp.get('dataHash',sp.get('dataHashHex',r.get('dataHash',r.get('dataHashHex')))))&0x1fffffff,'repository':sp.get('repositoryHint') or r.get('repository'),'width':r.get('width'),'height':r.get('height')}
+  if not isinstance(name,str) or not name:raise SystemExit('exact texture key row lacks image/name identity')
+  data_hash=u32(sp.get('dataHash',sp.get('dataHashHex',r.get('dataHash',r.get('dataHashHex')))))&0x1fffffff
+  exact[name]={'nameHash':r_hash_string(name),'dataHash':data_hash,'repository':sp.get('repositoryHint') or r.get('repository'),'width':r.get('width'),'height':r.get('height'),'upstreamHashField':r.get('nameHash',r.get('nameHashHex')),'nameHashEvidence':'retail-R_HashString-derived-from-exact-image-name'}
  material_rows=[];slot_total=0;identity_total=0;stream_total=0
  for m in mats['materials']:
   name=norm_mat(m['name']);slots=[]
@@ -122,6 +134,6 @@ def main()->int:
   v=bymat[name]['gltfVisualization']
   for role in ('baseColor','normal'):
    if not v.get(role) or not v[role].get('exactStreamKey'):missing_visual.append({'material':name,'role':role,'binding':v.get(role)})
- doc={'format':'t6-character-material-binding-plan-v1','authority':'join of exact retail MaterialTextureDef identities/aliases/imports, exact XModel material-handle ownership, normalized LOD boundaries, and exact IPAK stream keys; glTF role selection separated from native shader graph','sourceManifests':[{'path':str(p),'sha256':sha(p)} for p in (a.materials,a.surface_proof,a.mesh,a.exact_keys,a.header_alias_proof,a.image_run_proof,a.material_alias_proof,a.import_resolution,a.shared_identity_proof)],'slotRoleEvidence':{'Diffuse_Map':{'hashHex':'0xf039ec2d','status':'known T6 shader binding hash; used for standard PBR baseColor selection'},'Normal_Map':{'hashHex':'0x942cbff0','status':'known T6 shader binding hash; used for standard PBR normal selection'},'specialShaders':'All native texture slots are retained even when no standard PBR role is assigned.'},'summary':{'materialTextureSlots':slot_total,'identityResolvedSlots':identity_total,'exactStreamKeySlots':stream_total,'materials':len(material_rows),'lod':a.lod,'lodSurfIndex':lod_start,'lodSurfaces':len(surfaces),'lodUniqueMaterials':len(used),'visualBindingsMissingExactStreamKey':len(missing_visual),'nativeIdentityClosure':identity_total==slot_total,'visualPbrTextureClosure':len(missing_visual)==0},'materials':material_rows,'surfaceBindings':surfaces,'missingVisualBindings':missing_visual,'proofBoundary':'Native T6 material identity is the complete slot list. glTF baseColor/normal fields are an interoperability mapping: standard Diffuse_Map/Normal_Map hashes are preferred; any fallback is explicitly marked shaderApproximation and never replaces the native dependency graph.'}
+ doc={'format':'t6-character-material-binding-plan-v1','authority':'join of exact retail MaterialTextureDef identities/aliases/imports, exact XModel material-handle ownership, normalized LOD boundaries, and exact IPAK stream keys with filename hash derived from exact retail image identity; glTF role selection separated from native shader graph','sourceManifests':[{'path':str(p),'sha256':sha(p)} for p in (a.materials,a.surface_proof,a.mesh,a.exact_keys,a.header_alias_proof,a.image_run_proof,a.material_alias_proof,a.import_resolution,a.shared_identity_proof)],'slotRoleEvidence':{'Diffuse_Map':{'hashHex':'0xf039ec2d','status':'known T6 shader binding hash; used for standard PBR baseColor selection'},'Normal_Map':{'hashHex':'0x942cbff0','status':'known T6 shader binding hash; used for standard PBR normal selection'},'specialShaders':'All native texture slots are retained even when no standard PBR role is assigned.'},'ipakFilenameHashPolicy':{'algorithm':'T6 R_HashString: h=((33*h) XOR (byte|0x20)) mod 2^32','source':'derived from exact retail image name','historicalNameHashHexUsedAsFilenameHash':False},'summary':{'materialTextureSlots':slot_total,'identityResolvedSlots':identity_total,'exactStreamKeySlots':stream_total,'materials':len(material_rows),'lod':a.lod,'lodSurfIndex':lod_start,'lodSurfaces':len(surfaces),'lodUniqueMaterials':len(used),'visualBindingsMissingExactStreamKey':len(missing_visual),'nativeIdentityClosure':identity_total==slot_total,'visualPbrTextureClosure':len(missing_visual)==0},'materials':material_rows,'surfaceBindings':surfaces,'missingVisualBindings':missing_visual,'proofBoundary':'Native T6 material identity is the complete slot list. glTF baseColor/normal fields are an interoperability mapping: standard Diffuse_Map/Normal_Map hashes are preferred; any fallback is explicitly marked shaderApproximation and never replaces the native dependency graph. IPAK filename identity is derived from the exact retail image name and never from the historically mislabeled upstream nameHashHex field.'}
  a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n',encoding='utf-8');print(json.dumps(doc['summary'],indent=2,sort_keys=True));return 2 if missing_visual else 0
 if __name__=='__main__':raise SystemExit(main())
