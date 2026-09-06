@@ -1,0 +1,119 @@
+name: T6 Nuketown GfxWorld lightmap reflection catalog v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_gfxworld_light_reflection_catalog_v1.yml'
+      - 'tools/t6_gfxworld_lightmap_oat_patch/**'
+      - 'tools/t6_gfxworld_reflection_probe_oat_patch/**'
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools with both GfxWorld catalog dumpers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 7d027e8f89118196713e955b0e11f8404149c54d
+          git -C /tmp/oat submodule update -q --init --recursive
+
+          mkdir -p /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap
+          mkdir -p /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe
+          cp tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.h /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap/
+          cp tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.cpp /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap/
+          cp tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.h /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe/
+          cp tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.cpp /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe/
+          git -C /tmp/oat apply "$GITHUB_WORKSPACE/tools/t6_gfxworld_reflection_probe_oat_patch/ObjWriterT6.registration.combined.patch"
+
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-release.sh
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          echo "$BIN" >/tmp/unlinker_path.txt
+          "$BIN" --version | tee /tmp/unlinker_version.txt
+
+      - name: Fetch exact retail zones
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+
+      - name: Dump only retail GfxWorld ownership catalogs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BIN=$(cat /tmp/unlinker_path.txt)
+          mkdir -p /tmp/out
+          "$BIN" --no-color --skip-obj --include-assets gfxworld \
+            --output-folder /tmp/out \
+            --load /tmp/game/zone/all/common_mp.ff \
+            --load /tmp/game/zone/all/common_patch_mp.ff \
+            --load /tmp/game/zone/all/patch_mp.ff \
+            /tmp/game/zone/all/mp_nuketown_2020.ff \
+            2>&1 | tee /tmp/unlinker_dump.log
+
+          find /tmp/out -type f -maxdepth 8 -print | sort | tee /tmp/output_files.txt
+          LM=$(find /tmp/out -type f -path '*/gfxworld_lightmaps/*' | head -1)
+          RP=$(find /tmp/out -type f -path '*/gfxworld_reflection_probes/*' | head -1)
+          test -n "$LM" -a -n "$RP"
+          cp "$LM" /tmp/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json
+          cp "$RP" /tmp/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json
+
+      - name: Fail-closed catalog validation
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib,json,math
+          from pathlib import Path
+          lm_p=Path('/tmp/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json')
+          rp_p=Path('/tmp/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json')
+          lm=json.loads(lm_p.read_text()); rp=json.loads(rp_p.read_text())
+          assert lm['format']=='t6-gfxworld-lightmap-catalog-v1',lm.get('format')
+          assert rp['format']=='t6-gfxworld-reflection-probe-catalog-v1',rp.get('format')
+          assert lm['lightmapCount']==len(lm['lightmaps'])==2,lm.get('lightmapCount')
+          assert rp['reflectionProbeCount']==len(rp['reflectionProbes']),rp.get('reflectionProbeCount')
+          assert [x['index'] for x in lm['lightmaps']]==list(range(2))
+          assert [x['index'] for x in rp['reflectionProbes']]==list(range(len(rp['reflectionProbes'])))
+          def finite(v):
+            if isinstance(v,(int,str,type(None),bool)): return True
+            if isinstance(v,float): return math.isfinite(v)
+            if isinstance(v,list): return all(finite(x) for x in v)
+            if isinstance(v,dict): return all(finite(x) for x in v.values())
+            return False
+          assert finite(rp)
+          for p in (lm_p,rp_p):
+            b=p.read_bytes(); print(p.name,len(b),hashlib.sha256(b).hexdigest())
+          print('LIGHTMAPS',json.dumps(lm['lightmaps'],sort_keys=True))
+          print('REFLECTION_PROBES',rp['reflectionProbeCount'])
+          print('REFLECTION_IMAGES',json.dumps(sorted({x.get('reflectionImage') for x in rp['reflectionProbes']},key=lambda x:'' if x is None else x),sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-nuketown-gfxworld-light-reflection-catalog-v1
+          path: |
+            /tmp/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json
+            /tmp/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json
+            /tmp/unlinker_version.txt
+            /tmp/unlinker_dump.log
+            /tmp/output_files.txt
+          if-no-files-found: error
