@@ -12,10 +12,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Probe remote ZIP central directory
-        shell: python
+        shell: bash
         env:
           ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
         run: |
+          python - <<'PY'
           import os, struct, urllib.request, json
 
           url = os.environ['ZIP_URL']
@@ -26,7 +27,6 @@ jobs:
               b = r.read()
               return b, dict(r.headers), r.status
 
-          # Resolve total length with a one-byte range request.
           b, hdr, status = req_range(0, 0)
           cr = hdr.get('Content-Range') or hdr.get('content-range')
           if not cr or '/' not in cr:
@@ -92,7 +92,6 @@ jobs:
           if 'zone/all/base.ipak' not in found or 'zone/all/mp.ipak' not in found:
               raise SystemExit('required base/mp IPAK entries not found')
 
-          # Read local headers too, so the exact compressed-data starts are known.
           for name, row in sorted(found.items()):
               h, _, _ = req_range(row['localHeaderOffset'], row['localHeaderOffset'] + 29)
               if h[:4] != b'PK\x03\x04':
@@ -102,3 +101,4 @@ jobs:
               row['localMethod'] = method
               row['dataOffset'] = data_off
               print('ENTRY', name, json.dumps(row, sort_keys=True))
+          PY
