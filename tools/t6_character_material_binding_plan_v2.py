@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Compatibility frontend for character material binding-plan v1.
+"""Strict frontend for exact T6 character material binding-plan v1.
 
-v2 adds support for the durable `t6-xmodel-surface-material-assignments-v1`
-manifest. It adapts only that explicit surface evidence into the historical v1
-shape, then delegates all material/image/alias/IPAK joining and glTF role policy
-to the proven v1 compiler.
+v2 accepts the durable `t6-xmodel-surface-material-assignments-v1` manifest, but
+it does not treat a packed assignment as exact merely because the manifest names a
+material.  Every packed Material* must carry an explicit loaderReplay proof that
+reproduces the retail pointer path:
+
+    raw token -> exact Sys_DecodePointer result -> DB_ConvertOffsetToAlias
+    -> exact VIRTUAL pointer slot -> previously replayed inline Material owner
+
+Inline sentinels remain exact when their durable row says `inline-following` and
+the serialized value is one of the retail -1/-2/-3 sentinels.  Packed rows lacking
+source-backed decoder/owner evidence fail closed before v1 sees them.
 """
 from __future__ import annotations
 
@@ -14,23 +21,27 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BASE_PATH = HERE / "t6_character_material_binding_plan_v1.py"
+REPLAY_PATH = HERE / "t6_material_pointer_replay_v1.py"
 
 
-def _load_v1():
-    spec = importlib.util.spec_from_file_location("t6_character_material_binding_plan_v1", BASE_PATH)
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot import {BASE_PATH}")
+        raise RuntimeError(f"cannot import {path}")
     module = importlib.util.module_from_spec(spec)
+    # dataclasses and other stdlib helpers may consult sys.modules while executing.
+    import sys
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 
-base = _load_v1()
+base = _load_module("t6_character_material_binding_plan_v1", BASE_PATH)
+replay = _load_module("t6_material_pointer_replay_v1", REPLAY_PATH)
 _original_load = base.load
 
 
-def load_with_surface_v2(path: Path):
-    doc = json.loads(path.read_text(encoding="utf-8-sig"))
+def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) -> dict:
     if doc.get("format") != "t6-xmodel-surface-material-assignments-v1":
         return doc
 
@@ -46,22 +57,48 @@ def load_with_surface_v2(path: Path):
         raise RuntimeError("surface assignment indices are not exact contiguous 0..N-1")
 
     legacy = []
+    inline_count = 0
+    packed_count = 0
+    packed_backrefs = 0
     for r in rows:
-        evidence = (
-            "exact-inline-retail-material"
-            if r.get("handleKind") == "inline-following"
-            else "exact-packed-virtual-material-owner"
-        )
-        legacy.append(
-            {
-                "surfaceIndex": int(r["surfaceIndex"]),
-                "lod": int(r["lodIndex"]),
-                "lodLocalSurfaceIndex": int(r["lodLocalSurfaceIndex"]),
-                "materialName": r["material"],
-                "materialPointerRaw": r["handleRaw"],
-                "evidence": evidence,
+        token = replay.u32(r["handleRaw"])
+        if r.get("handleKind") == "inline-following":
+            if token not in replay.INLINE_SENTINELS:
+                raise RuntimeError(
+                    f"surface {r['surfaceIndex']}: inline-following has non-inline token 0x{token:08x}"
+                )
+            evidence = "exact-inline-retail-material"
+            inline_count += 1
+            derived = None
+        else:
+            result = replay.validate_packed_loader_replay(r, allow_synthetic=allow_synthetic)
+            if not result.exact:
+                raise RuntimeError(
+                    f"surface {r['surfaceIndex']}: packed Material* is not exact under retail loader replay: "
+                    f"{result.classification}: {result.reason}"
+                )
+            evidence = "exact-packed-virtual-material-owner-loader-replay"
+            packed_count += 1
+            proof = r.get("loaderReplay") or {}
+            if bool(proof.get("sameOwnerBackreference", False)):
+                packed_backrefs += 1
+            derived = {
+                "decodedPointer": result.decoded_pointer,
+                "resolvedTargetPointerSlotVirtual": result.target_pointer_slot_virtual,
+                "objectVirtual": result.object_virtual,
             }
-        )
+
+        out = {
+            "surfaceIndex": int(r["surfaceIndex"]),
+            "lod": int(r["lodIndex"]),
+            "lodLocalSurfaceIndex": int(r["lodLocalSurfaceIndex"]),
+            "materialName": r["material"],
+            "materialPointerRaw": r["handleRaw"],
+            "evidence": evidence,
+        }
+        if derived is not None:
+            out["loaderReplay"] = derived
+        legacy.append(out)
 
     return {
         "format": "t6-surface-proof-v2-adapted-for-binding-v1",
@@ -72,8 +109,21 @@ def load_with_surface_v2(path: Path):
             "inputRows": len(rows),
             "allSurfaceIndicesContiguous": True,
             "noIdentityInferencePerformed": True,
+            "inlineSentinelRows": inline_count,
+            "packedRowsExactByLoaderReplay": packed_count,
+            "packedRowsSameOwnerBackreferences": packed_backrefs,
+            "runtimeObfuscatedTokensGuessed": 0,
+            "proofRule": (
+                "packed rows are admitted only after exact decoded-pointer evidence, "
+                "DB_ConvertOffsetToAlias zone/segment replay, and replayed inline owner-slot identity"
+            ),
         },
     }
+
+
+def load_with_surface_v2(path: Path):
+    doc = json.loads(path.read_text(encoding="utf-8-sig"))
+    return adapt_surface_assignment_doc(doc)
 
 
 def main() -> int:
