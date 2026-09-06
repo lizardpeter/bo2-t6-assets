@@ -1,0 +1,39 @@
+name: SEAL6 downloadable build
+
+on:
+  push:
+    branches: [r2-fetch-test]
+    paths: ['.github/workflows/seal6-download-build.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: reversal/nonmap-assets
+      - name: Fetch exact retail source
+        run: |
+          mkdir -p work
+          curl --fail --location --retry 3 -o work/faction_seals_mp.ff https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff
+          echo '1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88  work/faction_seals_mp.ff' | sha256sum -c -
+      - name: Expand retail FastFile
+        run: python tools/t6_pc_fastfile_expand_v1.py work/faction_seals_mp.ff work/faction_seals_mp.expanded
+      - name: Close exact SEAL6 body
+        run: |
+          python tools/t6_player_body_close_v3.py \
+            --name c_usa_mp_seal6_smg_fb \
+            --zone-name faction_seals_mp \
+            --fastfile work/faction_seals_mp.ff \
+            --expanded work/faction_seals_mp.expanded \
+            --out-dir work/seal6
+          cat work/seal6/player_body_closure_v3.json
+      - name: Package normalized exact body
+        uses: actions/upload-artifact@v4
+        with:
+          name: seal6-normalized-body
+          path: |
+            work/seal6/*.json
+          retention-days: 1
+          compression-level: 0
