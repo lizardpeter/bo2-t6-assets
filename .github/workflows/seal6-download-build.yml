@@ -23,16 +23,12 @@ jobs:
       - name: Normalize exact retail SEAL6 skeleton
         run: |
           python tools/t6_xmodel_skeleton_normalize_v3.py work/faction_seals_mp.expanded \
-            --asset-start 0x45CCF1 \
-            --xasset-index 64 \
-            --name c_usa_mp_seal6_smg_fb \
+            --asset-start 0x45CCF1 --xasset-index 64 --name c_usa_mp_seal6_smg_fb \
             --out work/seal6/xmodel_skeleton_normalized_v3.json
       - name: Normalize exact retail SEAL6 mesh
         run: |
-          python tools/t6_xmodel_mesh_normalize_v4.py work/faction_seals_mp.expanded \
-            --asset-start 0x45CCF1 \
-            --skeleton work/seal6/xmodel_skeleton_normalized_v3.json \
-            --out work/seal6/xmodel_mesh_normalized_v4.json
+          python tools/t6_xmodel_mesh_normalize_v1.py work/faction_seals_mp.expanded \
+            --asset-start 0x45CCF1 --out work/seal6/xmodel_mesh_normalized_v1.json
           sha256sum work/seal6/*.json
       - name: Package normalized exact body
         uses: actions/upload-artifact@v4
