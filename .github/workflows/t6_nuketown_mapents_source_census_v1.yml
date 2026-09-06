@@ -1,0 +1,81 @@
+name: T6 Nuketown MapEnt source census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_mapents_source_census_v1.yml'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_mapents_model_animation_census_v1.py'
+      - 'manifests/maps/mp_nuketown_2020/clipmap_pvs_tail_proof.json'
+
+permissions:
+  contents: write
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Regenerate exact expanded FastFile and MapEnt entity string
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          proof=json.loads(Path('manifests/maps/mp_nuketown_2020/clipmap_pvs_tail_proof.json').read_text())
+          sec=next(x for x in proof['sections'] if x['name']=='MapEnts_entityString')
+          b=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()[sec['start']:sec['end']]
+          assert len(b)==sec['bytes']==177971
+          assert hashlib.sha256(b).hexdigest()==sec['sha256']=='4a7966ac877fd5fe57746ad4e71bc765660f91d67a108a363cbfb5007524e104'
+          Path('/tmp/mp_nuketown_2020.mapents.txt').write_bytes(b)
+          PY
+      - name: Build fail-closed MapEnt model and animation census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python tools/t6_mapents_model_animation_census_v1.py \
+            /tmp/mp_nuketown_2020.mapents.txt \
+            --map mp_nuketown_2020 \
+            --out /tmp/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json | tee /tmp/census_summary.txt
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          p=Path('/tmp/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json')
+          b=p.read_bytes(); d=json.loads(b); c=d['counts']
+          assert d['source']['bytes']==177971
+          assert d['source']['sha256']=='4a7966ac877fd5fe57746ad4e71bc765660f91d67a108a363cbfb5007524e104'
+          assert c['parkedDestructibleCars']==6,c
+          assert c['fxanimSceneEntities']>=1,c
+          assert c['carScriptModels']>=6,c
+          out=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json')
+          out.write_bytes(b)
+          sha=hashlib.sha256(b).hexdigest()
+          cars=d['carEntities']; parked=[x for x in cars if x.get('destructibledef')]
+          cp=Path('checkpoints/T6_NUKETOWN_MAPENTS_SOURCE_CENSUS_V1_2026-09-06.md')
+          cp.write_text(f'''# T6 Nuketown MapEnt source census v1\n\nThe map-owned entity string was regenerated directly from the exact retail `mp_nuketown_2020.ff` expansion and sliced at the already source-closed ClipMap/MapEnt serialization span. No prior GLB or hand-authored placement list was used.\n\n## Source\n\n- expanded FastFile SHA-256: `7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505`\n- MapEnt entity-string bytes: **177,971**\n- MapEnt entity-string SHA-256: `4a7966ac877fd5fe57746ad4e71bc765660f91d67a108a363cbfb5007524e104`\n\n## Census\n\n- total entities: **{c['entities']}**\n- named model references: **{c['namedModelReferences']}**\n- unique named model tokens: **{c['uniqueNamedModelTokens']}**\n- script_model entities: **{c['scriptModels']}**\n- destructible script models: **{c['destructibleScriptModels']}**\n- parked/destructible car entities: **{c['parkedDestructibleCars']}**\n- car script-model entities including animated phases: **{c['carScriptModels']}**\n- fxanim scene entities: **{c['fxanimSceneEntities']}**\n\nMachine-readable census bytes: **{len(b):,}**; SHA-256: `{sha}`.\n\nAll car/fxanim placements in the manifest preserve the exact entity key/value pairs plus parsed source `origin`/`angles`. Duplicate gameplay phases remain separate source entities and are not rendered simultaneously unless runtime semantics prove that behavior.\n''')
+          print('CENSUS_SHA256',sha)
+          print('COUNTS',json.dumps(c,sort_keys=True))
+          print('PARKED_CARS',json.dumps(parked,sort_keys=True))
+          print('FXANIM',json.dumps(d['fxanimSceneEntities'],sort_keys=True))
+          PY
+      - name: Commit source-derived MapEnt census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json \
+                  checkpoints/T6_NUKETOWN_MAPENTS_SOURCE_CENSUS_V1_2026-09-06.md
+          git commit -m 'Archive source-derived Nuketown MapEnt census'
+          git pull --rebase origin main
+          git push origin HEAD:main
