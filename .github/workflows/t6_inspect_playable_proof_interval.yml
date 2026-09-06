@@ -1,0 +1,83 @@
+name: T6 inspect playable proof interval
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_inspect_playable_proof_interval.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and inspect retained playable-static proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, pathlib, zlib
+
+          p = pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64')
+          raw = zlib.decompress(base64.b64decode(p.read_bytes()))
+          got = hashlib.sha256(raw).hexdigest()
+          expected = 'e1704755fdf365eb97c47f517afe0173152ca4a3ae702b309cb4d02981380423'
+          assert got == expected, (got, expected)
+          doc = json.loads(raw)
+          print('BYTES', len(raw), 'SHA256', got)
+          print('TOPLEVEL', json.dumps({k:type(v).__name__ for k,v in doc.items()}, sort_keys=True))
+
+          needles = [
+              'mlv/nt_tree_ficus_lrg_01_sway',
+              'mlv/nt_tree_ficus_lrg_01',
+              'dest_nt_nuked_female_03_d0',
+              'nt_2020_vista_cart_02',
+              'nt_2020_vista_kiosk_01',
+              't5_foliage_hedge_boxy01',
+              'nt_2020_vista_sign_01',
+              'p6_anim_nautical_flag_04',
+              'p6_anim_nautical_flag_01',
+              'nt_2020_house_04_section',
+              'ny_harbor_veh_civ_car_a_10',
+              'ny_harbor_veh_civ_car_a_11',
+          ]
+
+          hits=[]
+          def walk(x, path='$', parent=None):
+              if isinstance(x, dict):
+                  for k,v in x.items():
+                      walk(v, f'{path}.{k}', x)
+              elif isinstance(x, list):
+                  for i,v in enumerate(x):
+                      walk(v, f'{path}[{i}]', x)
+              elif isinstance(x, str):
+                  for n in needles:
+                      if n in x:
+                          hits.append((n,path,parent))
+          walk(doc)
+          seen=set()
+          for n,path,parent in hits:
+              key=(n,path)
+              if key in seen: continue
+              seen.add(key)
+              print('MATCH', n, path)
+              print('PARENT', json.dumps(parent, sort_keys=True))
+
+          # Also surface all exact packed block-5-looking integers in the car neighborhood,
+          # retaining their object context. This is evidence discovery only; no identity is inferred.
+          ranges=[]
+          def ints(x, path='$', parent=None):
+              if isinstance(x, dict):
+                  for k,v in x.items(): ints(v, f'{path}.{k}', x)
+              elif isinstance(x, list):
+                  for i,v in enumerate(x): ints(v, f'{path}[{i}]', x)
+              elif isinstance(x, int) and 24_000_000 <= x <= 28_000_000:
+                  ranges.append((path,x,parent))
+          ints(doc)
+          print('NEARBY_INT_COUNT', len(ranges))
+          for path,v,parent in ranges[:400]:
+              print('NEARBY_INT', path, v, json.dumps(parent, sort_keys=True))
+          PY
