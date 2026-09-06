@@ -1,0 +1,30 @@
+name: T6 Nuketown 7 missing image aliases inspect v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_7_missing_image_alias_inspect_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print exact retained alias records and bank availability
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64,json,zlib
+          from pathlib import Path
+          p=Path('manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64')
+          d=json.loads(zlib.decompress(base64.b64decode(p.read_bytes())))
+          wanted={1,10,67,72,73,74,76}
+          print('AVAILABILITY',json.dumps(d.get('availability'),sort_keys=True))
+          for i,row in enumerate(d['aliases']):
+              if i in wanted:
+                  print('ALIAS',i,json.dumps(row,sort_keys=True))
+          PY
