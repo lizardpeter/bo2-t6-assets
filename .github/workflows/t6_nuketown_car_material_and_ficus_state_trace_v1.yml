@@ -31,8 +31,12 @@ jobs:
           import base64,hashlib,json,struct,zlib
           from pathlib import Path
           from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
 
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          table=parse_top_level_xasset_table(data); prefix=walk_map_prefix_stringtable(data,table); logical=prefix['logicalToText']
           targets={'ficus':24530208,'car01':44523322,'car02':41469954}
           report={'format':'t6-nuketown-car-material-and-ficus-state-trace-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'models':{}}
 
@@ -65,7 +69,9 @@ jobs:
           for key,start in targets.items():
             d=XModelWalker(data,start).walk_xmodel(); walks[key]=d; x=d['xmodel']
             if d['blockers']: raise SystemExit(f'{key}: blockers {d["blockers"]}')
-            lod0=x['lods'][0]; si=int(lod0['surfIndex']); sn=int(lod0['numSurfs']); handles=x['materialHandles']
+            mesh=Normalizer(data,start,logical_to_text=logical).normalize()
+            if mesh['identity']['name']!=x['name']: raise SystemExit(f'{key}: walker/normalizer identity drift')
+            lod0=mesh['xmodel']['lods'][0]; si=int(lod0['surfIndex']); sn=int(lod0['numSurfs']); handles=x['materialHandles']
             bysec={s['name']:s for s in d['sections']}
             inline=[]
             for m in (d.get('details') or {}).get('inlineMaterials',[]):
@@ -79,8 +85,7 @@ jobs:
                   if p not in (0,0xFFFFFFFF,0xFFFFFFFE):
                     enc=(p-1)&0xffffffff; rec['imagePointer']={'kind':'packed','block':enc>>29,'offset':enc&0x1fffffff}
                   else: rec['imagePointer']={'kind':'null' if p==0 else 'following' if p==0xffffffff else 'insert'}
-                  prefix=f"{m['label']}.Material.textureTable[{j}].image.GfxImage"
-                  ns=bysec.get(prefix+'.name')
+                  prefix2=f"{m['label']}.Material.textureTable[{j}].image.GfxImage"; ns=bysec.get(prefix2+'.name')
                   if ns:
                     a=ns['start']; e=data.index(b'\0',a); rec['inlineImageName']=data[a:e].decode('latin1')
                   tex.append(rec)
@@ -92,7 +97,6 @@ jobs:
             for rr in row['lod0MaterialHandles']: print('HANDLE',key,json.dumps(rr,sort_keys=True))
             for m in inline: print('INLINE_MAT',key,json.dumps(m,sort_keys=True))
 
-          # Exact Ficus render states straight from its inline Material records.
           fd=walks['ficus']; bysec={s['name']:s for s in fd['sections']}; fdetails=(fd.get('details') or {}).get('inlineMaterials',[])
           want={'mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway'}
           states=[]
@@ -108,7 +112,6 @@ jobs:
           if {r['material'] for r in states}!=want: raise SystemExit('did not recover all Ficus LOD0 states')
           report['ficusRenderStates']=states
 
-          # Decode exact packed Material/image binding manifest; keep schema and car offsets for the next exact join.
           p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
           bind=json.loads(zlib.decompress(base64.b64decode(p.read_bytes().strip())))
           print('PACKED_BIND_SUMMARY',json.dumps(bind['summary'],sort_keys=True))
@@ -118,8 +121,7 @@ jobs:
             for rr in report['models'][key]['lod0MaterialHandles']:
               h=rr['handle']
               if h.get('kind')=='packed' and h.get('block')==5: offs.append(int(h['offset']))
-          report['carLod0PackedMaterialOffsets']=sorted(set(offs))
-          report['packedBindingManifestSummary']=bind['summary']
+          report['carLod0PackedMaterialOffsets']=sorted(set(offs)); report['packedBindingManifestSummary']=bind['summary']
           Path('/tmp/trace.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           PY
       - uses: actions/upload-artifact@v4
