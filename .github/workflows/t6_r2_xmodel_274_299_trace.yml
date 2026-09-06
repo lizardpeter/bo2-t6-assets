@@ -1,0 +1,89 @@
+name: T6 R2 XModel 274-299 trace
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_r2_xmodel_274_299_trace.yml'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          sha256sum /tmp/mp_nuketown_2020.ff
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded mp_nuketown_2020
+          stat -c '%s' /tmp/mp_nuketown_2020.expanded
+          sha256sum /tmp/mp_nuketown_2020.expanded
+          test "$(stat -c '%s' /tmp/mp_nuketown_2020.expanded)" = 154653476
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+      - name: Recover XAsset-to-XModel source offsets and walk target interval
+        shell: bash
+        run: |
+          PYTHONPATH=tools python - <<'PY'
+          import json, pathlib, struct
+          from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL, parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable, scan_required_xmodels
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          data = pathlib.Path('/tmp/mp_nuketown_2020.expanded').read_bytes()
+          table = parse_top_level_xasset_table(data)
+          prefix = walk_map_prefix_stringtable(data, table)
+          entries = table['entries']
+          xmodel_indices = [i for i,e in enumerate(entries) if e['type'] == ASSET_TYPE_XMODEL and i <= 299]
+          records = scan_required_xmodels(data, prefix['sourceEnd'], len(xmodel_indices), prefix['logicalToText'])
+          by = {idx: rec for idx,rec in zip(xmodel_indices,records)}
+          print('XASSET_COUNT', len(entries), 'XMODELS_THROUGH_299', len(xmodel_indices))
+          print('PREFIX_SOURCE_END', prefix['sourceEnd'])
+          print('STRINGTABLE_VIRTUAL', prefix['assets']['stringTable']['virtualStringBase'], prefix['assets']['stringTable']['inlineStringLogicalEnd'])
+
+          out=[]
+          for idx in xmodel_indices:
+              if idx < 270: continue
+              rec=by[idx]
+              print('FIXED', idx, rec['fixedSourceStart'], rec['name'], rec['nameSource'])
+              if idx > 299: continue
+              try:
+                  w=XModelWalker(data, rec['fixedSourceStart']).walk_xmodel()
+              except Exception as e:
+                  print('WALK_ERROR', idx, repr(e)); continue
+              row={
+                  'xassetIndex':idx,
+                  'name':rec['name'],
+                  'fixedSourceStart':rec['fixedSourceStart'],
+                  'serializedEnd':w['assetSerializedEnd'],
+                  'serializedBytes':w['assetSerializedBytes'],
+                  'blockers':w['blockers'],
+                  'xmodel':w['xmodel'],
+                  'sections':w['sections'],
+                  'details':w['details'],
+              }
+              out.append(row)
+              print('WALK', idx, rec['name'], 'start', rec['fixedSourceStart'], 'end', w['assetSerializedEnd'], 'bytes', w['assetSerializedBytes'], 'blockers', json.dumps(w['blockers'],sort_keys=True))
+              for s in w['sections']:
+                  n=s.get('name','')
+                  if ('Material' in n or 'GfxImage' in n or 'materialHandles' in n or n in ('XModel.fixed','XModel.name')):
+                      print(' SECTION',idx,json.dumps(s,sort_keys=True))
+              # Dump pointer words from the XModel fixed record with field labels.
+              fields={0:'name',8:'boneNames',12:'parentList',16:'quats',20:'trans',24:'partClassification',28:'baseMat',32:'surfs',36:'materialHandles',152:'collSurfs',164:'boneInfo',200:'himip',216:'physPreset',224:'collmaps',228:'physConstraints'}
+              for off,label in fields.items():
+                  raw=struct.unpack_from('<I',data,rec['fixedSourceStart']+off)[0]
+                  if raw in (0xffffffff,0xfffffffe): print(' PTR',idx,label,hex(raw))
+          pathlib.Path('/tmp/xmodel_274_299_trace.json').write_text(json.dumps(out,indent=2)+'\n')
+          print('TRACE_ROWS',len(out),'TRACE_BYTES',pathlib.Path('/tmp/xmodel_274_299_trace.json').stat().st_size)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-nuketown-xmodel-274-299-trace
+          path: /tmp/xmodel_274_299_trace.json
+          if-no-files-found: error
