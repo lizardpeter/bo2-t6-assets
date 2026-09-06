@@ -2,7 +2,7 @@
 
 > **DIAGNOSTIC / FORENSIC INTERMEDIATE ONLY — NOT A VISUAL SUCCESSOR OR FULL-MAP CANDIDATE.**
 >
-> `mp_nuketown_2020_FRESH_RETAIL_GFXWORLD_v1.glb` contains only the freshly regenerated retail `GfxWorld` slice. It intentionally lacks the already-proven full-map static XModel population, full texture/material coverage, MapEnt cars, skybox, animation-support content, and other v25/v31 scene content. It MUST NOT be presented to the user for visual quality judgement as a successor build. Any future user-facing Nuketown candidate must first pass `manifests/maps/mp_nuketown_2020/T6_NUKETOWN_V25_RELEASE_FLOOR_V1.json` through `tools/t6_gltf_nonregression_guard_v1.py` and independently verify the full-map requirements recorded in that floor.
+> `mp_nuketown_2020_FRESH_RETAIL_GFXWORLD_v1.glb` contains only the freshly regenerated retail `GfxWorld` slice. It intentionally lacks the already-proven full-map static XModel population, full texture/material coverage, MapEnt cars, skybox, animation-support content, and other v25/v31 scene content. It MUST NOT be presented to the user for visual quality judgement as a successor build. Any future user-facing Nuketown candidate must first pass `manifests/maps/mp_nuketown_2020/T6_NUKETOWN_V25_RELEASE_FLOOR_V1.json` through `tools/t6_gltf_scene_policy_guard_v3.py` with zero failures.
 
 This checkpoint records the first fresh Nuketown GfxWorld regeneration performed in the current execution environment directly from the connected Google Drive retail source package. No prior GLB was used as geometry input.
 
@@ -154,5 +154,5 @@ v31 is stronger still: it retains the entire v25 binary as an exact prefix and a
 2. regenerate static XModel placements/models from the raw FF/shared zones instead of importing an old GLB;
 3. merge that fresh raw-source reconstruction into the retained v25/v31 full-map scene contract;
 4. feed the newer generated-material/lightmap/normal/replay contracts into the regenerated artifact;
-5. run the hard v25 release floor plus full-map requirement verification before any new downloadable/user-facing GLB is promoted;
+5. run the hard v25 release floor with `tools/t6_gltf_scene_policy_guard_v3.py` before any new downloadable/user-facing GLB is promoted;
 6. keep shared `base.ipak` / `mp.ipak` requirements explicit until those large containers or exact targeted payloads are available.
