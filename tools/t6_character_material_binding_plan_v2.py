@@ -7,12 +7,16 @@ serialized-XFile replay.
 
 SEAL6 has a later, stronger retained proof chain whose final image inventory is
 `t6-seal6-smg-texture-keys-v4`: all 44 MaterialTextureDef uses are already joined
-to exact retail image identities.  Older builders still pass the predecessor v2
-inventory in --materials.  When that input is detected, this frontend consumes
+to exact retail image identities. Older builders still pass the predecessor v2
+inventory in --materials. When that input is detected, this frontend consumes
 v4 directly, cross-checks the independently retained LOD0 visualization proof,
 exact stream-key set, strict serialized surface-owner replay and normalized LOD
-bounds, and emits the same binding-plan-v1 interoperability schema.  It never
+bounds, and emits the same binding-plan-v1 interoperability schema. It never
 fabricates slot hashes/sampler bytes that are absent from the resolved inventory.
+
+The retained historical `nameHashHex` field is upstream GfxImage evidence and is
+not the IPAK filename hash. IPAK filename identity is always derived from the
+exact retail image name with T6 R_HashString, matching materializer v3.
 """
 from __future__ import annotations
 
@@ -58,6 +62,13 @@ def u32(v) -> int:
 
 def norm_mat(s: str) -> str:
     return s[1:] if s.startswith(",") else s
+
+
+def r_hash_string(s: str) -> int:
+    h = 0
+    for c in s.encode("latin1"):
+        h = ((33 * h) ^ (c | 0x20)) & 0xFFFFFFFF
+    return h
 
 
 def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) -> dict:
@@ -158,7 +169,18 @@ def compile_seal6(a: argparse.Namespace) -> int:
     exact = {}
     for r in exact_doc.get("exactBaseIpakKeys", exact_doc.get("exactStreamKeyImages", [])):
         name = r.get("image") or r.get("name")
-        exact[name] = {"nameHash":u32(r.get("nameHash", r.get("nameHashHex"))),"dataHash":u32(r.get("dataHash", r.get("dataHashHex"))) & 0x1fffffff,"repository":r.get("repository"),"width":r.get("width"),"height":r.get("height")}
+        if not isinstance(name, str) or not name:
+            raise RuntimeError("exact stream-key row lacks retail image identity")
+        data_hash = u32(r.get("dataHash", r.get("dataHashHex"))) & 0x1fffffff
+        exact[name] = {
+            "nameHash": r_hash_string(name),
+            "dataHash": data_hash,
+            "repository": r.get("repository"),
+            "width": r.get("width"),
+            "height": r.get("height"),
+            "upstreamHashField": r.get("nameHash", r.get("nameHashHex")),
+            "nameHashEvidence": "retail-R_HashString-derived-from-exact-image-name",
+        }
     if len(exact) != 42:
         raise RuntimeError(f"expected 42 exact stream keys, got {len(exact)}")
 
@@ -241,7 +263,7 @@ def compile_seal6(a: argparse.Namespace) -> int:
         raise RuntimeError(f"LOD{a.lod}: exact PBR visualization stream-key closure failed: {missing}")
 
     source_paths = [a.materials,resolved_path,lod0_path,a.surface_proof,a.mesh,a.exact_keys,a.header_alias_proof,a.image_run_proof,a.material_alias_proof,a.import_resolution,a.shared_identity_proof]
-    doc = {"format":"t6-character-material-binding-plan-v1","authority":"exact resolved SEAL6 MaterialTextureDef v4 image-use inventory + exact LOD0 visualization proof + exact serialized XModel Material pointer replay + normalized retail LOD boundaries + exact stream keys; no slot structural fields are fabricated","sourceManifests":[{"path":str(p),"sha256":sha(p)} for p in source_paths],"summary":{"materialTextureSlots":44,"identityResolvedSlots":44,"exactStreamKeySlots":43,"materials":13,"lod":a.lod,"lodSurfIndex":lod_start,"lodSurfaces":len(surfaces),"lodUniqueMaterials":len(used),"visualBindingsMissingExactStreamKey":0,"nativeIdentityClosure":True,"visualPbrTextureClosure":True},"materials":material_rows,"surfaceBindings":surfaces,"missingVisualBindings":[],"proofBoundary":"All native material/image identities and selected glTF color/normal images are exact retail-derived evidence. This adapter deliberately omits MaterialTextureDef structural fields not present in the resolved v4 inventory rather than inferring them; upstream byte-decoded manifests remain authoritative for those fields. The cornea PBR mapping remains explicitly visualization-only."}
+    doc = {"format":"t6-character-material-binding-plan-v1","authority":"exact resolved SEAL6 MaterialTextureDef v4 image-use inventory + exact LOD0 visualization proof + exact serialized XModel Material pointer replay + normalized retail LOD boundaries + exact streamed dataHash plus retail-derived IPAK filename hash; no slot structural fields are fabricated","sourceManifests":[{"path":str(p),"sha256":sha(p)} for p in source_paths],"ipakFilenameHashPolicy":{"algorithm":"T6 R_HashString(exact image name)","historicalNameHashHexUsedAsFilenameHash":False},"summary":{"materialTextureSlots":44,"identityResolvedSlots":44,"exactStreamKeySlots":43,"materials":13,"lod":a.lod,"lodSurfIndex":lod_start,"lodSurfaces":len(surfaces),"lodUniqueMaterials":len(used),"visualBindingsMissingExactStreamKey":0,"nativeIdentityClosure":True,"visualPbrTextureClosure":True},"materials":material_rows,"surfaceBindings":surfaces,"missingVisualBindings":[],"proofBoundary":"All native material/image identities and selected glTF color/normal images are exact retail-derived evidence. IPAK filename hashes are derived from exact retail image names; the historical nameHashHex field is retained only as upstream evidence and is never used as an IPAK filename hash. This adapter deliberately omits MaterialTextureDef structural fields not present in the resolved v4 inventory rather than inferring them; upstream byte-decoded manifests remain authoritative for those fields. The cornea PBR mapping remains explicitly visualization-only."}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(doc, indent=2, sort_keys=True)+"\n", encoding="utf-8")
     print(json.dumps(doc["summary"], indent=2, sort_keys=True))
