@@ -1,0 +1,100 @@
+name: T6 Nuketown MapEnt car owner zone v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_mapent_car_owner_zone_v1.yml'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Probe and expand exact retail dependency zones
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          mkdir -p /tmp/zones
+          python - <<'PY' >/tmp/targets.txt
+          import json
+          d=json.load(open('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'))
+          for x in sorted({e['model'] for e in d['carEntities'] if e.get('model')}): print(x)
+          PY
+          : >/tmp/zone_rows.ndjson
+          for zone in common_mp common_patch_mp patch_mp dlc0_load_mp dlc0; do
+            url="https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            code=$(curl -sS -L -o "/tmp/zones/${zone}.ff" -w '%{http_code}' "$url" || true)
+            if [ "$code" != 200 ]; then
+              rm -f "/tmp/zones/${zone}.ff"
+              printf '{"zone":"%s","httpStatus":"%s","exists":false}\n' "$zone" "$code" >>/tmp/zone_rows.ndjson
+              continue
+            fi
+            rawsha=$(sha256sum "/tmp/zones/${zone}.ff" | awk '{print $1}')
+            rawbytes=$(stat -c%s "/tmp/zones/${zone}.ff")
+            if /tmp/t6_expand "/tmp/zones/${zone}.ff" "/tmp/zones/${zone}.expanded.bin" "$zone" 2>"/tmp/zones/${zone}.expand.log"; then
+              expsha=$(sha256sum "/tmp/zones/${zone}.expanded.bin" | awk '{print $1}')
+              expbytes=$(stat -c%s "/tmp/zones/${zone}.expanded.bin")
+              ZONE="$zone" RAWSHA="$rawsha" RAWBYTES="$rawbytes" EXPSHA="$expsha" EXPBYTES="$expbytes" python - <<'PY' >>/tmp/zone_rows.ndjson
+          import json,os
+          from pathlib import Path
+          zone=os.environ['ZONE']; data=Path(f'/tmp/zones/{zone}.expanded.bin').read_bytes()
+          targets=Path('/tmp/targets.txt').read_text().splitlines()
+          matches={}
+          for name in targets:
+            needle=name.encode('latin1')+b'\0'; pos=[]; s=0
+            while True:
+              i=data.find(needle,s)
+              if i<0: break
+              pos.append(i); s=i+1
+            matches[name]=pos
+          print(json.dumps({'zone':zone,'exists':True,'expandOk':True,'rawBytes':int(os.environ['RAWBYTES']),'rawSha256':os.environ['RAWSHA'],'expandedBytes':int(os.environ['EXPBYTES']),'expandedSha256':os.environ['EXPSHA'],'nameOccurrences':matches},sort_keys=True))
+          PY
+            else
+              ZONE="$zone" RAWSHA="$rawsha" RAWBYTES="$rawbytes" python - <<'PY' >>/tmp/zone_rows.ndjson
+          import json,os
+          print(json.dumps({'zone':os.environ['ZONE'],'exists':True,'expandOk':False,'rawBytes':int(os.environ['RAWBYTES']),'rawSha256':os.environ['RAWSHA']},sort_keys=True))
+          PY
+            fi
+          done
+
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          rows=[json.loads(x) for x in Path('/tmp/zone_rows.ndjson').read_text().splitlines() if x.strip()]
+          targets=Path('/tmp/targets.txt').read_text().splitlines()
+          owners={t:[] for t in targets}
+          for r in rows:
+            for t,p in (r.get('nameOccurrences') or {}).items():
+              if p: owners[t].append({'zone':r['zone'],'positions':p,'expandedSha256':r['expandedSha256']})
+          out={'format':'t6-nuketown-mapent-car-owner-zone-v1','map':'mp_nuketown_2020','targets':targets,'zones':rows,'owners':owners}
+          b=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode()
+          Path('/tmp/T6_NUKETOWN_MAPENT_CAR_OWNER_ZONE_V1.json').write_bytes(b)
+          print(json.dumps({'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'owners':owners,'zones':rows},indent=2))
+          missing=[t for t,v in owners.items() if not v]
+          ambiguous=[t for t,v in owners.items() if len(v)>1]
+          if missing: raise SystemExit(f'no retail owner zone found for {missing}')
+          # Multiple zones are allowed only as retained override/dependency evidence;
+          # do not silently choose among them here.
+          if ambiguous: print('AMBIGUOUS_OWNER_ZONES',json.dumps(ambiguous))
+          PY
+      - name: Promote owner-zone census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp /tmp/T6_NUKETOWN_MAPENT_CAR_OWNER_ZONE_V1.json manifests/maps/mp_nuketown_2020/
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_OWNER_ZONE_V1.json
+          git commit -m 'Locate retail owner zones for Nuketown MapEnt cars'
+          git pull --rebase origin main
+          git push origin HEAD:main
