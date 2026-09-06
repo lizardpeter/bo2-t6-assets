@@ -1,0 +1,87 @@
+{
+  "artifact": {
+    "fullJsonUncompressedBytes": 1668665,
+    "fullJsonUncompressedSha256": "99c6aa39f00e216b037f22019d3e11fc7d008f7a3af9ee965b71d25eb7fc0de7",
+    "storedBytes": 694109,
+    "storedEncoding": "zlib+base64",
+    "storedFile": "T6_NUKETOWN_STATIC_LIGHTING_SH_V1.json.zlib.b64",
+    "storedSha256": "959eaa5b4bb177a09485580afcafe02fcbf418b2679a7fc73ce0f076b12781c4",
+    "zlibBytes": 520580,
+    "zlibSha256": "16295fa5898fbef24808177f48b1cd7f5edfe3a5b2fc47755d4bc483816014d1"
+  },
+  "coefficientBank": {
+    "allFinite": true,
+    "decodedFloatRange": [-6.655618667602539, 8.81385612487793],
+    "rawUint16Range": [19137, 50818]
+  },
+  "format": "t6-nuketown-lightgrid-coeff-decode-v1",
+  "gridBasisDirs": {
+    "count": 56,
+    "first": [-0.5773502588272095, -0.5773502588272095, -0.5773502588272095],
+    "float32BytesSha256": "9dd96f562853c9286e37d31cd4c328a9bb955159d9e704e640a8164463f23d32",
+    "last": [0.5773502588272095, 0.5773502588272095, 0.5773502588272095],
+    "lengthRangeUsingFloat64Check": [0.9999999820517685, 1.0000000269797291]
+  },
+  "map": "mp_nuketown_2020",
+  "producer": "tools/t6_nuketown_lightgrid_coeff_decode_v1.py",
+  "proofBoundary": {
+    "notClaimed": "This does not by itself reproduce dynamic hero-light additions, material lightmap equations, runtime visibility traces, or a full retail framebuffer.",
+    "oldGlbUsedAsInput": false,
+    "proven": "Exact PC uint16 coefficient decode, exact 56-direction basis generation, exact second-order directional evaluation, and exact coeff->GfxLightingSH packing for all 2,992 source-derived Nuketown static draw instances."
+  },
+  "retailPcProof": {
+    "GenerateLightGridBasisDirs": {"va": "0x00a98020"},
+    "R_BlendAndSetLightGridColors": {"va": "0x00a6fd40"},
+    "R_CalculateLightGridColorFromCoeffs": {"bytes": 156, "va": "0x00a6ee90"},
+    "R_DecodeLightGridCoeffsWeighted": {"va": "0x00a6ef30"},
+    "binary": "CoDMPServer_PC.exe",
+    "constants": {
+      "biasMinus16": {"bits": "0xc1800000", "va": "0x00d23260", "value": -16.0},
+      "epsilon": {"bits": "0x38d1b717", "va": "0x00be6c34", "value": 9.999999747378752e-05},
+      "half": {"bits": "0x3f000000", "va": "0x00becb58", "value": 0.5},
+      "inv65535": {"bits": "0x37800080", "va": "0x00d23240", "value": 1.5259021893143654e-05},
+      "quarter": {"bits": "0x3e800000", "va": "0x00b91034", "value": 0.25},
+      "scale32": {"bits": "0x42000000", "va": "0x00d23250", "value": 32.0},
+      "three": {"bits": "0x40400000", "va": "0x00b95c08", "value": 3.0},
+      "twoThirds": {"bits": "0x3f2aaaab", "va": "0x00ba8ae0", "value": 0.6666666865348816}
+    },
+    "decodeEquation": "float32((float32(float32(uint16 * 1/65535) * 32) + -16) * weight)",
+    "directionalEquation": "max(c0 + x*c1 + y*c2 + z*c3 + zx*c4 + zy*c5 + yx*c6 + (3*z*z-1)*c7 + (x*x-y*y)*c8, 0)",
+    "gfxLightingSHPack": {
+      "L": "L(ci)=0.25*ci.r+0.5*ci.g+0.25*ci.b, in PC scalar instruction order",
+      "V0": ["c0.r/(L(c0)+eps)", "c0.g/(L(c0)+eps)", "c0.b/(L(c0)+eps)", "3*L(c7)"],
+      "V1": ["L(c1)", "L(c2)", "L(c3)", "L(c0)+eps-L(c7)"],
+      "V2": ["L(c4)", "L(c5)", "L(c6)", "L(c8)"]
+    }
+  },
+  "source": {
+    "coefficientCount": 40615,
+    "coefficientEnd": 84451266,
+    "coefficientPayloadBytes": 2193210,
+    "coefficientPayloadSha256": "cb78afcf9fd6abd008b2beeb56eedc355885bd681b384f92b261152c8eebb1e5",
+    "coefficientRecordBytes": 54,
+    "coefficientStart": 82258056,
+    "expandedBytes": 154653476,
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+    "gfxLightGridFixedStart": 63150884,
+    "gfxWorldFixedStart": 63150420,
+    "staticPlacementCount": 2992,
+    "staticPlacementFile": "NUKETOWN_STATIC_MODEL_PLACEMENTS_V1.json"
+  },
+  "staticReconstruction": {
+    "allDirectionalSamplesNonnegative": true,
+    "allGfxLightingSHFinite": true,
+    "colorsIndexRange": [2, 6784],
+    "count": 2992,
+    "directionalRgbMax": [19.917757034301758, 19.57750701904297, 19.042818069458008],
+    "directionalRgbMin": [0.0, 0.0, 0.0],
+    "directionalSampleLaneCount": 502656,
+    "directionalZeroLaneCount": 987,
+    "gfxLightingSHComponentMax": [2.8707735538482666, 1.4755562543869019, 1.432374119758606, 6.257908344268799, 2.028351306915283, 2.44119930267334, 8.693859100341797, 5.964546203613281, 1.4430155754089355, 1.6512703895568848, 1.6024413108825684, 0.8353400230407715],
+    "gfxLightingSHComponentMin": [0.25723493099212646, 0.4560726583003998, 0.21685346961021423, -1.3436479568481445, -2.4027466773986816, -4.083680152893066, -1.9424126148223877, 0.005226952955126762, -1.719630479812622, -6.614602565765381, -1.7041277885437012, -0.8293581008911133],
+    "primaryLightIndexCounts": {"0":529,"1":2222,"2":3,"3":6,"4":1,"5":16,"6":1,"7":9,"8":21,"9":60,"10":9,"11":1,"12":3,"13":61,"14":1,"15":37,"16":11,"17":1},
+    "uniqueColorsIndexCount": 2992,
+    "uniqueModelCount": 324,
+    "visibilityCounts": {"0":935,"1":16,"2":12,"3":6,"4":15,"5":6,"6":5,"7":2,"8":5,"10":4,"11":2,"12":5,"13":2,"14":4,"15":4,"16":6,"17":2,"19":1,"22":4,"24":3,"25":2,"27":2,"29":3,"30":2,"31":1,"32":2,"33":2,"34":1,"35":2,"36":2,"37":2,"38":3,"39":3,"40":4,"41":3,"42":2,"43":3,"45":2,"47":2,"49":3,"51":1,"52":2,"53":1,"54":1,"55":2,"56":2,"57":2,"58":1,"59":1,"60":2,"62":1,"65":1,"68":9,"69":3,"71":1,"72":1,"73":2,"74":2,"75":1,"78":5,"79":2,"80":1,"81":2,"82":1,"83":1,"85":2,"87":1,"88":1,"89":6,"90":2,"93":1,"94":2,"95":1,"96":5,"97":2,"98":3,"99":2,"100":4,"102":1,"103":1,"104":3,"105":2,"106":1,"107":1,"108":1,"109":6,"110":5,"111":2,"112":1,"113":3,"114":1,"115":3,"116":1,"117":3,"119":2,"120":3,"121":4,"122":2,"123":4,"124":4,"125":1,"126":2,"128":6,"129":6,"130":1,"131":3,"132":3,"133":1,"134":6,"135":2,"136":5,"137":8,"138":6,"139":6,"140":1,"141":7,"142":3,"143":5,"144":3,"145":3,"146":12,"147":4,"148":5,"149":6,"150":6,"151":5,"152":4,"154":1,"155":6,"156":8,"157":5,"158":5,"159":2,"160":3,"161":6,"162":6,"163":7,"164":10,"165":2,"166":4,"167":4,"168":9,"169":1,"170":6,"171":3,"172":4,"173":8,"174":2,"175":6,"176":4,"177":3,"179":1,"180":2,"181":1,"182":2,"183":3,"184":4,"185":4,"186":3,"187":4,"188":4,"189":6,"190":2,"192":7,"193":6,"194":7,"195":4,"196":3,"197":10,"198":3,"199":4,"200":5,"201":4,"202":9,"203":2,"204":1,"205":1,"206":6,"207":6,"208":2,"209":6,"210":3,"211":4,"212":9,"213":1,"214":8,"215":28,"216":12,"217":13,"218":5,"219":19,"220":4,"221":5,"222":1,"223":4,"224":2,"225":5,"226":10,"227":4,"228":7,"229":13,"230":6,"231":6,"232":23,"233":7,"234":11,"235":11,"236":25,"237":13,"238":12,"239":8,"240":34,"241":35,"242":14,"243":39,"244":13,"245":18,"246":8,"247":26,"248":12,"249":72,"250":23,"251":32,"252":16,"253":47,"254":72,"255":676}
+  }
+}
