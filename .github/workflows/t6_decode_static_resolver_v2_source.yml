@@ -1,0 +1,45 @@
+name: T6 decode static resolver v2 source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_decode_static_resolver_v2_source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode retained v2 resolver source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,zlib
+          p=pathlib.Path('tools/t6_nuketown_static_material_alias_resolve_v2.py.zlib.b64')
+          b64=p.read_bytes().strip()
+          print('PAYLOAD_BYTES',len(b64),hashlib.sha256(b64).hexdigest())
+          try:
+              raw=zlib.decompress(base64.b64decode(b64))
+          except Exception as e:
+              print('DECODE_ERROR',repr(e))
+              raise
+          print('DECODED_BYTES',len(raw),hashlib.sha256(raw).hexdigest())
+          expected='26b5237eec5f1cfbeeb457370733880f86f090bc82f78ab6c0fc7a1d530eb153'
+          assert hashlib.sha256(raw).hexdigest()==expected
+          pathlib.Path('/tmp/resolver_v2.py').write_bytes(raw)
+          print('--- CURSOR/ALIGNMENT LINES ---')
+          for i,line in enumerate(raw.decode().splitlines(),1):
+              l=line.lower()
+              if any(k in l for k in ('virtual','align','cursor','material_handle','geometry','triindices','colltris','boneinfo')):
+                  print(f'{i:04d}: {line}')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-static-resolver-v2-source
+          path: /tmp/resolver_v2.py
+          if-no-files-found: error
