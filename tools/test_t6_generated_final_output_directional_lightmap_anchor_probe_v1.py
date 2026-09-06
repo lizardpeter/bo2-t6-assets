@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import copy
 import struct
 
 import t6_generated_final_output_directional_lightmap_anchor_probe_v1 as probe
@@ -121,14 +120,12 @@ def main() -> int:
 
     wrong_coord = fixture(False)
     nodes = wrong_coord["shaders"][0]["nodes"]
-    # Find the row2 v expression and change 2/3 to 1/2.
+    # Find the row2 v expression via the known row2 sample and change 2/3 to 1/2.
     half = len(nodes); nodes.append({"id": half, "kind": "literal32", "bits": bits(0.5)})
-    row2_v = next(
+    row2_sample = next(
         node for node in nodes
-        if node.get("kind") == "op" and node.get("op") == "add" and 4 in node.get("args", [])
+        if node.get("kind") == "textureSample" and node.get("instructionDword") == 140
     )
-    # Avoid relying on the above search target: row2 samples are at DWORD 140.
-    row2_sample = next(node for node in nodes if node.get("kind") == "textureSample" and node.get("instructionDword") == 140)
     old_v = row2_sample["args"][1]
     old_node = nodes[old_v]
     old_node["args"] = [old_node["args"][0], half]
