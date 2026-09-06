@@ -30,7 +30,7 @@ def main() -> int:
         "bo2_t6_fastfile.py",
         '"decrypt"',
         "t6_xmodel_skeleton_normalize_v3.py",
-        "t6_xmodel_mesh_normalize_v4.py",
+        "t6_xmodel_mesh_normalize_v1.py",
         "t6_xanim_normalize_v1.py",
         "t6_build_seal6_smg_textured_animated_all_lods_v4.ps1",
         FACTION_EXPANDED,
@@ -39,16 +39,17 @@ def main() -> int:
         "CommonExpandedBytes = 206493911",
         'TargetAssetStart = "0x45CCF1"',
         "TargetXAssetIndex = 213",
-        "topLevelSurfsAliasProven",
-        'reuseProof.mode -ne "exact-packed-top-level-XModel.surfs-alias"',
-        "Mesh.summary.vertices -ne 21188",
-        "Mesh.summary.triangles -ne 21283",
+        'skeletonSource.mode -ne "inline_owned"',
+        'Mesh.format -ne "t6-xmodel-mesh-normalized-v1"',
+        "MeshVertices -ne 21188",
+        "MeshTriangles -ne 21283",
         "assetSerializedSha256",
         "allFlatPoolsExhausted",
         "SEAL6_FULL_RETAIL_BLENDER.zip",
         "t6-seal6-full-retail-rebuild-v1",
         "fastFilesPromotedByExpandedIdentity",
         "ipakImagesPromotedByExactContentIdentity",
+        "inlineXModelOwnershipRequired",
     ]
     missing = [x for x in required if x not in text]
     assert not missing, f"raw rebuild script missing required contract tokens: {missing}"
@@ -69,14 +70,21 @@ def main() -> int:
     assert "Assert-FileIdentity $FactionExpanded $FactionExpandedBytes $FactionExpandedSha256" in text
     assert "Assert-FileIdentity $CommonExpanded $CommonExpandedBytes $CommonExpandedSha256" in text
 
+    # Fresh retail replay and the retained golden fixture both require this
+    # SEAL6 target to be inline-owned and decoded by mesh-normalize-v1. Do not
+    # silently route it through the later packed-alias v4 mesh normalizer.
+    assert 'skeletonSource.mode -ne "inline_owned"' in text
+    assert 't6-xmodel-mesh-normalized-v1' in text
+    assert "t6_xmodel_mesh_normalize_v4.py" not in text
+    assert "exact-packed-top-level-XModel.surfs-alias" not in text
+
     # IPAK container hashes remain provenance. The v4 package builder is the
     # content-authoritative 42/42 exact-key + CRC/IWI gate across both repos.
     assert "all-LOD v4 builder" in text
     assert "ipakImagesPromotedByExactContentIdentity=$true" in text
     assert "unique exact (retail filename hash, streamed dataHash)" in text
 
-    # Never regress to old model normalizers or single-IPAK packaging.
-    assert "t6_xmodel_mesh_normalize_v1.py" not in text
+    # Never regress to old skeleton normalizers or single-IPAK packaging.
     assert "t6_xmodel_skeleton_normalize_v1.py" not in text
     assert re.search(r"-BaseIpak\s+\$BaseIpak\s+-MpIpak\s+\$MpIpak", text)
 
