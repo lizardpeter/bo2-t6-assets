@@ -1,0 +1,93 @@
+name: T6 Nuketown car material and Ficus state trace v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car_material_and_ficus_state_trace_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and expand exact retail FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+      - name: Trace exact LOD0 Material handles and Ficus GfxStateBits
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import base64,hashlib,json,struct,zlib
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_nuketown_static_material_catalog_v1 import material_row
+          from t6_nuketown_material_render_state_apply_v1 import choose_state_entry,state_table_start,decode_state
+
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          targets={
+            'ficus':24530208,
+            'car01':44523322,
+            'car02':41469954,
+          }
+          report={'format':'t6-nuketown-car-material-and-ficus-state-trace-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'models':{}}
+          for key,start in targets.items():
+            d=XModelWalker(data,start).walk_xmodel(); x=d['xmodel']
+            if d['blockers']: raise SystemExit(f'{key}: blockers {d["blockers"]}')
+            lod0=x['lods'][0]
+            si=int(lod0['surfIndex']); sn=int(lod0['numSurfs'])
+            handles=x['materialHandles']
+            row={'name':x['name'],'fixedSourceStart':start,'numSurfs':x['numSurfs'],'lod0':lod0,'lod0MaterialHandles':[],'inlineMaterials':(d.get('details') or {}).get('inlineMaterials',[])}
+            for i in range(si,si+sn):
+              h=handles[i]
+              row['lod0MaterialHandles'].append({'surfaceIndex':i,'handle':h})
+            report['models'][key]=row
+            print('MODEL',key,x['name'],'LOD0',si,sn)
+            for rr in row['lod0MaterialHandles']: print('HANDLE',key,json.dumps(rr,sort_keys=True))
+            for m in row['inlineMaterials']: print('INLINE_MAT',key,json.dumps(m,sort_keys=True))
+
+          # Exact Ficus render states for the three LOD0 material identities.
+          ficus_names=['mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway']
+          states=[]
+          for name in ficus_names:
+            r=material_row(data,name)
+            if r.get('status')!='located': raise SystemExit(f'{name}: material catalog status {r}')
+            idx,selection,entries=choose_state_entry(data,r)
+            p=state_table_start(data,r)
+            q=p+20*idx
+            w0,w1=struct.unpack_from('<II',data,q)
+            st=decode_state(w0,w1)
+            states.append({'material':name,'materialRow':r,'stateBitsIndex':idx,'selection':selection,'stateBitsTableStart':p,'loadBits0':f'0x{w0:08X}','loadBits1':f'0x{w1:08X}',**st})
+            print('FICUS_STATE',json.dumps(states[-1],sort_keys=True,default=str))
+          report['ficusRenderStates']=states
+
+          # Decode retained packed Material binding manifest schema and report candidate matches for car packed handles.
+          p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
+          raw=zlib.decompress(base64.b64decode(p.read_bytes().strip()))
+          bind=json.loads(raw)
+          print('PACKED_BIND_SUMMARY',json.dumps(bind['summary'],sort_keys=True))
+          print('PACKED_BIND_FIRST',json.dumps(bind['materials'][:3],indent=2,sort_keys=True))
+          # Preserve exact packed pointer offsets used by car LOD0 for later join.
+          offs=[]
+          for key in ('car01','car02'):
+            for rr in report['models'][key]['lod0MaterialHandles']:
+              h=rr['handle']
+              if h.get('kind')=='packed' and h.get('block')==5: offs.append(int(h['offset']))
+          report['carLod0PackedMaterialOffsets']=sorted(set(offs))
+          Path('/tmp/trace.json').write_text(json.dumps(report,indent=2,sort_keys=True,default=str)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR_MATERIAL_AND_FICUS_STATE_TRACE_V1
+          path: /tmp/trace.json
+          if-no-files-found: error
