@@ -1,0 +1,120 @@
+{
+  "format": "t6-seal6-smg-playeranim-core-v1",
+  "authority": "direct retail common_mp expanded bytes + direct RawFile mp/playeranim.script + direct XAnimParts fixed/name/bone-name records + retail SEAL6 XModel skeleton",
+  "sources": {
+    "commonMpFastfile": {
+      "bytes": 40307072,
+      "sha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77"
+    },
+    "commonMpExpanded": {
+      "bytes": 206493911,
+      "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+    },
+    "playeranimRawFile": {
+      "name": "mp/playeranim.script",
+      "fixedRawOffset": 13032006,
+      "declaredLengthExcludingTerminator": 117683,
+      "bufferBytesIncludingTerminator": 117684,
+      "bufferSha256": "1f6e08e08feea7576354c9f744a020c7371accb4aea8146326c39fee993f8e6f"
+    },
+    "seal6Body": {
+      "name": "c_usa_mp_seal6_smg_fb",
+      "skeletonBones": 102,
+      "factionExpandedSha256": "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30"
+    }
+  },
+  "playeranimReferenceCensus": {
+    "animationReferenceLines": 1041,
+    "uniqueAnimationNames": 875,
+    "inlineNameResolvedInCommonMp": 825,
+    "notInlineNameResolved": 50,
+    "exactTrackSubsetOfSeal6": 629,
+    "containsAnimationOnlyTracks": 196
+  },
+  "playeranimRules": {
+    "defaultLocomotionComment": "retail playeranim declares default player states suitable for a two-handed rifle type weapon",
+    "weaponClassAlias": {
+      "name": "autofire",
+      "definition": "mg AND smg",
+      "sourceLine": 30
+    },
+    "smgSprintSelection": {
+      "condition": "weaponclass smg",
+      "animation": "pb_smg_sprint",
+      "sourceLine": 1233
+    },
+    "autoFireEventSelection": "SMG and MG firing use weaponclass autofire torso animations"
+  },
+  "coreSets": {
+    "idleHipfire": ["pb_stand_alert", "pb_crouch_alert", "pb_prone_aim"],
+    "idleAds": ["pb_stand_ads", "pb_crouch_ads", "pb_prone_aim_ads"],
+    "sprintSmg": ["pb_smg_sprint"],
+    "runStand": ["pb_combatrun_left_loop", "pb_combatrun_right_loop", "pb_combatrun_back_loop", "pb_combatrun_forward_loop"],
+    "walkStand": ["pb_stand_shoot_walk_left", "pb_stand_shoot_walk_right", "pb_stand_shoot_walk_back", "pb_stand_shoot_walk_forward"],
+    "runCrouch": ["pb_crouch_run_left", "pb_crouch_run_right", "pb_crouch_run_back", "pb_crouch_run_forward"],
+    "walkCrouch": ["pb_crouch_shoot_run_left", "pb_crouch_shoot_run_right", "pb_crouch_shoot_run_back", "pb_crouch_shoot_run_forward"],
+    "walkProne": ["pb_prone_crawl_left", "pb_prone_crawl_right", "pb_prone_crawl_back", "pb_prone_crawl"],
+    "jumpTakeoff": ["pb_standjump_takeoff", "pb_runjump_takeoff", "pb_rifle_stand_leftjump_takeoff", "pb_rifle_stand_rightjump_takeoff"],
+    "jumpLand": ["pb_standjump_land", "pb_runjump_land", "pb_rifle_stand_leftjump_land", "pb_rifle_stand_rightjump_land"],
+    "autoFireTorso": ["pt_stand_shoot_auto", "pt_stand_shoot_auto_ads", "pt_crouch_shoot_auto", "pt_crouch_shoot_auto_ads", "pt_prone_shoot_auto", "pt_prone_ads_shoot_auto"],
+    "stanceTransitions": ["pb_rifle_crouch2stand", "pb_rifle_stand2crouch", "pb_prone2sprint"]
+  },
+  "canaries": {
+    "standIdle": {
+      "name": "pb_stand_alert",
+      "rawStructOffset": 662933,
+      "numFrames": 383,
+      "frameRate": 30.0,
+      "trackNameCount": 68,
+      "matchedSeal6BoneCount": 68,
+      "extraAnimationBoneCount": 0
+    },
+    "standRunForward": {
+      "name": "pb_combatrun_forward_loop",
+      "rawStructOffset": 5670677,
+      "numFrames": 50,
+      "frameRate": 30.0,
+      "trackNameCount": 68,
+      "matchedSeal6BoneCount": 68,
+      "extraAnimationBoneCount": 0
+    },
+    "standAutoFire": {
+      "name": "pt_stand_shoot_auto",
+      "rawStructOffset": 7851319,
+      "numFrames": 18,
+      "frameRate": 30.0,
+      "trackNameCount": 55,
+      "matchedSeal6BoneCount": 55,
+      "extraAnimationBoneCount": 0
+    },
+    "smgSprint": {
+      "name": "pb_smg_sprint",
+      "rawStructOffset": 5203838,
+      "numFrames": 46,
+      "frameRate": 30.0,
+      "trackNameCount": 111,
+      "matchedSeal6BoneCount": 92,
+      "extraAnimationBoneCount": 19,
+      "extraAnimationBones": [
+        "j_bridge", "j_brow_in_le", "j_brow_in_ri", "j_brow_out_le", "j_brow_out_ri",
+        "j_chin_skinroll", "j_forehead_le", "j_forehead_ri", "j_lip_bot_out_le",
+        "j_lip_bot_out_ri", "j_lip_top_out_le", "j_lip_top_out_ri", "j_lip_upper_le",
+        "j_lip_upper_out_le", "j_lip_upper_out_ri", "j_lip_upper_ri", "j_nose_le",
+        "j_nose_ri", "j_tongue"
+      ]
+    }
+  },
+  "runtimeBindingProof": {
+    "observation": "retail playeranim explicitly selects pb_smg_sprint for weaponclass smg while c_usa_mp_seal6_smg_fb has 102 bones and pb_smg_sprint names 111 tracks; 92 track names exist on the SEAL6 skeleton and 19 are animation-only facial/control names",
+    "consequence": "portable export must bind the exact ScriptString/name intersection and preserve/report unmatched animation tracks instead of rejecting this retail-valid pairing",
+    "noFabricatedBones": true,
+    "noNameHeuristic": true
+  },
+  "closure": {
+    "commonMpSourceHashExact": true,
+    "bodySkeletonResolved": true,
+    "playeranimCoreIdentityResolved": true,
+    "normalizedMotionPayloadsPending": true,
+    "portableGltfPlaybackPending": true
+  }
+}

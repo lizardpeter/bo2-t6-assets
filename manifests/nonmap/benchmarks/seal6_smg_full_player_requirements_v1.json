@@ -1,0 +1,88 @@
+{
+  "format": "t6-complete-player-requirements-v1",
+  "id": "seal6_smg_full_player_v1",
+  "title": "SEAL6 SMG complete third-person + first-person player bundle",
+  "playerClass": "allies/smg",
+  "semanticCandidate": {
+    "zone": "faction_seals_mp",
+    "script": "mpbody/class_smg_usa_seals.gsc",
+    "externalDiscoveryRepository": "xS2RT/GSC-Helper",
+    "externalDiscoveryCommit": "a6f8f0589170404901be3565fa36cda22cf24a53",
+    "claims": {
+      "playerModel": "c_usa_mp_seal6_smg_fb",
+      "viewModel": "c_usa_mp_seal6_shortsleeve_viewhands",
+      "headList": []
+    },
+    "promotionRule": "External GSC dumps are discovery evidence only. Complete-player closure requires the same assembly semantics to be re-resolved from retained retail faction_seals_mp script bytes/output."
+  },
+  "thirdPerson": {
+    "fullBodyModel": "c_usa_mp_seal6_smg_fb",
+    "required": true,
+    "modelRole": "complete-player-body",
+    "structuralClass": "animated",
+    "separateHeadExpected": false,
+    "coverage": {
+      "allSerializedLods": true,
+      "allSurfacesPerLod": true,
+      "allBones": true,
+      "allSkinWeights": true,
+      "allMaterialSlots": true,
+      "allMaterialToImageDependencies": true,
+      "bounds": true,
+      "collisionMetadata": true,
+      "physicsReferences": true,
+      "partBitsAndClassification": true,
+      "noHeadOrBodySubstitution": true,
+      "noViewhandsUsedAsBodyFallback": true
+    },
+    "animations": {
+      "required": true,
+      "scope": "retail third-person player animation set compatible with the full-body rig",
+      "minimumBehaviorFamilies": [
+        "idle/stance",
+        "walk/run/sprint",
+        "crouch/prone",
+        "jump/fall/land",
+        "weapon-ready/fire/reload",
+        "melee",
+        "turn/aim",
+        "death/reaction where owned by the player animation system"
+      ],
+      "rule": "Discover from retail animation ownership/animtree evidence; do not infer a family solely from filename prefix."
+    }
+  },
+  "firstPerson": {
+    "viewhandsModel": "c_usa_mp_seal6_shortsleeve_viewhands",
+    "weaponBenchmark": "seal6_smg_mp7_v1",
+    "required": true
+  },
+  "assemblySemantics": {
+    "requiredRetailClaims": [
+      {
+        "operation": "setmodel",
+        "value": "c_usa_mp_seal6_smg_fb"
+      },
+      {
+        "operation": "setviewmodel",
+        "value": "c_usa_mp_seal6_shortsleeve_viewhands"
+      },
+      {
+        "operation": "heads",
+        "value": []
+      }
+    ],
+    "meaning": "For this class the complete third-person visible player is expected to be the full-body XModel itself; no separate head list is selected by the class script."
+  },
+  "closureGates": [
+    "full-body XModel identity resolved from retained retail T6 source",
+    "retail faction_seals_mp player-class script confirms full-body setmodel + separate viewhands + empty head list",
+    "every serialized full-body LOD and surface retained",
+    "full skeleton hierarchy and every skin influence retained with no unsupported rows",
+    "all full-body material slots resolve to exact Material identities",
+    "all full-body Material -> GfxImage dependencies resolve without filename guessing",
+    "bounds, part classification, collision metadata, and physics references retained where serialized",
+    "third-person player animation ownership discovered from retail evidence and compatibility-checked against the body rig",
+    "first-person viewhands + MP7 benchmark gates remain independently satisfied",
+    "complete third-person and first-person outputs load in an independent consumer with source/output hashes archived"
+  ]
+}

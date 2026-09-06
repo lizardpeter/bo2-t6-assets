@@ -1,0 +1,122 @@
+name: Non-map player and weapon regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_virtual_front_map_v1.py"
+      - "tools/test_t6_virtual_front_map_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/t6_patch_weapon_closure_v1.py"
+      - "tools/test_t6_patch_weapon_closure_v1.py"
+      - "tools/t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
+      - "tools/t6_player_character_animation_census_v1.py"
+      - "tools/test_t6_player_character_animation_census_v1.py"
+      - "tools/t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_mp_v1.py"
+      - "tools/t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_retail_v1.py"
+      - "tools/t6_player_body_retail_proof_v1.py"
+      - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
+      - "tools/t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
+      - "manifests/nonmap/targets/mp_player_body_prefix_seeds_v1.json"
+      - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
+      - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_default_playeranim_compatibility_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_handleclip_playeranim_compatibility_v1.json"
+      - ".github/workflows/nonmap-weapon-regressions.yml"
+  pull_request:
+    paths:
+      - "tools/t6_virtual_front_map_v1.py"
+      - "tools/test_t6_virtual_front_map_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v1.py"
+      - "tools/t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
+      - "tools/t6_patch_weapon_closure_v1.py"
+      - "tools/test_t6_patch_weapon_closure_v1.py"
+      - "tools/t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
+      - "tools/t6_player_character_animation_census_v1.py"
+      - "tools/test_t6_player_character_animation_census_v1.py"
+      - "tools/t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_mp_v1.py"
+      - "tools/t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_retail_v1.py"
+      - "tools/t6_player_body_retail_proof_v1.py"
+      - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
+      - "tools/t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
+      - "manifests/nonmap/targets/mp_player_body_prefix_seeds_v1.json"
+      - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
+      - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_default_playeranim_compatibility_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_handleclip_playeranim_compatibility_v1.json"
+      - ".github/workflows/nonmap-weapon-regressions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: VIRTUAL front allocation mapper
+        run: python tools/test_t6_virtual_front_map_v1.py
+      - name: WEAPON structural probe v1
+        run: python tools/test_t6_weapon_xasset_structural_probe_v1.py
+      - name: WEAPON packed-front identity probe v2
+        run: python tools/test_t6_weapon_xasset_structural_probe_v2.py
+      - name: patch_mp one-command closure gate
+        run: python tools/test_t6_patch_weapon_closure_v1.py
+      - name: selector profile census
+        run: python tools/test_t6_playeranim_selector_profile_census_v1.py
+      - name: common_mp selector profile retail canary
+        run: python tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py
+      - name: third-person body x selector census v1
+        run: python tools/test_t6_player_character_animation_census_v1.py
+      - name: multiplayer player-body target generator
+        run: python tools/test_t6_player_body_target_census_v1.py
+      - name: multiplayer 30-body discovery canary
+        run: python tools/test_t6_player_body_target_census_mp_v1.py
+      - name: multiplayer player-body identity registry
+        run: python tools/test_t6_player_body_identity_registry_v1.py
+      - name: current retail player-body registry canary
+        run: python tools/test_t6_player_body_identity_registry_retail_v1.py
+      - name: packed-skeleton mesh normalizer v2
+        run: python tools/test_t6_xmodel_mesh_normalize_v2.py
+      - name: retail player-body proof promoter
+        run: python tools/test_t6_player_body_retail_proof_v1.py
+      - name: one-command retail player-body closer
+        run: python tools/test_t6_player_body_close_v1.py
+      - name: retail-gated player character animation matrix
+        run: python tools/test_t6_player_character_animation_matrix_v2.py
+      - name: current retail character x selector matrix canary
+        run: python tools/test_t6_player_character_animation_matrix_retail_v2.py

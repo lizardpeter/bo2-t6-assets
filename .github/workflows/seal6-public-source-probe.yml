@@ -1,0 +1,113 @@
+name: SEAL6 public retail source probe
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_remote_zip_member_v1.py"
+      - "tools/test_t6_remote_zip_member_v1.py"
+      - "tools/bo2_t6_fastfile.py"
+      - ".github/workflows/seal6-public-source-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Offline remote ZIP parser regressions
+        run: python tools/test_t6_remote_zip_member_v1.py
+      - name: Fetch exact FastFiles from project R2 mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p probe/source
+          base='https://r2.houseofkublai.com/bo2/zone/all'
+          for name in faction_seals_mp.ff common_mp.ff; do
+            echo "Fetching $base/$name"
+            curl --fail --location --silent --show-error \
+              --retry 4 --retry-all-errors --connect-timeout 20 \
+              "$base/$name" -o "probe/source/$name"
+          done
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('probe/source')
+          files=[]
+          for name in ('faction_seals_mp.ff','common_mp.ff'):
+              p=root/name
+              h=hashlib.sha256(p.read_bytes()).hexdigest()
+              files.append({'name':name,'bytes':p.stat().st_size,'sha256':h,'url':f'https://r2.houseofkublai.com/bo2/zone/all/{name}'})
+          (root/'r2_fetch_manifest.json').write_text(json.dumps({'format':'t6-r2-retail-source-fetch-v1','files':files},indent=2,sort_keys=True)+'\n')
+          print(json.dumps(files,indent=2))
+          PY
+      - name: Expand both retail FastFiles and record exact identities
+        run: |
+          python - <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          sys.path.insert(0, 'tools')
+          from bo2_t6_fastfile import decrypt_fastfile_bytes
+
+          root=Path('probe')
+          out=root/'expanded'
+          out.mkdir(parents=True, exist_ok=True)
+          expected={
+            'faction_seals_mp.ff': {
+              'observedRawBytes':3095232,
+              'observedRawSha256':'1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88',
+              'expandedBytes':6245916,
+              'expandedSha256':'21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30',
+            },
+            'common_mp.ff': {
+              'observedRawBytes':40307072,
+              'observedRawSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'expandedBytes':206493911,
+              'expandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+            },
+          }
+          report={'format':'t6-seal6-public-source-probe-v2','files':{}}
+          for name in ('faction_seals_mp.ff','common_mp.ff'):
+            p=root/'source'/name
+            raw=p.read_bytes()
+            row={'rawBytes':len(raw),'rawSha256':hashlib.sha256(raw).hexdigest()}
+            try:
+              expanded,audit,summary=decrypt_fastfile_bytes(raw)
+              ep=out/(name+'.expanded')
+              ep.write_bytes(expanded)
+              row.update({
+                'decrypt':'pass','zoneName':summary['zoneName'],'records':summary['records'],
+                'expandedBytes':len(expanded),'expandedSha256':hashlib.sha256(expanded).hexdigest(),
+                'expandedPath':str(ep),
+              })
+            except Exception as exc:
+              row.update({'decrypt':'fail','error':repr(exc)})
+            report['files'][name]=row
+          for name, e in expected.items():
+            r=report['files'][name]
+            r['observedRawMatchesMirrorIdentity']=(r.get('rawBytes')==e['observedRawBytes'] and r.get('rawSha256')==e['observedRawSha256'])
+            r['expandedExact']=(r.get('decrypt')=='pass' and r.get('expandedBytes')==e['expandedBytes'] and r.get('expandedSha256')==e['expandedSha256'])
+          report['allExpandedExact']=all(report['files'][n]['expandedExact'] for n in expected)
+          (root/'source_probe.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
+          if not report['allExpandedExact']:
+            raise SystemExit('one or more R2 FastFiles do not reproduce the pinned expanded XFile identity')
+          PY
+      - name: Upload public-source proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seal6-public-source-probe
+          path: |
+            probe/source/r2_fetch_manifest.json
+            probe/source_probe.json
+          if-no-files-found: warn
+          retention-days: 7

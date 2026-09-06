@@ -1,0 +1,86 @@
+name: All-assets closure regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_100_percent_closure_v2.py"
+      - "tools/test_t6_100_percent_closure_v2.py"
+      - "tools/t6_asset_proof_manifest_v1.py"
+      - "tools/test_t6_asset_proof_manifest_v1.py"
+      - "tools/test_t6_seal6_full_retail_build_contract_v1.py"
+      - "scripts/t6_build_seal6_smg_textured_animated_all_lods_v3.ps1"
+      - "manifests/T6_100_PERCENT_CLOSURE_V1.json"
+      - "manifests/T6_100_PERCENT_CLOSURE_V2.json"
+      - "manifests/T6_100_PERCENT_CLOSURE_V3.json"
+      - "manifests/nonmap/retail/seal6_smg_golden_asset_proof_v1.json"
+      - "manifests/nonmap/retail/seal6_smg_multi_ipak_resolution_contract_v1.json"
+      - ".github/workflows/all-assets-closure-regressions.yml"
+  pull_request:
+    paths:
+      - "tools/t6_100_percent_closure_v2.py"
+      - "tools/test_t6_100_percent_closure_v2.py"
+      - "tools/t6_asset_proof_manifest_v1.py"
+      - "tools/test_t6_asset_proof_manifest_v1.py"
+      - "tools/test_t6_seal6_full_retail_build_contract_v1.py"
+      - "scripts/t6_build_seal6_smg_textured_animated_all_lods_v3.ps1"
+      - "manifests/T6_100_PERCENT_CLOSURE_V*.json"
+      - "manifests/nonmap/retail/seal6_smg_golden_asset_proof_v1.json"
+      - "manifests/nonmap/retail/seal6_smg_multi_ipak_resolution_contract_v1.json"
+      - ".github/workflows/all-assets-closure-regressions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  closure-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version-aware closure ledger regressions
+        run: python tools/test_t6_100_percent_closure_v2.py
+      - name: Canonical per-asset proof regressions
+        run: python tools/test_t6_asset_proof_manifest_v1.py
+      - name: SEAL6 exact full-retail build contract
+        run: python tools/test_t6_seal6_full_retail_build_contract_v1.py
+      - name: Parse SEAL6 PowerShell wrapper without executing retail stages
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/t6_build_seal6_smg_textured_animated_all_lods_v3.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'PASS: SEAL6 v3 PowerShell parses cleanly'
+      - name: Validate canonical V3 ledger as intentionally incomplete
+        shell: bash
+        run: |
+          set +e
+          python tools/t6_100_percent_closure_v2.py manifests/T6_100_PERCENT_CLOSURE_V3.json --out /tmp/t6-v3-summary.json
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+          python - <<'PY'
+          import json
+          p='/tmp/t6-v3-summary.json'
+          d=json.load(open(p, encoding='utf-8'))
+          assert d['gateCount'] == 25
+          assert d['closedGateCount'] == 1
+          assert d['partialGateCount'] == 24
+          assert d['release100Percent'] is False
+          assert d['blockerCount'] == 24
+          print('PASS: canonical V3 remains fail-closed with 24 explicit blockers')
+          PY
+      - name: Validate SEAL6 golden proof directly
+        run: python tools/t6_asset_proof_manifest_v1.py manifests/nonmap/retail/seal6_smg_golden_asset_proof_v1.json

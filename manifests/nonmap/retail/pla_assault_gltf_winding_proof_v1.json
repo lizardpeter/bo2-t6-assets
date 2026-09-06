@@ -1,0 +1,29 @@
+{
+  "format": "t6-player-body-gltf-winding-proof-v1",
+  "authority": "direct retail faction_pla_mp expanded bytes compared against retail packed vertex normals",
+  "model": "c_chn_mp_pla_assault_fb",
+  "zone": "faction_pla_mp",
+  "expandedSha256": "d853e71040dc1fabc78bf9a65d53d25b69043d0312ceda52153a4054e34ae5c3",
+  "xmodelFixedStart": 814186,
+  "lod": 0,
+  "facesAudited": 13490,
+  "retailStoredTriangleOrder": {
+    "meanFaceNormalDotAveragedRetailVertexNormal": -0.9340947486438151,
+    "medianFaceNormalDotAveragedRetailVertexNormal": -0.9723225449235198,
+    "opposingNormalFraction": 0.9997034840622684
+  },
+  "gltfEmissionRule": {
+    "sourceIndexOrder": ["i0", "i1", "i2"],
+    "emittedIndexOrder": ["i0", "i2", "i1"],
+    "meanFaceNormalDotAveragedRetailVertexNormal": 0.9340947486438151,
+    "medianFaceNormalDotAveragedRetailVertexNormal": 0.9723225449235198,
+    "opposingNormalFraction": 0.0002965159377316531
+  },
+  "conclusion": "For this retained T6 PC32 player-body fixture, stored XSurface triangle winding is opposite glTF/Blender front-face winding and must be reversed at export. The rule is validated against the retail packed vertex normals, not visual appearance.",
+  "proofBoundary": "This proof closes triangle front-face conversion for the retained PLA assault fixture. It does not claim material/texture closure and does not by itself promote the complete player-body exporter until independent Blender validation of the corrected canary succeeds.",
+  "correctedCanaryArtifacts": {
+    "staticGlbSha256": "5dcad7bc3f57e8d32235afe4585570319d69cbb5756467a98cb969297c6bad2f",
+    "riggedGlbSha256": "7065b1bd46b52d99e3400b7c60bb367f6eda9625f26f7a6198637e8fbdb734d9",
+    "staticObjSha256": "ed0c7e8d0e596e1c2431dd1ac5a31202d3d4ff886bcb05806e9c6fbf92eeb8d4"
+  }
+}

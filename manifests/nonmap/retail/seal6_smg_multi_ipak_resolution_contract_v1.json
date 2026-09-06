@@ -1,0 +1,60 @@
+{
+  "format": "t6-seal6-smg-multi-ipak-resolution-contract-v1",
+  "asset": "c_usa_mp_seal6_smg_fb",
+  "authority": "Exact 42-image identity set retained in seal6_smg_texture_keys_v4.json, corrected by cross-repository lookup with the retail T6 filename hash plus exact streamed dataHash. This file is a build-time resolution contract, not a substitute for the generated materialization report.",
+  "sourceIdentityManifest": "manifests/nonmap/retail/seal6_smg_texture_keys_v4.json",
+  "sourceIdentityManifestPolicy": "The historical repository/nameHash labels in v4 are non-authoritative. tools/t6_ipak_iwi_materialize_v3.py derives the retail IPAK filename hash from the exact image name and searches the exact (filenameHash,dataHash) pair across every supplied repository.",
+  "repositories": {
+    "base.ipak": {
+      "sha256": "6c3e68f846fd8ae7bc0bc1adfbeff642d5c8e3ecfc4bd9be3a880f452144fa02",
+      "expectedResolvedTextures": 40
+    },
+    "mp.ipak": {
+      "sha256": "f97404b9bf5a4410ecd298e62a5cdbb3f9d5630b226d885310033842930632a5",
+      "expectedResolvedTextures": 2
+    }
+  },
+  "summary": {
+    "requestedTextures": 42,
+    "expectedMaterializedTextures": 42,
+    "expectedUnresolvedTextures": 0,
+    "expectedAmbiguousTextures": 0,
+    "expectedRepositoryCounts": {
+      "base.ipak": 40,
+      "mp.ipak": 2
+    }
+  },
+  "mpIpakExceptionsToHistoricalV4RepositoryLabel": [
+    {
+      "image": "~-gc_usa_milcas_mcknight_head_camo_c",
+      "derivedFilenameHashHex": "0xd5fa4a3b",
+      "dataHashHex": "0x0e73f12d",
+      "width": 512,
+      "height": 1024,
+      "repository": "mp.ipak"
+    },
+    {
+      "image": "~-gc_usa_mp_seal6_vest_1_c",
+      "derivedFilenameHashHex": "0xe3737726",
+      "dataHashHex": "0x14c7d31c",
+      "width": 1024,
+      "height": 512,
+      "repository": "mp.ipak"
+    }
+  ],
+  "materializer": {
+    "tool": "tools/t6_ipak_iwi_materialize_v3.py",
+    "identityRule": "exact image name -> retail T6 filename hash; pair with exact streamed dataHash; require exactly one match across base.ipak + mp.ipak",
+    "payloadValidation": [
+      "source IPAK SHA-256",
+      "unique cross-repository exact-key match",
+      "entry decompression",
+      "CRC29",
+      "IWI27 metadata",
+      "retained width/height/depth",
+      "PNG decode semantics"
+    ]
+  },
+  "passCondition": "A generated t6-ipak-iwi-materialization-v3 manifest reports requested=42, materialized=42, unresolved=0, repositories.base.ipak=40, repositories.mp.ipak=2, with both supplied IPAKs matching the hashes above.",
+  "proofBoundary": "This contract pins the already identified cross-IPAK repository split and exact two mp.ipak exceptions. It does not claim that a fresh payload materialization has occurred merely because this file exists; only the generated v3 materialization manifest can close that execution step."
+}

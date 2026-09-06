@@ -1,0 +1,162 @@
+{
+  "format": "t6-first-person-benchmark-spec-v1",
+  "id": "seal6_smg_mp7_v1",
+  "title": "SEAL6 SMG + MP7 first complete player/first-person bundle",
+  "goal": "Close one representative COMPLETE multiplayer player: the full third-person SEAL6 SMG player body exactly as assembled by retail faction logic, the separate first-person viewhands, MP7 view/world models, magazine models, materials/images, and both first- and third-person animation closure before generalizing to the full T6 corpus.",
+  "proofPolicy": {
+    "externalDumpsAreDiscoveryEvidenceOnly": true,
+    "retailPromotionRequiresExactIdentityInRetainedSource": true,
+    "noFallbackModels": true,
+    "noFallbackAnimations": true,
+    "noInferredTextureNames": true,
+    "noInferredSoundOrFxIdentity": true,
+    "noImplicitBasePatchWinner": true,
+    "completePlayerCannotPassOnViewhandsWeaponEvidenceAlone": true
+  },
+  "retainedRetailEvidence": {
+    "commonMpExpandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+    "xanimProof": "manifests/stage18d/xanim_raw_proof_summary.json",
+    "mp7BaseViewmodelRecords": 23,
+    "mp7AllWalkExact": true,
+    "reloadCanary": {
+      "name": "viewmodel_mp7_reload",
+      "rawStructOffset": 18001446,
+      "numFrames": 86,
+      "frameRate": 30.0,
+      "boneTrackCount": 76,
+      "notifyCount": 17,
+      "serializedSha256": "371936182a1a71a25d391da7d6a224aabea2d5d0aeae1fdfaed414dbc67b373a"
+    },
+    "weaponDefinitionLayering": {
+      "internalName": "mp7_mp",
+      "baseLayer": "common_mp",
+      "baseInventory": "manifests/weapons/stage18c/clean_mp_loadout_arsenal.csv",
+      "knownOverrideLayer": "common_patch_mp",
+      "overrideInventory": "manifests/weapons/stage18c/common_patch_mp_weapon_overrides.csv",
+      "knownOverrideIndex": 7,
+      "fullPrecedenceRule": ["common_mp", "common_patch_mp", "patch_mp"],
+      "status": "common_patch_mp override is retained evidence; final dependency graph must resolve the winning definition through the full precedence chain rather than copying common_mp base fields"
+    },
+    "rawAttachmentModelProofProducer": "tools/stage18d_attachment_unique_models.py",
+    "rawAttachmentModelProofExpectedOutput": "attachment_unique_xmodel_proof.json"
+  },
+  "discoveryEvidence": [
+    {
+      "kind": "dumped multiplayer body script",
+      "repository": "xS2RT/GSC-Helper",
+      "commit": "a6f8f0589170404901be3565fa36cda22cf24a53",
+      "path": "gsc-dump/faction_seals_mp/mpbody/class_smg_usa_seals.gsc",
+      "claims": [
+        "precachemodel c_usa_mp_seal6_smg_fb",
+        "precachemodel c_usa_mp_seal6_shortsleeve_viewhands",
+        "setmodel c_usa_mp_seal6_smg_fb",
+        "setviewmodel c_usa_mp_seal6_shortsleeve_viewhands",
+        "heads = []"
+      ],
+      "proofStatus": "candidate player assembly source only; setmodel/setviewmodel/head semantics must be re-resolved from retained retail faction_seals_mp script data before complete-player closure"
+    },
+    {
+      "kind": "dumped weapon definition",
+      "repository": "Jbleezy/BO2-Reimagined",
+      "path": "weapons/zm/mp7_zm",
+      "claims": [
+        "gunModel t6_wpn_smg_mp7_view",
+        "worldModel t6_wpn_smg_mp7_world",
+        "attachViewModel7 t6_attach_mag_mp7_view",
+        "attachWorldModel7 t6_attach_mag_mp7_world",
+        "viewmodel_mp7_* animation family",
+        "weapon muzzle/shell FX identities",
+        "MP7 player/NPC sound identities"
+      ],
+      "proofStatus": "candidate dependency source; every dependency must be re-resolved from retained retail T6 assets and the MP definition must honor common_mp -> common_patch_mp -> patch_mp precedence"
+    }
+  ],
+  "playerAssembly": {
+    "required": true,
+    "thirdPersonSetModelCandidate": "c_usa_mp_seal6_smg_fb",
+    "firstPersonSetViewModelCandidate": "c_usa_mp_seal6_shortsleeve_viewhands",
+    "externalHeadListCandidate": [],
+    "retailScriptZoneCandidate": "faction_seals_mp",
+    "closure": [
+      "retail faction logic re-proves the exact third-person setmodel identity",
+      "retail faction logic re-proves the exact first-person setviewmodel identity",
+      "retail faction logic proves whether any separate head/headgear model is selected",
+      "if no separate head is selected, the exported body XModel must itself contain the complete visible head/body assembly",
+      "all serialized body LODs/surfaces are accounted for",
+      "full body skeleton and all supported skin-weight rows are retained",
+      "all exact XModel -> Material -> GfxImage dependencies are retained",
+      "bounds/collision/physics metadata are retained or explicitly classified if stored outside XModel",
+      "compatible third-person player animation families are retained rather than exporting only a static bind pose"
+    ]
+  },
+  "models": [
+    {
+      "role": "playerFullBody",
+      "name": "c_usa_mp_seal6_smg_fb",
+      "required": true,
+      "expectedClass": "human-third-person",
+      "completeness": "complete visible third-person player selected by retail setmodel; not merely torso geometry"
+    },
+    {
+      "role": "viewhands",
+      "name": "c_usa_mp_seal6_shortsleeve_viewhands",
+      "required": true,
+      "expectedClass": "viewhands"
+    },
+    {"role": "weaponView", "name": "t6_wpn_smg_mp7_view", "required": true, "expectedClass": "first-person-weapon"},
+    {"role": "weaponWorld", "name": "t6_wpn_smg_mp7_world", "required": true, "expectedClass": "third-person-weapon"},
+    {"role": "magazineView", "name": "t6_attach_mag_mp7_view", "required": true, "expectedClass": "first-person-attachment"},
+    {"role": "magazineWorld", "name": "t6_attach_mag_mp7_world", "required": true, "expectedClass": "third-person-attachment"}
+  ],
+  "animations": {
+    "familyPrefix": "viewmodel_mp7_",
+    "retailExpectedFamilyCount": 23,
+    "requiredCore": [
+      "viewmodel_mp7_idle", "viewmodel_mp7_fire", "viewmodel_mp7_reload", "viewmodel_mp7_reload_empty",
+      "viewmodel_mp7_pullout", "viewmodel_mp7_putaway", "viewmodel_mp7_first_raise",
+      "viewmodel_mp7_sprint_in", "viewmodel_mp7_sprint_loop", "viewmodel_mp7_sprint_out",
+      "viewmodel_mp7_ads_fire", "viewmodel_mp7_ads_up", "viewmodel_mp7_ads_down",
+      "viewmodel_mp7_d2p_in", "viewmodel_mp7_d2p_loop", "viewmodel_mp7_d2p_out"
+    ],
+    "additionalDiscoveryCandidates": [
+      "viewmodel_mp7_pullout_quick", "viewmodel_mp7_crawl_in", "viewmodel_mp7_crawl_forward",
+      "viewmodel_mp7_crawl_back", "viewmodel_mp7_crawl_right", "viewmodel_mp7_crawl_left", "viewmodel_mp7_crawl_out"
+    ],
+    "thirdPersonPlayer": {
+      "required": true,
+      "status": "family identities not yet closed; complete-player gate must remain false until compatible retail third-person animations are retained"
+    }
+  },
+  "dependencyCandidates": {
+    "fx": [
+      "weapon/muzzleflashes/fx_muz_smg_flash_1p_4_sqr_mb",
+      "weapon/muzzleflashes/fx_muz_smg_flash_3p",
+      "weapon/shellejects/fx_pistol"
+    ],
+    "sounds": [
+      "wpn_mp7_fire_npc", "wpn_mp7_fire_plr", "wpn_generic_dryfire_npc", "wpn_generic_dryfire_plr",
+      "fly_generic_raise_npc", "fly_generic_raise_plr", "fly_generic_first_raise_npc", "fly_generic_first_raise_plr",
+      "fly_generic_ads_plr", "fly_generic_ads_lower_plr", "fly_generic_down_npc", "fly_generic_down_plr"
+    ],
+    "reloadNotifyNamesFromRetailCanary": [
+      "sndnt#fly_mp7_start", "sndnt#fly_reload_cloth_med", "sndnt#fly_reload_cloth_sm", "sndnt#fly_mp7_mag_out",
+      "rmbnt#reload_clipout", "sndnt#fly_mp7_mag_in", "rmbnt#reload_clipin", "end"
+    ],
+    "status": "candidate identities until exact T6 FX/SOUND dependency resolution is retained"
+  },
+  "closureGates": [
+    "retail player assembly semantics are retained from faction_seals_mp, including setmodel, setviewmodel, and head selection",
+    "all six model identities resolved from retained retail T6 sources",
+    "complete third-person player body exports with every serialized visible LOD/surface, full skeleton and supported skin rows",
+    "body and viewhands exact material and image dependencies are closed",
+    "compatible third-person player animation family is retained and exportable",
+    "weapon view/world and magazine view/world model geometry exported with exact material identities",
+    "all 23 retained MP7 family XAnims normalized and compatibility-checked against the appropriate first-person skeleton",
+    "required core first-person animations export through current v7 runtime-binding semantics",
+    "material -> image dependencies retained exactly for every model surface",
+    "MP7 winning weapon definition and dependency graph resolved through common_mp -> common_patch_mp -> patch_mp with no implicit base-layer winner",
+    "raw WeaponAttachmentUnique -> XModel edges retained for MP7 attachment/model dependencies",
+    "FX and audio identities re-resolved from retail assets rather than inherited from external dumps",
+    "complete player bundle loads independently in Blender or another glTF consumer with hashes/counts archived"
+  ]
+}

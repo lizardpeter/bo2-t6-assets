@@ -1,0 +1,73 @@
+{
+  "format": "t6-seal6-smg-multi-ipak-resolution-contract-v2",
+  "asset": "c_usa_mp_seal6_smg_fb",
+  "authority": "Exact 42-image retail identity set. Asset closure is exact image name -> retail T6 filename hash paired with exact streamed dataHash, unique across supplied repositories, followed by reconstructed payload CRC29, IWI27, dimension, and PNG-semantic validation. Whole-IPAK SHA-256 identifies a source container instance and is provenance, not image identity.",
+  "sourceIdentityManifest": "manifests/nonmap/retail/seal6_smg_texture_keys_v4.json",
+  "sourceIdentityManifestPolicy": "Historical repository/nameHash labels in v4 are non-authoritative. tools/t6_ipak_iwi_materialize_v3.py derives the retail IPAK filename hash from the exact image name and searches the exact (filenameHash,dataHash) pair across every supplied repository.",
+  "repositories": {
+    "base.ipak": {
+      "expectedResolvedTextures": 40,
+      "knownContainerInstances": [
+        {
+          "source": "https://r2.houseofkublai.com/bo2/zone/all/base.ipak",
+          "bytes": 2614362112,
+          "sha256": "6c3e68f856f0eafb54aef193b96464b313617f11653f75d1d3fa03f01125fa02"
+        }
+      ]
+    },
+    "mp.ipak": {
+      "expectedResolvedTextures": 2,
+      "knownContainerInstances": [
+        {
+          "source": "https://r2.houseofkublai.com/bo2/zone/all/mp.ipak",
+          "bytes": 348651520,
+          "sha256": "f97404b995659a2129e69105a971ec3d4537a583335ca073d2a09ad24ea932a5"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "requestedTextures": 42,
+    "expectedMaterializedTextures": 42,
+    "expectedUnresolvedTextures": 0,
+    "expectedAmbiguousTextures": 0,
+    "expectedRepositoryCounts": {
+      "base.ipak": 40,
+      "mp.ipak": 2
+    }
+  },
+  "mpIpakExceptionsToHistoricalV4RepositoryLabel": [
+    {
+      "image": "~-gc_usa_milcas_mcknight_head_camo_c",
+      "derivedFilenameHashHex": "0xd5fa4a3b",
+      "dataHashHex": "0x0e73f12d",
+      "width": 512,
+      "height": 1024,
+      "repository": "mp.ipak"
+    },
+    {
+      "image": "~-gc_usa_mp_seal6_vest_1_c",
+      "derivedFilenameHashHex": "0xe3737726",
+      "dataHashHex": "0x14c7d31c",
+      "width": 1024,
+      "height": 512,
+      "repository": "mp.ipak"
+    }
+  ],
+  "materializer": {
+    "tool": "tools/t6_ipak_iwi_materialize_v3.py",
+    "identityRule": "exact image name -> retail T6 filename hash; pair with exact streamed dataHash; require exactly one match across base.ipak + mp.ipak",
+    "containerRule": "Always record actual source IPAK size/SHA-256. Container SHA may optionally be pinned by a caller, but successful image promotion never follows from container identity alone.",
+    "payloadValidation": [
+      "unique cross-repository exact-key match",
+      "known retail IPAK command reconstruction including 0xCF padding",
+      "CRC29",
+      "IWI27 metadata",
+      "retained width/height/depth",
+      "proven texture semantic",
+      "PNG decode semantics"
+    ]
+  },
+  "passCondition": "A freshly generated t6-ipak-iwi-materialization-v3 manifest reports requested=42, materialized=42, unresolved=0, repositories.base.ipak=40, repositories.mp.ipak=2, all 42 rows exactKeyValidated=true and crc29Validated=true, and records the actual source container hashes used for that run.",
+  "proofBoundary": "This contract defines the exact content-level gate and records currently known source-container instances. It does not claim payload closure merely because this file exists. Only a generated materialization manifest that satisfies passCondition closes the texture execution step; no filename similarity, dataHash-only fallback, cross-repository substitution, or unsupported decoder fallback is accepted."
+}
