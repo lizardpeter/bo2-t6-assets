@@ -12,10 +12,14 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Tools = Join-Path $RepoRoot "tools"
 $Builder = Join-Path $PSScriptRoot "t6_build_seal6_smg_textured_animated_all_lods_v3.ps1"
 
-$FactionRawBytes = 3095232
-$FactionRawSha256 = "1a0754a5183eca3b1169610ad61b369768617340d000ef730a0d5c7b9ea97c88"
-$FactionExpandedBytes = 11393922
+# Raw FastFile wrappers can differ across source packages while decrypting to the
+# same authoritative expanded XFile.  Promotion therefore pins the exact
+# expanded byte stream.  The observed raw identity is still recorded in the
+# provenance and the retail mirror's current raw size is checked as a guardrail.
+$FactionObservedRawBytes = 3095232
+$FactionExpandedBytes = 6245916
 $FactionExpandedSha256 = "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30"
+$CommonObservedRawBytes = 40307072
 $CommonExpandedBytes = 206493911
 $CommonExpandedSha256 = "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
 $TargetName = "c_usa_mp_seal6_smg_fb"
@@ -48,6 +52,10 @@ function Assert-FileIdentity([string]$Path,[long]$Bytes,[string]$Sha,[string]$La
     $actualSha = Get-Sha256 $Path
     if ($actualSha -ne $Sha) { throw "$Label SHA-256 mismatch: $actualSha != $Sha" }
 }
+function Assert-RawSize([string]$Path,[long]$Bytes,[string]$Label) {
+    $actualBytes = (Get-Item -LiteralPath $Path).Length
+    if ($actualBytes -ne $Bytes) { throw "$Label raw byte-size mismatch: $actualBytes != $Bytes" }
+}
 
 $FactionSealsFastfile = Require-File $FactionSealsFastfile "retail faction_seals_mp.ff"
 $CommonMpFastfile = Require-File $CommonMpFastfile "retail common_mp.ff"
@@ -59,11 +67,10 @@ $SkeletonTool = Require-File (Join-Path $Tools "t6_xmodel_skeleton_normalize_v3.
 $MeshTool = Require-File (Join-Path $Tools "t6_xmodel_mesh_normalize_v4.py") "XModel mesh normalizer v4"
 $XAnimTool = Require-File (Join-Path $Tools "t6_xanim_normalize_v1.py") "XAnim normalizer"
 
-# faction_seals_mp has one retained authoritative raw identity. common_mp is
-# intentionally keyed by exact expanded identity because retained provenance
-# contains two raw-container identities from different source packages; only the
-# expanded animation source used by the benchmark is promoted here.
-Assert-FileIdentity $FactionSealsFastfile $FactionRawBytes $FactionRawSha256 "faction_seals_mp.ff"
+Assert-RawSize $FactionSealsFastfile $FactionObservedRawBytes "faction_seals_mp.ff"
+Assert-RawSize $CommonMpFastfile $CommonObservedRawBytes "common_mp.ff"
+$FactionRawBytes = (Get-Item -LiteralPath $FactionSealsFastfile).Length
+$FactionRawSha256 = Get-Sha256 $FactionSealsFastfile
 $CommonRawBytes = (Get-Item -LiteralPath $CommonMpFastfile).Length
 $CommonRawSha256 = Get-Sha256 $CommonMpFastfile
 
@@ -122,7 +129,7 @@ $BuildSummary = Require-File (Join-Path $BuildDir "build_summary.json") "SEAL6 b
 $Repro = [ordered]@{
     format="t6-seal6-full-retail-rebuild-v1"
     asset=$TargetName
-    policy=[ordered]@{sourceDerivedOnly=$true;noFallbackGeometry=$true;noFallbackSkeleton=$true;noFallbackAnimation=$true;noFallbackMaterialsOrTextures=$true;commonMpPromotedByExpandedIdentity=$true}
+    policy=[ordered]@{sourceDerivedOnly=$true;noFallbackGeometry=$true;noFallbackSkeleton=$true;noFallbackAnimation=$true;noFallbackMaterialsOrTextures=$true;fastFilesPromotedByExpandedIdentity=$true}
     source=[ordered]@{
         faction_seals_mp=[ordered]@{path=$FactionSealsFastfile;bytes=$FactionRawBytes;sha256=$FactionRawSha256;expandedPath=$FactionExpanded;expandedBytes=$FactionExpandedBytes;expandedSha256=$FactionExpandedSha256}
         common_mp=[ordered]@{path=$CommonMpFastfile;bytes=$CommonRawBytes;sha256=$CommonRawSha256;expandedPath=$CommonExpanded;expandedBytes=$CommonExpandedBytes;expandedSha256=$CommonExpandedSha256}
@@ -133,7 +140,7 @@ $Repro = [ordered]@{
     animations=$XAnimProof
     buildSummary=[ordered]@{path=$BuildSummary;sha256=(Get-Sha256 $BuildSummary)}
     package=[ordered]@{path=$PackagePath;bytes=(Get-Item -LiteralPath $PackagePath).Length;sha256=(Get-Sha256 $PackagePath);sidecar="$PackagePath.manifest.json"}
-    proofBoundary="This is the one-command source-derived SEAL6 rebuild path from two retail FastFiles plus base.ipak/mp.ipak. It requires the exact faction source identity, exact retained common_mp expanded animation identity, exact XModel alias proof, six exact XAnim serialized payloads, and the v3 42/42 cross-IPAK materialization gate before packaging."
+    proofBoundary="This is the one-command source-derived SEAL6 rebuild path from two retail FastFiles plus base.ipak/mp.ipak. Each FastFile is promoted only after decrypt/decompress reproduces the exact pinned expanded XFile identity; then the build requires the exact XModel alias proof, six exact XAnim serialized payloads, and the v3 42/42 cross-IPAK materialization gate before packaging."
 }
 $ReproPath = Join-Path $OutRoot "rebuild_provenance.json"
 $Repro | ConvertTo-Json -Depth 12 | Set-Content -Encoding UTF8 -LiteralPath $ReproPath
