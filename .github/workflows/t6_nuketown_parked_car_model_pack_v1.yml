@@ -1,0 +1,201 @@
+name: T6 Nuketown parked car model pack v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_parked_car_model_pack_v1.yml'
+      - 'tools/t6_xmodel_mesh_normalize_v1.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v2.py'
+      - 'tools/t6_xanim_skinned_gltf_export_v7.py'
+      - 'tools/t6_embedded_gltf_to_glb_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate packed-name-aware mesh normalizer v2 from proven v1 core
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tools/t6_xmodel_mesh_normalize_v1.py')
+          src=p.read_text(encoding='utf-8')
+          old="""class Normalizer:\n    def __init__(self,data:bytes,start:int):\n        self.data=data; self.start=start; self.pos=start; self.sections=[]\n"""
+          new="""class Normalizer:\n    def __init__(self,data:bytes,start:int,logical_to_text:dict[int,str]|None=None):\n        self.data=data; self.start=start; self.pos=start; self.sections=[]; self.logical_to_text=logical_to_text\n"""
+          if src.count(old)!=1: raise SystemExit('v1 constructor transform anchor mismatch')
+          src=src.replace(old,new,1)
+          old="""        if not inline(namep): raise MeshError('v1 requires inline XModel name')\n        e=self.data.index(b'\\0',self.pos); name=self.data[self.pos:e].decode('latin1','replace'); self.take(e+1-self.pos,'XModel.name')\n"""
+          new="""        if inline(namep):\n            e=self.data.index(b'\\0',self.pos); name=self.data[self.pos:e].decode('latin1','replace'); self.take(e+1-self.pos,'XModel.name')\n        else:\n            np=ptr_kind(namep)\n            if np.get('kind')!='packed' or np.get('block')!=5:\n                raise MeshError(f'v2 requires inline or packed VIRTUAL XModel name; got {np}')\n            if self.logical_to_text is None:\n                raise MeshError('packed XModel name requires exact logical_to_text mapping')\n            name=self.logical_to_text.get(int(np['offset']))\n            if not isinstance(name,str) or not name:\n                raise MeshError(f'packed XModel name VIRTUAL offset {np[\"offset\"]} is not present in proven StringTable mapping')\n            self.take(0,'XModel.name.packed',pointer=np,identity=name)\n"""
+          if src.count(old)!=1: raise SystemExit('v1 name transform anchor mismatch')
+          src=src.replace(old,new,1)
+          old="""    a=ap.parse_args(); data=a.expanded.read_bytes(); d=Normalizer(data,a.asset_start).normalize(); d['expandedSha256']=hashlib.sha256(data).hexdigest()\n"""
+          new="""    a=ap.parse_args(); data=a.expanded.read_bytes()\n    from t6_clipmap_normalize_v5 import parse_top_level_xasset_table\n    from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable\n    table=parse_top_level_xasset_table(data); prefix=walk_map_prefix_stringtable(data,table)\n    d=Normalizer(data,a.asset_start,logical_to_text=prefix['logicalToText']).normalize(); d['expandedSha256']=hashlib.sha256(data).hexdigest()\n"""
+          if src.count(old)!=1: raise SystemExit('v1 CLI transform anchor mismatch')
+          src=src.replace(old,new,1)
+          src=src.replace('"""Normalize inline T6 PC32 XModel render surfaces into lossless mesh data.',
+                          '"""Normalize inline or exact packed-name T6 PC32 XModel render surfaces into lossless mesh data.',1)
+          src=src.replace('This first mesh layer intentionally fails closed on packed/reused surface data.',
+                          'v2 keeps v1 geometry semantics and additionally resolves packed VIRTUAL XModel names only through the proven StringTable logical mapping. It still fails closed on packed/reused surface data.',1)
+          out=Path('tools/t6_xmodel_mesh_normalize_v2.py')
+          out.write_text(src,encoding='utf-8')
+          print('generated',out,'bytes',out.stat().st_size)
+          PY
+          python -m py_compile tools/t6_xmodel_mesh_normalize_v2.py
+
+      - name: Download and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+      - name: Export the two exact parked-car XModels
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=tools python - <<'PY'
+          import hashlib,json,pathlib,zipfile
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_embedded_gltf_to_glb_v1 import convert_gltf_dict,parse_glb
+          from t6_xanim_skinned_gltf_export_v7 import export as export_gltf
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+          from t6_xmodel_skeleton_normalize_v2 import normalize_skeleton
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          EXP='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          data=pathlib.Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          if hashlib.sha256(data).hexdigest()!=EXP: raise SystemExit('expanded SHA mismatch')
+          closure=json.loads(pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1.json').read_text())
+          if closure.get('expandedFastFile',{}).get('sha256')!=EXP: raise SystemExit('car closure source SHA mismatch')
+          expected={
+            'veh_t6_nuketown_2020_car01_clean':{'fixedSourceStart':44523322,'nameLogicalVirtualOffset':92858,'namePointerRaw':0xA0016ABB},
+            'veh_t6_nuketown_2020_car02_whole':{'fixedSourceStart':41469954,'nameLogicalVirtualOffset':93100,'namePointerRaw':0xA0016BAD},
+          }
+          rows={r['name']:r for r in closure['resolvedModels']}
+          if set(rows)!=set(expected): raise SystemExit(f'unexpected closure models {set(rows)}')
+          for n,e in expected.items():
+            r=rows[n]
+            for k,v in e.items():
+              if int(r[k])!=int(v): raise SystemExit(f'{n}: closure {k} drift {r[k]} != {v}')
+
+          table=parse_top_level_xasset_table(data)
+          prefix=walk_map_prefix_stringtable(data,table)
+          logical=prefix['logicalToText']
+          root=pathlib.Path('/tmp/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1')
+          root.mkdir(parents=True,exist_ok=True)
+          report=[]
+          for name in sorted(expected):
+            e=expected[name]; start=e['fixedSourceStart']
+            if logical.get(e['nameLogicalVirtualOffset'])!=name:
+              raise SystemExit(f'{name}: current exact StringTable mapping does not prove packed name')
+            walk=XModelWalker(data,start).walk_xmodel()
+            if walk['blockers']: raise SystemExit(f'{name}: XModel walker blockers {walk["blockers"]}')
+            if int(walk['xmodel']['namePointer']['raw'])!=e['namePointerRaw']:
+              raise SystemExit(f'{name}: packed name pointer mismatch')
+
+            mesh=Normalizer(data,start,logical_to_text=logical).normalize()
+            mesh['expandedSha256']=EXP
+            mesh['source']['nameIdentity']={
+              'mode':'packed_virtual_stringtable',
+              'logicalVirtualOffset':e['nameLogicalVirtualOffset'],
+              'pointerRaw':e['namePointerRaw'],
+              'proofManifest':'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1.json',
+            }
+            if mesh['identity']['name']!=name: raise SystemExit(f'{name}: mesh identity mismatch')
+            skel=normalize_skeleton(data,start,identity_name=name)
+            if skel.get('identity',{}).get('name')!=name: raise SystemExit(f'{name}: skeleton identity mismatch')
+            if int(mesh['xmodel']['numBones'])!=int(rows[name]['numBones']) or int(mesh['xmodel']['numSurfs'])!=int(rows[name]['numSurfs']):
+              raise SystemExit(f'{name}: normalized structure does not match packed-name closure')
+
+            gltf=export_gltf(mesh,skel,None,lod=0)
+            glb,glb_stats=convert_gltf_dict(gltf)
+            parsed,_=parse_glb(glb)
+            if len(parsed.get('meshes',[]))!=1 or len(parsed.get('skins',[]))!=1: raise SystemExit(f'{name}: GLB mesh/skin cardinality')
+            stem=name
+            d=root/stem; d.mkdir(parents=True,exist_ok=True)
+            mb=(json.dumps(mesh,indent=2,sort_keys=True)+'\n').encode(); sb=(json.dumps(skel,indent=2,sort_keys=True)+'\n').encode(); gb=(json.dumps(gltf,indent=2,sort_keys=True)+'\n').encode()
+            (d/'mesh.normalized.json').write_bytes(mb); (d/'skeleton.normalized.json').write_bytes(sb); (d/f'{stem}_lod0.gltf').write_bytes(gb); (d/f'{stem}_lod0.glb').write_bytes(glb)
+            skin=gltf['extras']['T6']['skinValidation']; lod0=next(x for x in mesh['xmodel']['lods'] if int(x['index'])==0)
+            rr={
+              'name':name,'fixedSourceStart':start,'packedNamePointerRaw':f"0x{e['namePointerRaw']:08X}",'nameLogicalVirtualOffset':e['nameLogicalVirtualOffset'],
+              'numBones':mesh['xmodel']['numBones'],'numSurfsAllLods':mesh['xmodel']['numSurfs'],'numLods':mesh['xmodel']['numLods'],
+              'lod0':{'surfaceCount':int(lod0['numSurfs']),'vertices':int(skin['vertices']),'triangles':int(skin['triangles']),'rigidVertices':int(skin['rigidVertices']),'blendedVertices':int(skin['blendedVertices']),'influenceHistogram':skin['influenceHistogram']},
+              'serialized':{'bytes':walk['assetSerializedBytes'],'sha256':walk['assetSerializedSha256']},
+              'meshNormalized':{'bytes':len(mb),'sha256':hashlib.sha256(mb).hexdigest()},'skeletonNormalized':{'bytes':len(sb),'sha256':hashlib.sha256(sb).hexdigest()},
+              'gltf':{'bytes':len(gb),'sha256':hashlib.sha256(gb).hexdigest()},'glb':glb_stats,
+              'validation':{'packedNameStringTableExact':True,'fullSerializedWalkerBlockers':0,'gltfExporterValidationPassed':True,'glbRoundTripValidationPassed':True,'materialsAttached':False},
+            }
+            report.append(rr); print('CAR_MODEL_OK',json.dumps(rr,sort_keys=True))
+
+          manifest={
+            'format':'t6-nuketown-parked-car-model-pack-v1','map':'mp_nuketown_2020','sourceExpandedSha256':EXP,'modelCount':len(report),'models':report,
+            'proofBoundary':'Exact MapEnt/XModel packed-name closure + exact StringTable VIRTUAL lookup + untouched retail mesh bytes + blocker-free XModel walk + exact skeleton normalization + validated bind-pose glTF/GLB. No adjacent string, model-name guess, mesh similarity, old GLB, or substitute geometry is accepted.',
+            'materialsAttached':False,
+          }
+          man=(json.dumps(manifest,indent=2,sort_keys=True)+'\n').encode(); (root/'T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1.json').write_bytes(man)
+          rp=pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1.json'); rp.write_bytes(man)
+          cp=pathlib.Path('checkpoints/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1_2026-09-06.md')
+          lines=['# T6 Nuketown parked-car model pack v1 — 2026-09-06','',
+                 'Both retail parked-car XModels now export as standalone source-derived LOD0 GLBs while preserving the already-proven packed-name identity chain.','',
+                 '## Result','',f'- exact parked-car models exported: **{len(report)} / 2**','- packed-name identity failures: **0**','- mesh/skeleton/export/GLB validation failures: **0**','']
+          for r in report:
+            lines += [f"### `{r['name']}`",'',f"- packed name: `{r['packedNamePointerRaw']}` -> VIRTUAL **{r['nameLogicalVirtualOffset']}**",
+                      f"- bones / all-LOD surfaces: **{r['numBones']} / {r['numSurfsAllLods']}**",
+                      f"- LOD0 surfaces: **{r['lod0']['surfaceCount']}**",
+                      f"- LOD0 vertices / triangles: **{r['lod0']['vertices']:,} / {r['lod0']['triangles']:,}**",
+                      f"- GLB bytes: **{r['glb']['glbBytes']:,}**",f"- GLB SHA-256: `{r['glb']['glbSha256']}`",'']
+          lines += ['## Normalizer extension','',
+                    '`tools/t6_xmodel_mesh_normalize_v2.py` preserves the v1 geometry decoder byte-for-byte and adds exactly one capability: when `XModel.name` is a packed block-5 pointer, it resolves identity only through the self-calibrated retail StringTable logical mapping and consumes zero source bytes for the packed name. Packed/reused surface payloads remain fail-closed.','',
+                    '## Material boundary','',
+                    'These GLBs intentionally contain exact geometry + skeleton only. Materials/textures will be attached in the next pass from source-closed Material/Image provenance rather than inferred visually.','',
+                    f'- manifest bytes: **{len(man):,}**',f'- manifest SHA-256: `{hashlib.sha256(man).hexdigest()}`','']
+          cp.write_text('\n'.join(lines),encoding='utf-8')
+
+          zp=pathlib.Path('/tmp/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1.zip')
+          with zipfile.ZipFile(zp,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+            for p in sorted(root.rglob('*')):
+              if not p.is_file(): continue
+              zi=zipfile.ZipInfo(p.relative_to(root).as_posix(),date_time=(1980,1,1,0,0,0)); zi.compress_type=zipfile.ZIP_DEFLATED; zi.external_attr=0o100644<<16
+              z.writestr(zi,p.read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+          print(json.dumps({'zipBytes':zp.stat().st_size,'zipSha256':hashlib.sha256(zp.read_bytes()).hexdigest(),'manifestSha256':hashlib.sha256(man).hexdigest(),'models':report},indent=2,sort_keys=True))
+          PY
+
+      - name: Commit packed-name normalizer and car-model checkpoint
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tools/t6_xmodel_mesh_normalize_v2.py \
+                  manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1.json \
+                  checkpoints/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1_2026-09-06.md
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+          else
+            git commit -m 'Export exact Nuketown parked-car XModels'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1
+          path: /tmp/T6_NUKETOWN_PARKED_CAR_MODEL_PACK_V1.zip
+          if-no-files-found: error
+          compression-level: 0
