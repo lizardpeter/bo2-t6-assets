@@ -1,0 +1,60 @@
+name: T6 Nuketown GfxWorld pinned layout probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_gfxworld_layout_probe_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact T6 PC32 layout probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 7d027e8f89118196713e955b0e11f8404149c54d
+          cat >/tmp/layout.cpp <<'CPP'
+          #include <cstddef>
+          #include <cstdint>
+          #include <iostream>
+          #include "Game/T6/T6_Assets.h"
+          using namespace T6;
+          #define FIELD(T,F) std::cout << "\"" #F "\":" << offsetof(T,F)
+          int main(){
+            static_assert(sizeof(void*)==4,"probe must be PC32");
+            std::cout << "{\n";
+            std::cout << "\"format\":\"t6-gfxworld-pc32-layout-v1\",\n";
+            std::cout << "\"oatCommit\":\"7d027e8f89118196713e955b0e11f8404149c54d\",\n";
+            std::cout << "\"GfxWorld\":{\"size\":" << sizeof(GfxWorld) << ","; FIELD(GfxWorld,name); std::cout << ","; FIELD(GfxWorld,baseName); std::cout << ","; FIELD(GfxWorld,skyBoxModel); std::cout << ","; FIELD(GfxWorld,draw); std::cout << "},\n";
+            std::cout << "\"GfxWorldDraw\":{\"size\":" << sizeof(GfxWorldDraw) << ","; FIELD(GfxWorldDraw,reflectionProbeCount); std::cout << ","; FIELD(GfxWorldDraw,reflectionProbes); std::cout << ","; FIELD(GfxWorldDraw,reflectionProbeTextures); std::cout << ","; FIELD(GfxWorldDraw,lightmapCount); std::cout << ","; FIELD(GfxWorldDraw,lightmaps); std::cout << ","; FIELD(GfxWorldDraw,lightmapPrimaryTextures); std::cout << ","; FIELD(GfxWorldDraw,lightmapSecondaryTextures); std::cout << "},\n";
+            std::cout << "\"GfxReflectionProbe\":{\"size\":" << sizeof(GfxReflectionProbe) << ","; FIELD(GfxReflectionProbe,origin); std::cout << ","; FIELD(GfxReflectionProbe,lightingSH); std::cout << ","; FIELD(GfxReflectionProbe,reflectionImage); std::cout << ","; FIELD(GfxReflectionProbe,probeVolumeCount); std::cout << ","; FIELD(GfxReflectionProbe,probeVolumes); std::cout << ","; FIELD(GfxReflectionProbe,mipLodBias); std::cout << "},\n";
+            std::cout << "\"GfxReflectionProbeVolumeData\":{\"size\":" << sizeof(GfxReflectionProbeVolumeData) << ","; FIELD(GfxReflectionProbeVolumeData,volumePlanes); std::cout << "},\n";
+            std::cout << "\"GfxLightmapArray\":{\"size\":" << sizeof(GfxLightmapArray) << ","; FIELD(GfxLightmapArray,primary); std::cout << ","; FIELD(GfxLightmapArray,secondary); std::cout << "}\n";
+            std::cout << "}\n";
+          }
+          CPP
+          g++ -m32 -std=c++20 -I/tmp/oat/src/Common /tmp/layout.cpp -o /tmp/layout
+          /tmp/layout | tee /tmp/T6_GFXWORLD_PC32_LAYOUT_V1.json
+          python -m json.tool /tmp/T6_GFXWORLD_PC32_LAYOUT_V1.json >/dev/null
+          mkdir -p manifests/layouts
+          cp /tmp/T6_GFXWORLD_PC32_LAYOUT_V1.json manifests/layouts/
+      - name: Persist pinned layout
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/layouts/T6_GFXWORLD_PC32_LAYOUT_V1.json
+          git commit -m 'Pin T6 GfxWorld PC32 layout'
+          git pull --rebase origin main
+          git push origin HEAD:main
