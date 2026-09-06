@@ -1,0 +1,15 @@
+{
+  "format": "t6-playeranim-selector-profile-v1",
+  "id": "standard_onfoot_smg_handleclip_v1",
+  "description": "Generic standard on-foot SMG playeranim selector for retail weapons whose WeaponDef proves weaponClass=smg and playerAnimType=handleclip.",
+  "selectors": {
+    "weaponclass": "smg",
+    "nextWeaponclass": "smg",
+    "playerAnimType": "handleclip",
+    "nextPlayerAnimType": "handleclip"
+  },
+  "forbiddenConditionKeys": ["mounted", "vehicle_name", "vehicle_seat_to"],
+  "requiredBehaviorFamilies": ["idle/stance", "walk/run/sprint", "crouch/prone", "jump/fall/land", "weapon-ready/fire/reload", "melee", "turn/aim", "death/reaction"],
+  "concreteWeapon": null,
+  "rule": "A named weapon may use this profile only after its final retail WeaponDef selector survives common_mp -> common_patch_mp -> patch_mp precedence resolution."
+}
