@@ -43,7 +43,10 @@ jobs:
             std::cout << "}\n";
           }
           CPP
-          g++ -m32 -std=c++20 -I/tmp/oat/src/Common /tmp/layout.cpp -o /tmp/layout
+          # OAT's TypeAlignment.h selects the 32-bit asset-layout macros with
+          # ARCH_x86. -m32 controls the compiler ABI; both are required to
+          # reproduce OAT's exact T6 PC32 type layout.
+          g++ -m32 -DARCH_x86 -std=c++20 -I/tmp/oat/src/Common /tmp/layout.cpp -o /tmp/layout
           /tmp/layout | tee /tmp/T6_GFXWORLD_PC32_LAYOUT_V1.json
           python -m json.tool /tmp/T6_GFXWORLD_PC32_LAYOUT_V1.json >/dev/null
           mkdir -p manifests/layouts
