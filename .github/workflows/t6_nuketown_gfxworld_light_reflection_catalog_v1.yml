@@ -53,8 +53,8 @@ jobs:
 
           cd /tmp/oat
           PREMAKE_NO_PROMPT=1 ./generate.sh
-          # Build only the tool required for this proof.  Premake names the
-          # project UnlinkerCli and target binary Unlinker.  Building `all`
+          # Build only the tool required for this proof. Premake names the
+          # project UnlinkerCli and target binary Unlinker. Building `all`
           # needlessly compiles Linker/ImageConverter and can consume the full
           # Actions time window without advancing this retail parse.
           make -C build -j"$(nproc)" config=release_x86 UnlinkerCli
