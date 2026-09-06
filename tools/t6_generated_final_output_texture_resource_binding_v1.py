@@ -14,8 +14,8 @@ not yet join material RHS names to GfxImage objects or code RHS names to T6 code
 sampler enums; it closes the exact shader-resource -> TechniqueSet source edge.
 """
 from __future__ import annotations
-import argparse,copy,hashlib,json
-from collections import Counter,defaultdict
+import argparse,hashlib,json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -53,7 +53,7 @@ def _resolve_technique(oat_root:Path,technique:str,sha:str,cache:dict)->tuple[st
  if str(ps.get('sha256') or '').lower()!=sha.lower():raise TextureResourceBindingError(f"{technique!r}: slot-4 PS {ps.get('sha256')} != final-output {sha}")
  path=Path(oat_root)/str(resolved['techniqueFile'])
  if not path.is_file():raise TextureResourceBindingError(f"{technique!r}: technique file missing {path}")
- text=path.read_text(encoding='utf-8',errors='strict');assign=cb_sig._assignment_map(text)
+ text=path.read_text(encoding='utf-8',errors='strict');assign=cb_sig.parse_tech_assignments(text)
  cache[technique]=(text,{**resolved,'assignmentMap':assign});return cache[technique]
 
 def build(final_doc:dict,*,oat_root:Path)->dict:
@@ -68,8 +68,9 @@ def build(final_doc:dict,*,oat_root:Path)->dict:
    for technique in techniques:
     _text,resolved=_resolve_technique(root,technique,sha,cache);expr=resolved['assignmentMap'].get(resource)
     if expr is None:raise TextureResourceBindingError(f"shader {sha} TechniqueSet {technique!r}: sampled resource {resource!r} has no exact .tech assignment")
-    source_class,source_name=cb_sig._source_identity(expr)
-    assignments.append({'techniqueSet':technique,'techniqueAsset':resolved.get('techniqueAsset'),'techniqueFile':resolved.get('techniqueFile'),'sourceClass':source_class,'sourceExpression':expr,'sourceName':source_name})
+    identity=cb_sig._source_identity(expr)
+    source_class=str(identity['sourceClass']);source_name=identity.get('sourceName')
+    assignments.append({'techniqueSet':technique,'techniqueAsset':resolved.get('techniqueAsset'),'techniqueFile':resolved.get('techniqueFile'),'sourceClass':source_class,'sourceExpression':identity.get('sourceExpression'),'sourceName':source_name})
     source_counts[source_class]+=1;resource_counts[resource]+=1
    bound.append({**evidence,'techniqueAssignments':assignments})
   rows.append({'sha256':sha,'techniqueSets':techniques,'sampledTextureResourceCount':len(bound),'textureSampleNodeCount':sum(len(row['sampleNodeIds']) for row in bound),'resources':bound})
