@@ -15,7 +15,7 @@ jobs:
       - name: Checkout exact reversal pipeline
         uses: actions/checkout@v4
         with:
-          ref: reversal/nonmap-assets
+          ref: 6650f942e7fdc6ba068816b64b4a4139011ee5f1
 
       - name: Prepare workspace
         shell: bash
@@ -71,58 +71,41 @@ jobs:
           python - <<'PY'
           import json, struct, subprocess
           from pathlib import Path
-
           stream=Path('work/expanded/common_mp.expanded')
           data=stream.read_bytes()
           targets=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
           expected_inventory={
               'pb_stand_alert': {'offset':662933,'numframes':383,'framerate':30.0},
               'pb_stand_ads': {'offset':655915,'numframes':90,'framerate':30.0},
+              'pb_smg_sprint': {'offset':5203838,'numframes':46,'framerate':30.0},
               'pb_combatrun_forward_loop': {'offset':5670677,'numframes':50,'framerate':30.0},
               'pb_standjump_takeoff': {'offset':10693310,'numframes':27,'framerate':30.0},
               'pt_stand_shoot_auto': {'offset':7851319,'numframes':18,'framerate':30.0},
           }
-          resolved={}
-          diagnostics={}
+          resolved={}; diagnostics={}
           for name in targets:
-              needle=name.encode('ascii')+b'\0'
-              pos=0; candidates=[]
+              needle=name.encode('ascii')+b'\0'; pos=0; candidates=[]
               while True:
                   p=data.find(needle,pos)
                   if p < 0: break
-                  pos=p+1
-                  start=p-104
-                  if start < 0 or data[start:start+4] != b'\xff\xff\xff\xff':
-                      continue
-                  # PC32 XAnimParts fixed-record canaries from the proven layout.
+                  pos=p+1; start=p-104
+                  if start < 0 or data[start:start+4] != b'\xff\xff\xff\xff': continue
                   numframes=struct.unpack_from('<H',data,start+14)[0]
                   framerate=struct.unpack_from('<f',data,start+48)[0]
-                  if not (0 < numframes <= 8192 and 0.0 < framerate <= 1000.0):
-                      continue
+                  if not (0 < numframes <= 8192 and 0.0 < framerate <= 1000.0): continue
                   tmp=Path(f'work/xanim_norm/.{name}.{start}.json')
                   cp=subprocess.run(['python','tools/t6_xanim_normalize_v1.py',str(stream),'--asset-start',str(start),'--out',str(tmp)],text=True,capture_output=True)
-                  if cp.returncode != 0 or not tmp.exists():
-                      continue
-                  try:
-                      d=json.loads(tmp.read_text())
-                  except Exception:
-                      tmp.unlink(missing_ok=True); continue
-                  if d.get('name')==name and d.get('allFlatPoolsExhausted') is True:
-                      candidates.append((start,d,tmp))
-                  else:
-                      tmp.unlink(missing_ok=True)
+                  if cp.returncode != 0 or not tmp.exists(): continue
+                  try: d=json.loads(tmp.read_text())
+                  except Exception: tmp.unlink(missing_ok=True); continue
+                  if d.get('name')==name and d.get('allFlatPoolsExhausted') is True: candidates.append((start,d,tmp))
+                  else: tmp.unlink(missing_ok=True)
               diagnostics[name]=[c[0] for c in candidates]
-              if len(candidates) != 1:
-                  raise SystemExit(f'{name}: expected exactly one source-valid normalized XAnim candidate, got {diagnostics[name]}')
+              if len(candidates) != 1: raise SystemExit(f'{name}: expected exactly one source-valid normalized XAnim candidate, got {diagnostics[name]}')
               start,d,tmp=candidates[0]
-              final=Path(f'work/xanim_norm/{name}.normalized.json')
-              tmp.replace(final)
-              resolved[name]=start
-              if name in expected_inventory:
-                  e=expected_inventory[name]
-                  assert start==e['offset'], (name,start,e['offset'])
-                  assert int(d['header']['numframes'])==e['numframes']
-                  assert abs(float(d['header']['framerate'])-e['framerate']) < 1e-6
+              final=Path(f'work/xanim_norm/{name}.normalized.json'); tmp.replace(final); resolved[name]=start
+              e=expected_inventory[name]
+              assert start==e['offset'] and int(d['header']['numframes'])==e['numframes'] and abs(float(d['header']['framerate'])-e['framerate'])<1e-6
               print(name,start,d['header']['numframes'],d['header']['framerate'])
           Path('work/xanim_scan/benchmark_starts.json').write_text(json.dumps(resolved,indent=2)+'\n')
           Path('work/xanim_scan/source_resolution_diagnostics.json').write_text(json.dumps(diagnostics,indent=2)+'\n')
@@ -136,8 +119,7 @@ jobs:
           import json
           from pathlib import Path
           names=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
-          starts=json.loads(Path('work/xanim_scan/benchmark_starts.json').read_text())
-          assert set(starts)==set(names)
+          starts=json.loads(Path('work/xanim_scan/benchmark_starts.json').read_text()); assert set(starts)==set(names)
           for n in names:
               d=json.loads(Path(f'work/xanim_norm/{n}.normalized.json').read_text())
               assert d['name']==n and d['allFlatPoolsExhausted'] is True
@@ -172,13 +154,10 @@ jobs:
           from pathlib import Path
           expected_anims=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
           summary=json.loads(Path('work/final/build_summary.json').read_text(encoding='utf-8-sig'))
-          assert summary['aggregate']['serializedLods']==4
-          assert summary['aggregate']['serializedSurfaces']==42
-          assert summary['aggregate']['exactTexturePayloads']==42
-          assert summary['aggregate']['allLodsTextured'] and summary['aggregate']['allLodsAnimated']
+          assert summary['aggregate']['serializedLods']==4 and summary['aggregate']['serializedSurfaces']==42
+          assert summary['aggregate']['exactTexturePayloads']==42 and summary['aggregate']['allLodsTextured'] and summary['aggregate']['allLodsAnimated']
           for lod in summary['lods']:
-              p=Path(lod['texturedGlb'])
-              b=p.read_bytes(); assert b[:4]==b'glTF'
+              p=Path(lod['texturedGlb']); b=p.read_bytes(); assert b[:4]==b'glTF'
               jlen,jtyp=struct.unpack_from('<I4s',b,12); assert jtyp==b'JSON'
               doc=json.loads(b[20:20+jlen].decode('utf-8').rstrip(' \x00'))
               names=[a.get('name') for a in doc.get('animations',[])]
