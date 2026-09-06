@@ -26,6 +26,10 @@ on:
       - "tools/test_t6_player_body_identity_registry_retail_v1.py"
       - "tools/t6_player_body_retail_proof_v1.py"
       - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
       - "tools/t6_player_character_animation_matrix_v2.py"
       - "tools/test_t6_player_character_animation_matrix_v2.py"
       - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
@@ -58,6 +62,10 @@ on:
       - "tools/test_t6_player_body_identity_registry_retail_v1.py"
       - "tools/t6_player_body_retail_proof_v1.py"
       - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
       - "tools/t6_player_character_animation_matrix_v2.py"
       - "tools/test_t6_player_character_animation_matrix_v2.py"
       - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
@@ -102,8 +110,12 @@ jobs:
         run: python tools/test_t6_player_body_identity_registry_v1.py
       - name: current retail player-body registry canary
         run: python tools/test_t6_player_body_identity_registry_retail_v1.py
+      - name: packed-skeleton mesh normalizer v2
+        run: python tools/test_t6_xmodel_mesh_normalize_v2.py
       - name: retail player-body proof promoter
         run: python tools/test_t6_player_body_retail_proof_v1.py
+      - name: one-command retail player-body closer
+        run: python tools/test_t6_player_body_close_v1.py
       - name: retail-gated player character animation matrix
         run: python tools/test_t6_player_character_animation_matrix_v2.py
       - name: current retail character x selector matrix canary
