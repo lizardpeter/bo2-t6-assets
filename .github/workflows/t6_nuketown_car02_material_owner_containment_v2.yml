@@ -1,0 +1,56 @@
+name: T6 Nuketown car02 Material owner containment v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car02_material_owner_containment_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+      - name: Find early containing XModel
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL,parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
+          from t6_xmodel_serialized_walker import XModelWalker
+          data=Path('/tmp/map.expanded').read_bytes(); table=parse_top_level_xasset_table(data); prefix=walk_map_prefix_stringtable(data,table)
+          targets=[13035267,13035956]
+          xidx=[i for i,e in enumerate(table['entries']) if e['type']==ASSET_TYPE_XMODEL]
+          # 220 strict XModels are enough to pass the 13MB owner region; packed-name exceptions occur much later.
+          recs=scan_required_xmodels(data,prefix['sourceEnd'],220,prefix['logicalToText'])
+          rows=[]
+          for j,r in enumerate(recs):
+            s=int(r['fixedSourceStart']);w=XModelWalker(data,s).walk_xmodel()
+            if w['blockers']:continue
+            e=int(w['assetSerializedEnd'])
+            if any(s<=t<e for t in targets):
+              row={'ordinal':j,'xassetIndex':xidx[j],'name':r['name'],'start':s,'end':e,'inlineMaterials':(w.get('details') or {}).get('inlineMaterials',[]),'materialHandles':w['xmodel']['materialHandles']};rows.append(row);print('OWNER',json.dumps(row,sort_keys=True))
+          if not rows:raise SystemExit('no early owner contains car02 material strings')
+          if len({(r['start'],r['end']) for r in rows})!=1:raise SystemExit(f'multiple owners {rows}')
+          out={'format':'t6-nuketown-car02-material-owner-containment-v2','expandedSha256':hashlib.sha256(data).hexdigest(),'targetOffsets':targets,'owners':rows}
+          Path('/tmp/car02_owner.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR02_MATERIAL_OWNER_CONTAINMENT_V2
+          path: /tmp/car02_owner.json
+          if-no-files-found: error
