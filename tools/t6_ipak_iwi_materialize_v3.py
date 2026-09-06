@@ -9,6 +9,10 @@ Identity is fail-closed:
 - reconstructed payload CRC29, IWI27 metadata, dimensions, and PNG semantics are
   validated by the proven v1 implementation.
 
+Whole-container SHA-256 is always recorded as provenance.  Callers may also pin
+one or more container hashes with --expect-ipak-sha256, but container packaging
+is not itself an image identity: exact pair resolution + payload validation is.
+
 This corrects the historical v4 manifest's misleading `nameHashHex` label. That
 field is retained as upstream evidence but is not used as an IPAK filename hash.
 """
@@ -162,7 +166,7 @@ def parse_named_value(value: str) -> tuple[str, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ipak", action="append", required=True, help="NAME=PATH; repeat for each retail repository")
-    ap.add_argument("--expect-ipak-sha256", action="append", default=[], help="NAME=SHA256")
+    ap.add_argument("--expect-ipak-sha256", action="append", default=[], help="NAME=SHA256; optional whole-container provenance pin")
     ap.add_argument("--targets", type=Path, required=True)
     ap.add_argument("--metadata", type=Path, action="append", default=[])
     ap.add_argument("--outdir", type=Path, required=True)
@@ -174,7 +178,7 @@ def main() -> int:
         name, path = parse_named_path(raw)
         if not path.is_file():
             raise SystemExit(f"IPAK not found: {path}")
-        actual = base.sha256_file(path) if name in expected else None
+        actual = base.sha256_file(path)
         if name in expected and actual.lower() != expected[name].lower():
             raise SystemExit(f"{name} SHA-256 mismatch: {actual}")
         parsed = base.parse_ipak(path)
@@ -247,6 +251,8 @@ def main() -> int:
             "path": str(repo["path"]),
             "bytes": repo["path"].stat().st_size,
             "sha256": repo["sha256"],
+            "sha256Expected": expected.get(repo["name"]),
+            "sha256ExpectationMatched": (repo["sha256"].lower() == expected[repo["name"]].lower()) if repo["name"] in expected else None,
             "versionHex": f"0x{repo['ipak']['version']:x}",
         })
     counts = {repo["name"]: sum(1 for x in materialized if x["repository"] == repo["name"]) for repo in repositories}
@@ -266,7 +272,7 @@ def main() -> int:
         },
         "textures": materialized,
         "unresolved": unresolved,
-        "proofBoundary": "No retained mislabeled nameHash field, filename fallback, dataHash-only fallback, cross-repository substitution, or unsupported-format substitution is accepted. The exact proven image name is hashed with the retail T6 filename hash and paired with the exact streamed dataHash; the pair must be unique across the supplied retail IPAKs.",
+        "proofBoundary": "Whole-container SHA-256 is provenance and may optionally be pinned by the caller. Asset identity is exact: no retained mislabeled nameHash field, filename fallback, dataHash-only fallback, cross-repository substitution, or unsupported-format substitution is accepted. The exact proven image name is hashed with the retail T6 filename hash and paired with the exact streamed dataHash; the pair must be unique across the supplied retail IPAKs and its reconstructed payload must pass CRC29/IWI validation.",
     }
     (a.outdir / "manifest.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(doc["summary"], indent=2, sort_keys=True))
