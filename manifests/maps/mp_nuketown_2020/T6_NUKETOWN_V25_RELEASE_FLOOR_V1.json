@@ -1,6 +1,7 @@
 {
-  "format": "t6-gltf-nonregression-baseline-v1",
+  "format": "t6-gltf-scene-policy-baseline-v3",
   "map": "mp_nuketown_2020",
+  "guard": "tools/t6_gltf_scene_policy_guard_v3.py",
   "baseline": {
     "file": "mp_nuketown_2020_v25_FULL_WORLD_PRIMARY_STATICS_SKYBOX.glb",
     "sha256": "32197bb8963f635b537b785830b3653b5122d63324eddbfafe51aea4ab7aa11c",
@@ -9,6 +10,7 @@
   },
   "floors": {
     "meshCount": 356,
+    "sceneCount": 5,
     "usedMaterialCount": 711,
     "baseColorBoundUsedMaterialCount": 709,
     "normalBoundUsedMaterialCount": 662,
@@ -25,18 +27,17 @@
   },
   "required": {},
   "t6Invariants": {},
-  "fullMapRequirements": {
-    "retailGfxWorldSurfaces": 5614,
-    "retailWorldVertices": 146764,
-    "retailWorldTriangles": 100280,
-    "serializedStaticPlacementsPreserved": 2992,
-    "nonReflectionPrimaryStaticPlacementsPreserved": 2923,
-    "primaryStaticsVisible": 2921,
-    "mapEntCarsVisible": 6,
-    "retailSkyboxRequired": true,
-    "animationsRequired": 3,
-    "skinsRequired": 1,
-    "scenesRequired": 5
+  "fullMapInvariants": {
+    "fullWorldSurfaceCount": 5614,
+    "fullWorldVertexCount": 146764,
+    "fullWorldTriangleCount": 100280,
+    "staticPlacementCountSerialized": 2992,
+    "staticPlacementCountPrimary": 2923,
+    "staticPlacementCountCanonicalVisible": 2921,
+    "staticPlacementCountAnimationSupport": 2,
+    "staticPlacementCountReflectionProxy": 69,
+    "mapEntVisiblePlacementCount": 6,
+    "retailSkyboxImageName": "skybox_mp_nuketown2020_ft"
   },
-  "promotionPolicy": "Any intermediate raw extraction may be retained for forensic/provenance work, but it MUST NOT be described, named, linked, or handed to the user as a visual successor/full-map candidate unless the GLB non-regression guard passes this floor and all full-map requirements are independently verified. Later reviewed baselines may only raise or source-close these requirements; they may not silently lower them."
+  "promotionPolicy": "Diagnostic/forensic partial exports are allowed and should be retained when they prove new source facts, but they are never visual successors. A user-facing Nuketown full-map candidate must pass t6_gltf_scene_policy_guard_v3.py against this baseline with zero failures and retain the stronger v31 shader-facing contracts. Later reviewed baselines may raise/source-close requirements; they may not silently lower them."
 }
