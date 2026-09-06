@@ -1,0 +1,35 @@
+name: R2 BO2 fetch test
+
+on:
+  push:
+    branches:
+      - r2-fetch-test
+    paths:
+      - .github/workflows/r2-bo2-fetch-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch exact retail zone files from R2 custom domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p payload/zone/all
+          base='https://r2.houseofkublai.com/bo2/zone/all'
+          curl --fail --location --retry 4 --retry-all-errors --output payload/zone/all/faction_seals_mp.ff "$base/faction_seals_mp.ff"
+          curl --fail --location --retry 4 --retry-all-errors --output payload/zone/all/common_mp.ff "$base/common_mp.ff"
+          sha256sum payload/zone/all/faction_seals_mp.ff payload/zone/all/common_mp.ff | tee payload/SHA256SUMS.txt
+          test "$(sha256sum payload/zone/all/faction_seals_mp.ff | awk '{print $1}')" = 'e84f279dfd49aa0962bd630cfc5355bb4a1c15c49047560f58a00e07e6d036be'
+      - name: Upload exact inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bo2-seal6-retail-inputs
+          path: payload/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
