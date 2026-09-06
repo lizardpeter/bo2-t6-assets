@@ -15,25 +15,29 @@ jobs:
           ref: reversal/nonmap-assets
       - name: Fetch exact retail source
         run: |
-          mkdir -p work
+          mkdir -p work/seal6
           curl --fail --location --retry 3 -o work/faction_seals_mp.ff https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff
           echo '1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88  work/faction_seals_mp.ff' | sha256sum -c -
       - name: Expand retail FastFile
         run: python tools/t6_pc_fastfile_expand_v1.py work/faction_seals_mp.ff work/faction_seals_mp.expanded
-      - name: Close exact SEAL6 body
+      - name: Normalize exact retail SEAL6 skeleton
         run: |
-          python tools/t6_player_body_close_v3.py \
+          python tools/t6_xmodel_skeleton_normalize_v3.py work/faction_seals_mp.expanded \
+            --asset-start 0x45CCF1 \
+            --xasset-index 64 \
             --name c_usa_mp_seal6_smg_fb \
-            --zone-name faction_seals_mp \
-            --fastfile work/faction_seals_mp.ff \
-            --expanded work/faction_seals_mp.expanded \
-            --out-dir work/seal6
-          cat work/seal6/player_body_closure_v3.json
+            --out work/seal6/xmodel_skeleton_normalized_v3.json
+      - name: Normalize exact retail SEAL6 mesh
+        run: |
+          python tools/t6_xmodel_mesh_normalize_v4.py work/faction_seals_mp.expanded \
+            --asset-start 0x45CCF1 \
+            --skeleton work/seal6/xmodel_skeleton_normalized_v3.json \
+            --out work/seal6/xmodel_mesh_normalized_v4.json
+          sha256sum work/seal6/*.json
       - name: Package normalized exact body
         uses: actions/upload-artifact@v4
         with:
           name: seal6-normalized-body
-          path: |
-            work/seal6/*.json
+          path: work/seal6/*.json
           retention-days: 1
           compression-level: 0
