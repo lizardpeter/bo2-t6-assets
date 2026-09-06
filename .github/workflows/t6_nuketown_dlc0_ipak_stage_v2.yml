@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Require canonical 81 of 81 proof
+        run: test -f manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64
       - name: Install LZO runtime
         run: sudo apt-get update -qq && sudo apt-get install -y -qq liblzo2-2 >/dev/null
       - name: Materialize all 81 exact pointer-proven payloads
