@@ -1,0 +1,23 @@
+name: T6 Nuketown alias bank schema inspect tmp
+on:
+  push:
+    paths: ['.github/workflows/t6_nuketown_alias_bank_schema_inspect_tmp.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import base64,json,zlib,collections
+          p='manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64'
+          d=json.loads(zlib.decompress(base64.b64decode(open(p,'rb').read())))
+          print('ALIAS_KEYS',collections.Counter(tuple(sorted(r)) for r in d['aliases']))
+          print('EVIDENCE_KEYS',collections.Counter(tuple(sorted(e)) for r in d['aliases'] for e in r.get('evidence',[])))
+          print('EVIDENCE_ROWS',sum(len(r.get('evidence',[])) for r in d['aliases']))
+          print('PACKED_MATERIALS',len({e.get('packedMaterial') for r in d['aliases'] for e in r.get('evidence',[]) if e.get('packedMaterial')}))
+          print('INLINE_MATERIALS',len({e.get('inlineMaterial') for r in d['aliases'] for e in r.get('evidence',[]) if e.get('inlineMaterial')}))
+          for r in d['aliases'][:10]: print(json.dumps(r,sort_keys=True))
+          PY
