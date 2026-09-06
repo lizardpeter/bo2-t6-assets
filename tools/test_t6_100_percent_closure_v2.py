@@ -40,8 +40,25 @@ def main() -> int:
     assert v2["openGateCount"] == 0
     assert v2["release100Percent"] is False
 
+    v3_doc = load("T6_100_PERCENT_CLOSURE_V3.json")
+    v3 = validate(v3_doc)
+    assert v3["sourceFormat"] == "t6-100-percent-closure-v3"
+    assert v3["gateCount"] == 25
+    assert v3["closedGateCount"] == 1
+    assert v3["implementedAwaitingRetailGateCount"] == 0
+    assert v3["partialGateCount"] == 24
+    assert v3["openGateCount"] == 0
+    assert v3["release100Percent"] is False
+    assert "seal6-golden-fixture" not in v3["blockerIds"]
+    assert "global-xasset-inventory" in v3["blockerIds"]
+    assert "world-v2-inherited-closure" in v3["blockerIds"]
+
     bad = copy.deepcopy(v2_doc)
     bad["summary"]["closed"] += 1
+    must_fail(bad, "contradicts computed")
+
+    bad = copy.deepcopy(v3_doc)
+    bad["summary"]["partial"] -= 1
     must_fail(bad, "contradicts computed")
 
     bad = copy.deepcopy(v2_doc)
@@ -71,7 +88,7 @@ def main() -> int:
                 "closureRequirement": "B is proven"
             }
         ],
-        "summary": {"gateCount": 2, "closed": 2, "partial": 0, "open": 0, "implementedAwaitingRetail": 0, "release100Percent": True}
+        "summary": {"gateCount": 2, "closed": 2, "partial": 0, "open": 0, "implementedAwaitingRetail": 0, "release100Percent": true}
     }
     s = validate(synthetic)
     assert s["release100Percent"] is True
