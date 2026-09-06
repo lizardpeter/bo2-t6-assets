@@ -1,0 +1,177 @@
+name: T6 Nuketown car01 textured Blender v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_textured_blender_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install image dependencies
+        run: python3 -m pip install --quiet pillow numpy
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Build exact textured car01 GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+          from t6_xmodel_blender_static_bindpose_export_v1 import export as export_static
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_ipak_http_range_v2 import open_ipak
+          from t6_nuketown_static_xmodel_texture_apply_v2 import iwi_top_png
+
+          DATA=Path('/tmp/map.expanded').read_bytes(); CLEAN=44523322; OWNER=38558166
+          proof=json.loads(Path('manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2.json').read_text())
+          assert proof['handleArrayVirtualBase']==40852396
+          slot_by_off={int(r['virtualOffset']):int(r['slot']) for r in proof['slotMapping']}
+          name_by_slot={int(r['slot']):r['material'] for r in proof['slotMapping']}
+          table=parse_top_level_xasset_table(DATA);prefix=walk_map_prefix_stringtable(DATA,table);logical=prefix['logicalToText']
+          mesh=Normalizer(DATA,CLEAN,logical_to_text=logical).normalize();assert mesh['identity']['name']=='veh_t6_nuketown_2020_car01_clean'
+          base_glb=export_static(mesh,0)
+
+          def read_glb(blob):
+            _,_,total=struct.unpack_from('<4sII',blob,0);assert total==len(blob);p=12;doc=binb=None
+            while p<len(blob):
+              n,t=struct.unpack_from('<II',blob,p);p+=8;b=blob[p:p+n];p+=n
+              if t==0x4E4F534A:doc=json.loads(b.rstrip(b' \t\r\n\0'))
+              elif t==0x004E4942:binb=bytearray(b)
+            return doc,binb
+          def emit(doc,binb):
+            while len(binb)%4:binb.append(0)
+            doc['buffers']=[{'byteLength':len(binb)}]
+            jb=json.dumps(doc,separators=(',',':'),sort_keys=True,ensure_ascii=False).encode();jb+=b' '*((-len(jb))%4);bb=bytes(binb);total=12+8+len(jb)+8+len(bb);o=bytearray(struct.pack('<4sII',b'glTF',2,total));o+=struct.pack('<II',len(jb),0x4E4F534A)+jb;o+=struct.pack('<II',len(bb),0x004E4942)+bb;return bytes(o)
+          def hashstr(s,h=0):
+            for c in s.encode('latin1'):h=((33*h)^(c|0x20))&0xffffffff
+            return h
+          def decode_state(w0,w1):
+            src=w0&15;dst=(w0>>4)&15;op=(w0>>8)&7;atd=(w0>>11)&1;atm=(w0>>12)&1;cull=(w0>>14)&3
+            non=(op!=0) and not (src==2 and dst==1)
+            if non:return 'BLEND',None,cull==1
+            if not atd:return 'MASK',0.5 if atm else 1/255,cull==1
+            return 'OPAQUE',None,cull==1
+          def choose_state(fixed,count):
+            ent=list(DATA[fixed+48:fixed+84]);lit=[x for x in ent[4:26] if x!=255]
+            if lit:
+              u=sorted(set(lit));assert len(u)==1 and u[0]<count,(fixed,count,u);return u[0]
+            a,b=ent[2],ent[3];assert a==b and a!=255 and a<count,(fixed,count,a,b);return a
+
+          ow=XModelWalker(DATA,OWNER).walk_xmodel();assert not ow['blockers'];by={s['name']:s for s in ow['sections']};mats={int(m['label'].split('[')[1].split(']')[0]):m for m in ow['details']['inlineMaterials']}
+          cw=XModelWalker(DATA,CLEAN).walk_xmodel();lod0=mesh['xmodel']['lods'][0];si=int(lod0['surfIndex']);sn=int(lod0['numSurfs']);chs=cw['xmodel']['materialHandles'][si:si+sn]
+          surface_slots=[]
+          for h in chs:
+            assert h['kind']=='packed' and h['block']==5,h;off=int(h['offset']);assert off in slot_by_off,off;surface_slots.append(slot_by_off[off])
+          assert surface_slots==[0,1,2,3,9],surface_slots
+
+          urls=[
+            'https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak','https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak','https://r2.houseofkublai.com/bo2/zone/all/mp.ipak','https://r2.houseofkublai.com/bo2/zone/all/base.ipak','https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak','https://r2.houseofkublai.com/bo2/zone/all/so.ipak','https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak']
+          ipaks=[(u,open_ipak(u)) for u in urls]
+          doc,binb=read_glb(base_glb);doc['materials']=[];doc['images']=[];doc['textures']=[];doc['samplers']=[{'magFilter':9729,'minFilter':9987,'wrapS':10497,'wrapT':10497}]
+          tex_cache={};image_proof=[]
+          # Resolve images defined inline by owner slot, with packed reuse to prior owner texture slots.
+          resolved_role={}
+          for ms in range(10):
+            m=mats[ms];label=m['label'];ts=by.get(label+'.Material.textureTable.fixed')
+            if not ts:continue
+            for ti in range(int(m['textureCount'])):
+              q=ts['start']+16*ti;sem=DATA[q+7];ip=struct.unpack_from('<I',DATA,q+12)[0]
+              if sem not in (2,5):continue
+              pref=f'{label}.Material.textureTable[{ti}].image.GfxImage';fs=by.get(pref+'.fixed');ns=by.get(pref+'.name')
+              if fs and ns:
+                ib=fs['start'];a=ns['start'];e=DATA.index(b'\0',a);name=DATA[a:e].decode('latin1');ih=struct.unpack_from('<I',DATA,ib+76)[0];spc=DATA[ib+60];dh=(struct.unpack_from('<I',DATA,ib+40)[0]&0x1fffffff) if spc else None
+                assert ih==hashstr(name)
+                if spc:
+                  found=[]
+                  for u,p in ipaks:
+                    ent=p.entry_exact(ih,dh)
+                    if ent is not None:found.append((u,p,ent))
+                  assert found,f'{name}: exact payload missing';raws=[]
+                  for u,p,ent in found:raws.append((u,p.extract_entry(ent)))
+                  sh={hashlib.sha256(raw).hexdigest() for _,raw in raws};assert len(sh)==1,(name,sh);iwi=raws[0][1];png,meta=iwi_top_png(iwi,normal_semantic=(sem==5));payload_sha=next(iter(sh));source=raws[0][0]
+                else:raise SystemExit(f'{name}: nonstreamed inline image not handled')
+                key=(ih,dh,sem);resolved_role[(ms,ti)]={'name':name,'semantic':sem,'png':png,'payloadSha256':payload_sha,'source':source,'gfxImageHash':ih,'dataHash':dh,'meta':meta};image_proof.append({'ownerSlot':ms,'textureSlot':ti,'name':name,'semantic':sem,'gfxImageHash':ih,'dataHash':dh,'payloadSha256':payload_sha,'source':source})
+              elif ip not in (0,0xffffffff,0xfffffffe):
+                enc=(ip-1)&0xffffffff;assert enc>>29==5;off=enc&0x1fffffff
+                # resolve packed GfxImage by matching exact earlier MaterialTextureDef.image pointer address from proofable owner walk
+                # For clean car roles, only slot9 color reuses slot0 color; normal is global identity and omitted from glTF normal rather than guessed.
+                if ms==9 and sem==2: resolved_role[(ms,ti)]=resolved_role[(0,2)]
+                elif sem==5 and off==514620: resolved_role[(ms,ti)]=None
+                else: pass
+
+          # Build one glTF Material per clean-car owner slot.
+          mat_index={}
+          for ms in surface_slots:
+            m=mats[ms];label=m['label'];fs=by[label+'.Material.fixed']['start'];ss=by[label+'.Material.stateBitsTable']['start'];idx=choose_state(fs,int(m['stateBitsCount']));w0,w1=struct.unpack_from('<II',DATA,ss+20*idx);am,cut,ds=decode_state(w0,w1)
+            gm={'name':name_by_slot[ms],'pbrMetallicRoughness':{'baseColorFactor':[1,1,1,1],'metallicFactor':0.0,'roughnessFactor':0.8},'doubleSided':ds,'extras':{'T6':{'ownerSlot':ms,'stateBitsIndex':idx,'loadBits0':f'0x{w0:08X}','loadBits1':f'0x{w1:08X}'}}}
+            if am!='OPAQUE':gm['alphaMode']=am
+            if cut is not None:gm['alphaCutoff']=cut
+            # choose exact semantic roles, never texture order
+            roles=[]
+            for ti in range(int(m['textureCount'])):
+              rr=resolved_role.get((ms,ti));sem=DATA[by[label+'.Material.textureTable.fixed']['start']+16*ti+7]
+              if sem not in (2,5) or rr is None:continue
+              k=(rr['gfxImageHash'],rr['dataHash'],sem)
+              if k not in tex_cache:
+                while len(binb)%4:binb.append(0)
+                off=len(binb);binb.extend(rr['png']);bv=len(doc.setdefault('bufferViews',[]));doc['bufferViews'].append({'buffer':0,'byteOffset':off,'byteLength':len(rr['png'])});ii=len(doc['images']);doc['images'].append({'name':rr['name'],'bufferView':bv,'mimeType':'image/png','extras':{'T6':{'gfxImageHash':rr['gfxImageHash'],'dataHash':rr['dataHash'],'payloadSha256':rr['payloadSha256'],'semantic':sem}}});ti_out=len(doc['textures']);doc['textures'].append({'name':rr['name'],'source':ii,'sampler':0});tex_cache[k]=ti_out
+              ti_out=tex_cache[k]
+              if sem==2:gm['pbrMetallicRoughness']['baseColorTexture']={'index':ti_out,'texCoord':0}
+              elif sem==5:gm['normalTexture']={'index':ti_out,'texCoord':0,'scale':1.0}
+              roles.append({'semantic':sem,'image':rr['name'],'textureIndex':ti_out})
+            # slot9 exact packed reuse to slot0 color
+            if ms==9:
+              rr=resolved_role[(0,2)];k=(rr['gfxImageHash'],rr['dataHash'],2);gm['pbrMetallicRoughness']['baseColorTexture']={'index':tex_cache[k],'texCoord':0};roles.append({'semantic':2,'image':rr['name'],'textureIndex':tex_cache[k],'resolution':'packed-reuse-slot0-color'})
+            gm['extras']['T6']['roles']=roles
+            if 'baseColorTexture' not in gm['pbrMetallicRoughness']:raise SystemExit(f'{gm["name"]}: no exact color role')
+            mat_index[ms]=len(doc['materials']);doc['materials'].append(gm)
+          prims=doc['meshes'][0]['primitives'];assert len(prims)==len(surface_slots)
+          for i,ms in enumerate(surface_slots):prims[i]['material']=mat_index[ms]
+          out=emit(doc,binb);Path('/tmp/veh_t6_nuketown_2020_car01_clean_LOD0_TEXTURED_FIXED.glb').write_bytes(out)
+          # hard regression: every primitive has material; every material has color; no normal role used as basecolor
+          assert all('material' in p for p in prims);assert all('baseColorTexture' in m['pbrMetallicRoughness'] for m in doc['materials'])
+          for m in doc['materials']:
+            bi=m['pbrMetallicRoughness']['baseColorTexture']['index'];iname=doc['images'][doc['textures'][bi]['source']]['name'];assert not iname.endswith('_n'),(m['name'],iname)
+          proofout={'format':'t6-nuketown-car01-textured-blender-v1','sourceExpandedSha256':hashlib.sha256(DATA).hexdigest(),'model':mesh['identity']['name'],'surfaceOwnerSlots':surface_slots,'materials':[{'name':m['name'],'alphaMode':m.get('alphaMode','OPAQUE'),'doubleSided':m.get('doubleSided',False),'roles':m['extras']['T6']['roles']} for m in doc['materials']],'imageProof':image_proof,'glbBytes':len(out),'glbSha256':hashlib.sha256(out).hexdigest(),'validation':{'allPrimitivesMaterialBound':True,'allMaterialsExactColor':True,'normalAsBaseColor':False}}
+          rb=(json.dumps(proofout,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/T6_NUKETOWN_CAR01_TEXTURED_FIXED_V1.json').write_bytes(rb);rp=Path('manifests/models/T6_NUKETOWN_CAR01_TEXTURED_FIXED_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(rb)
+          print(json.dumps(proofout,indent=2,sort_keys=True))
+          PY
+      - name: Commit proof manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_TEXTURED_FIXED_V1.json
+          git commit -m 'Build exact textured Nuketown car01'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_TEXTURED_FIXED_V1
+          path: |
+            /tmp/veh_t6_nuketown_2020_car01_clean_LOD0_TEXTURED_FIXED.glb
+            /tmp/T6_NUKETOWN_CAR01_TEXTURED_FIXED_V1.json
+          if-no-files-found: error
+          compression-level: 0
