@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p probe/source
-          base='https://houseofkublai.com/bo2/zone/all'
+          base='https://r2.houseofkublai.com/bo2/zone/all'
           for name in faction_seals_mp.ff common_mp.ff; do
             echo "Fetching $base/$name"
             curl --fail --location --silent --show-error \
@@ -45,7 +45,7 @@ jobs:
           for name in ('faction_seals_mp.ff','common_mp.ff'):
               p=root/name
               h=hashlib.sha256(p.read_bytes()).hexdigest()
-              files.append({'name':name,'bytes':p.stat().st_size,'sha256':h,'url':f'https://houseofkublai.com/bo2/zone/all/{name}'})
+              files.append({'name':name,'bytes':p.stat().st_size,'sha256':h,'url':f'https://r2.houseofkublai.com/bo2/zone/all/{name}'})
           (root/'r2_fetch_manifest.json').write_text(json.dumps({'format':'t6-r2-retail-source-fetch-v1','files':files},indent=2,sort_keys=True)+'\n')
           print(json.dumps(files,indent=2))
           PY
