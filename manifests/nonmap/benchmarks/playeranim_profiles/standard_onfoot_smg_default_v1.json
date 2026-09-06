@@ -1,0 +1,15 @@
+{
+  "format": "t6-playeranim-selector-profile-v1",
+  "id": "standard_onfoot_smg_default_v1",
+  "description": "Generic standard on-foot SMG playeranim selector. This is reusable by any retail weapon whose WeaponDef proves weaponclass=smg and playerAnimType=default.",
+  "selectors": {
+    "weaponclass": "smg",
+    "nextWeaponclass": "smg",
+    "playerAnimType": "default",
+    "nextPlayerAnimType": "default"
+  },
+  "forbiddenConditionKeys": ["mounted", "vehicle_name", "vehicle_seat_to"],
+  "requiredBehaviorFamilies": ["idle/stance", "walk/run/sprint", "crouch/prone", "jump/fall/land", "weapon-ready/fire/reload", "melee", "turn/aim", "death/reaction"],
+  "concreteWeapon": null,
+  "rule": "Do not attach a weapon name to this profile until its retail WeaponDef/player animation metadata is hash-pinned."
+}
