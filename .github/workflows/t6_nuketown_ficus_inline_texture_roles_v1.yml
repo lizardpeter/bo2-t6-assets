@@ -24,49 +24,80 @@ jobs:
           /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
           test "$(stat -c '%s' /tmp/mp_nuketown_2020.expanded.bin)" = 154653476
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
-      - name: Trace Ficus inline MaterialTextureDef roles
+      - name: Trace and resolve Ficus MaterialTextureDef roles
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 - <<'PY'
-          import json,struct
+          import hashlib,json,struct
           from pathlib import Path
           from t6_xmodel_serialized_walker import XModelWalker
+          from t6_ipak_http_range_v2 import open_ipak
+          from t6_nuketown_ipak_partial_texture_export_v2 import r_hash_string
+
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
-          d=XModelWalker(data,24530208).walk_xmodel()
-          x=d['xmodel']
-          assert x['name']=='mlv/nt_tree_ficus_lrg_01_sway',x.get('name')
-          assert not d['blockers'],d['blockers']
+          d=XModelWalker(data,24530208).walk_xmodel(); x=d['xmodel']
+          assert x['name']=='mlv/nt_tree_ficus_lrg_01_sway'; assert not d['blockers'],d['blockers']
           inline=(d.get('details') or {}).get('inlineMaterials',[])
-          print('RESULT_KEYS',sorted(d.keys()))
-          print('DETAIL_KEYS',sorted((d.get('details') or {}).keys()))
-          print('MODEL',x['name'])
-          print('HANDLES',json.dumps(x['materialHandles'],sort_keys=True))
-          print('INLINE_MATERIALS',json.dumps(inline,indent=2,sort_keys=True))
-          secs=d['sections']
-          by={s['name']:s for s in secs}
+          assert len(inline)==4, len(inline)
+          by={s['name']:s for s in d['sections']}
           roles={0:'2D',1:'FUNCTION',2:'COLOR_MAP',3:'UNUSED_1',4:'UNUSED_2',5:'NORMAL_MAP',6:'UNUSED_3',7:'UNUSED_4',8:'SPECULAR_MAP'}
           rows=[]
           for m in inline:
-              label=m['label']
-              tname=f'{label}.Material.textureTable.fixed'
-              if tname not in by:
-                  print('MATERIAL_NO_INLINE_TABLE',m['name'])
-                  continue
-              tb=by[tname]['start']
-              print('MATERIAL',m['name'],'TEXTURES',m['textureCount'],'TABLE',tb)
+              label=m['label']; tb=by[f'{label}.Material.textureTable.fixed']['start']
               for i in range(m['textureCount']):
-                  b=tb+i*16
-                  namehash=struct.unpack_from('<I',data,b)[0]
-                  ns=chr(data[b+4]); ne=chr(data[b+5]); sampler=data[b+6]; semantic=data[b+7]
-                  imagep=struct.unpack_from('<I',data,b+12)[0]
+                  b=tb+i*16; sem=data[b+7]; sampler=data[b+6]; texture_name_hash=struct.unpack_from('<I',data,b)[0]
                   prefix=f'{label}.Material.textureTable[{i}].image.GfxImage'
-                  imgname=None
-                  nsec=by.get(prefix+'.name')
-                  if nsec:
-                      a=nsec['start']; e=data.index(b'\0',a); imgname=data[a:e].decode('latin1')
-                  row={'material':m['name'],'slot':i,'nameHash':f'0x{namehash:08X}','nameStart':ns,'nameEnd':ne,'samplerState':sampler,'semantic':semantic,'semanticName':roles.get(semantic,'OTHER'),'imagePointer':f'0x{imagep:08X}','inlineImageName':imgname}
-                  rows.append(row); print('ROLE',json.dumps(row,sort_keys=True))
-          if len(inline)!=4: raise SystemExit(f'expected 4 inline Ficus materials, got {len(inline)}')
-          if not rows: raise SystemExit('no Ficus texture roles recovered')
+                  fs=by.get(prefix+'.fixed'); ns=by.get(prefix+'.name')
+                  if not fs or not ns: raise SystemExit(f'{m["name"]} slot {i}: expected inline GfxImage')
+                  ib=fs['start']; a=ns['start']; e=data.index(b'\0',a); image=data[a:e].decode('latin1')
+                  width,height,depth=struct.unpack_from('<3H',data,ib+20)
+                  streaming=data[ib+27]; streamed_count=data[ib+60]
+                  image_hash=struct.unpack_from('<I',data,ib+76)[0]
+                  data_hash=(struct.unpack_from('<I',data,ib+40)[0]&0x1fffffff) if streamed_count else None
+                  if image_hash!=r_hash_string(image): raise SystemExit(f'{image}: stored hash mismatch')
+                  rows.append({'material':m['name'],'slot':i,'semantic':sem,'semanticName':roles.get(sem,'OTHER'),'samplerState':sampler,
+                               'materialTextureNameHash':texture_name_hash,'image':image,'imageHash':image_hash,'dataHash':data_hash,
+                               'width':width,'height':height,'depth':depth,'streaming':streaming,'streamedPartCount':streamed_count,'gfxImageFixedStart':ib})
+          urls=[
+            'https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/mp.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/base.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/all/so.ipak',
+            'https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak',
+          ]
+          ipaks=[]
+          for u in urls:
+              try: ipaks.append((u,open_ipak(u)))
+              except Exception as ex:
+                  if u.endswith('dlc0_load_mp.ipak'): continue
+                  raise
+          for r in rows:
+              if not r['streamedPartCount']:
+                  r['containerMatches']=[]; continue
+              found=[]; shas=set()
+              for u,p in ipaks:
+                  e=p.entry_exact(r['imageHash'],r['dataHash'])
+                  if e is None: continue
+                  raw=p.extract_entry(e); h=hashlib.sha256(raw).hexdigest(); shas.add(h)
+                  found.append({'url':u,'entry':list(e),'iwiBytes':len(raw),'iwiSha256':h})
+              if not found: raise SystemExit(f"no exact IPAK payload for {r['image']}")
+              if len(shas)!=1: raise SystemExit(f"conflicting exact payload bytes for {r['image']}: {shas}")
+              r['containerMatches']=found; r['iwiSha256']=next(iter(shas))
+          bark=[r for r in rows if r['material']=='mlv/mtl_p6_tree_ficus_lrg_01_bark1']
+          assert [(r['slot'],r['semantic'],r['image']) for r in bark]==[
+              (0,5,'p6_tree_ficus_lrg_01_bark1_n'),
+              (1,2,'~-gp6_tree_ficus_lrg_01_bark1_c')],bark
+          report={'format':'t6-nuketown-ficus-inline-texture-roles-v1','model':x['name'],'expandedSha256':hashlib.sha256(data).hexdigest(),
+                  'rows':rows,'ficusBarkRegression':{'slot0Semantic':'NORMAL_MAP','slot1Semantic':'COLOR_MAP','passed':True}}
+          Path('/tmp/ficus_roles.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
           PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_FICUS_INLINE_TEXTURE_ROLES_V1
+          path: /tmp/ficus_roles.json
+          if-no-files-found: error
