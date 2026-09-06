@@ -37,13 +37,17 @@ jobs:
           x=d['xmodel']
           assert x['name']=='mlv/nt_tree_ficus_lrg_01_sway',x.get('name')
           assert not d['blockers'],d['blockers']
+          inline=(d.get('details') or {}).get('inlineMaterials',[])
+          print('RESULT_KEYS',sorted(d.keys()))
+          print('DETAIL_KEYS',sorted((d.get('details') or {}).keys()))
           print('MODEL',x['name'])
           print('HANDLES',json.dumps(x['materialHandles'],sort_keys=True))
-          print('INLINE_MATERIALS',json.dumps(d.get('inlineMaterials',[]),indent=2,sort_keys=True))
+          print('INLINE_MATERIALS',json.dumps(inline,indent=2,sort_keys=True))
           secs=d['sections']
           by={s['name']:s for s in secs}
           roles={0:'2D',1:'FUNCTION',2:'COLOR_MAP',3:'UNUSED_1',4:'UNUSED_2',5:'NORMAL_MAP',6:'UNUSED_3',7:'UNUSED_4',8:'SPECULAR_MAP'}
-          for m in d.get('inlineMaterials',[]):
+          rows=[]
+          for m in inline:
               label=m['label']
               tname=f'{label}.Material.textureTable.fixed'
               if tname not in by:
@@ -61,5 +65,8 @@ jobs:
                   nsec=by.get(prefix+'.name')
                   if nsec:
                       a=nsec['start']; e=data.index(b'\0',a); imgname=data[a:e].decode('latin1')
-                  print(json.dumps({'material':m['name'],'slot':i,'nameHash':f'0x{namehash:08X}','nameStart':ns,'nameEnd':ne,'samplerState':sampler,'semantic':semantic,'semanticName':roles.get(semantic,'OTHER'),'imagePointer':f'0x{imagep:08X}','inlineImageName':imgname},sort_keys=True))
+                  row={'material':m['name'],'slot':i,'nameHash':f'0x{namehash:08X}','nameStart':ns,'nameEnd':ne,'samplerState':sampler,'semantic':semantic,'semanticName':roles.get(semantic,'OTHER'),'imagePointer':f'0x{imagep:08X}','inlineImageName':imgname}
+                  rows.append(row); print('ROLE',json.dumps(row,sort_keys=True))
+          if len(inline)!=4: raise SystemExit(f'expected 4 inline Ficus materials, got {len(inline)}')
+          if not rows: raise SystemExit('no Ficus texture roles recovered')
           PY
