@@ -1,4 +1,4 @@
-name: Non-map weapon regressions
+name: Non-map player and weapon regressions
 
 on:
   push:
@@ -13,6 +13,12 @@ on:
       - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
       - "tools/t6_patch_weapon_closure_v1.py"
       - "tools/test_t6_patch_weapon_closure_v1.py"
+      - "tools/t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
+      - "tools/t6_player_character_animation_census_v1.py"
+      - "tools/test_t6_player_character_animation_census_v1.py"
+      - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
       - ".github/workflows/nonmap-weapon-regressions.yml"
   pull_request:
     paths:
@@ -24,6 +30,12 @@ on:
       - "tools/test_t6_weapon_xasset_structural_probe_v2.py"
       - "tools/t6_patch_weapon_closure_v1.py"
       - "tools/test_t6_patch_weapon_closure_v1.py"
+      - "tools/t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_v1.py"
+      - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
+      - "tools/t6_player_character_animation_census_v1.py"
+      - "tools/test_t6_player_character_animation_census_v1.py"
+      - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
       - ".github/workflows/nonmap-weapon-regressions.yml"
   workflow_dispatch:
 
@@ -46,3 +58,9 @@ jobs:
         run: python tools/test_t6_weapon_xasset_structural_probe_v2.py
       - name: patch_mp one-command closure gate
         run: python tools/test_t6_patch_weapon_closure_v1.py
+      - name: selector profile census
+        run: python tools/test_t6_playeranim_selector_profile_census_v1.py
+      - name: common_mp selector profile retail canary
+        run: python tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py
+      - name: third-person body x selector census
+        run: python tools/test_t6_player_character_animation_census_v1.py
