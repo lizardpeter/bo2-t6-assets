@@ -12,14 +12,52 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Decode and print resolver source
+      - name: Decode resolver and retained closure interval
         shell: bash
         run: |
           python - <<'PY'
-          import base64, zlib, pathlib
-          p = pathlib.Path('tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64')
-          out = zlib.decompress(base64.b64decode(p.read_text().strip()))
-          pathlib.Path('/tmp/resolver.py').write_bytes(out)
-          print('RESOLVER_BYTES', len(out))
+          import base64, json, pathlib, zlib
+
+          root = pathlib.Path('.')
+          src = root/'tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64'
+          resolver = zlib.decompress(base64.b64decode(src.read_text().strip()))
+          pathlib.Path('/tmp/resolver.py').write_bytes(resolver)
+          print('RESOLVER_BYTES', len(resolver))
+
+          def decode_json(path):
+              b = zlib.decompress(base64.b64decode(path.read_text().strip()))
+              print('DECODED', path, 'bytes', len(b))
+              return json.loads(b)
+
+          paths = [
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V3.json.zlib.b64',
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V1.json.zlib.b64',
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64',
+          ]
+
+          def walk(o, path='$'):
+              if isinstance(o, dict):
+                  xa = o.get('xassetIndex')
+                  if isinstance(xa, int) and 274 <= xa <= 299:
+                      print('MATCH', path, json.dumps(o, sort_keys=True, default=str))
+                  # Also surface exact records touching the unresolved packed target.
+                  txt = json.dumps(o, sort_keys=True, default=str)
+                  if '26834420' in txt or 'mtl_ac_prs_vehicle_sheet_a' in txt:
+                      print('CAR_MATCH', path, txt)
+                  for k,v in o.items():
+                      walk(v, f'{path}.{k}')
+              elif isinstance(o, list):
+                  for i,v in enumerate(o):
+                      walk(v, f'{path}[{i}]')
+
+          for p in paths:
+              if p.exists():
+                  print('===', p, '===')
+                  obj = decode_json(p)
+                  if isinstance(obj, dict): print('TOP_KEYS', sorted(obj.keys()))
+                  walk(obj)
+              else:
+                  print('MISSING', p)
           PY
-          nl -ba /tmp/resolver.py
+          echo '=== RESOLVER RELEVANT LINES ==='
+          grep -n -E 'FOLLOW|INSERT|prefix_to_material|simple_tail|geometry_events|inline-material|materialHandles' /tmp/resolver.py || true
