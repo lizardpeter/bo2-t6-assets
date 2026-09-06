@@ -1,0 +1,177 @@
+name: SEAL6 full Blender bundle from R2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [r2-fetch-test]
+    paths:
+      - '.github/workflows/seal6-full-blender-r2.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact reversal pipeline
+        uses: actions/checkout@v4
+        with:
+          ref: reversal/nonmap-assets
+
+      - name: Prepare workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/retail/zone/all work/expanded work/xanim_scan work/xanim_norm work/model_norm work/final
+
+      - name: Fetch Plutonium retail inputs from R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://r2.houseofkublai.com/bo2'
+          curl --fail --location --retry 5 --retry-delay 2 --output work/retail/zone/all/faction_seals_mp.ff "$base/zone/all/faction_seals_mp.ff"
+          curl --fail --location --retry 5 --retry-delay 2 --output work/retail/zone/all/common_mp.ff "$base/zone/all/common_mp.ff"
+          curl --fail --location --retry 5 --retry-delay 2 --output work/retail/zone/all/base.ipak "$base/zone/all/base.ipak"
+          sha256sum work/retail/zone/all/faction_seals_mp.ff work/retail/zone/all/common_mp.ff work/retail/zone/all/base.ipak | tee work/retail/SHA256SUMS.txt
+          test "$(sha256sum work/retail/zone/all/faction_seals_mp.ff | awk '{print $1}')" = '1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88'
+          test "$(sha256sum work/retail/zone/all/common_mp.ff | awk '{print $1}')" = '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'
+          test "$(sha256sum work/retail/zone/all/base.ipak | awk '{print $1}')" = '6c3e68f856f0eafb54aef193b96464b313617f11653f75d1d3fa03f01125fa02'
+
+      - name: Expand exact retail fastfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/bo2_t6_fastfile.py decrypt work/retail/zone/all/faction_seals_mp.ff -o work/expanded/faction_seals_mp.expanded --audit work/expanded/faction_seals_mp.audit.json
+          python tools/bo2_t6_fastfile.py decrypt work/retail/zone/all/common_mp.ff -o work/expanded/common_mp.expanded --audit work/expanded/common_mp.audit.json
+          sha256sum work/expanded/*.expanded | tee work/expanded/SHA256SUMS.txt
+
+      - name: Regenerate exact SEAL6 model and skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/t6_xmodel_mesh_normalize_v1.py work/expanded/faction_seals_mp.expanded --asset-start 4574449 --out work/model_norm/xmodel_mesh_normalized_v1.json
+          python tools/t6_xmodel_skeleton_normalize_v3.py work/expanded/faction_seals_mp.expanded --asset-start 4574449 --xasset-index 64 --name c_usa_mp_seal6_smg_fb --out work/model_norm/xmodel_skeleton_normalized_v3.json
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          m=Path('work/model_norm/xmodel_mesh_normalized_v1.json')
+          s=Path('work/model_norm/xmodel_skeleton_normalized_v3.json')
+          md=json.loads(m.read_text()); sd=json.loads(s.read_text())
+          assert md['identity']['name']=='c_usa_mp_seal6_smg_fb'
+          assert md['xmodel']['numBones']==102 and len(sd['skeleton']['bones'])==102
+          l=md['xmodel']['lods'][0]; ss=md['surfaces'][l['surfIndex']:l['surfIndex']+l['numSurfs']]
+          assert l['numSurfs']==14 and sum(x['vertCount'] for x in ss)==13490 and sum(x['triCount'] for x in ss)==14968
+          print('mesh sha256',hashlib.sha256(m.read_bytes()).hexdigest())
+          print('skeleton sha256',hashlib.sha256(s.read_bytes()).hexdigest())
+          PY
+
+      - name: Locate six exact retail XAnimParts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/stage18d_xanim_raw.py --stream work/expanded/common_mp.expanded --raw-parser tools/t6_raw_xasset_inventory.py --outdir work/xanim_scan
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          targets=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
+          rows=json.loads(Path('work/xanim_scan/common_mp_xanim_inline_assets.json').read_text())
+          by={}
+          for r in rows:
+              if r.get('name') in targets:
+                  by.setdefault(r['name'],[]).append(r)
+          missing=[n for n in targets if len(by.get(n,[]))!=1]
+          if missing:
+              raise SystemExit('XAnim exact-name uniqueness failure: '+repr({n:len(by.get(n,[])) for n in targets}))
+          starts={n:int(by[n][0]['raw_struct_offset']) for n in targets}
+          Path('work/xanim_scan/benchmark_starts.json').write_text(json.dumps(starts,indent=2)+'\n')
+          for n in targets: print(n,starts[n])
+          PY
+
+      - name: Normalize six exact retail animations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          starts=json.loads(Path('work/xanim_scan/benchmark_starts.json').read_text())
+          for name,start in starts.items():
+              out=f'work/xanim_norm/{name}.normalized.json'
+              subprocess.run(['python','tools/t6_xanim_normalize_v1.py','work/expanded/common_mp.expanded','--asset-start',str(start),'--out',out],check=True)
+          PY
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          names=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
+          for n in names:
+              d=json.loads(Path(f'work/xanim_norm/{n}.normalized.json').read_text())
+              assert d['name']==n and d['allFlatPoolsExhausted'] is True
+              print(n,d['header']['numframes'],d['header']['framerate'])
+          PY
+
+      - name: Install portable retail texture dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements-t6-textures.txt
+          python -c "import imagecodecs, PIL; assert imagecodecs.LZO.available; print('LZO + Pillow ready')"
+
+      - name: Build exact textured animated all-LOD SEAL6 bundle
+        shell: pwsh
+        run: |
+          ./scripts/t6_build_seal6_smg_textured_animated_all_lods_v2.ps1 `
+            -MeshJson work/model_norm/xmodel_mesh_normalized_v1.json `
+            -SkeletonJson work/model_norm/xmodel_skeleton_normalized_v3.json `
+            -XAnimDir work/xanim_norm `
+            -BaseIpak work/retail/zone/all/base.ipak `
+            -Python python `
+            -OutDir work/final `
+            -NoPortableDependencyBootstrap
+
+      - name: Final fail-closed Blender canaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, struct, hashlib
+          from pathlib import Path
+          expected_anims=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
+          summary=json.loads(Path('work/final/build_summary.json').read_text(encoding='utf-8-sig'))
+          assert summary['aggregate']['serializedLods']==4
+          assert summary['aggregate']['serializedSurfaces']==42
+          assert summary['aggregate']['exactTexturePayloads']==42
+          assert summary['aggregate']['allLodsTextured'] and summary['aggregate']['allLodsAnimated']
+          for lod in summary['lods']:
+              p=Path(lod['texturedGlb'])
+              b=p.read_bytes(); assert b[:4]==b'glTF'
+              jlen,jtyp=struct.unpack_from('<I4s',b,12); assert jtyp==b'JSON'
+              doc=json.loads(b[20:20+jlen].decode('utf-8').rstrip(' \x00'))
+              names=[a.get('name') for a in doc.get('animations',[])]
+              assert names==expected_anims, (lod['lod'],names)
+              assert len(doc.get('skins',[]))==1 and len(doc['skins'][0]['joints'])==102
+              assert len(doc.get('images',[]))>0 and len(doc.get('textures',[]))>0
+              print('LOD',lod['lod'],'bytes',len(b),'sha256',hashlib.sha256(b).hexdigest(),'animations',names,'images',len(doc['images']))
+          PY
+
+      - name: Package Blender test bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/retail/SHA256SUMS.txt work/final/RETAIL_SOURCE_SHA256SUMS.txt
+          cp work/xanim_scan/benchmark_starts.json work/final/XANIM_SOURCE_STARTS.json
+          cp -r work/xanim_norm work/final/normalized_xanims
+          cp -r work/model_norm work/final/normalized_model
+          (cd work && zip -qr SEAL6_FULL_RETAIL_BLENDER.zip final)
+          sha256sum work/SEAL6_FULL_RETAIL_BLENDER.zip | tee work/SEAL6_FULL_RETAIL_BLENDER.zip.sha256
+
+      - name: Upload complete Blender bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          path: |
+            work/SEAL6_FULL_RETAIL_BLENDER.zip
+            work/SEAL6_FULL_RETAIL_BLENDER.zip.sha256
+            work/final/lod0/seal6_smg_lod0_textured_animated.glb
+            work/final/build_summary.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
