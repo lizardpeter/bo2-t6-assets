@@ -8,7 +8,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "t6_rebuild_seal6_full_retail_v1.ps1"
 
-FACTION_RAW = "1a0754a5183eca3b1169610ad61b369768617340d000ef730a0d5c7b9ea97c88"
 FACTION_EXPANDED = "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30"
 COMMON_EXPANDED = "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
 ANIMS = {
@@ -34,9 +33,10 @@ def main() -> int:
         "t6_xmodel_mesh_normalize_v4.py",
         "t6_xanim_normalize_v1.py",
         "t6_build_seal6_smg_textured_animated_all_lods_v3.ps1",
-        FACTION_RAW,
         FACTION_EXPANDED,
         COMMON_EXPANDED,
+        "FactionExpandedBytes = 6245916",
+        "CommonExpandedBytes = 206493911",
         'TargetAssetStart = "0x45CCF1"',
         "TargetXAssetIndex = 213",
         "topLevelSurfsAliasProven",
@@ -47,6 +47,7 @@ def main() -> int:
         "allFlatPoolsExhausted",
         "SEAL6_FULL_RETAIL_BLENDER.zip",
         "t6-seal6-full-retail-rebuild-v1",
+        "fastFilesPromotedByExpandedIdentity",
     ]
     missing = [x for x in required if x not in text]
     assert not missing, f"raw rebuild script missing required contract tokens: {missing}"
@@ -57,12 +58,14 @@ def main() -> int:
         assert f"frames={frames}" in text
         assert digest in text
 
-    # The retained common_mp source has conflicting historical raw-container
-    # identities, so this build must promote it only after exact expanded-byte
-    # verification. A hard-coded raw common SHA here would silently choose one
-    # source package and weaken the actual semantic source boundary.
+    # FastFile outer wrappers can differ across source packages.  Both zones are
+    # promoted only after exact decrypt/decompress reproduction of the pinned
+    # expanded XFile identity; raw hashes remain provenance, never semantic IDs.
+    assert "FactionRawSha256 = Get-Sha256" in text
     assert "CommonRawSha256 = Get-Sha256" in text
+    assert "Assert-FileIdentity $FactionSealsFastfile" not in text
     assert "Assert-FileIdentity $CommonMpFastfile" not in text
+    assert "Assert-FileIdentity $FactionExpanded $FactionExpandedBytes $FactionExpandedSha256" in text
     assert "Assert-FileIdentity $CommonExpanded $CommonExpandedBytes $CommonExpandedSha256" in text
 
     # Never regress to old model normalizers or single-IPAK packaging.
