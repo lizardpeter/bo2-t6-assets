@@ -117,8 +117,8 @@ foreach ($a in $ExpectedAnimations) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 
-$ExportSurfaceProof = Require-File (Join-Path $Retail "seal6_smg_material_handle_alias_proof_v1.json") "export surface proof"
-$BindingSurfaceProof = Require-File (Join-Path $Retail "seal6_smg_surface_material_assignments_v1.json") "binding surface assignments"
+$ExportSurfaceProof = Require-File (Join-Path $Retail "seal6_smg_material_handle_alias_proof_v1.json") "exact Material owner ledger/export proof"
+$BindingSurfaceProof = Require-File (Join-Path $Retail "seal6_smg_surface_material_assignments_v1.json") "historical binding surface assignments"
 $Materials = Require-File (Join-Path $Retail "seal6_smg_texture_keys_v2.json") "material manifest"
 $ExactKeys = Require-File (Join-Path $Retail "seal6_smg_exact_base_ipak_keys_v4.json") "exact stream keys"
 $TextureTargets = Require-File (Join-Path $Retail "seal6_smg_texture_keys_v4.json") "42-image identity target set"
@@ -132,6 +132,7 @@ $TextureMeta = Require-File (Join-Path $Retail "seal6_smg_texture_keys_v3.json")
 $GoldenProof = Require-File (Join-Path $Retail "seal6_smg_golden_asset_proof_v1.json") "SEAL6 golden proof"
 $Multi = Require-File (Join-Path $Tools "t6_xanim_skinned_gltf_multianim_export_v1.py") "multi-animation exporter"
 $Binder = Require-File (Join-Path $Tools "t6_character_material_binding_plan_v2.py") "material binder v2"
+$SerializedProducer = Require-File (Join-Path $Tools "t6_character_material_serialized_proof_v1.py") "serialized Material pointer proof producer"
 $Materializer = Require-File (Join-Path $Tools "t6_ipak_iwi_materialize_v3.py") "multi-IPAK materializer v3"
 $Apply = Require-File (Join-Path $Tools "t6_gltf_apply_materialized_textures_v1.py") "GLB texture applier"
 $ProofValidator = Require-File (Join-Path $Tools "t6_asset_proof_manifest_v1.py") "asset proof validator"
@@ -142,6 +143,18 @@ if ($Contract.summary.requestedTextures -ne 42 -or $Contract.summary.expectedMat
 if ((Get-JsonProperty $Contract.summary.expectedRepositoryCounts "base.ipak") -ne 40) { throw "SEAL6 contract base.ipak count mismatch" }
 if ((Get-JsonProperty $Contract.summary.expectedRepositoryCounts "mp.ipak") -ne 2) { throw "SEAL6 contract mp.ipak count mismatch" }
 Run-With $Python @($ProofValidator,$GoldenProof)
+
+# Preserve the untouched historical assignment manifest as evidence, then derive
+# the strict packed-pointer proof required by binding-plan v2 from the independent
+# exact XModel.materialHandles[] owner ledger.  This closes 38 packed rows only by
+# T6 serialized XFile block/offset replay, never by material-name correlation.
+$ExactBindingSurfaceProof = Join-Path $OutDir "seal6_smg_surface_material_assignments_serialized_exact_v1.json"
+Run-With $Python @($SerializedProducer,$BindingSurfaceProof,$ExportSurfaceProof,"--output",$ExactBindingSurfaceProof)
+$ExactBindingSurfaceProof = Require-File $ExactBindingSurfaceProof "generated exact serialized Material assignments"
+$SP = Get-Content -Raw -LiteralPath $ExactBindingSurfaceProof | ConvertFrom-Json
+if ($SP.serializedPointerProof.status -ne "exact") { throw "serialized Material pointer proof is not exact" }
+if ($SP.serializedPointerProof.packedRowsExact -ne 38 -or $SP.serializedPointerProof.uniquePackedTokens -ne 12 -or $SP.serializedPointerProof.sameOwnerBackreferences -ne 26) { throw "serialized Material replay canary mismatch" }
+if ($SP.serializedPointerProof.identityInferencePerformed -ne $false) { throw "serialized Material proof reports identity inference" }
 
 $TexturePython = Resolve-TexturePython
 Write-Host "Texture Python: $TexturePython"
@@ -195,7 +208,7 @@ foreach ($e in $ExpectedLods) {
     foreach ($p in $XAnimJson) { $aa += @("--xanim",$p) }
     Run-With $Python $aa
 
-    Run-With $Python @($Binder,"--materials",$Materials,"--surface-proof",$BindingSurfaceProof,"--mesh",$MeshJson,"--exact-keys",$ExactKeys,"--header-alias-proof",$HeaderAlias,"--image-run-proof",$ImageRun,"--material-alias-proof",$MaterialAlias,"--import-resolution",$Imports,"--shared-identity-proof",$Shared,"--lod","$lod","--out",$plan)
+    Run-With $Python @($Binder,"--materials",$Materials,"--surface-proof",$ExactBindingSurfaceProof,"--mesh",$MeshJson,"--exact-keys",$ExactKeys,"--header-alias-proof",$HeaderAlias,"--image-run-proof",$ImageRun,"--material-alias-proof",$MaterialAlias,"--import-resolution",$Imports,"--shared-identity-proof",$Shared,"--lod","$lod","--out",$plan)
     Run-With $TexturePython @($Apply,"--glb",$animated,"--binding-plan",$plan,"--materialized-manifest",$TextureProof,"--out",$textured,"--manifest",$applyProof)
 
     $A = Get-Content -Raw -LiteralPath $animProof | ConvertFrom-Json
@@ -223,29 +236,30 @@ foreach ($e in $ExpectedLods) {
 
 $Summary = [ordered]@{
     format="t6-seal6-smg-textured-animated-all-lods-build-v4"
-    authority="retail T6 all serialized XModel LODs + retail common_mp animations + exact surface/material/image identities + exact unique cross-repository payload reconstruction; source IPAK whole-container hashes are retained as provenance"
+    authority="retail T6 all serialized XModel LODs + retail common_mp animations + exact serialized Material pointer replay + exact surface/material/image identities + exact unique cross-repository payload reconstruction; source IPAK whole-container hashes are retained as provenance"
     sourceIpaks=[ordered]@{
         "base.ipak"=[ordered]@{path=$BaseIpak;sha256=$ActualBaseSha;bytes=(Get-Item -LiteralPath $BaseIpak).Length;resolvedTextures=40}
         "mp.ipak"=[ordered]@{path=$MpIpak;sha256=$ActualMpSha;bytes=(Get-Item -LiteralPath $MpIpak).Length;resolvedTextures=2}
     }
     resolutionContract=[ordered]@{path=$ResolutionContract;sha256=(Get-Sha256 $ResolutionContract)}
     textureMaterialization=[ordered]@{path=$TextureProof;sha256=(Get-Sha256 $TextureProof);summary=$Tex.summary}
-    surfaceAssignments=[ordered]@{path=$BindingSurfaceProof;sha256=(Get-Sha256 $BindingSurfaceProof);rows=42}
+    surfaceAssignments=[ordered]@{historicalPath=$BindingSurfaceProof;historicalSha256=(Get-Sha256 $BindingSurfaceProof);exactSerializedReplayPath=$ExactBindingSurfaceProof;exactSerializedReplaySha256=(Get-Sha256 $ExactBindingSurfaceProof);rows=42;packedRowsExact=38;uniquePackedTokens=12;sameOwnerBackreferences=26}
     goldenFixture=[ordered]@{path=$GoldenProof;sha256=(Get-Sha256 $GoldenProof);referenceGlbSha256=$ExpectedReferenceGlbSha256}
     portableTextureBackend=[ordered]@{python=$TexturePython;requirements=$Requirements;systemLzoDllRequired=$false}
     lods=$LodResults
-    aggregate=[ordered]@{serializedLods=4;serializedSurfaces=42;verticesAcrossSerializedSurfaces=21188;trianglesAcrossSerializedSurfaces=21283;joints=102;benchmarkAnimations=6;exactTexturePayloads=42;baseIpakTextures=40;mpIpakTextures=2;allLodsTextured=$true;allLodsAnimated=$true;allSurfaceMaterialsExact=$true}
-    proofBoundary="All four serialized body LODs are rebuilt from supplied normalized retail model/animation inputs and closed for geometry, skin, exact surface materials, 42 CRC/IWI-validated retail texture payloads uniquely resolved across base.ipak + mp.ipak, and the six-animation benchmark. Whole-container IPAK hashes are recorded as source provenance, while image promotion is content-authoritative. Full third-person behavior-family closure, first-person weapon/world integration, FX/audio, and the final complete-player gate remain separate."
+    aggregate=[ordered]@{serializedLods=4;serializedSurfaces=42;verticesAcrossSerializedSurfaces=21188;trianglesAcrossSerializedSurfaces=21283;joints=102;benchmarkAnimations=6;exactTexturePayloads=42;baseIpakTextures=40;mpIpakTextures=2;exactPackedMaterialRows=38;allLodsTextured=$true;allLodsAnimated=$true;allSurfaceMaterialsExact=$true}
+    proofBoundary="All four serialized body LODs are rebuilt from supplied normalized retail model/animation inputs and closed for geometry, skin, exact surface materials, 42 CRC/IWI-validated retail texture payloads uniquely resolved across base.ipak + mp.ipak, and the six-animation benchmark. All 38 packed Material rows are admitted only after exact T6 serialized XFile pointer replay to independently established XModel.materialHandles[] VIRTUAL owner fields. Whole-container IPAK hashes are recorded as source provenance, while image promotion is content-authoritative. Full third-person behavior-family closure, first-person weapon/world integration, FX/audio, and the final complete-player gate remain separate."
 }
 $Build = Join-Path $OutDir "build_summary.json"
 $Summary | ConvertTo-Json -Depth 14 | Set-Content -Encoding UTF8 -LiteralPath $Build
 
 $ProvenanceDir = Join-Path $OutDir "provenance"
 New-Item -ItemType Directory -Force -Path $ProvenanceDir | Out-Null
-foreach ($p in @($ResolutionContract,$GoldenProof,$BindingSurfaceProof,$ExportSurfaceProof,$Materials,$ExactKeys,$TextureTargets,$TextureMeta,$HeaderAlias,$ImageRun,$MaterialAlias,$Imports,$Shared)) {
+foreach ($p in @($ResolutionContract,$GoldenProof,$BindingSurfaceProof,$ExactBindingSurfaceProof,$ExportSurfaceProof,$Materials,$ExactKeys,$TextureTargets,$TextureMeta,$HeaderAlias,$ImageRun,$MaterialAlias,$Imports,$Shared)) {
     Copy-Item -LiteralPath $p -Destination (Join-Path $ProvenanceDir (Split-Path -Leaf $p)) -Force
 }
 Copy-Item -LiteralPath $Materializer -Destination (Join-Path $ProvenanceDir (Split-Path -Leaf $Materializer)) -Force
+Copy-Item -LiteralPath $SerializedProducer -Destination (Join-Path $ProvenanceDir (Split-Path -Leaf $SerializedProducer)) -Force
 Copy-Item -LiteralPath $Build -Destination (Join-Path $ProvenanceDir "build_summary.json") -Force
 
 if (-not $PackagePath) { $PackagePath = Join-Path (Split-Path -Parent $OutDir) "SEAL6_FULL_RETAIL_BLENDER.zip" }
@@ -264,6 +278,7 @@ $PackageManifest = [ordered]@{
     sha256=$PackageSha
     buildSummary=$Build
     exactRetailTextureSplit=[ordered]@{"base.ipak"=40;"mp.ipak"=2}
+    exactPackedMaterialRows=38
     sourceIpakSha256=[ordered]@{"base.ipak"=$ActualBaseSha;"mp.ipak"=$ActualMpSha}
     lods=4
     surfaces=42
