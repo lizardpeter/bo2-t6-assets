@@ -1,0 +1,166 @@
+{
+  "format": "t6-asset-proof-manifest-v1",
+  "asset": {
+    "id": "golden:seal6-smg-lod0-sixclip-v1",
+    "type": "GOLDEN_FIXTURE",
+    "name": "c_usa_mp_seal6_smg_fb",
+    "variant": "LOD0 + six exact retail third-person animations"
+  },
+  "lifecycleStage": "semantically_validated",
+  "exactClaim": true,
+  "sources": [
+    {
+      "id": "faction-seals-expanded",
+      "kind": "expanded-xfile",
+      "sha256": "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30"
+    },
+    {
+      "id": "common-mp-expanded",
+      "kind": "expanded-xfile",
+      "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+    },
+    {
+      "id": "base-ipak",
+      "kind": "ipak",
+      "sha256": "6c3e68f856f0eafb54aef193b96464b313617f11653f75d1d3fa03f01125fa02"
+    }
+  ],
+  "stages": {
+    "discovered": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      ]
+    },
+    "uniquely_resolved": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json",
+        "manifests/nonmap/retail/seal6_smg_image_alias_header_proof_v1.json",
+        "manifests/nonmap/retail/seal6_faction_material_alias_proof_v1.json",
+        "manifests/nonmap/retail/seal6_shared_radiant_alias_proof_v1.json"
+      ]
+    },
+    "raw_extracted": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/seal6_smg_all_lods_animated_material_binding_proof_v1.json"
+      ]
+    },
+    "decoded": {
+      "status": "pass",
+      "evidence": [
+        "tools/t6_xmodel_mesh_normalize_v1.py",
+        "tools/t6_xmodel_skeleton_normalize_v2.py",
+        "tools/t6_xanim_normalize_v1.py",
+        "tools/t6_xanim_skinned_gltf_multianim_export_v1.py"
+      ]
+    },
+    "dependency_closed": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/seal6_smg_all_lods_animated_material_binding_proof_v1.json",
+        "manifests/nonmap/retail/seal6_smg_texture_keys_v4.json"
+      ]
+    },
+    "exported": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"
+      ]
+    },
+    "semantically_validated": {
+      "status": "pass",
+      "evidence": [
+        "manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json",
+        "manifests/nonmap/retail/seal6_smg_lod0_material_binding_proof_v2.json"
+      ]
+    }
+  },
+  "dependencies": [
+    {
+      "id": "seal6-xmodel-lod0",
+      "type": "XMODEL",
+      "status": "resolved",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_all_lods_animated_material_binding_proof_v1.json"]
+    },
+    {
+      "id": "seal6-skeleton-102",
+      "type": "XMODEL_SKELETON",
+      "status": "resolved",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    },
+    {
+      "id": "seal6-material-bindings-lod0",
+      "type": "MATERIAL",
+      "status": "resolved",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_lod0_material_binding_proof_v2.json"]
+    },
+    {
+      "id": "seal6-image-identities",
+      "type": "IMAGE_IDENTITY",
+      "status": "resolved",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_texture_keys_v4.json"]
+    },
+    {
+      "id": "seal6-six-xanims",
+      "type": "XANIMPARTS",
+      "status": "resolved",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "glb-benchmark",
+      "sha256": "c83d2f14d121dc4e6ffad0a11ff6f1517c7e7274ba480cbd528ee45543290008",
+      "bytes": 1663080,
+      "committed": false,
+      "evidenceRef": "manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"
+    }
+  ],
+  "invariants": {
+    "lod": 0,
+    "surfaces": 14,
+    "vertices": 13490,
+    "triangles": 14968,
+    "joints": 102,
+    "materials": 12,
+    "fps": 30,
+    "animations": [
+      {"name": "pb_stand_alert", "frames": 383},
+      {"name": "pb_stand_ads", "frames": 90},
+      {"name": "pb_smg_sprint", "frames": 46},
+      {"name": "pb_combatrun_forward_loop", "frames": 50},
+      {"name": "pb_standjump_takeoff", "frames": 27},
+      {"name": "pt_stand_shoot_auto", "frames": 18}
+    ]
+  },
+  "validations": [
+    {
+      "id": "geometry-counts",
+      "status": "pass",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    },
+    {
+      "id": "bind-hierarchy-composition",
+      "status": "pass",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    },
+    {
+      "id": "surface-material-identity",
+      "status": "pass",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_lod0_material_binding_proof_v2.json"]
+    },
+    {
+      "id": "six-animation-cross-zone-binding",
+      "status": "pass",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    },
+    {
+      "id": "deterministic-reference-output",
+      "status": "pass",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"]
+    }
+  ],
+  "proofBoundary": "Exact only for the named SEAL6 LOD0 six-clip benchmark. This does not claim complete-player closure, the entire third-person animation state space, weapon/first-person integration, FX/audio, or whole-retail-corpus texture payload materialization. Those remain separate closure gates and may not be inferred from this fixture."
+}
