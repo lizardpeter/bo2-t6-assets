@@ -18,7 +18,20 @@ on:
       - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
       - "tools/t6_player_character_animation_census_v1.py"
       - "tools/test_t6_player_character_animation_census_v1.py"
+      - "tools/t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_mp_v1.py"
+      - "tools/t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_retail_v1.py"
+      - "tools/t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
+      - "manifests/nonmap/targets/mp_player_body_prefix_seeds_v1.json"
       - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
+      - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_default_playeranim_compatibility_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_handleclip_playeranim_compatibility_v1.json"
       - ".github/workflows/nonmap-weapon-regressions.yml"
   pull_request:
     paths:
@@ -35,7 +48,20 @@ on:
       - "tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py"
       - "tools/t6_player_character_animation_census_v1.py"
       - "tools/test_t6_player_character_animation_census_v1.py"
+      - "tools/t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_v1.py"
+      - "tools/test_t6_player_body_target_census_mp_v1.py"
+      - "tools/t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_v1.py"
+      - "tools/test_t6_player_body_identity_registry_retail_v1.py"
+      - "tools/t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_v2.py"
+      - "tools/test_t6_player_character_animation_matrix_retail_v2.py"
+      - "manifests/nonmap/targets/mp_player_body_prefix_seeds_v1.json"
       - "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"
+      - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_default_playeranim_compatibility_v1.json"
+      - "manifests/nonmap/retail/seal6_standard_onfoot_smg_handleclip_playeranim_compatibility_v1.json"
       - ".github/workflows/nonmap-weapon-regressions.yml"
   workflow_dispatch:
 
@@ -62,5 +88,17 @@ jobs:
         run: python tools/test_t6_playeranim_selector_profile_census_v1.py
       - name: common_mp selector profile retail canary
         run: python tools/test_t6_playeranim_selector_profile_census_common_mp_v1.py
-      - name: third-person body x selector census
+      - name: third-person body x selector census v1
         run: python tools/test_t6_player_character_animation_census_v1.py
+      - name: multiplayer player-body target generator
+        run: python tools/test_t6_player_body_target_census_v1.py
+      - name: multiplayer 30-body discovery canary
+        run: python tools/test_t6_player_body_target_census_mp_v1.py
+      - name: multiplayer player-body identity registry
+        run: python tools/test_t6_player_body_identity_registry_v1.py
+      - name: current retail player-body registry canary
+        run: python tools/test_t6_player_body_identity_registry_retail_v1.py
+      - name: retail-gated player character animation matrix
+        run: python tools/test_t6_player_character_animation_matrix_v2.py
+      - name: current retail character x selector matrix canary
+        run: python tools/test_t6_player_character_animation_matrix_retail_v2.py
