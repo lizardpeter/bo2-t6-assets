@@ -1,0 +1,106 @@
+{
+  "format": "t6-nuketown-full-asset-integration-floor-v1",
+  "map": "mp_nuketown_2020",
+  "expandedRetailSource": {
+    "bytes": 154653476,
+    "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "visualFloor": {
+    "manifest": "manifests/maps/mp_nuketown_2020/T6_NUKETOWN_V25_RELEASE_FLOOR_V1.json",
+    "policy": "A downloadable visual successor must still pass the v25 scene-policy floor and retain v31-and-later shader-facing contracts. Nonvisual archival layers do not justify lowering that floor."
+  },
+  "collision": {
+    "status": "source-closed substantially; full fresh-scene integration still required",
+    "clipMapAssetIndex": 629,
+    "clipMapSerializedStart": 87882673,
+    "clipMapSerializedEnd": 92414145,
+    "clipMapSerializedBytes": 4531472,
+    "clipMapSerializedSha256": "5f275dbae3110a5f402405be9a3f69baa674f816832e8f736b0167dadd5270f0",
+    "counts": {
+      "planes": 15197,
+      "clipMaterials": 704,
+      "brushSides": 38928,
+      "leafBrushNodes": 12115,
+      "leafBrushes": 24563,
+      "brushVertices": 79670,
+      "uinds": 50224,
+      "brushes": 9284,
+      "collisionStaticModels": 1712,
+      "bspNodes": 2753,
+      "bspLeaves": 2938,
+      "terrainCollisionVertices": 26150,
+      "terrainCollisionTriangles": 37480,
+      "partitions": 7411,
+      "collisionAabbTrees": 19322,
+      "submodels": 184,
+      "pvsClusters": 1,
+      "pvsBytesPerCluster": 184,
+      "dynEntDefs": 387,
+      "constraints": 0,
+      "maxRopes": 32,
+      "compiledTriggerModels": 0,
+      "compiledTriggerHulls": 0,
+      "compiledTriggerSlabs": 0
+    },
+    "staticXModelCollisionRegression": {
+      "uniqueCollisionReferencedStaticXModels": 240,
+      "successfulWalks": 240,
+      "failures": 0,
+      "collisionSurfaces": 399,
+      "collisionTriangles": 74555,
+      "collisionTrees": 912,
+      "collmaps": 6,
+      "physGeomRecords": 9,
+      "modelsWithPhysPreset": 12,
+      "modelsWithPhysConstraints": 0
+    },
+    "requiredForLosslessExport": [
+      "preserve ClipMaterial identities/flags",
+      "preserve BSP/leaf/brush topology",
+      "preserve terrain collision triangles and walkability bytes",
+      "preserve cmodels/submodels and CollisionAabbTrees",
+      "preserve collision static-model relationships",
+      "preserve DynEnt live/destroyed XModel, FX and PhysPreset provenance",
+      "preserve MapEnts entity string and trigger arrays when present",
+      "preserve constraints/ropes semantics when present",
+      "provide an engine-friendly collision scene/sidecar without discarding T6-native metadata"
+    ]
+  },
+  "lighting": {
+    "status": "partially source-closed; not yet complete as a live fresh-scene lighting reconstruction",
+    "sourceClosed": [
+      "GfxSurface lightmapIndex ownership and dedicated lightmap UVs",
+      "nullable GfxLightmapArray primary/secondary GfxImage roles",
+      "directional secondary-lightmap sampling/reconstruction equation",
+      "generated/layered diffuse recurrence",
+      "generated/layered normal transform and recurrence",
+      "layered-specular XYZW recurrence",
+      "reflection probe resource ownership and universal reflection vector/decode mechanics",
+      "5823/5888 measured reflection fetches (98.8960597826%)"
+    ],
+    "stillOpen": [
+      "compile/run corrected retail GfxWorld lightmap catalog dumper against the pinned map",
+      "compile/run corrected retail reflection-probe catalog dumper and archive exact cubemap payloads",
+      "promote remaining 65 reflection fetches only after pinned-corpus closure",
+      "recover and integrate primary-light behavior",
+      "recover and integrate light-grid behavior",
+      "recover and integrate shadow/output composition",
+      "apply all exact lighting state in the actual downloadable fresh full-map scene rather than merely archiving dependencies"
+    ]
+  },
+  "otherFullMapLayersRequired": [
+    "fresh 5614-surface GfxWorld",
+    "2992 serialized static placements with canonical scene-role filtering",
+    "exact static/world materials and texture payloads",
+    "retail skybox",
+    "reflection probes and lightmaps",
+    "six visible MapEnt/destructible cars",
+    "animation/support scenes and skins retained by the current full-map floor",
+    "ClipMap/PVS and XModel collision",
+    "DynEnt definitions and exact asset provenance",
+    "MapEnts entity data",
+    "GameWorld/ComWorld data needed for gameplay/path/light ownership",
+    "FX/audio/scripts/other XAssets as separate export domains when the goal is every retail asset, rather than forcing all of them into one GLB"
+  ],
+  "promotionPolicy": "There are two separate gates: visual-successor gate (v25/v31 non-regression) and lossless-full-asset gate (this manifest). A scene may pass the visual gate while still lacking nonvisual collision/gameplay/light metadata. Do not call the project an all-assets extraction until both categories are satisfied or remaining unsupported domains are explicitly enumerated."
+}
