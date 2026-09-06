@@ -1,0 +1,63 @@
+name: T6 probe BO2 R2 mirror
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_probe_r2_mirror.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe direct retail paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+
+          root = 'https://r2.houseofkublai.com/bo2/'
+          paths = [
+              'zone/all/base.ipak',
+              'zone/all/mp.ipak',
+              'zone/all/patch_mp.ipak',
+              'zone/all/so.ipak',
+              'zone/all/mp_nuketown_2020.ipak',
+              'zone/all/mp_nuketown_2020.ff',
+              'zone/english/en_base.ipak',
+              'zone/english/mp_nuketown_2020.ff',
+              'base.ipak',
+              'mp.ipak',
+          ]
+
+          out = {}
+          for path in paths:
+              url = root + path
+              req = urllib.request.Request(url, headers={
+                  'Range': 'bytes=0-0',
+                  'User-Agent': 'bo2-t6-assets-r2-probe/1',
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      b = r.read(16)
+                      out[path] = {
+                          'status': r.status,
+                          'contentRange': r.headers.get('Content-Range'),
+                          'contentLength': r.headers.get('Content-Length'),
+                          'acceptRanges': r.headers.get('Accept-Ranges'),
+                          'etag': r.headers.get('ETag'),
+                          'contentType': r.headers.get('Content-Type'),
+                          'prefixHex': b.hex(),
+                      }
+              except urllib.error.HTTPError as e:
+                  out[path] = {'status': e.code, 'reason': str(e.reason)}
+              except Exception as e:
+                  out[path] = {'error': repr(e)}
+
+          print(json.dumps(out, indent=2, sort_keys=True))
+          good = [p for p, row in out.items() if row.get('status') in (200, 206)]
+          print('GOOD_PATHS', json.dumps(good))
+          if not good:
+              raise SystemExit('No candidate R2 retail paths resolved')
+          PY
