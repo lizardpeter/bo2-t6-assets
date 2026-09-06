@@ -7,7 +7,7 @@ same expanded retail XFile:
 
 - t6-xmodel-target-probe-v1: exact inline XModel identity/fixed record
 - t6-xmodel-skeleton-normalized-v2: complete, valid retail skeleton
-- t6-xmodel-mesh-normalized-v1: complete decoded render mesh
+- t6-xmodel-mesh-normalized-v1/v2: complete decoded render mesh
 - exact source fastfile bytes and exact expanded bytes
 
 Candidate naming evidence is never accepted here. A successful output is safe
@@ -25,7 +25,7 @@ from typing import Any
 FORMAT = "t6-player-body-retail-proof-v1"
 PROBE_FORMAT = "t6-xmodel-target-probe-v1"
 SKELETON_FORMAT = "t6-xmodel-skeleton-normalized-v2"
-MESH_FORMATS = {"t6-xmodel-mesh-normalized-v1"}
+MESH_FORMATS = {"t6-xmodel-mesh-normalized-v1", "t6-xmodel-mesh-normalized-v2"}
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -134,35 +134,42 @@ def verify_mesh(mesh: dict[str, Any], row: dict[str, Any], expanded_sha: str, na
         raise ValueError("mesh artifact is missing identity/source/xmodel/surfaces/validation")
     if ident.get("name") != name:
         raise ValueError(f"mesh identity mismatch: {ident.get('name')!r} != {name!r}")
-    if mesh.get("expandedSha256") != expanded_sha:
+    mesh_expanded_sha = mesh.get("expandedSha256")
+    if mesh_expanded_sha != expanded_sha:
         raise ValueError("mesh expandedSha256 does not match expanded retail artifact")
     fixed_start = src.get("assetFixedStart")
     if fixed_start is None:
         fixed_start = src.get("xmodelFixedStart")
     if int(fixed_start if fixed_start is not None else -1) != int(row["rawStructOffset"]):
         raise ValueError("mesh XModel fixed start does not match exact target probe")
-    for field, probe_key in (("numBones", "numBones"), ("numRootBones", "numRootBones"), ("numSurfs", "numSurfs"), ("numLods", "numLods")):
+    checks = (("numBones", "numBones"), ("numRootBones", "numRootBones"), ("numSurfs", "numSurfs"), ("numLods", "numLods"))
+    for field, probe_key in checks:
         if int(xm.get(field, -1)) != int(row[probe_key]):
             raise ValueError(f"mesh {field} does not match target probe")
     if len(surfaces) != int(row["numSurfs"]):
         raise ValueError("mesh surface cardinality mismatch")
     if val.get("allLocalTriangleIndicesInRange") is not True:
         raise ValueError("mesh triangle-range validation is not closed")
+    if mesh.get("format") == "t6-xmodel-mesh-normalized-v2":
+        dep = mesh.get("skeletonDependency")
+        if not isinstance(dep, dict):
+            raise ValueError("mesh v2 is missing skeletonDependency")
+        if dep.get("identity") != name:
+            raise ValueError("mesh v2 skeleton dependency identity mismatch")
+        if dep.get("allBoneNamesResolved") is not True or dep.get("hierarchyValid") is not True:
+            raise ValueError("mesh v2 skeleton dependency is not closed")
     vertices = 0
     triangles = 0
     for i, surf in enumerate(surfaces):
         if not isinstance(surf, dict):
             raise ValueError(f"surface {i} is not an object")
-        vc = int(surf.get("vertCount", -1))
-        tc = int(surf.get("triCount", -1))
-        verts = surf.get("vertices")
-        tris = surf.get("triangles")
+        vc = int(surf.get("vertCount", -1)); tc = int(surf.get("triCount", -1))
+        verts = surf.get("vertices"); tris = surf.get("triangles")
         if vc < 0 or tc < 0 or not isinstance(verts, list) or not isinstance(tris, list):
             raise ValueError(f"surface {i}: malformed geometry arrays")
         if len(verts) != vc or len(tris) != tc:
             raise ValueError(f"surface {i}: geometry cardinality mismatch")
-        vertices += vc
-        triangles += tc
+        vertices += vc; triangles += tc
     return {"vertices": vertices, "triangles": triangles, "fallbackGeometryUsed": False}
 
 
@@ -170,9 +177,7 @@ def build(*, name: str, zone_name: str, fastfile_path: Path, expanded_path: Path
           probe_path: Path, skeleton_path: Path, mesh_path: Path) -> dict[str, Any]:
     if not name or not zone_name:
         raise ValueError("name and zone_name must be non-empty")
-    probe = load(probe_path)
-    skeleton = load(skeleton_path)
-    mesh = load(mesh_path)
+    probe = load(probe_path); skeleton = load(skeleton_path); mesh = load(mesh_path)
     expanded_bytes, expanded_sha = verify_probe_source(probe, expanded_path)
     row = exact_target(probe, name)
     sk_summary = verify_skeleton(skeleton, row, expanded_sha, name)
@@ -181,12 +186,10 @@ def build(*, name: str, zone_name: str, fastfile_path: Path, expanded_path: Path
     exp = artifact(expanded_path)
     if exp["bytes"] != expanded_bytes or exp["sha256"] != expanded_sha:
         raise AssertionError("expanded artifact changed during proof construction")
-    skeleton_art = artifact(skeleton_path)
-    mesh_art = artifact(mesh_path)
-    probe_art = artifact(probe_path)
+    skeleton_art = artifact(skeleton_path); mesh_art = artifact(mesh_path); probe_art = artifact(probe_path)
     lods = row.get("lods") if isinstance(row.get("lods"), list) else []
     pointers = row.get("pointers") if isinstance(row.get("pointers"), dict) else {}
-    return {
+    out = {
         "format": FORMAT,
         "authority": "direct hash-pinned retail T6 PC fastfile/expanded bytes plus exact XModel identity, skeleton, and mesh proof artifacts",
         "sourceFastfile": {"zoneName": zone_name, "bytes": ff["bytes"], "sha256": ff["sha256"]},
@@ -215,9 +218,14 @@ def build(*, name: str, zone_name: str, fastfile_path: Path, expanded_path: Path
             "thirdPersonAnimationClosureComplete": False,
             "completePlayerBundleClosed": False,
         },
-        "proofArtifacts": {"xmodelProbe": probe_art, "skeleton": skeleton_art, "mesh": mesh_art},
+        "proofArtifacts": {
+            "xmodelProbe": probe_art,
+            "skeleton": skeleton_art,
+            "mesh": mesh_art,
+        },
         "proofBoundary": "This proof closes one exact full-body XModel's identity, decoded skeleton, and decoded render mesh. It does not prove player-script ownership, materials/textures, named-weapon precedence, or third-person animation compatibility.",
     }
+    return out
 
 
 def main() -> int:
