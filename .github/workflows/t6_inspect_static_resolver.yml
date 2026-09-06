@@ -16,48 +16,58 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import base64, json, pathlib, zlib
+          import base64, hashlib, json, pathlib, zlib
 
           root = pathlib.Path('.')
           src = root/'tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64'
           resolver = zlib.decompress(base64.b64decode(src.read_text().strip()))
           pathlib.Path('/tmp/resolver.py').write_bytes(resolver)
-          print('RESOLVER_BYTES', len(resolver))
-
-          def decode_json(path):
-              b = zlib.decompress(base64.b64decode(path.read_text().strip()))
-              print('DECODED', path, 'bytes', len(b))
-              return json.loads(b)
+          print('RESOLVER_BYTES', len(resolver), hashlib.sha256(resolver).hexdigest())
 
           paths = [
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V3.json.zlib.b64',
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V1.json.zlib.b64',
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64',
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_FICUS_MATERIAL_ALIAS_PROOF_V1.json.zlib.b64',
           ]
 
           def walk(o, path='$'):
               if isinstance(o, dict):
                   xa = o.get('xassetIndex')
-                  if isinstance(xa, int) and 274 <= xa <= 299:
-                      print('MATCH', path, json.dumps(o, sort_keys=True, default=str))
-                  # Also surface exact records touching the unresolved packed target.
                   txt = json.dumps(o, sort_keys=True, default=str)
+                  if isinstance(xa, int) and 274 <= xa <= 299:
+                      print('MATCH', path, txt)
                   if '26834420' in txt or 'mtl_ac_prs_vehicle_sheet_a' in txt:
                       print('CAR_MATCH', path, txt)
-                  for k,v in o.items():
-                      walk(v, f'{path}.{k}')
+                  for k,v in o.items(): walk(v, f'{path}.{k}')
               elif isinstance(o, list):
-                  for i,v in enumerate(o):
-                      walk(v, f'{path}[{i}]')
+                  for i,v in enumerate(o): walk(v, f'{path}[{i}]')
 
           for p in paths:
-              if p.exists():
-                  print('===', p, '===')
-                  obj = decode_json(p)
-                  if isinstance(obj, dict): print('TOP_KEYS', sorted(obj.keys()))
-                  walk(obj)
-              else:
-                  print('MISSING', p)
+              if not p.exists():
+                  print('MISSING', p); continue
+              text = p.read_text().strip()
+              print('===', p, '===')
+              print('B64_CHARS', len(text), 'MOD4', len(text)%4, 'FILE_SHA', hashlib.sha256(p.read_bytes()).hexdigest())
+              try:
+                  raw = base64.b64decode(text, validate=True)
+              except Exception as e:
+                  print('BASE64_ERROR', repr(e)); continue
+              print('RAW_BYTES', len(raw), 'HEAD', raw[:16].hex(), 'TAIL', raw[-16:].hex(), 'RAW_SHA', hashlib.sha256(raw).hexdigest())
+              b = None
+              for label,wbits in [('zlib', zlib.MAX_WBITS), ('raw', -zlib.MAX_WBITS), ('gzip', zlib.MAX_WBITS|16)]:
+                  try:
+                      b = zlib.decompress(raw, wbits)
+                      print('DECOMP_OK', label, len(b), hashlib.sha256(b).hexdigest())
+                      break
+                  except Exception as e:
+                      print('DECOMP_FAIL', label, repr(e))
+              if b is None: continue
+              try: obj=json.loads(b)
+              except Exception as e:
+                  print('JSON_ERROR', repr(e), 'PREFIX', b[:200]); continue
+              if isinstance(obj, dict): print('TOP_KEYS', sorted(obj.keys()))
+              walk(obj)
           PY
           echo '=== RESOLVER RELEVANT LINES ==='
           grep -n -E 'FOLLOW|INSERT|prefix_to_material|simple_tail|geometry_events|inline-material|materialHandles' /tmp/resolver.py || true
