@@ -1,0 +1,84 @@
+name: Non-map player body reuse regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_xmodel_skeleton_normalize_v3.py"
+      - "tools/test_t6_xmodel_skeleton_normalize_v3.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
+      - "tools/t6_xmodel_mesh_normalize_v3.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v3.py"
+      - "tools/t6_xmodel_mesh_normalize_v4.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v4.py"
+      - "tools/t6_player_body_retail_proof_v1.py"
+      - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_retail_proof_v2.py"
+      - "tools/test_t6_player_body_retail_proof_v2.py"
+      - "tools/t6_player_body_retail_proof_v3.py"
+      - "tools/test_t6_player_body_retail_proof_v3.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_player_body_close_v2.py"
+      - "tools/test_t6_player_body_close_v2.py"
+      - "tools/t6_player_body_close_v3.py"
+      - "tools/test_t6_player_body_close_v3.py"
+      - ".github/workflows/nonmap-player-body-reuse-regressions.yml"
+  pull_request:
+    paths:
+      - "tools/t6_xmodel_skeleton_normalize_v3.py"
+      - "tools/test_t6_xmodel_skeleton_normalize_v3.py"
+      - "tools/t6_xmodel_mesh_normalize_v2.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v2.py"
+      - "tools/t6_xmodel_mesh_normalize_v3.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v3.py"
+      - "tools/t6_xmodel_mesh_normalize_v4.py"
+      - "tools/test_t6_xmodel_mesh_normalize_v4.py"
+      - "tools/t6_player_body_retail_proof_v1.py"
+      - "tools/test_t6_player_body_retail_proof_v1.py"
+      - "tools/t6_player_body_retail_proof_v2.py"
+      - "tools/test_t6_player_body_retail_proof_v2.py"
+      - "tools/t6_player_body_retail_proof_v3.py"
+      - "tools/test_t6_player_body_retail_proof_v3.py"
+      - "tools/t6_player_body_close_v1.py"
+      - "tools/test_t6_player_body_close_v1.py"
+      - "tools/t6_player_body_close_v2.py"
+      - "tools/test_t6_player_body_close_v2.py"
+      - "tools/t6_player_body_close_v3.py"
+      - "tools/test_t6_player_body_close_v3.py"
+      - ".github/workflows/nonmap-player-body-reuse-regressions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  player-body-reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Mesh v2 proven skeleton reuse
+        run: python tools/test_t6_xmodel_mesh_normalize_v2.py
+      - name: Body promoter v1
+        run: python tools/test_t6_player_body_retail_proof_v1.py
+      - name: Body closer v1
+        run: python tools/test_t6_player_body_close_v1.py
+      - name: Mesh v3 nested render reuse
+        run: python tools/test_t6_xmodel_mesh_normalize_v3.py
+      - name: Body promoter v2 nested reuse audit
+        run: python tools/test_t6_player_body_retail_proof_v2.py
+      - name: Body closer v2 nested reuse fallback
+        run: python tools/test_t6_player_body_close_v2.py
+      - name: Skeleton v3 packed top-level surface alias
+        run: python tools/test_t6_xmodel_skeleton_normalize_v3.py
+      - name: Mesh v4 whole surface alias
+        run: python tools/test_t6_xmodel_mesh_normalize_v4.py
+      - name: Body promoter v3 whole surface audit
+        run: python tools/test_t6_player_body_retail_proof_v3.py
+      - name: Body closer v3 whole surface fallback
+        run: python tools/test_t6_player_body_close_v3.py
