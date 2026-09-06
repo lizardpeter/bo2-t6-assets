@@ -18,11 +18,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff -o /tmp/mp.ff
-          test "$(sha256sum /tmp/mp.ff | cut -d' ' -f1)" = '6c026302ef0cb267910369d40955868962e30016026118052328005086a2b1e0'
-          gcc -O2 -std=c11 tools/t6_fastfile_expand_pc_v1.c -lz -o /tmp/expand
-          /tmp/expand /tmp/mp.ff /tmp/mp.expanded
-          test "$(sha256sum /tmp/mp.expanded | cut -d' ' -f1)" = '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          test "$(stat -c '%s' /tmp/mp_nuketown_2020.expanded.bin)" = 154653476
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
       - name: Trace Ficus inline MaterialTextureDef roles
         shell: bash
         run: |
@@ -31,7 +32,7 @@ jobs:
           import json,struct
           from pathlib import Path
           from t6_xmodel_serialized_walker import XModelWalker
-          data=Path('/tmp/mp.expanded').read_bytes()
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
           d=XModelWalker(data,24530208).walk_xmodel()
           assert d['name']=='mlv/nt_tree_ficus_lrg_01_sway',d.get('name')
           assert not d['blockers'],d['blockers']
