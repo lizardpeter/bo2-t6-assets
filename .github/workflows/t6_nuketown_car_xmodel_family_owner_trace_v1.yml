@@ -1,0 +1,107 @@
+name: T6 Nuketown car XModel family owner trace v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car_xmodel_family_owner_trace_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Enumerate exact car-family XModels and materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+
+          data=Path('/tmp/map.expanded').read_bytes();table=parse_top_level_xasset_table(data);prefix=walk_map_prefix_stringtable(data,table);logical=prefix['logicalToText']
+          # Exact StringTable aliases containing the Nuketown car family.
+          names=[]
+          for off,text in logical.items():
+              if 'nuketown_2020_car' in text.lower(): names.append((int(off),text))
+          print('CAR_STRINGTABLE',json.dumps(names,indent=2))
+
+          def ptr_raw_from_offset(off): return ((5<<29)|off)+1
+          candidates=[];seen=set()
+          # Packed-name candidates: scan exact encoded StringTable pointer words.
+          for off,text in names:
+              raw=ptr_raw_from_offset(off)&0xffffffff; needle=struct.pack('<I',raw); pos=0
+              while True:
+                  p=data.find(needle,pos)
+                  if p<0:break
+                  pos=p+1
+                  # XModel.name is field +0, so p itself is candidate fixed start.
+                  if p in seen:continue
+                  try:
+                      w=XModelWalker(data,p).walk_xmodel()
+                      if w['blockers']:continue
+                      m=Normalizer(data,p,logical_to_text=logical).normalize()
+                      if m['identity']['name']!=text:continue
+                  except Exception:continue
+                  seen.add(p);candidates.append((p,text,off,w,m))
+          # Inline-name candidates: exact NUL name immediately after 248-byte fixed record.
+          for _off,text in names:
+              nb=text.encode('latin1')+b'\0';pos=0
+              while True:
+                  s=data.find(nb,pos)
+                  if s<0:break
+                  pos=s+1; p=s-248
+                  if p<0 or p in seen:continue
+                  try:
+                      w=XModelWalker(data,p).walk_xmodel()
+                      if w['blockers']:continue
+                      m=Normalizer(data,p,logical_to_text=logical).normalize()
+                      if m['identity']['name']!=text:continue
+                  except Exception:continue
+                  seen.add(p);candidates.append((p,text,None,w,m))
+
+          rows=[]
+          for p,text,noff,w,m in sorted(candidates):
+              lod0=m['xmodel']['lods'][0];si=int(lod0['surfIndex']);sn=int(lod0['numSurfs']);handles=w['xmodel']['materialHandles'];by={s['name']:s for s in w['sections']}
+              inline=[]
+              for im in (w.get('details') or {}).get('inlineMaterials',[]):
+                  rec=dict(im);fs=by.get(im['label']+'.Material.fixed');ts=by.get(im['label']+'.Material.textureTable.fixed');rec['fixedStart']=fs['start'] if fs else None;rec['textureTableStart']=ts['start'] if ts else None
+                  tex=[]
+                  if ts:
+                    for j in range(im['textureCount']):
+                      q=ts['start']+16*j;ip=struct.unpack_from('<I',data,q+12)[0];tr={'slot':j,'semantic':data[q+7],'samplerState':data[q+6],'imagePointerRaw':f'0x{ip:08X}'};pref=f"{im['label']}.Material.textureTable[{j}].image.GfxImage";ns=by.get(pref+'.name')
+                      if ns:
+                        a=ns['start'];e=data.index(b'\0',a);tr['inlineImageName']=data[a:e].decode('latin1')
+                      elif ip not in (0,0xffffffff,0xfffffffe):
+                        enc=(ip-1)&0xffffffff;tr['imagePointerBlock']=enc>>29;tr['imagePointerOffset']=enc&0x1fffffff
+                      tex.append(tr)
+                  rec['textures']=tex;inline.append(rec)
+              row={'name':text,'fixedStart':p,'packedNameLogicalOffset':noff,'numBones':m['xmodel']['numBones'],'numSurfs':m['xmodel']['numSurfs'],'lod0':lod0,
+                   'allMaterialHandles':handles,'lod0MaterialHandles':[{'surfaceIndex':i,'handle':handles[i]} for i in range(si,si+sn)],'inlineMaterials':inline}
+              rows.append(row);print('CAR_XMODEL',json.dumps(row,sort_keys=True))
+          if not any(r['name']=='veh_t6_nuketown_2020_car01_clean' for r in rows):raise SystemExit('car01 missing')
+          if not any(r['name']=='veh_t6_nuketown_2020_car02_whole' for r in rows):raise SystemExit('car02 missing')
+          out={'format':'t6-nuketown-car-xmodel-family-owner-trace-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'models':rows}
+          Path('/tmp/car_family.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR_XMODEL_FAMILY_OWNER_TRACE_V1
+          path: /tmp/car_family.json
+          if-no-files-found: error
