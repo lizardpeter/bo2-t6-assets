@@ -1,0 +1,55 @@
+name: T6 Nuketown car material alias proof v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car_material_alias_proof_v1.yml'
+      - 'tools/t6_nuketown_car_material_alias_proof_v1.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded mp_nuketown_2020
+          test "$(stat -c '%s' /tmp/mp_nuketown_2020.expanded)" = 154653476
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+      - name: Fetch pinned retail-loader source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 2ca512abe7cb82d70a94d5ad7846043c3978862d
+          test "$(git -C /tmp/oat rev-parse HEAD)" = 2ca512abe7cb82d70a94d5ad7846043c3978862d
+      - name: Prove exact final static Material alias
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=tools python tools/t6_nuketown_car_material_alias_proof_v1.py \
+            --expanded /tmp/mp_nuketown_2020.expanded \
+            --oat-root /tmp/oat \
+            --out /tmp/T6_NUKETOWN_CAR_MATERIAL_ALIAS_PROOF_V1.json | tee /tmp/proof_summary.txt
+          python -m json.tool /tmp/T6_NUKETOWN_CAR_MATERIAL_ALIAS_PROOF_V1.json >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-nuketown-car-material-alias-proof-v1
+          path: |
+            /tmp/T6_NUKETOWN_CAR_MATERIAL_ALIAS_PROOF_V1.json
+            /tmp/proof_summary.txt
+          if-no-files-found: error
