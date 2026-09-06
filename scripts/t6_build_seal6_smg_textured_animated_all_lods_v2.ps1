@@ -18,11 +18,13 @@ function Require-File([string]$Path,[string]$Label) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "$Label not found: $Path" }
     return (Resolve-Path -LiteralPath $Path).Path
 }
-function Run-With([string]$Exe,[string[]]$Args) {
+function Run-With([string]$Exe,[string[]]$ArgList) {
     # Send child-process output to the host, not to the PowerShell function's
     # success-output stream. This keeps Resolve-TexturePython's return scalar.
-    & $Exe @Args | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "Stage failed ($LASTEXITCODE): $Exe $($Args -join ' ')" }
+    # Do not name this parameter $Args: $args is PowerShell's automatic variable
+    # and loses the explicitly supplied argument list on pwsh/Linux.
+    & $Exe @ArgList | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Stage failed ($LASTEXITCODE): $Exe $($ArgList -join ' ')" }
 }
 function Test-TexturePython([string]$Exe) {
     & $Exe -c "import imagecodecs, PIL; assert imagecodecs.LZO.available" *> $null
