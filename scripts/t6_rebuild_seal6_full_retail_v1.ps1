@@ -10,11 +10,11 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Tools = Join-Path $RepoRoot "tools"
-$Builder = Join-Path $PSScriptRoot "t6_build_seal6_smg_textured_animated_all_lods_v3.ps1"
+$Builder = Join-Path $PSScriptRoot "t6_build_seal6_smg_textured_animated_all_lods_v4.ps1"
 
 # Raw FastFile wrappers can differ across source packages while decrypting to the
-# same authoritative expanded XFile.  Promotion therefore pins the exact
-# expanded byte stream.  The observed raw identity is still recorded in the
+# same authoritative expanded XFile. Promotion therefore pins the exact
+# expanded byte stream. The observed raw identity is still recorded in the
 # provenance and the retail mirror's current raw size is checked as a guardrail.
 $FactionObservedRawBytes = 3095232
 $FactionExpandedBytes = 6245916
@@ -61,7 +61,7 @@ $FactionSealsFastfile = Require-File $FactionSealsFastfile "retail faction_seals
 $CommonMpFastfile = Require-File $CommonMpFastfile "retail common_mp.ff"
 $BaseIpak = Require-File $BaseIpak "retail base.ipak"
 $MpIpak = Require-File $MpIpak "retail mp.ipak"
-$Builder = Require-File $Builder "SEAL6 all-LOD v3 builder"
+$Builder = Require-File $Builder "SEAL6 all-LOD v4 builder"
 $FastfileTool = Require-File (Join-Path $Tools "bo2_t6_fastfile.py") "T6 FastFile decryptor"
 $SkeletonTool = Require-File (Join-Path $Tools "t6_xmodel_skeleton_normalize_v3.py") "XModel skeleton normalizer v3"
 $MeshTool = Require-File (Join-Path $Tools "t6_xmodel_mesh_normalize_v4.py") "XModel mesh normalizer v4"
@@ -122,25 +122,25 @@ foreach ($a in $ExpectedAnimations) {
 $BuildDir = Join-Path $OutRoot "build"
 if (-not $PackagePath) { $PackagePath = Join-Path $OutRoot "SEAL6_FULL_RETAIL_BLENDER.zip" }
 & $Builder -MeshJson $MeshJson -SkeletonJson $SkeletonJson -XAnimJson $XAnimPaths -BaseIpak $BaseIpak -MpIpak $MpIpak -Python $Python -OutDir $BuildDir -PackagePath $PackagePath
-if ($LASTEXITCODE -ne 0) { throw "SEAL6 v3 package builder failed with code $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "SEAL6 v4 package builder failed with code $LASTEXITCODE" }
 $PackagePath = Require-File $PackagePath "SEAL6 full retail package"
 $BuildSummary = Require-File (Join-Path $BuildDir "build_summary.json") "SEAL6 build summary"
 
 $Repro = [ordered]@{
     format="t6-seal6-full-retail-rebuild-v1"
     asset=$TargetName
-    policy=[ordered]@{sourceDerivedOnly=$true;noFallbackGeometry=$true;noFallbackSkeleton=$true;noFallbackAnimation=$true;noFallbackMaterialsOrTextures=$true;fastFilesPromotedByExpandedIdentity=$true}
+    policy=[ordered]@{sourceDerivedOnly=$true;noFallbackGeometry=$true;noFallbackSkeleton=$true;noFallbackAnimation=$true;noFallbackMaterialsOrTextures=$true;fastFilesPromotedByExpandedIdentity=$true;ipakImagesPromotedByExactContentIdentity=$true}
     source=[ordered]@{
         faction_seals_mp=[ordered]@{path=$FactionSealsFastfile;bytes=$FactionRawBytes;sha256=$FactionRawSha256;expandedPath=$FactionExpanded;expandedBytes=$FactionExpandedBytes;expandedSha256=$FactionExpandedSha256}
         common_mp=[ordered]@{path=$CommonMpFastfile;bytes=$CommonRawBytes;sha256=$CommonRawSha256;expandedPath=$CommonExpanded;expandedBytes=$CommonExpandedBytes;expandedSha256=$CommonExpandedSha256}
-        base_ipak=[ordered]@{path=$BaseIpak;sha256=(Get-Sha256 $BaseIpak)}
-        mp_ipak=[ordered]@{path=$MpIpak;sha256=(Get-Sha256 $MpIpak)}
+        base_ipak=[ordered]@{path=$BaseIpak;bytes=(Get-Item -LiteralPath $BaseIpak).Length;sha256=(Get-Sha256 $BaseIpak)}
+        mp_ipak=[ordered]@{path=$MpIpak;bytes=(Get-Item -LiteralPath $MpIpak).Length;sha256=(Get-Sha256 $MpIpak)}
     }
     xmodel=[ordered]@{assetStartHex=$TargetAssetStart;xassetIndex=$TargetXAssetIndex;skeletonPath=$SkeletonJson;skeletonSha256=(Get-Sha256 $SkeletonJson);meshPath=$MeshJson;meshSha256=(Get-Sha256 $MeshJson);joints=102;lods=4;surfaces=42;vertices=21188;triangles=21283}
     animations=$XAnimProof
     buildSummary=[ordered]@{path=$BuildSummary;sha256=(Get-Sha256 $BuildSummary)}
     package=[ordered]@{path=$PackagePath;bytes=(Get-Item -LiteralPath $PackagePath).Length;sha256=(Get-Sha256 $PackagePath);sidecar="$PackagePath.manifest.json"}
-    proofBoundary="This is the one-command source-derived SEAL6 rebuild path from two retail FastFiles plus base.ipak/mp.ipak. Each FastFile is promoted only after decrypt/decompress reproduces the exact pinned expanded XFile identity; then the build requires the exact XModel alias proof, six exact XAnim serialized payloads, and the v3 42/42 cross-IPAK materialization gate before packaging."
+    proofBoundary="This is the one-command source-derived SEAL6 rebuild path from two retail FastFiles plus base.ipak/mp.ipak. Each FastFile is promoted only after decrypt/decompress reproduces the exact pinned expanded XFile identity. IPAK whole-container hashes are retained as provenance, while every image is promoted only by unique exact (retail filename hash, streamed dataHash) resolution plus reconstructed CRC29/IWI validation. The build then requires the exact XModel alias proof and six exact XAnim serialized payloads before packaging."
 }
 $ReproPath = Join-Path $OutRoot "rebuild_provenance.json"
 $Repro | ConvertTo-Json -Depth 12 | Set-Content -Encoding UTF8 -LiteralPath $ReproPath
