@@ -34,7 +34,22 @@ jobs:
           cp tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.cpp /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap/
           cp tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.h /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe/
           cp tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.cpp /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe/
-          git -C /tmp/oat apply "$GITHUB_WORKSPACE/tools/t6_gfxworld_reflection_probe_oat_patch/ObjWriterT6.registration.combined.patch"
+
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/oat/src/ObjWriting/Game/T6/ObjWriterT6.cpp')
+          s=p.read_text()
+          inc='#include "Game/T6/XModel/XModelDumperT6.h"\n'
+          add=inc+'#include "GfxWorldLightmap/GfxWorldLightmapDumperT6.h"\n#include "GfxWorldReflectionProbe/GfxWorldReflectionProbeDumperT6.h"\n'
+          if s.count(inc)!=1: raise SystemExit('pinned ObjWriter include anchor drift')
+          s=s.replace(inc,add,1)
+          old='    // REGISTER_DUMPER(AssetDumperGfxWorld, m_gfx_world)\n'
+          new=('    // Keep lightmap and reflection resource ownership as independent proof schemas.\n'
+               '    RegisterAssetDumper(std::make_unique<gfx_world_lightmap::DumperT6>());\n'
+               '    RegisterAssetDumper(std::make_unique<gfx_world_reflection_probe::DumperT6>());\n')
+          if s.count(old)!=1: raise SystemExit('pinned ObjWriter GfxWorld registration anchor drift')
+          p.write_text(s.replace(old,new,1))
+          PY
 
           cd /tmp/oat
           PREMAKE_NO_PROMPT=1 ./generate.sh
@@ -71,7 +86,7 @@ jobs:
             /tmp/game/zone/all/mp_nuketown_2020.ff \
             2>&1 | tee /tmp/unlinker_dump.log
 
-          find /tmp/out -type f -maxdepth 8 -print | sort | tee /tmp/output_files.txt
+          find /tmp/out -maxdepth 8 -type f -print | sort | tee /tmp/output_files.txt
           LM=$(find /tmp/out -type f -path '*/gfxworld_lightmaps/*' | head -1)
           RP=$(find /tmp/out -type f -path '*/gfxworld_reflection_probes/*' | head -1)
           test -n "$LM" -a -n "$RP"
