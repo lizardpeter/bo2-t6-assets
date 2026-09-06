@@ -1,0 +1,227 @@
+{
+  "format": "t6-100-percent-closure-v3",
+  "supersedes": "manifests/T6_100_PERCENT_CLOSURE_V2.json",
+  "goal": "100% source-derived export of the complete retail T6 asset corpus: every discovered container and XAsset occurrence is inventoried, uniquely identified, raw-preserved, decoded, dependency-closed, exported, semantically validated, and reproducibly packaged without guessed substitutions or omitted unsupported classes.",
+  "statusVocabulary": {
+    "closed": "The stated full gate and proof boundary are satisfied.",
+    "implemented-awaiting-retail": "Production-safe implementation exists but required whole-corpus retail execution proof is pending.",
+    "partial": "Substantial source-derived implementation or proof exists, but the full gate is not closed.",
+    "open": "No defensible implementation path is retained yet."
+  },
+  "rules": {
+    "percent100RequiresEveryGateClosed": true,
+    "inventoryCompletenessAndSemanticCompletenessAreSeparate": true,
+    "unsupportedAndUnknownAssetsRemainInDenominator": true,
+    "rawExtractionDoesNotEqualSemanticExport": true,
+    "oatDumpableDoesNotEqualRepoProvenUsable": true,
+    "missingAssetMayNeverBeSilentlySubstituted": true,
+    "ambiguousIdentityMayNeverBePromoted": true,
+    "formulaOrCrossEngineAnalogyCannotCloseRetailSemanticGate": true,
+    "retailContradictionReopensAffectedGate": true,
+    "publicBulkOrchestrationMustBeRegressionTested": true,
+    "noFabricatedAnimationEndpointKeys": true,
+    "noFabricatedBonesMaterialsTexturesOrDependencies": true
+  },
+  "assetLifecycle": [
+    "discovered",
+    "uniquely_resolved",
+    "raw_extracted",
+    "decoded",
+    "dependency_closed",
+    "exported",
+    "semantically_validated",
+    "packaged_audited"
+  ],
+  "knownT6XAssetTypeDenominator": {
+    "count": 60,
+    "authority": "tools/t6_nonmap_asset_coverage_v1.py ASSET_TYPES",
+    "policy": "The denominator may grow if retail enumeration reveals a previously unrepresented class; growth is not a regression. Silently dropping a class is a regression."
+  },
+  "gates": [
+    {
+      "id": "world-v2-inherited-closure",
+      "title": "Complete the V2 world/map closure program",
+      "status": "partial",
+      "evidence": ["manifests/T6_100_PERCENT_CLOSURE_V2.json", "docs/T6_FULL_MAP_EXPORT_PIPELINE_V1.md"],
+      "closureRequirement": "Every required gate in T6_100_PERCENT_CLOSURE_V2.json is closed; V3 does not weaken or replace any of its retail world semantic requirements."
+    },
+    {
+      "id": "retail-container-census",
+      "title": "Complete retail source-container census",
+      "status": "partial",
+      "evidence": ["source-containers/", "manifests/corpus/", "tools/t6_nonmap_corpus_census_v1.py"],
+      "closureRequirement": "Every retail FF/IPAK/SABS/SABL/IWD and required patch/DLC/localization variant in scope has canonical identity, byte size, SHA-256, role, and provenance; no installed retail container is unaccounted for."
+    },
+    {
+      "id": "global-xasset-inventory",
+      "title": "Complete global XAsset occurrence inventory",
+      "status": "partial",
+      "evidence": ["tools/t6_raw_xasset_inventory.py", "tools/t6_raw_xasset_inventory_v2.py", "tools/t6_nonmap_asset_coverage_v1.py"],
+      "closureRequirement": "Every XAsset occurrence from every hash-pinned expanded zone is enumerated by class and source location; totals reconcile to per-zone tables and all 60 known T6 classes remain explicit even when unsupported."
+    },
+    {
+      "id": "raw-byte-preservation",
+      "title": "Lossless raw preservation for every discovered asset",
+      "status": "partial",
+      "evidence": ["tools/t6_raw_xasset_inventory_v2.py", "manifests/nonmap/"],
+      "closureRequirement": "Each discovered asset has enough source-container identity, offsets/ranges or reconstructable serialization evidence to recover its authoritative retail bytes without relying on normalized exports."
+    },
+    {
+      "id": "canonical-asset-identity",
+      "title": "Canonical cross-zone asset identity",
+      "status": "partial",
+      "evidence": ["tools/t6_asset_proof_manifest_v1.py", "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json", "manifests/nonmap/retail/seal6_smg_image_alias_header_proof_v1.json"],
+      "closureRequirement": "Every asset occurrence resolves to a canonical identity using retail loader semantics, names/hashes/pointers/aliases as applicable, with collisions and ambiguous imports represented explicitly and never guessed."
+    },
+    {
+      "id": "global-dependency-graph",
+      "title": "Complete cross-container dependency graph",
+      "status": "partial",
+      "evidence": ["tools/t6_asset_proof_manifest_v1.py", "tools/t6_character_bundle_pipeline_v1.py", "manifests/nonmap/"],
+      "closureRequirement": "All dependencies of every asset are represented and uniquely resolved across zones/containers; zero exported assets have unresolved or ambiguous required dependencies."
+    },
+    {
+      "id": "xmodel-corpus",
+      "title": "All XModel/XModelPieces/skinned geometry",
+      "status": "partial",
+      "evidence": ["tools/t6_xmodel_mesh_normalize_v1.py", "tools/t6_xmodel_skeleton_normalize_v2.py", "tools/t6_xanim_skinned_gltf_export_v7.py", "manifests/xmodels/"],
+      "closureRequirement": "Every observed model class and every serialized LOD/surface/influence bucket/skeleton/placement variant is decoded, dependency-closed, exported and corpus-regression validated."
+    },
+    {
+      "id": "xanim-corpus",
+      "title": "All XAnimParts and runtime animation semantics",
+      "status": "partial",
+      "evidence": ["tools/t6_xanim_normalize_v1.py", "tools/t6_xanim_skinned_gltf_export_v7.py", "manifests/xanim/", "manifests/animations/"],
+      "closureRequirement": "Every serialized XAnim branch used by the retail corpus is directly proven or exhaustively absent, all tracks/delta parts/runtime composition semantics are preserved, and every animation can be deterministically exported without fabricated keys."
+    },
+    {
+      "id": "material-techset-corpus",
+      "title": "All Material and TechniqueSet semantics",
+      "status": "partial",
+      "evidence": ["tools/t6_oat_material_manifest_v4.py", "manifests/render/", "manifests/shaders/"],
+      "closureRequirement": "Every material/TechniqueSet dependency, render state, constant, texture semantic and required shader behavior in the retail corpus is archived and reproducibly represented or executed by a T6-aware adapter."
+    },
+    {
+      "id": "image-ipak-corpus",
+      "title": "All GfxImage/IPAK payloads",
+      "status": "partial",
+      "evidence": ["tools/t6_ipak_exact_key_extract_v1.py", "tools/t6_ipak_iwi_materialize_v3.py", "manifests/nonmap/retail/seal6_smg_texture_keys_v4.json"],
+      "closureRequirement": "Every streamed and inline image is uniquely mapped to its authoritative repository/payload, extracted with exact retail filename-hash plus dataHash identity where applicable, decoded losslessly enough for archival and visual export, and validated across every required IPAK."
+    },
+    {
+      "id": "audio-corpus",
+      "title": "All sound banks, sound patches and driver globals",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "OpenAssetTools:T6/SndBank", "OpenAssetTools:T6/SndDriverGlobals"],
+      "closureRequirement": "Every SOUND/SOUND_PATCH/SNDDRIVER_GLOBALS occurrence and referenced audio payload is source-identified, decoded/exported with names and playback metadata, dependency-closed and corpus-validated in this repository."
+    },
+    {
+      "id": "script-data-corpus",
+      "title": "Rawfiles, script parse trees, localization and tables",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "OpenAssetTools:T6/RawFile", "OpenAssetTools:T6/StringTable", "OpenAssetTools:T6/LocalizeEntry"],
+      "closureRequirement": "RAWFILE/SCRIPTPARSETREE/STRINGTABLE/LOCALIZE_ENTRY/LEADERBOARD/KEYVALUEPAIRS/QDB/SLUG assets are exported with exact identities, payloads, encodings and dependency relationships; binary script forms remain preserved when source reconstruction is not lossless."
+    },
+    {
+      "id": "ui-font-menu-corpus",
+      "title": "UI maps, menus, fonts, icons, glasses and emblems",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "OpenAssetTools:T6/Font_s", "OpenAssetTools:T6/FontIcon"],
+      "closureRequirement": "UI_MAP/MENULIST/MENU/FONT/FONTICON/GLASSES/EMBLEMSET assets and their material/image/string dependencies export reproducibly with structural and visual validation."
+    },
+    {
+      "id": "weapon-system-corpus",
+      "title": "Weapons, variants, attachments, camos and tracers",
+      "status": "partial",
+      "evidence": ["manifests/weapons/", "tools/t6_nonmap_asset_coverage_v1.py", "manifests/nonmap/retail/common_mp_weapon_playeranim_selector_summary_v1.json"],
+      "closureRequirement": "WEAPON/WEAPONDEF/WEAPON_VARIANT/WEAPON_FULL/ATTACHMENT/ATTACHMENT_UNIQUE/WEAPON_CAMO/TRACER definitions resolve all model/material/animation/FX/audio/gameplay dependencies and export without heuristic field substitution."
+    },
+    {
+      "id": "character-system-corpus",
+      "title": "Player, NPC and character-definition corpus",
+      "status": "partial",
+      "evidence": ["manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json", "tools/t6_character_bundle_pipeline_v1.py", "manifests/nonmap/retail/seal6_smg_golden_asset_proof_v1.json"],
+      "closureRequirement": "MPBODY/MPHEAD/CHARACTER/AITYPE/MPTYPE/XMODELALIAS definitions resolve exact component models, materials, animations, equipment and behavior dependencies for the complete retail corpus."
+    },
+    {
+      "id": "physics-destructible-corpus",
+      "title": "Physics, constraints and destructibles",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "OpenAssetTools:T6/PhysPreset", "OpenAssetTools:T6/PhysConstraints"],
+      "closureRequirement": "PHYSPRESET/PHYSCONSTRAINTS/DESTRUCTIBLEDEF and related collision/dynamic data are decoded into source-faithful, dependency-closed representations and validated on retail fixtures."
+    },
+    {
+      "id": "fx-impact-footstep-corpus",
+      "title": "FX, impact FX and footstep systems",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "manifests/render/"],
+      "closureRequirement": "FX/IMPACT_FX/FOOTSTEP_TABLE/FOOTSTEPFX_TABLE assets resolve every referenced material/image/model/audio dependency and preserve timing/spawn/attachment semantics in a usable export or T6-aware runtime representation."
+    },
+    {
+      "id": "vehicle-corpus",
+      "title": "Vehicle definitions and dependencies",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "OpenAssetTools:T6/VehicleDef"],
+      "closureRequirement": "Every VEHICLEDEF occurrence is decoded and dependency-closed across models, weapons, FX, sound, physics and gameplay fields with representative retail semantic validation."
+    },
+    {
+      "id": "gameplay-schema-corpus",
+      "title": "DDL, globals, memory blocks and gameplay definitions",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py"],
+      "closureRequirement": "XGLOBALS/DDL/MEMORYBLOCK/ZBARRIER and any other retained gameplay/data-schema classes have deterministic source-faithful exports with field/layout proof and dependency closure."
+    },
+    {
+      "id": "zero-unclassified-retail-assets",
+      "title": "Zero unclassified or silently dropped retail assets",
+      "status": "partial",
+      "evidence": ["tools/t6_nonmap_asset_coverage_v1.py", "tools/t6_raw_xasset_inventory_v2.py"],
+      "closureRequirement": "Whole-corpus inventory reports zero unknown/unclassified observed types and zero asset occurrences discarded because no semantic decoder exists; unsupported items remain explicit blockers until closed."
+    },
+    {
+      "id": "semantic-interchange-contracts",
+      "title": "Lossless normalized/interchange contracts",
+      "status": "partial",
+      "evidence": ["tools/t6_asset_proof_manifest_v1.py", "tools/t6_xmodel_mesh_normalize_v1.py", "tools/t6_xanim_normalize_v1.py"],
+      "closureRequirement": "Every asset class has a documented normalized/export contract that preserves source distinctions required for future reconstruction and does not overload standard interchange semantics with unrelated T6 control data."
+    },
+    {
+      "id": "deterministic-whole-corpus-rebuild",
+      "title": "Deterministic whole-corpus rebuild",
+      "status": "partial",
+      "evidence": ["tools/t6_asset_proof_manifest_v1.py", "tools/t6_100_percent_closure_v2.py", "manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v2.json"],
+      "closureRequirement": "Given the same hash-pinned retail sources and tool revision, every canonical export and manifest is reproducible or has explicitly documented serializer-only nondeterminism with semantic equivalence checks."
+    },
+    {
+      "id": "independent-consumer-validation",
+      "title": "Independent consumer and semantic validation",
+      "status": "partial",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_whole_body_animated_benchmark_v1.json", "manifests/T6_100_PERCENT_CLOSURE_V2.json"],
+      "closureRequirement": "Representative and then whole-corpus outputs load and behave correctly in independent consumers appropriate to each class, including glTF tooling/Blender for 3D assets and dedicated validators for data/audio/script assets."
+    },
+    {
+      "id": "packaging-provenance-audit",
+      "title": "Reproducible package, provenance and audit trail",
+      "status": "partial",
+      "evidence": ["tools/t6_asset_proof_manifest_v1.py", "manifests/"],
+      "closureRequirement": "Every released export is linked to canonical asset identity, exact source evidence, dependencies, tool revision, validation results and output hashes; a machine-generated audit can reconstruct why every asset is or is not closed."
+    },
+    {
+      "id": "seal6-golden-fixture",
+      "title": "SEAL6 LOD0 six-animation golden regression fixture",
+      "status": "closed",
+      "evidence": ["manifests/nonmap/retail/seal6_smg_golden_asset_proof_v1.json", "tools/test_t6_asset_proof_manifest_v1.py"],
+      "closureRequirement": "The bounded SEAL6 golden fixture remains semantically validated with exact geometry/skeleton/material/cross-zone-animation invariants and deterministic reference output; its proof boundary may not be widened by inference."
+    }
+  ],
+  "summary": {
+    "gateCount": 25,
+    "closed": 1,
+    "implementedAwaitingRetail": 0,
+    "partial": 24,
+    "open": 0,
+    "release100Percent": false,
+    "milestone": "V3 changes the release target from world-centric closure to whole-game asset closure. Existing V2 world proof remains mandatory through an inherited closure gate. The first bounded cross-asset golden fixture is SEAL6; all full-corpus class gates remain explicit blockers until corpus execution and semantic validation close them."
+  },
+  "releaseRule": "100% is a boolean certification. It is true only when every V3 gate is closed, including inherited V2 world closure, every observed retail asset belongs to the canonical inventory, and every required asset reaches packaged_audited with zero unresolved/ambiguous dependencies or silent unsupported-class omissions."
+}
