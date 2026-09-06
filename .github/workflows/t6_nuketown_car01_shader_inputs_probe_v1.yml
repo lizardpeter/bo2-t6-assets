@@ -1,0 +1,153 @@
+name: T6 Nuketown car01 shader inputs probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_shader_inputs_probe_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install image dependencies
+        run: python3 -m pip install --quiet pillow numpy
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Probe car01 material and vertex shader inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections, hashlib, io, json, math, struct
+          from pathlib import Path
+          from PIL import Image
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_ipak_http_range_v2 import open_ipak
+          from t6_nuketown_static_xmodel_texture_apply_v2 import iwi_top_png
+          import t6_retail_world_formats_45_proof_v1 as worldfmt
+
+          DATA=Path('/tmp/map.expanded').read_bytes(); OWNER=38558166; CLEAN=44523322
+          EXPECT='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          assert hashlib.sha256(DATA).hexdigest()==EXPECT
+          table=parse_top_level_xasset_table(DATA);prefix=walk_map_prefix_stringtable(DATA,table);logical=prefix['logicalToText']
+          mesh=Normalizer(DATA,CLEAN,logical_to_text=logical).normalize();assert mesh['identity']['name']=='veh_t6_nuketown_2020_car01_clean'
+          ow=XModelWalker(DATA,OWNER).walk_xmodel();assert not ow['blockers'];assert ow['xmodel']['name']=='veh_t6_nuketown_2020_car01_whole'
+          by={s['name']:s for s in ow['sections']}; mats={int(m['label'].split('[')[1].split(']')[0]):m for m in ow['details']['inlineMaterials']};assert set(range(10)).issubset(mats)
+          proof=json.loads(Path('manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2.json').read_text()); slot_by_off={int(r['virtualOffset']):int(r['slot']) for r in proof['slotMapping']}
+          cw=XModelWalker(DATA,CLEAN).walk_xmodel();lod0=mesh['xmodel']['lods'][0];si=int(lod0['surfIndex']);sn=int(lod0['numSurfs']);chs=cw['xmodel']['materialHandles'][si:si+sn]
+          surface_slots=[]
+          for h in chs:
+            assert h['kind']=='packed' and h['block']==5;surface_slots.append(slot_by_off[int(h['offset'])])
+          assert surface_slots==[0,1,2,3,9],surface_slots
+
+          def ptr(raw):
+            if raw==0:return {'kind':'null','rawHex':'0x00000000'}
+            if raw==0xffffffff:return {'kind':'following','rawHex':'0xFFFFFFFF'}
+            if raw==0xfffffffe:return {'kind':'insert','rawHex':'0xFFFFFFFE'}
+            enc=(raw-1)&0xffffffff;return {'kind':'packed','rawHex':f'0x{raw:08X}','block':enc>>29,'offset':enc&0x1fffffff}
+          def rhash(s,h=0):
+            for c in s.encode('latin1'):h=((33*h)^(c|0x20))&0xffffffff
+            return h
+          roles={0:'2D',1:'FUNCTION',2:'COLOR_MAP',3:'UNUSED_1',4:'UNUSED_2',5:'NORMAL_MAP',6:'UNUSED_3',7:'UNUSED_4',8:'SPECULAR_MAP'}
+
+          # Resolve exact TechniqueSet identities through top-level XAsset pointer allocation.
+          blocks,assets=worldfmt.front(DATA)
+          tech_ptrs=[]
+          for ms in range(10):
+            fs=by[mats[ms]['label']+'.Material.fixed']['start'];tech_ptrs.append(struct.unpack_from('<I',DATA,fs+92)[0])
+          technique_binding={'status':'unresolved'};by_q={}
+          try:
+            base=worldfmt.solve_base(set(tech_ptrs),assets,blocks)
+            q7=[q for q,(t,p) in enumerate(assets) if t==7 and p==worldfmt.FOLLOW]
+            scans=worldfmt.scan_tech(DATA,blocks,OWNER)
+            if len(scans)==len(q7):by_q={q:scans[i] for i,q in enumerate(q7)}
+            qs=[]
+            for raw in tech_ptrs:
+              k,b,o=worldfmt.dec(raw,blocks);assert k=='packed' and b==5 and (o-base-4)%8==0
+              q=(o-base-4)//8;assert assets[q][0]==7;qs.append(q)
+            technique_binding={'status':'exact-pointer-solved','virtualBase':base,'assetIndices':qs,'scanCount':len(scans),'type7FollowingCount':len(q7),'nameMappingExact':len(scans)==len(q7)}
+          except Exception as exc:
+            technique_binding={'status':'unresolved','reason':repr(exc)};qs=[None]*10
+
+          urls=['https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak','https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak','https://r2.houseofkublai.com/bo2/zone/all/mp.ipak','https://r2.houseofkublai.com/bo2/zone/all/base.ipak','https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak','https://r2.houseofkublai.com/bo2/zone/all/so.ipak','https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak']
+          ipaks=[(u,open_ipak(u)) for u in urls]
+          outdir=Path('/tmp/car01_textures');outdir.mkdir(parents=True,exist_ok=True)
+          materials=[]
+          for ms in range(10):
+            m=mats[ms];label=m['label'];fs=by[label+'.Material.fixed']['start'];rawtech=tech_ptrs[ms];q=qs[ms]
+            mr={'slot':ms,'name':m['name'],'fixedStart':fs,'techniqueSetPointer':ptr(rawtech),'techniqueAssetIndex':q,'textureCount':int(m['textureCount']),'constantCount':int(m['constantCount']),'stateBitsCount':int(m['stateBitsCount']),'textures':[],'constants':[]}
+            if q in by_q:mr['techniqueSet']={'name':by_q[q]['name'],'worldVertFormat':by_q[q]['fmt'],'fixedStart':by_q[q]['start']}
+            ts=by.get(label+'.Material.textureTable.fixed')
+            if ts:
+              for ti in range(int(m['textureCount'])):
+                b=ts['start']+16*ti;namehash=struct.unpack_from('<I',DATA,b)[0];sampler=DATA[b+6];sem=DATA[b+7];rawp=struct.unpack_from('<I',DATA,b+12)[0]
+                tr={'slot':ti,'nameHash':namehash,'nameHashHex':f'0x{namehash:08X}','samplerState':sampler,'semantic':sem,'semanticName':roles.get(sem,'OTHER'),'imagePointer':ptr(rawp)}
+                pref=f'{label}.Material.textureTable[{ti}].image.GfxImage';ims=by.get(pref+'.fixed');ns=by.get(pref+'.name')
+                if ims and ns:
+                  ib=ims['start'];a=ns['start'];e=DATA.index(b'\0',a);iname=DATA[a:e].decode('latin1');ih=struct.unpack_from('<I',DATA,ib+76)[0];spc=DATA[ib+60];dh=(struct.unpack_from('<I',DATA,ib+40)[0]&0x1fffffff) if spc else None;w,h,d=struct.unpack_from('<3H',DATA,ib+20)
+                  assert ih==rhash(iname);tr.update({'image':iname,'gfxImageHash':ih,'dataHash':dh,'width':w,'height':h,'depth':d,'streamedPartCount':spc})
+                  if spc:
+                    found=[]
+                    for u,p in ipaks:
+                      ent=p.entry_exact(ih,dh)
+                      if ent is not None:found.append((u,p.extract_entry(ent)))
+                    assert found,f'{iname}: payload not found';hs={hashlib.sha256(raw).hexdigest() for _,raw in found};assert len(hs)==1,(iname,hs)
+                    iwi=found[0][1];png,meta=iwi_top_png(iwi,normal_semantic=(sem==5));im=Image.open(io.BytesIO(png)).convert('RGBA');px=list(im.getdata());mins=[min(v[c] for v in px) for c in range(4)];maxs=[max(v[c] for v in px) for c in range(4)];means=[sum(v[c] for v in px)/len(px) for c in range(4)];au=len({v[3] for v in px});nonopaque=sum(v[3]!=255 for v in px)
+                    safe=f'm{ms:02d}_t{ti:02d}_{iname.replace("/","_").replace("\\\\","_")}.png';(outdir/safe).write_bytes(png)
+                    tr.update({'payloadSha256':next(iter(hs)),'source':found[0][0],'pngBytes':len(png),'pngSha256':hashlib.sha256(png).hexdigest(),'decoded':meta,'rgbaMin':mins,'rgbaMax':maxs,'rgbaMean':means,'alphaUniqueCount':au,'nonOpaquePixelCount':nonopaque,'artifactPng':safe})
+                mr['textures'].append(tr)
+            cs=by.get(label+'.Material.constantTable')
+            if cs:
+              for ci in range(int(m['constantCount'])):
+                b=cs['start']+32*ci;raw=DATA[b:b+32];mr['constants'].append({'slot':ci,'rawHex':raw.hex(),'u32':[f'0x{x:08X}' for x in struct.unpack_from('<8I',raw)],'tailFloat4':list(struct.unpack_from('<4f',raw,16))})
+            ss=by.get(label+'.Material.stateBitsTable')
+            if ss:mr['stateBitsRawHex']=[DATA[ss['start']+20*i:ss['start']+20*(i+1)].hex() for i in range(int(m['stateBitsCount']))]
+            materials.append(mr)
+
+          surfstats=[]
+          active=mesh['surfaces'][si:si+sn]
+          for local,s in enumerate(active):
+            raws=[int(v['raw']['color'],16) for v in s['vertices']];ch=[[((x>>(8*c))&255) for x in raws] for c in range(4)];uv=[v['texcoord0'] for v in s['vertices']]
+            hist=collections.Counter(raws)
+            surfstats.append({'localPrimitive':local,'surfaceIndex':s['index'],'materialSlot':surface_slots[local],'material':mats[surface_slots[local]]['name'],'vertexCount':s['vertCount'],'triangleCount':s['triCount'],'uvMin':[min(v[c] for v in uv) for c in range(2)],'uvMax':[max(v[c] for v in uv) for c in range(2)],'vertexColorUniqueCount':len(hist),'vertexColorAllWhite':all(x==0xffffffff for x in raws),'vertexColorChannelMin':[min(x) for x in ch],'vertexColorChannelMax':[max(x) for x in ch],'vertexColorTop':[{'rawHex':f'0x{k:08X}','count':v} for k,v in hist.most_common(12)]})
+
+          report={'format':'t6-nuketown-car01-shader-inputs-probe-v1','expandedSha256':EXPECT,'ownerModel':ow['xmodel']['name'],'cleanModel':mesh['identity']['name'],'cleanLod0MaterialSlots':surface_slots,'techniqueBinding':technique_binding,'materials':materials,'cleanLod0Surfaces':surfstats,'proofBoundary':'Material/texture/constant/state and XModel vertex inputs are recorded from the exact retail expansion. TechniqueSet identity is promoted only if the packed XAsset pointer allocation and serialized TechniqueSet scan cardinality agree exactly. Texture PNGs are deterministic top-mip decodes of exact IPAK payloads. No Blender/PBR shader interpretation is promoted here.'}
+          raw=(json.dumps(report,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/T6_NUKETOWN_CAR01_SHADER_INPUTS_PROBE_V1.json').write_bytes(raw);rp=Path('manifests/models/T6_NUKETOWN_CAR01_SHADER_INPUTS_PROBE_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
+          print(json.dumps({'techniqueBinding':technique_binding,'surfaceStats':surfstats,'materialSummary':[{'slot':m['slot'],'name':m['name'],'techniqueSet':m.get('techniqueSet'),'textureCount':m['textureCount'],'constantCount':m['constantCount']} for m in materials]},indent=2))
+          PY
+      - name: Commit durable probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_SHADER_INPUTS_PROBE_V1.json
+          git commit -m 'Probe exact Nuketown car01 shader inputs'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_SHADER_INPUTS_PROBE_V1
+          path: |
+            /tmp/T6_NUKETOWN_CAR01_SHADER_INPUTS_PROBE_V1.json
+            /tmp/car01_textures/*.png
+          if-no-files-found: error
+          compression-level: 0
