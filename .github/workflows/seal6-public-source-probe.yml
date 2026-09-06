@@ -1,0 +1,115 @@
+name: SEAL6 public retail source probe
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - "tools/t6_remote_zip_member_v1.py"
+      - "tools/test_t6_remote_zip_member_v1.py"
+      - "tools/bo2_t6_fastfile.py"
+      - ".github/workflows/seal6-public-source-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Offline remote ZIP parser regressions
+        run: python tools/test_t6_remote_zip_member_v1.py
+      - name: Fetch only SEAL6 body and shared animation FastFiles
+        run: |
+          python tools/t6_remote_zip_member_v1.py \
+            --url 'https://zobtorrents.net/files/Plutonium%20T6.zip' \
+            --length 45672242561 \
+            --basename faction_seals_mp.ff \
+            --basename common_mp.ff \
+            --expect 'faction_seals_mp.ff=3095232:1a0754a5183eca3b1169610ad61b369768617340d000ef730a0d5c7b9ea97c88' \
+            --out-dir probe/source
+      - name: Expand both retail FastFiles and record exact identities
+        run: |
+          python - <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          sys.path.insert(0, 'tools')
+          from bo2_t6_fastfile import decrypt_fastfile_bytes
+
+          root=Path('probe')
+          out=root/'expanded'
+          out.mkdir(parents=True, exist_ok=True)
+          expected={
+            'faction_seals_mp.ff': {
+              'rawBytes':3095232,
+              'rawSha256':'1a0754a5183eca3b1169610ad61b369768617340d000ef730a0d5c7b9ea97c88',
+              'expandedBytes':11393922,
+              'expandedSha256':'21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30',
+            },
+            'common_mp.ff': {
+              'candidateRawBytes':40307072,
+              'candidateRawSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'expandedBytes':206493911,
+              'expandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+            },
+          }
+          report={'format':'t6-seal6-public-source-probe-v1','files':{}}
+          for name in ('faction_seals_mp.ff','common_mp.ff'):
+            p=root/'source'/name
+            raw=p.read_bytes()
+            row={
+              'rawBytes':len(raw),
+              'rawSha256':hashlib.sha256(raw).hexdigest(),
+            }
+            try:
+              expanded,audit,summary=decrypt_fastfile_bytes(raw)
+              ep=out/(name+'.expanded')
+              ep.write_bytes(expanded)
+              row.update({
+                'decrypt':'pass',
+                'zoneName':summary['zoneName'],
+                'records':summary['records'],
+                'expandedBytes':len(expanded),
+                'expandedSha256':hashlib.sha256(expanded).hexdigest(),
+                'expandedPath':str(ep),
+              })
+            except Exception as exc:
+              row.update({'decrypt':'fail','error':repr(exc)})
+            report['files'][name]=row
+          f=report['files']['faction_seals_mp.ff']
+          e=expected['faction_seals_mp.ff']
+          report['factionExact']=all(f.get(k)==v for k,v in e.items()) and f.get('decrypt')=='pass'
+          c=report['files']['common_mp.ff']
+          ce=expected['common_mp.ff']
+          report['commonMatchesRetainedAnimationSource']=(
+              c.get('decrypt')=='pass' and
+              c.get('expandedBytes')==ce['expandedBytes'] and
+              c.get('expandedSha256')==ce['expandedSha256']
+          )
+          report['commonMatchesCandidateRawIdentity']=(
+              c.get('rawBytes')==ce['candidateRawBytes'] and
+              c.get('rawSha256')==ce['candidateRawSha256']
+          )
+          (root/'source_probe.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
+          if not report['factionExact']:
+            raise SystemExit('faction_seals_mp public member does not match retained exact source')
+          if not report['commonMatchesRetainedAnimationSource']:
+            raise SystemExit('common_mp public member does not expand to retained exact animation source')
+          PY
+      - name: Upload public-source proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seal6-public-source-probe
+          path: |
+            probe/source/remote_zip_fetch_manifest.json
+            probe/source_probe.json
+          if-no-files-found: warn
+          retention-days: 7
