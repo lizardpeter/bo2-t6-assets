@@ -34,10 +34,11 @@ jobs:
           from t6_xmodel_serialized_walker import XModelWalker
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
           d=XModelWalker(data,24530208).walk_xmodel()
-          assert d['name']=='mlv/nt_tree_ficus_lrg_01_sway',d.get('name')
+          x=d['xmodel']
+          assert x['name']=='mlv/nt_tree_ficus_lrg_01_sway',x.get('name')
           assert not d['blockers'],d['blockers']
-          print('MODEL',d['name'])
-          print('HANDLES',json.dumps(d['materialHandles'],sort_keys=True))
+          print('MODEL',x['name'])
+          print('HANDLES',json.dumps(x['materialHandles'],sort_keys=True))
           print('INLINE_MATERIALS',json.dumps(d.get('inlineMaterials',[]),indent=2,sort_keys=True))
           secs=d['sections']
           by={s['name']:s for s in secs}
