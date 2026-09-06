@@ -40,10 +40,13 @@ jobs:
           OWNER=38558166;GFXWORLD=63150420
           baseproof=json.loads(Path('manifests/maps/clipmap_static_xmodel_xasset_cross_map_proof_v1.json').read_text())
           row=next(r for r in baseproof['maps'] if r['map']=='mp_nuketown_2020');base=int(row['xAssetVirtualBase']);assert base==13472 and int(row['candidateBaseCount'])==1
-          blocks,assets=h.front(d);q7_follow=[q for q,(t,p) in enumerate(assets) if t==7 and p==h.FOLLOW];q7_nonfollow=[q for q,(t,p) in enumerate(assets) if t==7 and p!=h.FOLLOW]
+          lm=json.loads(Path('manifests/maps/mp_nuketown_2020/lightmap_role_presence_proof_v1.json').read_text());GFXWORLD_Q=int(lm['sourceProof']['gfxWorldAssetIndex']);assert GFXWORLD_Q==624
+          blocks,assets=h.front(d)
+          q7_pre=[q for q,(t,p) in enumerate(assets) if q<GFXWORLD_Q and t==7 and p==h.FOLLOW]
+          q7_pre_nonfollow=[q for q,(t,p) in enumerate(assets) if q<GFXWORLD_Q and t==7 and p!=h.FOLLOW]
           scans=h.scan_tech(d,blocks,GFXWORLD)
-          assert len(scans)==len(q7_follow),(len(scans),len(q7_follow),q7_nonfollow)
-          byq={q:scans[i] for i,q in enumerate(q7_follow)}
+          assert len(scans)==len(q7_pre),(len(scans),len(q7_pre),q7_pre_nonfollow)
+          byq={q:scans[i] for i,q in enumerate(q7_pre)}
 
           w=XModelWalker(d,OWNER).walk_xmodel();assert not w['blockers'],w['blockers'];by={s['name']:s for s in w['sections']};mats={int(m['label'].split('[')[1].split(']')[0]):m for m in w['details']['inlineMaterials']}
           out=[]
@@ -51,12 +54,10 @@ jobs:
             fs=by[mats[i]['label']+'.Material.fixed']['start'];raw=struct.unpack_from('<I',d,fs+92)[0];k,b,o=h.dec(raw,blocks);assert k=='packed' and b==5;delta=o-base-4;assert delta>=0 and delta%8==0;q=delta//8;assert q in byq,(i,q)
             tr=byq[q]
             out.append({'slot':i,'material':mats[i]['name'],'materialFixedStart':fs,'techniquePointerRawHex':f'0x{raw:08X}','techniquePointerVirtualOffset':o,'xassetIndex':q,'xassetHeaderPointerRawHex':f'0x{assets[q][1]:08X}','techniqueSet':tr['name'],'worldVertFormat':tr['fmt'],'techniqueSetFixedStart':tr['start']})
-          # The three distinct pointer targets must close to three exact identities.
-          distinct={r['techniquePointerVirtualOffset']:(r['xassetIndex'],r['techniqueSet'],r['techniqueSetFixedStart']) for r in out}
-          assert len(distinct)==3
-          proof={'format':'t6-nuketown-car01-technique-binding-v1','expandedSha256':SHA,'independentXAssetVirtualBaseProof':'manifests/maps/clipmap_static_xmodel_xasset_cross_map_proof_v1.json','xAssetVirtualBase':base,'xAssetVirtualBaseCandidateCount':1,'gfxWorldFixedStart':GFXWORLD,'type7FollowingAssetCount':len(q7_follow),'serializedTechniqueSetCountBeforeGfxWorld':len(scans),'serializationCardinalityMatchesExactly':True,'materialBindings':out,'distinctBindings':[{'virtualOffset':k,'xassetIndex':v[0],'techniqueSet':v[1],'fixedStart':v[2]} for k,v in sorted(distinct.items())],'proofBoundary':'The global XAsset VIRTUAL base is imported from the independently source-closed 240-reference Nuketown static-XModel proof. Every FOLLOWING type-7 XAsset is then matched one-to-one, in top-level XAsset order, to the complete serialized MaterialTechniqueSet block before the independently pinned GfxWorld boundary. Car Material.techniqueSet packed pointers resolve by exact base+assetIndex*8+4 pointer-slot identity.','contradictions':0}
+          distinct={r['techniquePointerVirtualOffset']:(r['xassetIndex'],r['techniqueSet'],r['techniqueSetFixedStart']) for r in out};assert len(distinct)==3
+          proof={'format':'t6-nuketown-car01-technique-binding-v1','expandedSha256':SHA,'independentXAssetVirtualBaseProof':'manifests/maps/clipmap_static_xmodel_xasset_cross_map_proof_v1.json','independentGfxWorldAssetIndexProof':'manifests/maps/mp_nuketown_2020/lightmap_role_presence_proof_v1.json','xAssetVirtualBase':base,'xAssetVirtualBaseCandidateCount':1,'gfxWorldAssetIndex':GFXWORLD_Q,'gfxWorldFixedStart':GFXWORLD,'preGfxWorldType7FollowingAssetCount':len(q7_pre),'serializedTechniqueSetCountBeforeGfxWorld':len(scans),'serializationCardinalityMatchesExactly':True,'materialBindings':out,'distinctBindings':[{'virtualOffset':k,'xassetIndex':v[0],'techniqueSet':v[1],'fixedStart':v[2]} for k,v in sorted(distinct.items())],'proofBoundary':'The global XAsset VIRTUAL base is imported from the independently source-closed 240-reference Nuketown static-XModel proof. The independently pinned GfxWorld XAsset index splits the top-level list at XAsset 624. Every FOLLOWING type-7 XAsset before that boundary is matched one-to-one, in top-level XAsset order, to every serialized MaterialTechniqueSet before the independently pinned GfxWorld fixed boundary. Car Material.techniqueSet packed pointers resolve by exact base+assetIndex*8+4 pointer-slot identity.','contradictions':0}
           raw=(json.dumps(proof,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/proof.json').write_bytes(raw);rp=Path('manifests/models/T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
-          cp=Path('checkpoints/T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_V1_2026-09-06.md');cp.write_text('# T6 Nuketown car01 TechniqueSet binding v1 — 2026-09-06\n\n'+''.join(f"- `{r['material']}` → XAsset **{r['xassetIndex']}** → `{r['techniqueSet']}` (fixed `{r['techniqueSetFixedStart']}`)\n" for r in out[:4])+f"\nGlobal XAsset VIRTUAL base: **{base}**. Type-7 serialization cardinality: **{len(scans)}/{len(q7_follow)} exact**. Contradictions: **0**.\n",encoding='utf-8')
+          cp=Path('checkpoints/T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_V1_2026-09-06.md');cp.write_text('# T6 Nuketown car01 TechniqueSet binding v1 — 2026-09-06\n\n'+''.join(f"- `{r['material']}` → XAsset **{r['xassetIndex']}** → `{r['techniqueSet']}` (fixed `{r['techniqueSetFixedStart']}`)\n" for r in out[:4])+f"\nGlobal XAsset VIRTUAL base: **{base}**. Pre-GfxWorld type-7 serialization cardinality: **{len(scans)}/{len(q7_pre)} exact**. Contradictions: **0**.\n",encoding='utf-8')
           print(json.dumps(proof,indent=2,sort_keys=True))
           PY
       - name: Commit proof
