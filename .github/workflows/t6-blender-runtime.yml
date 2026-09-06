@@ -11,18 +11,23 @@ on:
       - 'tools/t6_blender_generated_layer_preview_v5.py'
       - 'tools/t6_blender_generated_layer_preview_v6.py'
       - 'tools/t6_blender_generated_layer_preview_v7.py'
+      - 'tools/t6_blender_generated_layer_preview_v8.py'
       - 'tools/t6_blender_generated_normal_nodes_v1.py'
       - 'tools/t6_blender_generated_normal_nodes_v2.py'
       - 'tools/t6_blender_normal_decode_dag_nodes_v1.py'
       - 'tools/t6_blender_height_dag_nodes_v1.py'
+      - 'tools/t6_blender_directional_lightmap_nodes_v1.py'
       - 'tools/t6_generated_height_weight_dag_v1.py'
       - 'tools/t6_generated_shader_recipe_contract_v1.py'
       - 'tools/t6_generated_world_shader_semantics_v1.py'
       - 'tools/t6_world_generated_attribute_contract_v1.py'
       - 'tools/t6_world_generated_normal_basis_attributes_v2.py'
+      - 'tools/t6_world_lightmap_material_specialize_v1.py'
+      - 'tools/t6_world_lightmap_preview_embed_v1.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v3.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v4.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v7.py'
+      - 'tools/test_t6_blender_generated_layer_preview_runtime_v8.py'
   pull_request:
     paths:
       - '.github/workflows/t6-blender-runtime.yml'
@@ -33,18 +38,23 @@ on:
       - 'tools/t6_blender_generated_layer_preview_v5.py'
       - 'tools/t6_blender_generated_layer_preview_v6.py'
       - 'tools/t6_blender_generated_layer_preview_v7.py'
+      - 'tools/t6_blender_generated_layer_preview_v8.py'
       - 'tools/t6_blender_generated_normal_nodes_v1.py'
       - 'tools/t6_blender_generated_normal_nodes_v2.py'
       - 'tools/t6_blender_normal_decode_dag_nodes_v1.py'
       - 'tools/t6_blender_height_dag_nodes_v1.py'
+      - 'tools/t6_blender_directional_lightmap_nodes_v1.py'
       - 'tools/t6_generated_height_weight_dag_v1.py'
       - 'tools/t6_generated_shader_recipe_contract_v1.py'
       - 'tools/t6_generated_world_shader_semantics_v1.py'
       - 'tools/t6_world_generated_attribute_contract_v1.py'
       - 'tools/t6_world_generated_normal_basis_attributes_v2.py'
+      - 'tools/t6_world_lightmap_material_specialize_v1.py'
+      - 'tools/t6_world_lightmap_preview_embed_v1.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v3.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v4.py'
       - 'tools/test_t6_blender_generated_layer_preview_runtime_v7.py'
+      - 'tools/test_t6_blender_generated_layer_preview_runtime_v8.py'
   workflow_dispatch:
 
 jobs:
@@ -98,3 +108,10 @@ jobs:
           set -euxo pipefail
           "$BLENDER" --background --factory-startup \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v7.py
+
+      - name: Run v8 actual Blender directional-lightmap state regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          "$BLENDER" --background --factory-startup \
+            --python tools/test_t6_blender_generated_layer_preview_runtime_v8.py
