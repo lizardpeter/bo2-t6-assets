@@ -5,7 +5,7 @@ Pipeline:
   exact target XModel probe
   -> exact top-level XAsset index binding
   -> skeleton normalize v2 (including unique reusable-owner resolution)
-  -> mesh normalize v1
+  -> mesh normalize v2 (packed skeleton reuse allowed only via skeleton-v2 proof)
   -> registry-ready retail body proof promotion
 
 Every stage emits a durable artifact. If any stage cannot close exactly, the
@@ -56,7 +56,7 @@ def default_modules(here: Path, raw_parser_path: Path):
         raw=load_module(raw_parser_path, "t6_body_close_raw"),
         probe=load_module(here / "t6_xmodel_target_probe_v1.py", "t6_body_close_probe"),
         skeleton=load_module(here / "t6_xmodel_skeleton_normalize_v2.py", "t6_body_close_skeleton"),
-        mesh=load_module(here / "t6_xmodel_mesh_normalize_v1.py", "t6_body_close_mesh"),
+        mesh=load_module(here / "t6_xmodel_mesh_normalize_v2.py", "t6_body_close_mesh"),
         promoter=load_module(here / "t6_player_body_retail_proof_v1.py", "t6_body_close_promoter"),
     )
 
@@ -68,8 +68,9 @@ def _blocked(base: dict[str, Any], stage: str, reason: str, report_path: Path) -
     return out
 
 
-def _probe_doc(data: bytes, stream: Path, name: str, row: dict[str, Any], front: dict[str, Any]) -> dict[str, Any]:
-    exact = row.get("status") == "exact_inline_xmodel"
+def _probe_doc(data: bytes, stream: Path, name: str, row: dict[str, Any], rawmod, front: dict[str, Any]) -> dict[str, Any]:
+    required = [row]
+    exact = [r for r in required if r.get("status") == "exact_inline_xmodel"]
     return {
         "format": "t6-xmodel-target-probe-v1",
         "authority": "direct expanded retail T6 XFile bytes",
@@ -84,8 +85,9 @@ def _probe_doc(data: bytes, stream: Path, name: str, row: dict[str, Any], front:
             "generatedByPlayerBodyClosure": True,
         },
         "summary": {
-            "targets": 1, "requiredTargets": 1, "exactRequired": 1 if exact else 0,
-            "allRequiredExactInline": exact, "unresolvedRequired": [] if exact else [name],
+            "targets": 1, "requiredTargets": 1, "exactRequired": len(exact),
+            "allRequiredExactInline": len(exact) == 1,
+            "unresolvedRequired": [] if exact else [name],
         },
         "targets": [row],
     }
@@ -132,8 +134,9 @@ def close_body(*, name: str, zone_name: str, fastfile: Path, expanded: Path, raw
         front = mods.raw.parse_front(data)
         blocks = [int(x["bytes"]) for x in front["block_sizes"]]
         row = mods.probe.probe_name(data, {"name": name, "required": True, "role": "multiplayer_full_body"}, mods.raw, blocks)
-        probe_doc = _probe_doc(data, expanded, name, row, front)
-        base["xmodelProbe"] = dump(out_dir / "xmodel_target_probe_v1.json", probe_doc)
+        probe_doc = _probe_doc(data, expanded, name, row, mods.raw, front)
+        probe_art = dump(out_dir / "xmodel_target_probe_v1.json", probe_doc)
+        base["xmodelProbe"] = probe_art
         if row.get("status") != "exact_inline_xmodel":
             return _blocked(base, "xmodel-identity", f"target probe status: {row.get('status')}: {row.get('reason')}", report_path)
     except Exception as e:
@@ -152,7 +155,8 @@ def close_body(*, name: str, zone_name: str, fastfile: Path, expanded: Path, raw
 
     try:
         sk = mods.skeleton.normalize_skeleton(data, fixed_start, xasset_index=xasset_index, identity_name=name)
-        base["skeleton"] = dump(out_dir / "xmodel_skeleton_normalized_v2.json", sk)
+        sk_art = dump(out_dir / "xmodel_skeleton_normalized_v2.json", sk)
+        base["skeleton"] = sk_art
         val = sk.get("validation", {})
         if val.get("allBoneNamesResolved") is not True or val.get("hierarchyValid") is not True:
             raise ValueError("normalized skeleton did not close bone names and hierarchy")
@@ -160,9 +164,14 @@ def close_body(*, name: str, zone_name: str, fastfile: Path, expanded: Path, raw
         return _blocked(base, "skeleton", str(e), report_path)
 
     try:
-        mesh = mods.mesh.Normalizer(data, fixed_start).normalize()
-        mesh["expandedSha256"] = expanded_sha
-        base["mesh"] = dump(out_dir / "xmodel_mesh_normalized_v1.json", mesh)
+        if hasattr(mods.mesh, "normalize_mesh"):
+            mesh = mods.mesh.normalize_mesh(data, fixed_start, sk)
+        else:
+            mesh = mods.mesh.Normalizer(data, fixed_start).normalize()
+            mesh["expandedSha256"] = expanded_sha
+        mesh_name = "xmodel_mesh_normalized_v2.json" if mesh.get("format") == "t6-xmodel-mesh-normalized-v2" else "xmodel_mesh_normalized_v1.json"
+        mesh_art = dump(out_dir / mesh_name, mesh)
+        base["mesh"] = mesh_art
         if mesh.get("validation", {}).get("allLocalTriangleIndicesInRange") is not True:
             raise ValueError("normalized mesh did not close local triangle ranges")
     except Exception as e:
