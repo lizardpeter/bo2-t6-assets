@@ -1,0 +1,96 @@
+name: T6 Nuketown car01 TechniqueSet binding probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_technique_binding_probe_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Bind car01 TechniqueSet pointers
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          import t6_retail_world_formats_45_proof_v1 as h
+
+          d=Path('/tmp/map.expanded').read_bytes();assert hashlib.sha256(d).hexdigest()=='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          OWNER=38558166
+          w=XModelWalker(d,OWNER).walk_xmodel();assert not w['blockers'],w['blockers'];by={s['name']:s for s in w['sections']};mats={int(m['label'].split('[')[1].split(']')[0]):m for m in w['details']['inlineMaterials']}
+          blocks,assets=h.front(d)
+          raw_by_slot={};off_by_slot={}
+          for i in range(10):
+            fs=by[mats[i]['label']+'.Material.fixed']['start'];raw=struct.unpack_from('<I',d,fs+92)[0];k,b,o=h.dec(raw,blocks);assert k=='packed' and b==5
+            raw_by_slot[i]=raw;off_by_slot[i]=o
+          unique_offsets=sorted(set(off_by_slot.values()))
+          q7_all=sorted(i for i,(t,p) in enumerate(assets) if t==7)
+          q7_follow=sorted(i for i,(t,p) in enumerate(assets) if t==7 and p==h.FOLLOW)
+          sets=[]
+          for off in unique_offsets: sets.append({off-4-8*q for q in q7_all})
+          common=sorted(set.intersection(*sets))
+          candidates=[]
+          for base in common:
+            rows=[];valid=True
+            for off in unique_offsets:
+              delta=off-base-4
+              if delta<0 or delta%8:valid=False;break
+              q=delta//8
+              if q>=len(assets) or assets[q][0]!=7:valid=False;break
+              rows.append({'offset':off,'xassetIndex':q,'assetPointerRaw':f'0x{assets[q][1]:08X}','following':assets[q][1]==h.FOLLOW})
+            if valid:candidates.append({'base':base,'rows':rows,'allFollowing':all(r['following'] for r in rows)})
+
+          scans=h.scan_tech(d,blocks,OWNER)
+          # Test cardinality/order models without promoting one unless exact.
+          order_models=[]
+          for label,qs in [('all_type7',q7_all),('following_type7',q7_follow)]:
+            if len(scans)==len(qs):
+              mapping={q:scans[i] for i,q in enumerate(qs)}
+              for c in candidates:
+                named=[]
+                for r in c['rows']:
+                  rec=mapping.get(r['xassetIndex']);named.append({'offset':r['offset'],'xassetIndex':r['xassetIndex'],'techniqueSet':rec['name'] if rec else None,'worldVertFormat':rec['fmt'] if rec else None,'fixedStart':rec['start'] if rec else None})
+                order_models.append({'model':label,'base':c['base'],'rows':named})
+
+          # Independent serialization anchor: every scan record has FOLLOWING name ptr and is before owner.
+          scan_tail=[{'fixedStart':r['start'],'name':r['name'],'worldVertFormat':r['fmt']} for r in scans[-40:]]
+          report={'format':'t6-nuketown-car01-technique-binding-probe-v1','expandedSha256':hashlib.sha256(d).hexdigest(),'ownerFixedStart':OWNER,'ownerWalkerName':w['xmodel'].get('name'),'materialTechniquePointers':[{'slot':i,'material':mats[i]['name'],'rawHex':f'0x{raw_by_slot[i]:08X}','virtualOffset':off_by_slot[i]} for i in range(10)],'uniqueTechniqueOffsets':unique_offsets,'type7AssetCount':len(q7_all),'type7FollowingAssetCount':len(q7_follow),'scanTechniqueCountBeforeOwner':len(scans),'candidateBaseCount':len(candidates),'candidateBases':candidates,'orderModels':order_models,'scanTail':scan_tail,'proofBoundary':'This is a fail-closed pointer-allocation probe. It does not promote a TechniqueSet identity unless a single VIRTUAL base and an independently justified XAsset-to-serialized-TechniqueSet ordering are established.'}
+          raw=(json.dumps(report,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/report.json').write_bytes(raw);rp=Path('manifests/models/T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_PROBE_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
+          print(json.dumps({'uniqueTechniqueOffsets':unique_offsets,'type7AssetCount':len(q7_all),'type7FollowingAssetCount':len(q7_follow),'scanTechniqueCountBeforeOwner':len(scans),'candidateBaseCount':len(candidates),'candidates':candidates,'orderModels':order_models},indent=2))
+          PY
+      - name: Commit durable probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_PROBE_V1.json
+          git commit -m 'Probe car01 TechniqueSet pointer binding'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_TECHNIQUE_BINDING_PROBE_V1
+          path: /tmp/report.json
+          if-no-files-found: error
