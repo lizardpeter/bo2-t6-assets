@@ -11,8 +11,8 @@ Proof boundary
 --------------
 - A FOLLOWING/INSERT WEAPON header proves that a WeaponVariantDef fixed body is
   serialized in the zone stream.
-- A fixed body is accepted only when the recovered T6 scalar/pointer invariants
-  hold. Packed pointers must fall inside their declared XFile block.
+- A fixed body is accepted only when recovered T6 bool/pointer invariants hold.
+  Packed pointers must fall inside their declared XFile block.
 - Cardinality binding is stricter: the candidate must also expose a direct
   FOLLOWING/INSERT WeaponDef whose recovered selector enums validate. This
   prevents shifted child bytes from masquerading as top-level WVD records.
@@ -33,13 +33,10 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import math
 import struct
 from pathlib import Path
 from typing import Any
 
-PTR_FOLLOWING = 0xFFFFFFFF
-PTR_INSERT = 0xFFFFFFFE
 WEAPON_TYPE_INDEX = 25
 WVD_SIZE = 716
 
@@ -124,7 +121,7 @@ def candidate_at(data: bytes, start: int, blocks: list[int], rawmod) -> dict[str
     if start < 0 or start + WVD_SIZE > len(data):
         return None
 
-    # Cheap rejection first: these are retained uint8 booleans in the proven PC32 layout.
+    # Cheap rejection first: these are retained uint8 booleans in the PC32 layout.
     if any(data[start + off] not in (0, 1) for off in BOOL_OFFSETS):
         return None
 
@@ -146,11 +143,6 @@ def candidate_at(data: bytes, start: int, blocks: list[int], rawmod) -> dict[str
             "raw_u32": raw,
             "decoded": rawmod.decode_zone_pointer(raw, blocks),
         }
-
-    for off in (616, 620, 624):
-        value = struct.unpack_from("<f", data, start + off)[0]
-        if not math.isfinite(value) or abs(value) > 1_000_000:
-            return None
 
     non_null = sum(p["raw_u32"] != 0 for p in pointers.values())
     return {
