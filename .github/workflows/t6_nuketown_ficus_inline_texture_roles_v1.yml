@@ -1,0 +1,63 @@
+name: T6 Nuketown Ficus inline texture roles v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_ficus_inline_texture_roles_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and expand exact retail FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff -o /tmp/mp.ff
+          test "$(sha256sum /tmp/mp.ff | cut -d' ' -f1)" = '6c026302ef0cb267910369d40955868962e30016026118052328005086a2b1e0'
+          gcc -O2 -std=c11 tools/t6_fastfile_expand_pc_v1.c -lz -o /tmp/expand
+          /tmp/expand /tmp/mp.ff /tmp/mp.expanded
+          test "$(sha256sum /tmp/mp.expanded | cut -d' ' -f1)" = '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+      - name: Trace Ficus inline MaterialTextureDef roles
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          data=Path('/tmp/mp.expanded').read_bytes()
+          d=XModelWalker(data,24530208).walk_xmodel()
+          assert d['name']=='mlv/nt_tree_ficus_lrg_01_sway',d.get('name')
+          assert not d['blockers'],d['blockers']
+          print('MODEL',d['name'])
+          print('HANDLES',json.dumps(d['materialHandles'],sort_keys=True))
+          print('INLINE_MATERIALS',json.dumps(d.get('inlineMaterials',[]),indent=2,sort_keys=True))
+          secs=d['sections']
+          by={s['name']:s for s in secs}
+          roles={0:'2D',1:'FUNCTION',2:'COLOR_MAP',3:'UNUSED_1',4:'UNUSED_2',5:'NORMAL_MAP',6:'UNUSED_3',7:'UNUSED_4',8:'SPECULAR_MAP'}
+          for m in d.get('inlineMaterials',[]):
+              label=m['label']
+              tname=f'{label}.Material.textureTable.fixed'
+              if tname not in by:
+                  print('MATERIAL_NO_INLINE_TABLE',m['name'])
+                  continue
+              tb=by[tname]['start']
+              print('MATERIAL',m['name'],'TEXTURES',m['textureCount'],'TABLE',tb)
+              for i in range(m['textureCount']):
+                  b=tb+i*16
+                  namehash=struct.unpack_from('<I',data,b)[0]
+                  ns=chr(data[b+4]); ne=chr(data[b+5]); sampler=data[b+6]; semantic=data[b+7]
+                  imagep=struct.unpack_from('<I',data,b+12)[0]
+                  prefix=f'{label}.Material.textureTable[{i}].image.GfxImage'
+                  imgname=None
+                  nsec=by.get(prefix+'.name')
+                  if nsec:
+                      a=nsec['start']; e=data.index(b'\0',a); imgname=data[a:e].decode('latin1')
+                  print(json.dumps({'material':m['name'],'slot':i,'nameHash':f'0x{namehash:08X}','nameStart':ns,'nameEnd':ne,'samplerState':sampler,'semantic':semantic,'semanticName':roles.get(semantic,'OTHER'),'imagePointer':f'0x{imagep:08X}','inlineImageName':imgname},sort_keys=True))
+          PY
