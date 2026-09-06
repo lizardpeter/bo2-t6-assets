@@ -1,0 +1,49 @@
+name: T6 PC32 alignment audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_pc32_alignment_audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact 32-bit T6 layout probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 2ca512abe7cb82d70a94d5ad7846043c3978862d
+          cat >/tmp/layout.cpp <<'CPP'
+          #include <cstdint>
+          #include <cstdio>
+          #define ARCH_x86 1
+          #include "Game/T6/T6_Assets.h"
+          using namespace T6;
+          #define P(T) std::printf("%-32s size=%zu align=%zu\n", #T, sizeof(T), alignof(T))
+          int main(){
+            P(vec2_t); P(vec3_t); P(vec4_t);
+            P(XModelQuat); P(DObjAnimMat); P(XSurfaceVertexInfo);
+            P(GfxPackedVertex); P(XRigidVertList); P(XSurfaceCollisionTree);
+            P(XSurfaceCollisionNode); P(XSurfaceCollisionLeaf); P(XSurfaceTri); P(XSurfaceTri16); P(XSurface);
+            P(MaterialTextureDef); P(MaterialConstantDef); P(GfxStateBits); P(Material);
+            P(XModelCollTri_s); P(XModelCollSurf_s); P(XBoneInfo); P(Collmap);
+            P(PhysGeomList); P(PhysGeomInfo); P(BrushWrapper); P(cbrushside_t); P(cplane_s);
+            P(XModel);
+          }
+          CPP
+          g++ -m32 -std=c++20 -I/tmp/oat/src/Common /tmp/layout.cpp -o /tmp/layout
+          /tmp/layout | tee /tmp/t6_pc32_layout.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-pc32-layout-audit
+          path: /tmp/t6_pc32_layout.txt
+          if-no-files-found: error
