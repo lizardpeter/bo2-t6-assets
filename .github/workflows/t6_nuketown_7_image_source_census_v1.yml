@@ -1,0 +1,69 @@
+name: T6 Nuketown 7 image source census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_7_image_source_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Search every retained text/compressed manifest for the seven exact GfxImage identities
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64,json,zlib
+          from pathlib import Path
+          names=[
+            '~-gnt_2020_plastic_cream_col',
+            '~-gnt_2020_plastic_yellow_col',
+            '~-gnt_wood_fence',
+            'nt_2020_concrete_pattern_02_n',
+            '~-gnt_2020_concrete_pattern_02_c',
+            '~~-gnt_2020_wall_small_cos-rg~b4bc9749',
+            '~-gnt_2020_wall_orange_ext_c',
+          ]
+          excluded={
+            'manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64',
+            'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_SHARED_IPAK_PACKED_IMAGE_ALIAS_CENSUS_V2.json.zlib.b64',
+          }
+          hits={n:[] for n in names}
+          for p in Path('.').rglob('*'):
+            if not p.is_file() or str(p).startswith('.git/') or str(p) in excluded: continue
+            raw=None; kind='text'
+            try:
+              b=p.read_bytes()
+              if p.name.endswith('.zlib.b64'):
+                raw=zlib.decompress(base64.b64decode(b.strip())); kind='zlib+b64'
+              elif len(b)<=8_000_000:
+                raw=b
+              else:
+                continue
+              text=raw.decode('utf-8')
+            except Exception:
+              continue
+            for n in names:
+              start=0
+              while True:
+                i=text.find(n,start)
+                if i<0: break
+                hits[n].append({'path':str(p),'kind':kind,'context':text[max(0,i-300):min(len(text),i+len(n)+500)].replace('\n',' ')})
+                start=i+len(n)
+          out={'format':'t6-nuketown-seven-image-retained-source-census-v1','hits':hits,'counts':{n:len(v) for n,v in hits.items()}}
+          Path('/tmp/T6_NUKETOWN_7_IMAGE_SOURCE_CENSUS_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out['counts'],indent=2,sort_keys=True))
+          for n,rows in hits.items():
+            print('\nIMAGE',n)
+            for r in rows[:20]: print(json.dumps(r,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-nuketown-7-image-source-census-v1
+          path: /tmp/T6_NUKETOWN_7_IMAGE_SOURCE_CENSUS_V1.json
+          if-no-files-found: error
