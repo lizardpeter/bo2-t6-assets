@@ -2,7 +2,7 @@
 
 This checkpoint supersedes the renderer-integration portions of
 `T6_SHADER_LIGHTING_REFLECTION_V9_2026-09-05.md` while retaining its historical
-proof facts.  It exists so another worker can continue without widening any
+proof facts. It exists so another worker can continue without widening any
 proof boundary or reverting source-closed renderer state to generic PBR guesses.
 
 ## Non-regression facts retained
@@ -10,7 +10,7 @@ proof boundary or reverting source-closed renderer state to generic PBR guesses.
 - Original internal Nuketown v31 SHA-256:
   `6aff8a3c8e44dd5d0c20a7f229d2102677b092add054341b265aec74547882df`.
   The large v31 artifact itself is not currently retained in the repository.
-- Reflection closure remains **5823 / 5888 = 98.89605978260869%**.  The final 65
+- Reflection closure remains **5823 / 5888 = 98.89605978260869%**. The final 65
   residuals are **not** promoted by this checkpoint.
 - Corrected OAT GfxWorld lightmap/reflection dumper patches are source-prepared
   but still require compilation/retail execution for a new exact catalog.
@@ -70,7 +70,7 @@ Adds separately interpolated per-vertex binormal:
 
 `B_vertex = cross(N_vertex, T_vertex) * TANGENT.w`
 
-This preserves retail vertex-stage topology.  Recomputing `cross(interpolated
+This preserves retail vertex-stage topology. Recomputing `cross(interpolated
 N, interpolated T)` in the fragment/material graph is forbidden because it is
 not algebraically equivalent to interpolating the vertex-stage cross.
 
@@ -105,7 +105,7 @@ Adds explicit conversion for custom glTF basis-vector attributes:
 
 `(x,y,z) -> (x,-z,y)`
 
-before OBJECT->WORLD.  This prevents relying on Blender's standard semantic
+before OBJECT->WORLD. This prevents relying on Blender's standard semantic
 conversion for custom `_T6_*` attributes.
 
 Real runtime fixture:
@@ -113,8 +113,8 @@ Real runtime fixture:
 `tools/test_t6_blender_generated_layer_preview_runtime_v7.py`
 
 The fixture is committed and production-shaped, but hosted GitHub Actions did
-not execute it.  The latest v7-era hosted job failed with zero executed steps.
-Do not claim a real Blender v7 pass until a Blender process actually runs.
+not execute it. Do not claim a real Blender v7 pass until a Blender process
+actually runs.
 
 ## v21 — exact generated specular XYZW state, Nuketown only
 
@@ -126,10 +126,10 @@ Contract:
 
 `tools/t6_world_generated_specular_state_v1.py`
 
-Regression:
+Regressions:
 
-`tools/test_t6_world_generated_specular_state_v1.py`
-`tools/test_t6_oat_world_textured_export_pipeline_v21.py`
+- `tools/test_t6_world_generated_specular_state_v1.py`
+- `tools/test_t6_oat_world_textured_export_pipeline_v21.py`
 
 Source proof:
 
@@ -158,8 +158,8 @@ No-base-spec fallback:
 - W = 0 otherwise.
 
 v21 binds exact embedded specular texture ownership and explicitly binds the
-specular transition to the same exact RGB layer factor/condition.  It does not
-assign physical meaning to XYZW.  v21 is currently source-gated to
+specular transition to the same exact RGB layer factor/condition. It does not
+assign physical meaning to XYZW. v21 is currently source-gated to
 `mp_nuketown_2020` rather than pretending the retained five-map census is a
 per-shader membership registry for arbitrary future maps.
 
@@ -172,7 +172,7 @@ Authoritative proof:
 `manifests/render/T6_RETAIL_LAYERED_DIRECTIONAL_LIGHTMAP_V1.json`
 
 The newer retained-DXBC proof supersedes the old 2026-09-01 statement that all
-lightmap channel/combine behavior was unknown.  What is now closed is the
+lightmap channel/combine behavior was unknown. What is now closed is the
 **secondary directional-lightmap RGB state** for 173/173 retained layered slot-4
 shaders:
 
@@ -207,9 +207,10 @@ Derived preview contract:
 
 `tools/t6_world_lightmap_preview_embed_v1.py`
 
-Regression:
+Regressions:
 
-`tools/test_t6_world_lightmap_preview_embed_v1.py`
+- `tools/test_t6_world_lightmap_preview_embed_v1.py`
+- `tools/test_t6_oat_world_textured_export_pipeline_v22.py`
 
 Behavior:
 
@@ -238,14 +239,15 @@ Contract:
 
 `tools/t6_world_lightmap_material_specialize_v1.py`
 
-Regression:
+Regressions:
 
-`tools/test_t6_world_lightmap_material_specialize_v1.py`
+- `tools/test_t6_world_lightmap_material_specialize_v1.py`
+- `tools/test_t6_oat_world_textured_export_pipeline_v23.py`
 
 Reason:
 
-T6 `GfxSurface` owns `lightmapIndex`; `Material` does not.  One retail material
-may therefore appear on multiple differently lightmapped surfaces.  Blender
+T6 `GfxSurface` owns `lightmapIndex`; `Material` does not. One retail material
+may therefore appear on multiple differently lightmapped surfaces. Blender
 material sharing cannot represent that ownership without specialization.
 
 v23 creates preview-only material shells keyed by:
@@ -304,7 +306,7 @@ Latest hosted run after v8 workflow commit:
 - conclusion failure
 - **executed steps: 0**
 
-This is the same hosted-runner provisioning failure seen earlier.  It is not a
+This is the same hosted-runner provisioning failure seen earlier. It is not a
 Blender v8 test failure because no checkout/download/test step ran.
 
 ## Current strongest production chain
@@ -337,12 +339,15 @@ v7 exact generated diffuse + layered normal
 
 ## Immediate next targets
 
-1. Add orchestration regressions for v22/v23 production wrappers.
+1. Build a generated-layer final-output symbolic probe by reusing the existing
+   SM4 symbolic DAG engine and exact slot-4 recipe shader identities. Match
+   proved generated-color, normal/lightmap and specular subexpressions against
+   `o0` ancestry rather than reconstructing HLSL from assumptions.
 2. Run v7/v8 real Blender fixtures in an environment that actually supplies a
    Blender process; current hosted runner does not start.
 3. Close the final T6 output composition that consumes generated diffuse,
    generated specular XYZW, directional lightmap state, reflection probe state,
-   primary light/light-grid terms, shadows, etc.  Do not infer this from generic
+   primary light/light-grid terms, shadows, etc. Do not infer this from generic
    PBR.
 4. Continue the final 65 reflection residuals only with pinned retained proof.
 5. Compile/run corrected OAT GfxWorld lightmap/reflection dumpers against retail
