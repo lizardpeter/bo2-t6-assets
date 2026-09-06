@@ -1,0 +1,147 @@
+name: T6 Nuketown Ficus textured model v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_ficus_textured_model_v1.yml'
+      - 'tools/t6_nuketown_static_xmodel_texture_apply_v3.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install image decode dependencies
+        run: python3 -m pip install --disable-pip-version-check pillow numpy
+      - name: Download and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+      - name: Build exact semantic-correct textured Ficus
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import base64,hashlib,json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v1 import Normalizer
+          from t6_xmodel_skeleton_normalize_v2 import normalize_skeleton
+          from t6_xanim_skinned_gltf_export_v7 import export as export_gltf
+          from t6_embedded_gltf_to_glb_v1 import convert_gltf_dict,parse_glb
+          from t6_ipak_http_range_v2 import open_ipak
+          from t6_nuketown_static_xmodel_texture_apply_v2 import iwi_top_png
+
+          START=24530208; XASSET=246
+          NAME='mlv/nt_tree_ficus_lrg_01_sway'
+          MATERIALS=[
+              'mlv/mtl_p6_tree_ficus_lrg_01_bark1',
+              'mlv/t5_foliage_tree_standard_gobo_128',
+              'mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway',
+          ]
+          def rh(s,h=0):
+              for c in s.encode('latin1'): h=((33*h)^(c|0x20))&0xffffffff
+              return h
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          walk=XModelWalker(data,START).walk_xmodel(); assert not walk['blockers'],walk['blockers']; assert walk['xmodel']['name']==NAME
+          mesh=Normalizer(data,START).normalize(); mesh['expandedSha256']=hashlib.sha256(data).hexdigest()
+          skel=normalize_skeleton(data,START,xasset_index=XASSET,identity_name=NAME)
+          gltf=export_gltf(mesh,skel,None,lod=0)
+          prims=gltf['meshes'][0]['primitives']; assert len(prims)==3,len(prims)
+
+          inline=(walk.get('details') or {}).get('inlineMaterials',[]); by={s['name']:s for s in walk['sections']}
+          source_rows=[]
+          for m in inline[:3]:
+              label=m['label']; tb=by[f'{label}.Material.textureTable.fixed']['start']
+              for slot in range(m['textureCount']):
+                  b=tb+slot*16; sem=data[b+7]; sampler=data[b+6]
+                  prefix=f'{label}.Material.textureTable[{slot}].image.GfxImage'
+                  fs=by[prefix+'.fixed']; ns=by[prefix+'.name']; ib=fs['start']; a=ns['start']; e=data.index(b'\0',a); image=data[a:e].decode('latin1')
+                  w,h,d=struct.unpack_from('<3H',data,ib+20); count=data[ib+60]; ih=struct.unpack_from('<I',data,ib+76)[0]; dh=struct.unpack_from('<I',data,ib+40)[0]&0x1fffffff
+                  assert count==1; assert ih==rh(image)
+                  source_rows.append({'material':m['name'],'slot':slot,'semantic':sem,'samplerState':sampler,'image':image,'imageHash':ih,'dataHash':dh,'width':w,'height':h,'depth':d})
+          assert [m['name'] for m in inline[:3]]==MATERIALS
+          bark=[r for r in source_rows if r['material']==MATERIALS[0]]
+          assert [(r['slot'],r['semantic'],r['image']) for r in bark]==[(0,5,'p6_tree_ficus_lrg_01_bark1_n'),(1,2,'~-gp6_tree_ficus_lrg_01_bark1_c')]
+
+          ipak=open_ipak('https://r2.houseofkublai.com/bo2/zone/all/base.ipak')
+          payload={}; png={}; payload_meta={}
+          for r in source_rows:
+              key=(r['imageHash'],r['dataHash']); entry=ipak.entry_exact(*key)
+              if entry is None: raise SystemExit(f'exact base.ipak pair absent: {r}')
+              iwi=ipak.extract_entry(entry); h=hashlib.sha256(iwi).hexdigest()
+              p,meta=iwi_top_png(iwi,normal_semantic=(r['semantic']==5))
+              payload[r['image']]=iwi; png[r['image']]=p; payload_meta[r['image']]={'entry':list(entry),'iwiSha256':h,'iwiBytes':len(iwi),'pngSha256':hashlib.sha256(p).hexdigest(),'pngBytes':len(p),**meta}
+
+          images=[]; textures=[]; image_to_tex={}
+          for name in sorted(png):
+              images.append({'name':name,'uri':'data:image/png;base64,'+base64.b64encode(png[name]).decode('ascii'),
+                             'extras':{'T6':payload_meta[name]}})
+              textures.append({'name':name,'source':len(images)-1})
+              image_to_tex[name]=len(textures)-1
+          gltf['images']=images; gltf['textures']=textures
+          mats=[]
+          for mat_name in MATERIALS:
+              rows=[r for r in source_rows if r['material']==mat_name]
+              color=next((r for r in rows if r['semantic']==2),None); normal=next((r for r in rows if r['semantic']==5),None)
+              if color is None: raise SystemExit(f'{mat_name}: no semantic-2 color role')
+              mat={'name':mat_name,'pbrMetallicRoughness':{'baseColorTexture':{'index':image_to_tex[color['image']],'texCoord':0},'baseColorFactor':[1,1,1,1],'metallicFactor':0.0,'roughnessFactor':1.0},
+                   'doubleSided':True,'extras':{'T6':{'sourceRoleBindings':rows,'baseColorSemantic':2,'baseColorImage':color['image']}}}
+              if normal:
+                  mat['normalTexture']={'index':image_to_tex[normal['image']],'texCoord':0,'scale':1.0}
+                  mat['extras']['T6']['normalSemantic']=5; mat['extras']['T6']['normalImage']=normal['image']
+              # Foliage/gobo color payload alpha is retained in the PNG. Exact retail alpha-test threshold is a separate shader-state proof.
+              mats.append(mat)
+          gltf['materials']=mats
+          for i,p in enumerate(prims): p['material']=i
+          gltf.setdefault('extras',{}).setdefault('T6',{}).update({'texturedFicusSemanticRegression':True,'sourceExpandedSha256':hashlib.sha256(data).hexdigest(),
+              'proofBoundary':'Base Color is selected only from MaterialTextureDef semantic 2; Normal only from semantic 5; exact GfxImage (hash,streamed dataHash) payloads are range-extracted from retail base.ipak.'})
+
+          # Hard fail if normal is assigned as bark base color.
+          bark_mat=gltf['materials'][0]
+          bti=bark_mat['pbrMetallicRoughness']['baseColorTexture']['index']; nti=bark_mat['normalTexture']['index']
+          assert gltf['images'][gltf['textures'][bti]['source']]['name']=='~-gp6_tree_ficus_lrg_01_bark1_c'
+          assert gltf['images'][gltf['textures'][nti]['source']]['name']=='p6_tree_ficus_lrg_01_bark1_n'
+
+          glb,stats=convert_gltf_dict(gltf); parsed,_=parse_glb(glb)
+          out=Path('/tmp/mlv__nt_tree_ficus_lrg_01_sway_LOD0_TEXTURE_ROLE_FIXED.glb'); out.write_bytes(glb)
+          manifest={'format':'t6-nuketown-ficus-textured-model-v1','model':NAME,'xassetIndex':XASSET,'fixedSourceStart':START,
+              'expandedSha256':hashlib.sha256(data).hexdigest(),'lod0':{'surfaces':3,'vertices':sum(mesh['surfaces'][i]['vertCount'] for i in range(3)),'triangles':sum(mesh['surfaces'][i]['triCount'] for i in range(3))},
+              'roles':source_rows,'payloads':payload_meta,'glb':stats,
+              'regression':{'barkBaseColor':'~-gp6_tree_ficus_lrg_01_bark1_c','barkNormal':'p6_tree_ficus_lrg_01_bark1_n','purpleNormalAsBaseColorForbidden':True,'passed':True}}
+          mb=(json.dumps(manifest,indent=2,sort_keys=True)+'\n').encode(); Path('/tmp/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1.json').write_bytes(mb)
+          rp=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1.json'); rp.write_bytes(mb)
+          cp=Path('checkpoints/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1_2026-09-06.md')
+          cp.write_text(f'''# T6 Nuketown Ficus texture-role fix v1 — 2026-09-06\n\nThe blue/purple Ficus bark regression is source-closed and fixed.\n\n- exact bark slot 0: semantic **5 NORMAL_MAP** -> `p6_tree_ficus_lrg_01_bark1_n`\n- exact bark slot 1: semantic **2 COLOR_MAP** -> `~-gp6_tree_ficus_lrg_01_bark1_c`\n- both exact GfxImage payloads resolve from retail `base.ipak` by `(imageHash,dataHash)` and CRC29\n- corrected standalone LOD0 GLB: **{stats['glbBytes']:,} bytes**, SHA-256 `{stats['glbSha256']}`\n- Base Color normal-map regression: **forbidden and fail-closed**\n\nThe reusable full-map role repair is `tools/t6_nuketown_static_xmodel_texture_apply_v3.py`; occupied legacy roles are no longer trusted merely because they already contain a texture.\n''',encoding='utf-8')
+          print(json.dumps(manifest,indent=2,sort_keys=True))
+          PY
+      - name: Commit proof checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1.json checkpoints/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1_2026-09-06.md
+          git commit -m 'Close and fix Nuketown Ficus texture roles'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIXED_V1
+          path: |
+            /tmp/mlv__nt_tree_ficus_lrg_01_sway_LOD0_TEXTURE_ROLE_FIXED.glb
+            /tmp/T6_NUKETOWN_FICUS_TEXTURE_ROLE_FIX_V1.json
+          if-no-files-found: error
+          compression-level: 0
