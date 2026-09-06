@@ -1,0 +1,89 @@
+name: SEAL6 R2 IPAK payload audit
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - ".github/workflows/seal6-r2-ipak-payload-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payload-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch current R2 base/mp IPAKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='https://r2.houseofkublai.com/bo2/zone/all'
+          mkdir -p /tmp/t6
+          for name in base.ipak mp.ipak; do
+            curl --fail --location --silent --show-error \
+              --retry 6 --retry-delay 2 --retry-all-errors --connect-timeout 30 \
+              "$root/$name" -o "/tmp/t6/$name"
+          done
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          rows=[]
+          for name in ('base.ipak','mp.ipak'):
+            p=Path('/tmp/t6')/name
+            h=hashlib.sha256()
+            with p.open('rb') as f:
+              for chunk in iter(lambda:f.read(8*1024*1024),b''):
+                h.update(chunk)
+            rows.append({'name':name,'bytes':p.stat().st_size,'sha256':h.hexdigest(),'url':f'https://r2.houseofkublai.com/bo2/zone/all/{name}'})
+          Path('/tmp/t6/r2_ipak_container_identities.json').write_text(json.dumps({'format':'t6-r2-ipak-container-identities-v1','containers':rows},indent=2,sort_keys=True)+'\n')
+          print(json.dumps(rows,indent=2))
+          PY
+      - name: Install portable texture dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-t6-textures.txt
+      - name: Materialize and validate all 42 exact SEAL6 payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/seal6_textures
+          python tools/t6_ipak_iwi_materialize_v3.py \
+            --ipak base.ipak=/tmp/t6/base.ipak \
+            --ipak mp.ipak=/tmp/t6/mp.ipak \
+            --targets manifests/nonmap/retail/seal6_smg_texture_keys_v4.json \
+            --metadata manifests/nonmap/retail/seal6_smg_texture_keys_v3.json \
+            --metadata manifests/nonmap/retail/seal6_smg_import_image_resolution_v2.json \
+            --outdir /tmp/seal6_textures
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/seal6_textures/manifest.json')
+          d=json.loads(p.read_text())
+          s=d['summary']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          if s.get('requested') != 42 or s.get('materialized') != 42 or s.get('unresolved') != 0:
+            raise SystemExit(f'expected 42/42 exact payload closure, got {s}')
+          repos=s.get('repositories') or {}
+          if repos.get('base.ipak') != 40 or repos.get('mp.ipak') != 2:
+            raise SystemExit(f'expected exact 40+2 split, got {repos}')
+          rows=d.get('textures') or []
+          if len(rows)!=42 or not all(x.get('crc29Validated') is True and x.get('exactKeyValidated') is True for x in rows):
+            raise SystemExit('not every texture has exact-key + CRC29 closure')
+          Path('/tmp/t6/payload_audit_summary.json').write_text(json.dumps({'format':'t6-seal6-r2-ipak-payload-audit-v1','summary':s,'allExactKeyValidated':True,'allCrc29Validated':True},indent=2,sort_keys=True)+'\n')
+          PY
+      - name: Upload IPAK payload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seal6-r2-ipak-payload-audit
+          path: |
+            /tmp/t6/r2_ipak_container_identities.json
+            /tmp/t6/payload_audit_summary.json
+            /tmp/seal6_textures/manifest.json
+          if-no-files-found: warn
+          retention-days: 14
