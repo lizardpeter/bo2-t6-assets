@@ -6,8 +6,7 @@ on:
     paths:
       - '.github/workflows/t6_nuketown_mapent_car_xmodel_census_v1.yml'
       - 'tools/t6_fastfile_expand_pc_v1.c'
-      - 'tools/t6_clipmap_normalize_v5.py'
-      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
       - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'
 
 permissions:
@@ -21,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Expand retail Nuketown and resolve exact car XAsset records
+      - name: Expand retail Nuketown and prove exact car XModel records
         shell: bash
         run: |
           set -euxo pipefail
@@ -31,27 +30,58 @@ jobs:
           /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
           PYTHONPATH=tools python - <<'PY'
-          import hashlib,json
+          import hashlib,json,struct
           from pathlib import Path
-          from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL,parse_top_level_xasset_table
-          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
+          from t6_clipmap_serialized_walker import PTR_FOLLOWING,PTR_INSERT
+          from t6_xmodel_serialized_walker import XModelWalker,XMODEL_SIZE
+
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
           ents=json.loads(Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json').read_text())
           targets=sorted({e['model'] for e in ents['carEntities'] if e.get('model')})
-          table=parse_top_level_xasset_table(data); entries=table['entries']; prefix=walk_map_prefix_stringtable(data,table)
-          xidx=[i for i,e in enumerate(entries) if e['type']==ASSET_TYPE_XMODEL]
-          recs=scan_required_xmodels(data,prefix['sourceEnd'],len(xidx),prefix['logicalToText'])
-          assert len(recs)==len(xidx)
           rows=[]
-          for idx,rec in zip(xidx,recs):
-            if rec['name'] in targets:
-              rows.append({'xassetIndex':idx,'name':rec['name'],'fixedSourceStart':rec['fixedSourceStart']})
-          by={r['name']:r for r in rows}
-          missing=[x for x in targets if x not in by]
-          out={'format':'t6-nuketown-mapent-car-xmodel-census-v1','map':'mp_nuketown_2020','expandedSha256':hashlib.sha256(data).hexdigest(),'targetModelTokens':targets,'resolved':rows,'missing':missing,'xmodelAssetCount':len(xidx)}
-          b=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode(); p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_CENSUS_V1.json');p.write_bytes(b)
-          print(json.dumps({'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'targets':targets,'resolved':rows,'missing':missing,'xmodelAssetCount':len(xidx)},indent=2))
-          if missing: raise SystemExit(f'missing MapEnt car XModels in owning map FastFile: {missing}')
+          for name in targets:
+            needle=name.encode('latin1')+b'\0'
+            positions=[]; start=0
+            while True:
+              p=data.find(needle,start)
+              if p<0: break
+              positions.append(p); start=p+1
+            candidates=[]
+            for name_start in positions:
+              fixed=name_start-XMODEL_SIZE
+              if fixed<0: continue
+              name_ptr=struct.unpack_from('<I',data,fixed)[0]
+              if name_ptr not in (PTR_FOLLOWING,PTR_INSERT): continue
+              try:
+                w=XModelWalker(data,fixed).walk_xmodel()
+              except Exception as exc:
+                candidates.append({'fixedSourceStart':fixed,'nameSourceStart':name_start,'valid':False,'error':type(exc).__name__+': '+str(exc)})
+                continue
+              valid=(w['xmodel']['name']==name and not w['blockers'])
+              candidates.append({
+                'fixedSourceStart':fixed,'nameSourceStart':name_start,'valid':valid,
+                'namePointer':w['xmodel']['namePointer'],'serializedEnd':w['assetSerializedEnd'],
+                'serializedBytes':w['assetSerializedBytes'],'serializedSha256':w['assetSerializedSha256'],
+                'numBones':w['xmodel']['numBones'],'numRootBones':w['xmodel']['numRootBones'],
+                'numSurfs':w['xmodel']['numSurfs'],'numLods':w['xmodel']['numLods'],
+                'surfacesPointerKind':next((s for s in w['sections'] if s['name']=='XModel.surfs.fixed'),None) is not None and 'inline' or 'packed-or-null',
+                'blockers':w['blockers'],
+              })
+            good=[c for c in candidates if c.get('valid')]
+            if len(good)!=1:
+              raise SystemExit(f'{name}: expected one exact validated inline-name XModel candidate, got {good}; all={candidates}')
+            row={'name':name,'nameOccurrences':positions,'candidateCount':len(candidates),**good[0]}
+            rows.append(row)
+
+          out={
+            'format':'t6-nuketown-mapent-car-xmodel-census-v1','map':'mp_nuketown_2020',
+            'expandedSha256':hashlib.sha256(data).hexdigest(),'targetModelTokens':targets,
+            'proofMethod':'Exact NUL-terminated MapEnt model token -> candidate fixedStart=nameStart-248 only when XModel.name pointer is FOLLOWING/INSERT -> full t6_xmodel_serialized_walker walk must decode the identical name and have zero blockers. Bare string adjacency is not accepted without the fixed-record/walker validation.',
+            'resolved':rows,'missing':[],
+          }
+          b=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode()
+          p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_CENSUS_V1.json');p.write_bytes(b)
+          print(json.dumps({'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'resolved':rows},indent=2))
           PY
       - name: Commit exact car XModel ownership census
         shell: bash
