@@ -1,0 +1,81 @@
+name: T6 Nuketown car01 Material array proof v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_material_array_proof_v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Derive exact handle-array base from slot0 image aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          data=Path('/tmp/map.expanded').read_bytes();START=38558166
+          w=XModelWalker(data,START).walk_xmodel();assert not w['blockers'],w['blockers'];by={s['name']:s for s in w['sections']};mats=w['details']['inlineMaterials'];byslot={int(m['label'].split('[')[1].split(']')[0]):m for m in mats}
+          names=[byslot[i]['name'] for i in range(10)]
+          expect=['mc/mtl_nt_2020_car_01_glass_out','mc/mtl_nt_2020_car_01_exterior','mc/mtl_nt_2020_car_01_interior','mc/mtl_nt_2020_car_01_tire','mc/mtl_veh_t6_shattered_glass_in','mc/mtl_nt_2020_car_01_tire_d','mc/mtl_nt_2020_car_01_interior_d','mc/mtl_nt_2020_car_01_exterior_d','mc/mtl_veh_t6_shattered_glass_out','mc/mtl_nt_2020_car_01_glass_in'];assert names==expect
+          def au(x,a):return (x+a-1)//a*a
+          # Only replay through Material slot0. This avoids any unresolved later allocation event.
+          cur=40*4
+          m=byslot[0];label=m['label'];ns=by[label+'.Material.name'];cur+=ns['end']-ns['start'];cur=au(cur,4);tbase=cur;cur+=16*int(m['textureCount'])
+          rel_spec=tbase+12;rel_color=tbase+2*16+12
+          # slot9 glass_in reuses slot0 specular/color through exact packed GfxImage aliases.
+          src=by['XModel.materialHandles[9].Material.textureTable.fixed']['start']
+          def packed_off(texslot):
+            raw=struct.unpack_from('<I',data,src+16*texslot+12)[0];assert raw not in (0,0xffffffff,0xfffffffe);e=(raw-1)&0xffffffff;assert e>>29==5;return raw,e&0x1fffffff
+          raw0,off0=packed_off(0);raw2,off2=packed_off(2)
+          base0=off0-rel_spec;base2=off2-rel_color
+          if base0!=base2:raise SystemExit(f'slot0 aliases disagree {base0} vs {base2}')
+          base=base0
+          if base!=40852396:raise SystemExit(f'base {base} != 40852396')
+          mapping=[{'slot':i,'virtualOffset':base+4*i,'material':names[i]} for i in range(10)]
+          # Validate every later car reference into this exact 10-slot interval resolves to its address-derived slot.
+          consumer_rows=[]
+          for start in (44523322,41469954,43661367):
+            cw=XModelWalker(data,start).walk_xmodel();
+            for si,h in enumerate(cw['xmodel']['materialHandles']):
+              if h.get('kind')=='packed' and h.get('block')==5 and base<=int(h['offset'])<base+40:
+                off=int(h['offset']);assert (off-base)%4==0;slot=(off-base)//4;assert 0<=slot<10;consumer_rows.append({'xmodelFixedStart':start,'surfaceIndex':si,'virtualOffset':off,'ownerSlot':slot,'material':names[slot]})
+          proof={'format':'t6-nuketown-car01-material-array-proof-v2','expandedSha256':hashlib.sha256(data).hexdigest(),'owner':'veh_t6_nuketown_2020_car01_whole','ownerFixedStart':START,'numMaterialHandles':40,'lod0OwnerSlots':10,'handleArrayVirtualBase':base,'independentBaseAnchors':[{'source':'car01_glass_in.texture0','raw':f'0x{raw0:08X}','targetOffset':off0,'targetRelativePointerSlot':rel_spec,'derivedBase':base0},{'source':'car01_glass_in.texture2','raw':f'0x{raw2:08X}','targetOffset':off2,'targetRelativePointerSlot':rel_color,'derivedBase':base2}],'slotMapping':mapping,'consumerRows':consumer_rows,'proofBoundary':'Base is solved only from two packed GfxImage aliases in Material slot9 that target exact pointer slots in Material slot0, before the later +4 replay discrepancy. No later Material consumer address participates in base derivation.'}
+          rb=(json.dumps(proof,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/proof.json').write_bytes(rb);rp=Path('manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(rb)
+          cp=Path('checkpoints/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2_2026-09-06.md');cp.write_text('# T6 Nuketown car01 Material array proof v2 — 2026-09-06\n\n'+f'- exact VIRTUAL Material-handle-array base: **{base}**\n- independent pre-drift GfxImage anchors: **2 / 2 agree**\n- conflicts: **0**\n\n'+''.join(f"- `{r['virtualOffset']}` → `{r['material']}`\n" for r in mapping)+f"\nProof SHA-256: `{hashlib.sha256(rb).hexdigest()}`\n\n{proof['proofBoundary']}\n",encoding='utf-8')
+          print(json.dumps(proof,indent=2,sort_keys=True))
+          PY
+      - name: Commit proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2.json checkpoints/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2_2026-09-06.md
+          git commit -m 'Prove car01 Material array from pre-drift aliases'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V2
+          path: /tmp/proof.json
+          if-no-files-found: error
