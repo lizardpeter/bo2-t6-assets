@@ -15,8 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Decode retained source proof
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           import base64, zlib, pathlib, hashlib, json
           src = pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64')
           raw = zlib.decompress(base64.b64decode(src.read_bytes()))
@@ -35,6 +36,7 @@ jobs:
           }
           pathlib.Path('decoded/summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
           print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: nuketown-static-material-proof-decoded
