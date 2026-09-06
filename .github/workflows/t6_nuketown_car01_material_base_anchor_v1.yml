@@ -1,0 +1,63 @@
+name: T6 Nuketown car01 Material base anchor v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_material_base_anchor_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  anchor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Trace reusable anchors and source sections
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,struct,hashlib
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          data=Path('/tmp/map.expanded').read_bytes()
+          models={'owner':38558166,'clean':44523322,'car02clean':43661367,'car02whole':41469954}
+          fields={'name':0,'boneNames':8,'parentList':12,'quats':16,'trans':20,'partClass':24,'baseMat':28,'surfs':32,'materialHandles':36,'collSurfs':152,'boneInfo':164,'himip':200,'physPreset':216,'collmaps':224,'physConstraints':228}
+          def dec(v):
+            if v==0:return {'raw':f'0x{v:08X}','kind':'null'}
+            if v==0xffffffff:return {'raw':f'0x{v:08X}','kind':'following'}
+            if v==0xfffffffe:return {'raw':f'0x{v:08X}','kind':'insert'}
+            e=(v-1)&0xffffffff;return {'raw':f'0x{v:08X}','kind':'packed','block':e>>29,'offset':e&0x1fffffff}
+          out={'format':'t6-nuketown-car01-material-base-anchor-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'models':{}}
+          for k,start in models.items():
+            w=XModelWalker(data,start).walk_xmodel()
+            if w['blockers']:raise SystemExit(f'{k}: {w["blockers"]}')
+            ptrs={f:dec(struct.unpack_from('<I',data,start+o)[0]) for f,o in fields.items()}
+            secs=[]
+            for s in w['sections']:
+              if isinstance(s,dict): secs.append({'name':s['name'],'start':s['start'],'end':s['end'],'bytes':s['end']-s['start']})
+              else: secs.append({'name':s[0],'start':s[1],'end':s[2],'bytes':s[2]-s[1]})
+            out['models'][k]={'fixedStart':start,'xmodel':w['xmodel'],'pointers':ptrs,'sections':secs}
+            print('PTRS',k,json.dumps(ptrs,sort_keys=True))
+            if k=='owner':
+              for s in secs:
+                if any(t in s['name'] for t in ('boneNames','parentList','quats','trans','partClass','baseMat','XSurface','materialHandles')):print('OWNER_SEC',json.dumps(s,sort_keys=True))
+          Path('/tmp/anchor.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_MATERIAL_BASE_ANCHOR_V1
+          path: /tmp/anchor.json
+          if-no-files-found: error
