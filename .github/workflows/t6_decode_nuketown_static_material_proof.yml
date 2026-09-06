@@ -1,0 +1,43 @@
+name: T6 decode Nuketown static material proof
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_decode_nuketown_static_material_proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode retained source proof
+        shell: python
+        run: |
+          import base64, zlib, pathlib, hashlib, json
+          src = pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64')
+          raw = zlib.decompress(base64.b64decode(src.read_bytes()))
+          expected = 'e1704755fdf365eb97c47f517afe0173152ca4a3ae702b309cb4d02981380423'
+          got = hashlib.sha256(raw).hexdigest()
+          if got != expected:
+              raise SystemExit(f'proof SHA mismatch {got} != {expected}')
+          doc = json.loads(raw)
+          pathlib.Path('decoded').mkdir()
+          pathlib.Path('decoded/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json').write_bytes(raw)
+          summary = {
+              'bytes': len(raw),
+              'sha256': got,
+              'playableStaticModelCount': doc.get('playableStaticModelCount'),
+              'playableLod0MaterialSlotCount': doc.get('playableLod0MaterialSlotCount'),
+          }
+          pathlib.Path('decoded/summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-static-material-proof-decoded
+          path: decoded/
+          if-no-files-found: error
+          retention-days: 7
