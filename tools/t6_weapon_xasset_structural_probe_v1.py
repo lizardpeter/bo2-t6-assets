@@ -129,11 +129,7 @@ def candidate_at(data: bytes, start: int, blocks: list[int], rawmod) -> dict[str
         return None
 
     variants = struct.unpack_from("<i", data, start + 4)[0]
-    if not -1 <= variants <= 100:
-        return None
     attachments = struct.unpack_from("<i", data, start + 468)[0]
-    if not -1 <= attachments <= 95:
-        return None
 
     name_raw = struct.unpack_from("<I", data, start)[0]
     weap_raw = struct.unpack_from("<I", data, start + 8)[0]
