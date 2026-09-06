@@ -1,0 +1,25 @@
+name: T6 inspect static resolver
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_inspect_static_resolver.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode and print resolver source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, zlib, pathlib
+          p = pathlib.Path('tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64')
+          out = zlib.decompress(base64.b64decode(p.read_text().strip()))
+          pathlib.Path('/tmp/resolver.py').write_bytes(out)
+          print('RESOLVER_BYTES', len(out))
+          PY
+          nl -ba /tmp/resolver.py
