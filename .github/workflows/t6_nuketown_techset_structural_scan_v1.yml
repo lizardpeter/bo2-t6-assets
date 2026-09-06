@@ -1,0 +1,93 @@
+name: T6 Nuketown TechniqueSet structural scan v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_techset_structural_scan_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Scan all pre-GfxWorld TechniqueSet fixed records
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          import t6_retail_world_formats_45_proof_v1 as h
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+
+          d=Path('/tmp/map.expanded').read_bytes();SHA='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505';assert hashlib.sha256(d).hexdigest()==SHA
+          WORLD=63150420;WORLD_Q=624
+          blocks,assets=h.front(d)
+          q7=[q for q,(t,p) in enumerate(assets) if q<WORLD_Q and t==7 and p==h.FOLLOW]
+          assert len(q7)==142,q7
+          def valid_ptr(raw):return h.ptr_ok(raw,blocks)
+          def decptr(raw):
+            k,b,o=h.dec(raw,blocks);return {'rawHex':f'0x{raw:08X}','kind':k,'block':b if k=='packed' else None,'offset':o if k=='packed' else None}
+          rows=[]
+          # Structure: MaterialTechniqueSet fixed = name ptr + worldVertFormat/pad + 36 MaterialTechnique ptrs.
+          for s in range(100000,WORLD-152):
+            namep=struct.unpack_from('<I',d,s)[0]
+            if namep==0 or not valid_ptr(namep):continue
+            if d[s+4]>8 or d[s+5:s+8]!=b'\0\0\0':continue
+            ps=struct.unpack_from('<36I',d,s+8)
+            if not any(ps) or not all(valid_ptr(x) for x in ps):continue
+            # Technique refs are nullable, FOLLOW/INSERT, or packed; reject implausible all-packed/no-visible tables only if no nonnull.
+            row={'fixedStart':s,'worldVertFormat':d[s+4],'namePointer':decptr(namep),'followingTechniqueRefCount':sum(x in (h.FOLLOW,h.INSERT) for x in ps),'packedTechniqueRefCount':sum(h.dec(x,blocks)[0]=='packed' for x in ps),'nonnullTechniqueRefCount':sum(x!=0 for x in ps)}
+            if namep==h.FOLLOW:
+              name=h.cstr(d,s+152)
+              if not name:continue
+              row['name']=name
+            rows.append(row)
+          # Deduplicate starts (already unique) and compare exact expected cardinality.
+          starts=[r['fixedStart'] for r in rows]
+          old=h.scan_tech(d,blocks,WORLD);old_starts=[r['start'] for r in old]
+          old_missing=[s for s in old_starts if s not in starts]
+          report={'format':'t6-nuketown-techset-structural-scan-v1','expandedSha256':SHA,'gfxWorldAssetIndex':WORLD_Q,'gfxWorldFixedStart':WORLD,'preGfxWorldFollowingType7AssetIndices':q7,'expectedType7Count':len(q7),'structuralCandidateCount':len(rows),'followingNameCandidateCount':sum(r['namePointer']['kind']=='follow' for r in rows),'packedNameCandidateCount':sum(r['namePointer']['kind']=='packed' for r in rows),'legacyFollowingNameScanCount':len(old),'legacyScanStartsMissingFromStructuralScan':old_missing,'candidateCardinalityMatchesType7':len(rows)==len(q7),'rows':rows}
+          if len(rows)==len(q7):
+            for q,r in zip(q7,rows):r['xassetIndex']=q
+            report['targetBindings']=[next(r for r in rows if r['xassetIndex']==q) for q in (14,60,488)]
+            # Existing independently proven contiguous world TechniqueSet block q565..623 must be the exact tail.
+            tail=[r['xassetIndex'] for r in rows if 565<=r.get('xassetIndex',-1)<=623]
+            report['contiguousWorldTail']={'expected':[565,623],'observedFirst':tail[0] if tail else None,'observedLast':tail[-1] if tail else None,'count':len(tail),'exact':tail==list(range(565,624))}
+          raw=(json.dumps(report,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/report.json').write_bytes(raw);rp=Path('manifests/models/T6_NUKETOWN_TECHSET_STRUCTURAL_SCAN_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
+          print(json.dumps({k:report[k] for k in ('expectedType7Count','structuralCandidateCount','followingNameCandidateCount','packedNameCandidateCount','legacyFollowingNameScanCount','legacyScanStartsMissingFromStructuralScan','candidateCardinalityMatchesType7')},indent=2))
+          if report.get('targetBindings'):print('TARGETS',json.dumps(report['targetBindings'],indent=2))
+          if len(rows)!=len(q7):raise SystemExit(f'cardinality mismatch candidates={len(rows)} type7={len(q7)}')
+          assert report['contiguousWorldTail']['exact'],report['contiguousWorldTail']
+          PY
+      - name: Commit exact structural scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_TECHSET_STRUCTURAL_SCAN_V1.json
+          git commit -m 'Map packed-name Nuketown TechniqueSet fixed records'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_TECHSET_STRUCTURAL_SCAN_V1
+          path: /tmp/report.json
+          if-no-files-found: error
