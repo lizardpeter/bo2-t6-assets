@@ -64,48 +64,84 @@ jobs:
           print('skeleton sha256',hashlib.sha256(s.read_bytes()).hexdigest())
           PY
 
-      - name: Locate six exact retail XAnimParts
+      - name: Resolve and normalize six exact retail XAnimParts
         shell: bash
         run: |
           set -euo pipefail
-          python tools/stage18d_xanim_raw.py --stream work/expanded/common_mp.expanded --raw-parser tools/t6_raw_xasset_inventory.py --outdir work/xanim_scan
           python - <<'PY'
-          import json
+          import json, struct, subprocess
           from pathlib import Path
+
+          stream=Path('work/expanded/common_mp.expanded')
+          data=stream.read_bytes()
           targets=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
-          rows=json.loads(Path('work/xanim_scan/common_mp_xanim_inline_assets.json').read_text())
-          by={}
-          for r in rows:
-              if r.get('name') in targets:
-                  by.setdefault(r['name'],[]).append(r)
-          missing=[n for n in targets if len(by.get(n,[]))!=1]
-          if missing:
-              raise SystemExit('XAnim exact-name uniqueness failure: '+repr({n:len(by.get(n,[])) for n in targets}))
-          starts={n:int(by[n][0]['raw_struct_offset']) for n in targets}
-          Path('work/xanim_scan/benchmark_starts.json').write_text(json.dumps(starts,indent=2)+'\n')
-          for n in targets: print(n,starts[n])
+          expected_inventory={
+              'pb_stand_alert': {'offset':662933,'numframes':383,'framerate':30.0},
+              'pb_stand_ads': {'offset':655915,'numframes':90,'framerate':30.0},
+              'pb_combatrun_forward_loop': {'offset':5670677,'numframes':50,'framerate':30.0},
+              'pb_standjump_takeoff': {'offset':10693310,'numframes':27,'framerate':30.0},
+              'pt_stand_shoot_auto': {'offset':7851319,'numframes':18,'framerate':30.0},
+          }
+          resolved={}
+          diagnostics={}
+          for name in targets:
+              needle=name.encode('ascii')+b'\0'
+              pos=0; candidates=[]
+              while True:
+                  p=data.find(needle,pos)
+                  if p < 0: break
+                  pos=p+1
+                  start=p-104
+                  if start < 0 or data[start:start+4] != b'\xff\xff\xff\xff':
+                      continue
+                  # PC32 XAnimParts fixed-record canaries from the proven layout.
+                  numframes=struct.unpack_from('<H',data,start+14)[0]
+                  framerate=struct.unpack_from('<f',data,start+48)[0]
+                  if not (0 < numframes <= 8192 and 0.0 < framerate <= 1000.0):
+                      continue
+                  tmp=Path(f'work/xanim_norm/.{name}.{start}.json')
+                  cp=subprocess.run(['python','tools/t6_xanim_normalize_v1.py',str(stream),'--asset-start',str(start),'--out',str(tmp)],text=True,capture_output=True)
+                  if cp.returncode != 0 or not tmp.exists():
+                      continue
+                  try:
+                      d=json.loads(tmp.read_text())
+                  except Exception:
+                      tmp.unlink(missing_ok=True); continue
+                  if d.get('name')==name and d.get('allFlatPoolsExhausted') is True:
+                      candidates.append((start,d,tmp))
+                  else:
+                      tmp.unlink(missing_ok=True)
+              diagnostics[name]=[c[0] for c in candidates]
+              if len(candidates) != 1:
+                  raise SystemExit(f'{name}: expected exactly one source-valid normalized XAnim candidate, got {diagnostics[name]}')
+              start,d,tmp=candidates[0]
+              final=Path(f'work/xanim_norm/{name}.normalized.json')
+              tmp.replace(final)
+              resolved[name]=start
+              if name in expected_inventory:
+                  e=expected_inventory[name]
+                  assert start==e['offset'], (name,start,e['offset'])
+                  assert int(d['header']['numframes'])==e['numframes']
+                  assert abs(float(d['header']['framerate'])-e['framerate']) < 1e-6
+              print(name,start,d['header']['numframes'],d['header']['framerate'])
+          Path('work/xanim_scan/benchmark_starts.json').write_text(json.dumps(resolved,indent=2)+'\n')
+          Path('work/xanim_scan/source_resolution_diagnostics.json').write_text(json.dumps(diagnostics,indent=2)+'\n')
           PY
 
-      - name: Normalize six exact retail animations
+      - name: Verify six exact retail animations
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import json, subprocess
-          from pathlib import Path
-          starts=json.loads(Path('work/xanim_scan/benchmark_starts.json').read_text())
-          for name,start in starts.items():
-              out=f'work/xanim_norm/{name}.normalized.json'
-              subprocess.run(['python','tools/t6_xanim_normalize_v1.py','work/expanded/common_mp.expanded','--asset-start',str(start),'--out',out],check=True)
-          PY
           python - <<'PY'
           import json
           from pathlib import Path
           names=['pb_stand_alert','pb_stand_ads','pb_smg_sprint','pb_combatrun_forward_loop','pb_standjump_takeoff','pt_stand_shoot_auto']
+          starts=json.loads(Path('work/xanim_scan/benchmark_starts.json').read_text())
+          assert set(starts)==set(names)
           for n in names:
               d=json.loads(Path(f'work/xanim_norm/{n}.normalized.json').read_text())
               assert d['name']==n and d['allFlatPoolsExhausted'] is True
-              print(n,d['header']['numframes'],d['header']['framerate'])
+              print(n,'offset',starts[n],'frames',d['header']['numframes'],'fps',d['header']['framerate'])
           PY
 
       - name: Install portable retail texture dependencies
@@ -158,6 +194,7 @@ jobs:
           set -euo pipefail
           cp work/retail/SHA256SUMS.txt work/final/RETAIL_SOURCE_SHA256SUMS.txt
           cp work/xanim_scan/benchmark_starts.json work/final/XANIM_SOURCE_STARTS.json
+          cp work/xanim_scan/source_resolution_diagnostics.json work/final/XANIM_SOURCE_RESOLUTION.json
           cp -r work/xanim_norm work/final/normalized_xanims
           cp -r work/model_norm work/final/normalized_model
           (cd work && zip -qr SEAL6_FULL_RETAIL_BLENDER.zip final)
