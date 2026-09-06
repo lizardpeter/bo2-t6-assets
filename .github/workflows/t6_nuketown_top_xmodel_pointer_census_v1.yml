@@ -1,0 +1,33 @@
+name: T6 Nuketown top XModel pointer census v1
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/t6_nuketown_top_xmodel_pointer_census_v1.yml','tools/t6_fastfile_expand_pc_v1.c','tools/t6_clipmap_normalize_v5.py']
+permissions:
+  contents: read
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/m.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/e -lz -lcrypto
+          /tmp/e /tmp/m.ff /tmp/m.bin mp_nuketown_2020
+          PYTHONPATH=tools python - <<'PY'
+          import collections,json
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table,ASSET_TYPE_XMODEL
+          from t6_clipmap_serialized_walker import ptr_kind
+          d=Path('/tmp/m.bin').read_bytes(); t=parse_top_level_xasset_table(d)
+          rows=[]
+          for e in t['entries']:
+            if e['type']!=ASSET_TYPE_XMODEL: continue
+            p=ptr_kind(e['headerPointerRaw']); rows.append({'xassetIndex':e['index'],'rawStart':e['rawStart'],'headerPointer':p})
+          c=collections.Counter(r['headerPointer']['kind'] for r in rows)
+          print('COUNT',len(rows),'KINDS',json.dumps(c,sort_keys=True))
+          print('NON_FOLLOW',json.dumps([r for r in rows if r['headerPointer']['kind']!='following'],sort_keys=True))
+          PY
