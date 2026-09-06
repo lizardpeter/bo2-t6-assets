@@ -96,6 +96,26 @@ with tempfile.TemporaryDirectory() as d:
     assert rr["name"] == name and rr["bones"] == 3 and rr["surfaces"] == 1
     assert rr["skeletonNormalizedJsonSha256"] == out["fullBody"]["skeleton"]["normalizedJsonSha256"]
 
+    mesh_v2 = json.loads(mp.read_text())
+    mesh_v2["format"] = "t6-xmodel-mesh-normalized-v2"
+    mesh_v2["skeletonDependency"] = {
+        "identity": name, "allBoneNamesResolved": True, "hierarchyValid": True,
+        "sourceMode": "packed_reusable_owner", "packedSkeletonPointers": {"boneNames": {"kind": "packed"}},
+    }
+    dump(mp, mesh_v2)
+    out_v2 = m.build(name=name, zone_name="faction_test_mp", fastfile_path=ff, expanded_path=exp,
+                     probe_path=pp, skeleton_path=sp, mesh_path=mp)
+    assert out_v2["fullBody"]["mesh"]["vertices"] == 3
+    bad_v2 = dict(mesh_v2); bad_v2["skeletonDependency"] = dict(mesh_v2["skeletonDependency"]); bad_v2["skeletonDependency"]["hierarchyValid"] = False; dump(mp, bad_v2)
+    try:
+        m.build(name=name, zone_name="faction_test_mp", fastfile_path=ff, expanded_path=exp,
+                probe_path=pp, skeleton_path=sp, mesh_path=mp)
+    except ValueError as e:
+        assert "mesh v2 skeleton dependency is not closed" in str(e)
+    else:
+        raise AssertionError("mesh v2 with unclosed skeleton dependency promoted")
+    name, ff, exp, pp, sp, mp = fixture(td)
+
     bad = json.loads(pp.read_text()); bad["source"]["sha256"] = "0" * 64; dump(pp, bad)
     try:
         m.build(name=name, zone_name="faction_test_mp", fastfile_path=ff, expanded_path=exp,
