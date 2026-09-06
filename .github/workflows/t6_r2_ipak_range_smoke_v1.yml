@@ -1,0 +1,80 @@
+name: T6 R2 IPAK range smoke v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_r2_ipak_range_smoke_v1.yml'
+      - 'tools/t6_ipak_http_range_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LZO runtime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq liblzo2-2 >/dev/null
+      - name: Range-index all retail IPAKs needed by Nuketown
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ipak_info
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak | tee /tmp/ipak_info/mp_nuketown_2020.json
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/all/mp.ipak | tee /tmp/ipak_info/mp.json
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/all/base.ipak | tee /tmp/ipak_info/base.json
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak | tee /tmp/ipak_info/patch_mp.json
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/all/so.ipak | tee /tmp/ipak_info/so.json
+          python tools/t6_ipak_http_range_v1.py info https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak | tee /tmp/ipak_info/en_base.json
+      - name: Reproduce previously proven streamed Nuketown image using ranges only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          URL=https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak
+          python tools/t6_ipak_http_range_v1.py extract-datahash "$URL" 225863395 /tmp/proven.iwi --name-hash 3353894529 | tee /tmp/proven_extract.json
+          test "$(stat -c '%s' /tmp/proven.iwi)" = 174840
+          echo 'b0bdda7032e682e07970264e141e6521038e7e40b13354f5aafa767e203a2e40  /tmp/proven.iwi' | sha256sum -c -
+          python - <<'PY'
+          from pathlib import Path
+          import struct
+          b=Path('/tmp/proven.iwi').read_bytes()
+          assert b[:4] == b'IWi\x1b'
+          fmt=b[4]; w,h,d=struct.unpack_from('<3H',b,6)
+          assert (fmt,w,h,d)==(11,512,512,1),(fmt,w,h,d)
+          print({'format':fmt,'width':w,'height':h,'depth':d})
+          PY
+      - name: Exact/unique-dataHash cross-container audit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat >/tmp/pairs.json <<'JSON'
+          {"pairs":[
+            {"image":"~-gnt_2020_wall_lt_blue_c","nameHash":3588135138,"dataHash":225863395,"expectedIwiSha256":"b0bdda7032e682e07970264e141e6521038e7e40b13354f5aafa767e203a2e40"}
+          ]}
+          JSON
+          python tools/t6_ipak_http_range_v1.py audit-pairs /tmp/pairs.json /tmp/audit.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/audit.json'))
+          s=d['summary']
+          assert s['pairCount']==1
+          assert s['missing']==0 and s['ambiguous']==0,s
+          print(json.dumps(s,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-r2-ipak-range-smoke-v1
+          path: |
+            /tmp/ipak_info/
+            /tmp/proven_extract.json
+            /tmp/audit.json
+          if-no-files-found: error
