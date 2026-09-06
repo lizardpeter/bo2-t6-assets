@@ -1,0 +1,234 @@
+name: T6 Nuketown retail model pack v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_retail_model_pack_v1.yml'
+      - 'tools/t6_embedded_gltf_to_glb_v1.py'
+      - 'tools/t6_xmodel_mesh_normalize_v1.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v2.py'
+      - 'tools/t6_xanim_skinned_gltf_export_v7.py'
+      - 'tools/t6_xanim_gltf_export_v3.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          test "$(stat -c '%s' /tmp/mp_nuketown_2020.expanded.bin)" = 154653476
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+      - name: Build exact source-derived LOD0 XModel pack
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=tools python - <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import zipfile
+
+          from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL, parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable, scan_required_xmodels
+          from t6_embedded_gltf_to_glb_v1 import convert_gltf_dict, parse_glb
+          from t6_xanim_skinned_gltf_export_v7 import export as export_gltf
+          from t6_xmodel_mesh_normalize_v1 import Normalizer
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_skeleton_normalize_v2 import normalize_skeleton
+
+          EXPANDED_SHA='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          TARGETS={
+            246: ('mlv/nt_tree_ficus_lrg_01_sway',24530208),
+            255: ('mlv/nt_2020_vista_ufo_01',25254741),
+            257: ('mp_nuketown_2020_vista_bldg_03',25309099),
+          }
+          data=pathlib.Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          if hashlib.sha256(data).hexdigest()!=EXPANDED_SHA:
+            raise SystemExit('expanded SHA mismatch inside model build')
+
+          table=parse_top_level_xasset_table(data)
+          prefix=walk_map_prefix_stringtable(data,table)
+          xindices=[i for i,e in enumerate(table['entries']) if e['type']==ASSET_TYPE_XMODEL and i<=max(TARGETS)]
+          records=scan_required_xmodels(data,prefix['sourceEnd'],len(xindices),prefix['logicalToText'])
+          if len(records)!=len(xindices):
+            raise SystemExit('XModel source catalog cardinality mismatch')
+          by={idx:rec for idx,rec in zip(xindices,records)}
+
+          root=pathlib.Path('/tmp/t6_nuketown_retail_model_pack_v1')
+          root.mkdir(parents=True,exist_ok=True)
+          model_rows=[]
+          for idx in sorted(TARGETS):
+            expected_name,expected_start=TARGETS[idx]
+            rec=by.get(idx)
+            if rec is None:
+              raise SystemExit(f'XAsset {idx}: not present in exact XModel catalog')
+            if rec['name']!=expected_name or int(rec['fixedSourceStart'])!=expected_start:
+              raise SystemExit(f'XAsset {idx}: identity/source mismatch: {rec}')
+            walk=XModelWalker(data,expected_start).walk_xmodel()
+            if walk['blockers']:
+              raise SystemExit(f'XAsset {idx}: full serialized walker blockers: {walk["blockers"]}')
+
+            mesh=Normalizer(data,expected_start).normalize()
+            mesh['expandedSha256']=EXPANDED_SHA
+            if mesh['identity']['name']!=expected_name:
+              raise SystemExit(f'XAsset {idx}: mesh normalizer identity mismatch {mesh["identity"]}')
+            skel=normalize_skeleton(data,expected_start,xasset_index=idx,identity_name=expected_name)
+            if skel.get('identity',{}).get('name')!=expected_name:
+              raise SystemExit(f'XAsset {idx}: skeleton identity mismatch {skel.get("identity")}')
+
+            gltf=export_gltf(mesh,skel,None,lod=0)
+            glb,glb_stats=convert_gltf_dict(gltf)
+            parsed,bin_chunk=parse_glb(glb)
+            if parsed.get('asset',{}).get('version')!='2.0':
+              raise SystemExit(f'XAsset {idx}: emitted GLB is not glTF 2.0')
+            if len(parsed.get('meshes',[]))!=1 or len(parsed.get('skins',[]))!=1:
+              raise SystemExit(f'XAsset {idx}: unexpected mesh/skin cardinality')
+
+            stem=expected_name.replace('/','__')
+            d=root/stem
+            d.mkdir(parents=True,exist_ok=True)
+            mesh_b=(json.dumps(mesh,indent=2,sort_keys=True)+'\n').encode()
+            skel_b=(json.dumps(skel,indent=2,sort_keys=True)+'\n').encode()
+            gltf_b=(json.dumps(gltf,indent=2,sort_keys=True)+'\n').encode()
+            (d/'mesh.normalized.json').write_bytes(mesh_b)
+            (d/'skeleton.normalized.json').write_bytes(skel_b)
+            (d/f'{stem}_lod0.gltf').write_bytes(gltf_b)
+            (d/f'{stem}_lod0.glb').write_bytes(glb)
+
+            skin=gltf['extras']['T6']['skinValidation']
+            lod0=next(x for x in mesh['xmodel']['lods'] if int(x['index'])==0)
+            row={
+              'xassetIndex':idx,
+              'name':expected_name,
+              'fixedSourceStart':expected_start,
+              'serializedEnd':walk['assetSerializedEnd'],
+              'serializedBytes':walk['assetSerializedBytes'],
+              'serializedSha256':walk['assetSerializedSha256'],
+              'numBones':mesh['xmodel']['numBones'],
+              'numRootBones':mesh['xmodel']['numRootBones'],
+              'numSurfsAllLods':mesh['xmodel']['numSurfs'],
+              'numLods':mesh['xmodel']['numLods'],
+              'lod0':{
+                'surfaceCount':int(lod0['numSurfs']),
+                'vertices':int(skin['vertices']),
+                'triangles':int(skin['triangles']),
+                'rigidVertices':int(skin['rigidVertices']),
+                'blendedVertices':int(skin['blendedVertices']),
+                'influenceHistogram':skin['influenceHistogram'],
+              },
+              'meshNormalized':{'bytes':len(mesh_b),'sha256':hashlib.sha256(mesh_b).hexdigest()},
+              'skeletonNormalized':{'bytes':len(skel_b),'sha256':hashlib.sha256(skel_b).hexdigest()},
+              'gltf':{'bytes':len(gltf_b),'sha256':hashlib.sha256(gltf_b).hexdigest()},
+              'glb':glb_stats,
+              'validation':{
+                'fullSerializedWalkerBlockers':0,
+                'gltfExporterValidationPassed':True,
+                'glbRoundTripValidationPassed':True,
+                'materialBindingStatus':'not-attached-in-v1-pack',
+              },
+            }
+            model_rows.append(row)
+            print('MODEL_OK',json.dumps(row,sort_keys=True))
+
+          manifest={
+            'format':'t6-nuketown-retail-model-pack-v1',
+            'map':'mp_nuketown_2020',
+            'proofBoundary':(
+              'Exact retail FastFile -> exact expanded stream -> exact top-level XAsset identity/source offset -> '
+              'blocker-free serialized XModel walk -> source-owned mesh normalization -> reusable-owner-aware '
+              'skeleton normalization -> validated bind-pose glTF -> container-only GLB conversion. '
+              'No old GLB geometry, inferred model identity, guessed weights, or substitute assets are accepted.'
+            ),
+            'source':{
+              'retailFastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
+              'expandedBytes':len(data),'expandedSha256':EXPANDED_SHA,
+            },
+            'models':model_rows,
+            'modelCount':len(model_rows),
+            'allExactGeometrySkeleton':True,
+            'materialsAttached':False,
+            'nextStep':'Attach only already source-closed material identities/images, then extend mesh identity handling to exact packed-name parked-car XModels.',
+          }
+          manifest_b=(json.dumps(manifest,indent=2,sort_keys=True)+'\n').encode()
+          (root/'T6_NUKETOWN_RETAIL_MODEL_PACK_V1.json').write_bytes(manifest_b)
+
+          repo_manifest=pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_RETAIL_MODEL_PACK_V1.json')
+          repo_manifest.parent.mkdir(parents=True,exist_ok=True)
+          repo_manifest.write_bytes(manifest_b)
+
+          cp=pathlib.Path('checkpoints/T6_NUKETOWN_RETAIL_MODEL_PACK_V1_2026-09-06.md')
+          lines=[
+            '# T6 Nuketown retail model pack v1 — 2026-09-06','',
+            'The first standalone source-derived Nuketown XModel deliverable pack is now generated directly from the exact retail FastFile.','',
+            '## Result','',
+            f'- models exported: **{len(model_rows)} / {len(TARGETS)}**',
+            f'- exact expanded FastFile SHA-256: `{EXPANDED_SHA}`',
+            '- output: self-contained **LOD0 GLB + glTF + normalized mesh/skeleton provenance sidecars** for every model','- source/identity/walker/export/GLB validation failures: **0**','',
+          ]
+          for r in model_rows:
+            lines += [f"### `{r['name']}`",'',
+                      f"- XAsset: **{r['xassetIndex']}**; fixed source start: **{r['fixedSourceStart']}**",
+                      f"- bones: **{r['numBones']}**; LOD0 surfaces: **{r['lod0']['surfaceCount']}**",
+                      f"- LOD0 vertices / triangles: **{r['lod0']['vertices']:,} / {r['lod0']['triangles']:,}**",
+                      f"- GLB bytes: **{r['glb']['glbBytes']:,}**",
+                      f"- GLB SHA-256: `{r['glb']['glbSha256']}`",'']
+          lines += ['## Proof boundary','',manifest['proofBoundary'],'',
+                    'Materials are intentionally **not** attached in v1. Geometry and skeletons are exact; the next material pass will only consume already source-closed Material/Image identities rather than infer them from appearance or surface order.','',
+                    'The two parked-car XModels remain the next model-format extension because their exact names are packed VIRTUAL references. Their identities are already closed; the mesh normalizer will be extended to accept that proof without mutating or guessing retail bytes.','',
+                    f'- manifest bytes: **{len(manifest_b):,}**',
+                    f'- manifest SHA-256: `{hashlib.sha256(manifest_b).hexdigest()}`','']
+          cp.write_text('\n'.join(lines),encoding='utf-8')
+
+          # Deterministic ZIP: stable ordering, timestamp, permissions, and DEFLATE settings.
+          zip_path=pathlib.Path('/tmp/T6_NUKETOWN_RETAIL_MODEL_PACK_V1.zip')
+          with zipfile.ZipFile(zip_path,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+            for p in sorted(root.rglob('*')):
+              if not p.is_file(): continue
+              rel=p.relative_to(root).as_posix()
+              zi=zipfile.ZipInfo(rel,date_time=(1980,1,1,0,0,0))
+              zi.compress_type=zipfile.ZIP_DEFLATED
+              zi.external_attr=0o100644 << 16
+              z.writestr(zi,p.read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+          print(json.dumps({
+            'pack':str(zip_path),'bytes':zip_path.stat().st_size,
+            'sha256':hashlib.sha256(zip_path.read_bytes()).hexdigest(),
+            'manifestBytes':len(manifest_b),'manifestSha256':hashlib.sha256(manifest_b).hexdigest(),
+            'models':model_rows,
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Commit exact model-pack checkpoint
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_RETAIL_MODEL_PACK_V1.json \
+                  checkpoints/T6_NUKETOWN_RETAIL_MODEL_PACK_V1_2026-09-06.md
+          git commit -m 'Build first exact Nuketown retail XModel pack'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_RETAIL_MODEL_PACK_V1
+          path: /tmp/T6_NUKETOWN_RETAIL_MODEL_PACK_V1.zip
+          if-no-files-found: error
+          compression-level: 0
