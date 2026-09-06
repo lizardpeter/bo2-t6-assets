@@ -1,0 +1,41 @@
+name: T6 decode static resolver v3 source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_decode_static_resolver_v3_source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode retained v3 resolver source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,zlib
+          p=pathlib.Path('tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64')
+          b64=p.read_bytes().strip()
+          print('PAYLOAD_BYTES',len(b64),hashlib.sha256(b64).hexdigest())
+          raw=zlib.decompress(base64.b64decode(b64))
+          got=hashlib.sha256(raw).hexdigest()
+          print('DECODED_BYTES',len(raw),got)
+          expected='b33e28e355ee62e869a4a9c44b8a2740a87d5b66896fefab48e1e8656ac4fbad'
+          assert got==expected,(got,expected)
+          pathlib.Path('/tmp/resolver_v3.py').write_bytes(raw)
+          for i,line in enumerate(raw.decode().splitlines(),1):
+              l=line.lower()
+              if any(k in l for k in ('cross','cursor','tail','virtual','insert','materialhandle','material_handle','alignment','align_up')):
+                  print(f'{i:04d}: {line}')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-static-resolver-v3-source
+          path: /tmp/resolver_v3.py
+          if-no-files-found: error
