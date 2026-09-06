@@ -1,0 +1,146 @@
+name: T6 Nuketown car01 Material array proof v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_material_array_proof_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Prove exact VIRTUAL handle-array base
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          data=Path('/tmp/map.expanded').read_bytes(); START=38558166; EXPECTED='veh_t6_nuketown_2020_car01_whole'
+          w=XModelWalker(data,START).walk_xmodel(); assert not w['blockers'],w['blockers']; details=w['details']; by={s['name']:s for s in w['sections']}
+          mats=details['inlineMaterials']; byslot={int(m['label'].split('[')[1].split(']')[0]):m for m in mats}
+          assert set(range(10)).issubset(byslot),sorted(byslot)
+          # First 10 retail material names are the LOD0 owner slots.
+          names=[byslot[i]['name'] for i in range(10)]
+          expected_names=['mc/mtl_nt_2020_car_01_glass_out','mc/mtl_nt_2020_car_01_exterior','mc/mtl_nt_2020_car_01_interior','mc/mtl_nt_2020_car_01_tire','mc/mtl_veh_t6_shattered_glass_in','mc/mtl_nt_2020_car_01_tire_d','mc/mtl_nt_2020_car_01_interior_d','mc/mtl_nt_2020_car_01_exterior_d','mc/mtl_veh_t6_shattered_glass_out','mc/mtl_nt_2020_car_01_glass_in']
+          assert names==expected_names,(names,expected_names)
+
+          def au(x,a):return (x+a-1)//a*a
+          # Replay VIRTUAL allocations from handle-array base B=0. The 40-pointer array itself is VIRTUAL.
+          cur=40*4
+          aliases={} # (material slot, texture slot) -> relative VIRTUAL pointer-slot address
+          trace=[]
+          for mi in range(10):
+            m=byslot[mi]; label=m['label']; fs=by[label+'.Material.fixed']['start']
+            # Material fixed is TEMP/source-only. Name string is VIRTUAL.
+            ns=by[label+'.Material.name']; nbytes=ns['end']-ns['start']; cur+=nbytes; trace.append({'event':f'm{mi}.name','bytes':nbytes,'cur':cur})
+            tc=int(m['textureCount'])
+            if tc:
+              cur=au(cur,4); tbase=cur; cur+=16*tc; trace.append({'event':f'm{mi}.textureTable','base':tbase,'bytes':16*tc,'cur':cur})
+              for ti in range(tc):
+                q=by[label+'.Material.textureTable.fixed']['start']+16*ti
+                ip=struct.unpack_from('<I',data,q+12)[0]
+                aliases[(mi,ti)]=tbase+16*ti+12
+                if ip==0xffffffff:
+                  pref=f'{label}.Material.textureTable[{ti}].image.GfxImage'; ins=by.get(pref+'.fixed'); nsec=by.get(pref+'.name')
+                  assert ins and nsec,(mi,ti,pref)
+                  # GfxImage fixed is TEMP; name string is VIRTUAL.
+                  cur += nsec['end']-nsec['start']
+                  loadp=struct.unpack_from('<I',data,ins['start'])[0]
+                  # GfxImage.loadDef is TEMP. INSERT allocates one aligned PC32 alias slot in VIRTUAL.
+                  if loadp==0xfffffffe:
+                    cur=au(cur,4); cur+=4
+                  elif loadp in (0,0xffffffff):
+                    # Null or FOLLOWING does not create an insert alias slot.
+                    pass
+                  else:
+                    # Packed loadDef consumes no VIRTUAL allocation.
+                    enc=(loadp-1)&0xffffffff
+                    assert enc>>29 in range(8)
+                elif ip in (0,0xfffffffe):
+                  raise SystemExit(f'unexpected MaterialTextureDef image pointer {ip:#x} at m{mi}s{ti}')
+                else:
+                  # packed GfxImage: no new allocations
+                  pass
+            cc=int(m['constantCount'])
+            if cc:
+              cur=au(cur,16); cur+=32*cc; trace.append({'event':f'm{mi}.constantTable','bytes':32*cc,'cur':cur})
+            sc=int(m['stateBitsCount'])
+            if sc:
+              cur=au(cur,4); cur+=20*sc; trace.append({'event':f'm{mi}.stateBitsTable','bytes':20*sc,'cur':cur})
+
+          # Later packed image references must point to exact earlier pointer slots.
+          anchor_specs=[
+            (5,1,3,1), # tire_d normal -> tire normal
+            (6,1,2,1), # interior_d normal -> interior normal
+            (7,1,1,1), # exterior_d normal -> exterior normal
+            (8,0,4,0),(8,1,4,1),(8,2,4,2), # shattered glass out -> shattered glass in maps
+            (9,0,0,0),(9,1,0,1),(9,2,0,2), # glass in -> glass out maps (normal may be global identity)
+          ]
+          bases=[]; anchors=[]
+          for src_m,src_t,dst_m,dst_t in anchor_specs:
+            q=by[f'XModel.materialHandles[{src_m}].Material.textureTable.fixed']['start']+16*src_t
+            raw=struct.unpack_from('<I',data,q+12)[0]
+            if raw in (0,0xffffffff,0xfffffffe):
+              # Some expected reuse may instead be inline/global identity; retain explicit non-anchor.
+              anchors.append({'sourceMaterialSlot':src_m,'sourceTextureSlot':src_t,'targetMaterialSlot':dst_m,'targetTextureSlot':dst_t,'raw':f'0x{raw:08X}','used':False})
+              continue
+            enc=(raw-1)&0xffffffff; block=enc>>29; off=enc&0x1fffffff
+            if block!=5:
+              anchors.append({'sourceMaterialSlot':src_m,'sourceTextureSlot':src_t,'targetMaterialSlot':dst_m,'targetTextureSlot':dst_t,'raw':f'0x{raw:08X}','block':block,'offset':off,'used':False})
+              continue
+            rel=aliases[(dst_m,dst_t)]; base=off-rel; bases.append(base)
+            anchors.append({'sourceMaterialSlot':src_m,'sourceTextureSlot':src_t,'targetMaterialSlot':dst_m,'targetTextureSlot':dst_t,'raw':f'0x{raw:08X}','block':block,'offset':off,'targetRelativePointerSlot':rel,'derivedHandleArrayBase':base,'used':True})
+          if not bases:raise SystemExit('no internal packed-image anchors')
+          if len(set(bases))!=1:raise SystemExit(f'internal anchors disagree on handle-array base: {bases}')
+          base=bases[0]
+          if base!=40852396:raise SystemExit(f'handle-array base {base} != expected packed consumer floor 40852396')
+          mapping=[{'slot':i,'virtualOffset':base+4*i,'material':names[i]} for i in range(10)]
+          # Independent later-consumer canaries.
+          consumers={44523322:[40852396,40852400,40852404,40852408,40852432],41469954:[12967476,12967480,40852396,None,None,40852412,40852432,40852428],43661367:[12967476,12967480,40852396,40852432]}
+          for start,expected in consumers.items():
+            cw=XModelWalker(data,start).walk_xmodel(); hs=cw['xmodel']['materialHandles'][:len(expected)]
+            for i,e in enumerate(expected):
+              if e is None:
+                assert hs[i]['kind']=='following',(start,i,hs[i])
+              elif e>=40852396:
+                assert hs[i].get('kind')=='packed' and hs[i].get('block')==5 and hs[i].get('offset')==e,(start,i,e,hs[i])
+          proof={'format':'t6-nuketown-car01-material-array-proof-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'owner':EXPECTED,'ownerFixedStart':START,'numMaterialHandles':40,'lod0OwnerSlots':10,'handleArrayVirtualBase':base,'internalGfxImageAnchorCount':len(bases),'internalAnchors':anchors,'slotMapping':mapping,'consumerCanaries':consumers,'proofBoundary':'VIRTUAL Material-handle array base is derived independently from packed GfxImage aliases to exact earlier MaterialTextureDef.image pointer slots using retail TEMP/VIRTUAL/INSERT allocation semantics; later car packed Material pointers are only validation canaries.'}
+          raw=(json.dumps(proof,indent=2,sort_keys=True)+'\n').encode(); Path('/tmp/proof.json').write_bytes(raw)
+          rp=Path('manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
+          cp=Path('checkpoints/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V1_2026-09-06.md');cp.write_text(f'''# T6 Nuketown car01 Material array proof v1 — 2026-09-06\n\nThe `veh_t6_nuketown_2020_car01_whole` VIRTUAL Material-handle array is now independently anchored from packed GfxImage backreferences inside its own inline Materials.\n\n- exact handle-array VIRTUAL base: **{base}**\n- LOD0 owner slots: **10**\n- independent internal GfxImage anchors agreeing on that base: **{len(bases)}**\n- exact map expansion SHA-256: `{proof['expandedSha256']}`\n- conflicts: **0**\n\nThe proof does not derive Material identity from names, appearance, later surface order, or the packed Material consumer pattern. The base is solved from exact pointer-slot addresses under retail loader allocation semantics; later car XModels are validation canaries only.\n\n## LOD0 slot mapping\n\n'''+''.join(f"- `{base+4*i}` → `{names[i]}`\n" for i in range(10))+f"\nProof JSON SHA-256: `{hashlib.sha256(raw).hexdigest()}`\n",encoding='utf-8')
+          print(json.dumps(proof,indent=2,sort_keys=True))
+          PY
+      - name: Commit durable proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V1.json checkpoints/T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V1_2026-09-06.md
+          git commit -m 'Prove exact Nuketown car01 Material array'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_MATERIAL_ARRAY_PROOF_V1
+          path: /tmp/proof.json
+          if-no-files-found: error
