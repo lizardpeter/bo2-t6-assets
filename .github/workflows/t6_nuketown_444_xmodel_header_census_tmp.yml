@@ -20,21 +20,19 @@ jobs:
           PYTHONPATH=tools python - <<'PY'
           import json
           from pathlib import Path
-          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table,ASSET_TYPE_XMODEL
-          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels,_packed
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
           d=Path('/tmp/m.bin').read_bytes(); t=parse_top_level_xasset_table(d); p=walk_map_prefix_stringtable(d,t)
           class Fallback(dict):
             def get(self,k,default=None):
               v=super().get(k,None)
               return v if v is not None else f'@PACKED_VIRTUAL_{k}'
-          strings=Fallback(p['logicalToText'])
-          idx=[e['index'] for e in t['entries'] if e['type']==ASSET_TYPE_XMODEL]
-          recs=scan_required_xmodels(d,p['sourceEnd'],len(idx),strings)
-          assert len(recs)==len(idx)==444
-          packed=[]
-          for ai,r in zip(idx,recs):
-            if r['nameSource']=='packed_virtual_stringtable_alias' and str(r['name']).startswith('@PACKED_'):
-              packed.append({'xassetIndex':ai,'fixedSourceStart':r['fixedSourceStart'],'namePointer':r['namePointer'],'nameSynthetic':r['name'],'numBones':r['numBones'],'numRootBones':r['numRootBones'],'numSurfs':r['numSurfs'],'numLods':r['numLods'],'numCollSurfs':r['numCollSurfs'],'numCollmaps':r['numCollmaps']})
-          print('TOTAL',len(recs),'UNRESOLVED_PACKED_NAMES',len(packed))
-          print(json.dumps(packed,indent=2,sort_keys=True))
+          recs=scan_required_xmodels(d,p['sourceEnd'],433,Fallback(p['logicalToText']))
+          unresolved=[r for r in recs if r['nameSource']=='packed_virtual_stringtable_alias' and str(r['name']).startswith('@PACKED_')]
+          print('RECOVERED',len(recs),'UNRESOLVED_PACKED',len(unresolved))
+          print(json.dumps(unresolved,indent=2,sort_keys=True))
+          # Also print the last 20 recovered records to show source ordering around
+          # the added packed-name record without pretending they map 1:1 to XAsset
+          # indices after an as-yet-unexplained skipped header.
+          print('TAIL',json.dumps(recs[-20:],indent=2,sort_keys=True))
           PY
