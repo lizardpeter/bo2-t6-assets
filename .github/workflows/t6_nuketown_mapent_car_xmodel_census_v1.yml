@@ -1,0 +1,65 @@
+name: T6 Nuketown MapEnt car XModel census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_mapent_car_xmodel_census_v1.yml'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand retail Nuketown and resolve exact car XAsset records
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+          PYTHONPATH=tools python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL,parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          ents=json.loads(Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json').read_text())
+          targets=sorted({e['model'] for e in ents['carEntities'] if e.get('model')})
+          table=parse_top_level_xasset_table(data); entries=table['entries']; prefix=walk_map_prefix_stringtable(data,table)
+          xidx=[i for i,e in enumerate(entries) if e['type']==ASSET_TYPE_XMODEL]
+          recs=scan_required_xmodels(data,prefix['sourceEnd'],len(xidx),prefix['logicalToText'])
+          assert len(recs)==len(xidx)
+          rows=[]
+          for idx,rec in zip(xidx,recs):
+            if rec['name'] in targets:
+              rows.append({'xassetIndex':idx,'name':rec['name'],'fixedSourceStart':rec['fixedSourceStart']})
+          by={r['name']:r for r in rows}
+          missing=[x for x in targets if x not in by]
+          out={'format':'t6-nuketown-mapent-car-xmodel-census-v1','map':'mp_nuketown_2020','expandedSha256':hashlib.sha256(data).hexdigest(),'targetModelTokens':targets,'resolved':rows,'missing':missing,'xmodelAssetCount':len(xidx)}
+          b=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode(); p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_CENSUS_V1.json');p.write_bytes(b)
+          print(json.dumps({'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'targets':targets,'resolved':rows,'missing':missing,'xmodelAssetCount':len(xidx)},indent=2))
+          if missing: raise SystemExit(f'missing MapEnt car XModels in owning map FastFile: {missing}')
+          PY
+      - name: Commit exact car XModel ownership census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_CENSUS_V1.json
+          git commit -m 'Resolve exact Nuketown MapEnt car XModels'
+          git pull --rebase origin main
+          git push origin HEAD:main
