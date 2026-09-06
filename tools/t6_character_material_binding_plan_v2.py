@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """Strict frontend for exact T6 character material binding-plan v1.
 
-v2 accepts the durable `t6-xmodel-surface-material-assignments-v1` manifest, but
-it does not treat a packed assignment as exact merely because the manifest names a
-material.  Every packed Material* must carry an explicit loaderReplay proof that
-reproduces the retail pointer path:
+v2 accepts durable `t6-xmodel-surface-material-assignments-v1` manifests, but a
+packed assignment is exact only when one of two source-closed pointer paths is
+explicitly replayed:
 
+Runtime pointer path:
     raw token -> exact Sys_DecodePointer result -> DB_ConvertOffsetToAlias
-    -> exact VIRTUAL pointer slot -> previously replayed inline Material owner
+    -> exact pointer slot -> replayed inline Material owner
 
-Inline sentinels remain exact when their durable row says `inline-following` and
-the serialized value is one of the retail -1/-2/-3 sentinels.  Packed rows lacking
-source-backed decoder/owner evidence fail closed before v1 sees them.
+Serialized retail XFile path:
+    raw 32-bit archive pointer -> subtract-one block/offset decode
+    -> T6 XFILE_BLOCK_VIRTUAL (block 5) -> exact independently established
+       XModel.materialHandles[] VIRTUAL owner field
+
+The serialized path is deliberately separate from runtime pointer-cookie decoding.
+No packed row is admitted from naming, adjacency, LOD similarity, or low bits alone.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 BASE_PATH = HERE / "t6_character_material_binding_plan_v1.py"
 REPLAY_PATH = HERE / "t6_material_pointer_replay_v1.py"
+SERIALIZED_REPLAY_PATH = HERE / "t6_serialized_xfile_pointer_replay_v1.py"
 
 
 def _load_module(name: str, path: Path):
@@ -29,7 +34,6 @@ def _load_module(name: str, path: Path):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot import {path}")
     module = importlib.util.module_from_spec(spec)
-    # dataclasses and other stdlib helpers may consult sys.modules while executing.
     import sys
     sys.modules[name] = module
     spec.loader.exec_module(module)
@@ -38,6 +42,7 @@ def _load_module(name: str, path: Path):
 
 base = _load_module("t6_character_material_binding_plan_v1", BASE_PATH)
 replay = _load_module("t6_material_pointer_replay_v1", REPLAY_PATH)
+serialized_replay = _load_module("t6_serialized_xfile_pointer_replay_v1", SERIALIZED_REPLAY_PATH)
 _original_load = base.load
 
 
@@ -58,7 +63,8 @@ def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) ->
 
     legacy = []
     inline_count = 0
-    packed_count = 0
+    runtime_packed_count = 0
+    serialized_packed_count = 0
     packed_backrefs = 0
     for r in rows:
         token = replay.u32(r["handleRaw"])
@@ -70,6 +76,26 @@ def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) ->
             evidence = "exact-inline-retail-material"
             inline_count += 1
             derived = None
+        elif "serializedReplay" in r:
+            result = serialized_replay.validate_serialized_material_replay(r)
+            if not result.exact:
+                raise RuntimeError(
+                    f"surface {r['surfaceIndex']}: packed Material* is not exact under T6 serialized XFile replay: "
+                    f"{result.classification}: {result.reason}"
+                )
+            evidence = "exact-packed-virtual-material-owner-serialized-xfile-replay"
+            serialized_packed_count += 1
+            proof = r.get("serializedReplay") or {}
+            if bool(proof.get("sameOwnerBackreference", False)):
+                packed_backrefs += 1
+            derived = {
+                "mode": "serialized-xfile",
+                "blockIndex": result.block_index,
+                "resolvedTargetPointerSlotVirtual": result.block_offset,
+                "ownerModel": result.owner_model,
+                "ownerSlotIndex": result.owner_slot_index,
+                "ownerMaterialRawStart": result.owner_material_raw_start,
+            }
         else:
             result = replay.validate_packed_loader_replay(r, allow_synthetic=allow_synthetic)
             if not result.exact:
@@ -78,11 +104,12 @@ def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) ->
                     f"{result.classification}: {result.reason}"
                 )
             evidence = "exact-packed-virtual-material-owner-loader-replay"
-            packed_count += 1
+            runtime_packed_count += 1
             proof = r.get("loaderReplay") or {}
             if bool(proof.get("sameOwnerBackreference", False)):
                 packed_backrefs += 1
             derived = {
+                "mode": "runtime-loader",
                 "decodedPointer": result.decoded_pointer,
                 "resolvedTargetPointerSlotVirtual": result.target_pointer_slot_virtual,
                 "objectVirtual": result.object_virtual,
@@ -97,9 +124,10 @@ def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) ->
             "evidence": evidence,
         }
         if derived is not None:
-            out["loaderReplay"] = derived
+            out["pointerReplay"] = derived
         legacy.append(out)
 
+    packed_total = runtime_packed_count + serialized_packed_count
     return {
         "format": "t6-surface-proof-v2-adapted-for-binding-v1",
         "source": doc.get("source"),
@@ -110,12 +138,15 @@ def adapt_surface_assignment_doc(doc: dict, *, allow_synthetic: bool = False) ->
             "allSurfaceIndicesContiguous": True,
             "noIdentityInferencePerformed": True,
             "inlineSentinelRows": inline_count,
-            "packedRowsExactByLoaderReplay": packed_count,
+            "packedRowsExact": packed_total,
+            "packedRowsExactByRuntimeLoaderReplay": runtime_packed_count,
+            "packedRowsExactBySerializedXFileReplay": serialized_packed_count,
             "packedRowsSameOwnerBackreferences": packed_backrefs,
             "runtimeObfuscatedTokensGuessed": 0,
+            "serializedTokensGuessed": 0,
             "proofRule": (
-                "packed rows are admitted only after exact decoded-pointer evidence, "
-                "DB_ConvertOffsetToAlias zone/segment replay, and replayed inline owner-slot identity"
+                "packed rows are admitted only through either exact runtime decoded-pointer/DB_ConvertOffsetToAlias replay, "
+                "or exact T6 32-bit serialized block/offset replay to an independently established VIRTUAL owner field"
             ),
         },
     }
