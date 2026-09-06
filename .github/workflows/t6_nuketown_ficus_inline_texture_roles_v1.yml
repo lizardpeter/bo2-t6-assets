@@ -50,9 +50,15 @@ jobs:
               label=m['label']; tb=by[f'{label}.Material.textureTable.fixed']['start']
               for i in range(m['textureCount']):
                   b=tb+i*16; sem=data[b+7]; sampler=data[b+6]; texture_name_hash=struct.unpack_from('<I',data,b)[0]
+                  image_ptr=struct.unpack_from('<I',data,b+12)[0]
                   prefix=f'{label}.Material.textureTable[{i}].image.GfxImage'
                   fs=by.get(prefix+'.fixed'); ns=by.get(prefix+'.name')
-                  if not fs or not ns: raise SystemExit(f'{m["name"]} slot {i}: expected inline GfxImage')
+                  if not fs or not ns:
+                      enc=(image_ptr-1)&0xffffffff
+                      rows.append({'material':m['name'],'slot':i,'semantic':sem,'semanticName':roles.get(sem,'OTHER'),'samplerState':sampler,
+                                   'materialTextureNameHash':texture_name_hash,'imagePointerRaw':image_ptr,'imagePointerKind':'packed',
+                                   'imagePointerBlock':enc>>29,'imagePointerOffset':enc&0x1fffffff,'inlineImage':False})
+                      continue
                   ib=fs['start']; a=ns['start']; e=data.index(b'\0',a); image=data[a:e].decode('latin1')
                   width,height,depth=struct.unpack_from('<3H',data,ib+20)
                   streaming=data[ib+27]; streamed_count=data[ib+60]
@@ -61,7 +67,7 @@ jobs:
                   if image_hash!=r_hash_string(image): raise SystemExit(f'{image}: stored hash mismatch')
                   rows.append({'material':m['name'],'slot':i,'semantic':sem,'semanticName':roles.get(sem,'OTHER'),'samplerState':sampler,
                                'materialTextureNameHash':texture_name_hash,'image':image,'imageHash':image_hash,'dataHash':data_hash,
-                               'width':width,'height':height,'depth':depth,'streaming':streaming,'streamedPartCount':streamed_count,'gfxImageFixedStart':ib})
+                               'width':width,'height':height,'depth':depth,'streaming':streaming,'streamedPartCount':streamed_count,'gfxImageFixedStart':ib,'inlineImage':True})
           urls=[
             'https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak',
             'https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak',
@@ -79,6 +85,7 @@ jobs:
                   if u.endswith('dlc0_load_mp.ipak'): continue
                   raise
           for r in rows:
+              if not r.get('inlineImage'): continue
               if not r['streamedPartCount']:
                   r['containerMatches']=[]; continue
               found=[]; shas=set()
@@ -94,8 +101,12 @@ jobs:
           assert [(r['slot'],r['semantic'],r['image']) for r in bark]==[
               (0,5,'p6_tree_ficus_lrg_01_bark1_n'),
               (1,2,'~-gp6_tree_ficus_lrg_01_bark1_c')],bark
+          lod0_materials=['mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway']
+          lod0_rows=[r for r in rows if r['material'] in lod0_materials]
+          if any(not r.get('inlineImage') for r in lod0_rows): raise SystemExit('LOD0 Ficus unexpectedly depends on packed GfxImage')
+          if len(lod0_rows)!=4: raise SystemExit(f'expected 4 LOD0 texture roles, got {len(lod0_rows)}')
           report={'format':'t6-nuketown-ficus-inline-texture-roles-v1','model':x['name'],'expandedSha256':hashlib.sha256(data).hexdigest(),
-                  'rows':rows,'ficusBarkRegression':{'slot0Semantic':'NORMAL_MAP','slot1Semantic':'COLOR_MAP','passed':True}}
+                  'rows':rows,'lod0Rows':lod0_rows,'ficusBarkRegression':{'slot0Semantic':'NORMAL_MAP','slot1Semantic':'COLOR_MAP','passed':True}}
           Path('/tmp/ficus_roles.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           print(json.dumps(report,indent=2,sort_keys=True))
           PY
