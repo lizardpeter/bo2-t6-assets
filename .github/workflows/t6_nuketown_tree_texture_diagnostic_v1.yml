@@ -1,0 +1,32 @@
+name: T6 Nuketown tree texture diagnostic v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_tree_texture_diagnostic_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode exact tree material/image bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,zlib,json,pathlib
+          p=pathlib.Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
+          d=json.loads(zlib.decompress(base64.b64decode(p.read_bytes())))
+          hits=[]
+          for m in d['materials']:
+              n=m['material'].lower()
+              if any(k in n for k in ('ficus','foliage','tree','gobo')):
+                  hits.append(m)
+          print('TREE_MATERIAL_COUNT',len(hits))
+          print(json.dumps(hits,indent=2,sort_keys=True))
+          PY
