@@ -39,7 +39,8 @@ function Resolve-TexturePython() {
     }
     $cacheBase = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "bo2-t6-assets" } elseif ($env:TEMP) { Join-Path $env:TEMP "bo2-t6-assets" } else { Join-Path $HOME ".cache\bo2-t6-assets" }
     $venv = Join-Path $cacheBase "t6-textures-py-2026.8.16"
-    $venvPython = if ($IsWindows) { Join-Path $venv "Scripts\python.exe" } else { Join-Path $venv "bin\python" }
+    $isWin = ($env:OS -eq "Windows_NT")
+    $venvPython = if ($isWin) { Join-Path $venv "Scripts\python.exe" } else { Join-Path $venv "bin\python" }
     if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
         New-Item -ItemType Directory -Force -Path $cacheBase | Out-Null
         Write-Host "Creating isolated T6 texture Python environment: $venv"
@@ -100,11 +101,12 @@ if ($XAnimJson.Count -eq 0) {
 }
 if ($XAnimJson.Count -ne 6) { throw "Expected exactly six benchmark XAnims; got $($XAnimJson.Count)" }
 
-# Validate clip identity/rate/frame domain before producing any output.
+# Validate exact normalized clip identity/rate/frame domain before producing output.
 $SeenAnimations = @{}
 foreach ($p in $XAnimJson) {
     $x = Get-Content -Raw -LiteralPath $p | ConvertFrom-Json
     if ($x.format -ne "t6-xanim-normalized-v1") { throw "Unsupported normalized XAnim format in $p" }
+    if ($null -eq $x.header) { throw "Normalized XAnim has no retail header: $p" }
     $name = [string]$x.name
     if ($SeenAnimations.ContainsKey($name)) { throw "Duplicate normalized XAnim: $name" }
     $SeenAnimations[$name] = $x
@@ -112,8 +114,8 @@ foreach ($p in $XAnimJson) {
 foreach ($a in $ExpectedAnimations) {
     if (-not $SeenAnimations.ContainsKey($a.name)) { throw "Missing exact benchmark XAnim $($a.name)" }
     $x = $SeenAnimations[$a.name]
-    $frames = if ($null -ne $x.numframes) { [int]$x.numframes } elseif ($null -ne $x.numFrames) { [int]$x.numFrames } else { -1 }
-    $fps = if ($null -ne $x.framerate) { [double]$x.framerate } elseif ($null -ne $x.frameRate) { [double]$x.frameRate } else { -1 }
+    $frames = [int]$x.header.numframes
+    $fps = [double]$x.header.framerate
     if ($frames -ne [int]$a.frames) { throw "$($a.name) frame mismatch: $frames" }
     if ([math]::Abs($fps - 30.0) -gt 0.000001) { throw "$($a.name) framerate mismatch: $fps" }
 }
@@ -203,9 +205,18 @@ foreach ($e in $ExpectedLods) {
     if ($P.summary.boundMaterials -ne $e.mats -or $P.summary.baseColorBindings -ne $e.mats -or $P.summary.normalBindings -ne $e.mats) { throw "LOD$lod textured material binding mismatch" }
 
     $LodResults += [ordered]@{
-        lod=$lod; surfaces=$e.surfs; vertices=$A.vertices; triangles=$A.triangles; joints=$A.joints; materials=$e.mats; animations=$A.animations.Count
-        texturedGlb=$textured; texturedGlbSha256=Get-Sha256 $textured; texturedGlbBytes=(Get-Item -LiteralPath $textured).Length
-        nativeMaterialIdentityClosure=$B.summary.nativeIdentityClosure; visualPbrTextureClosure=$B.summary.visualPbrTextureClosure
+        lod=$lod
+        surfaces=$e.surfs
+        vertices=$A.vertices
+        triangles=$A.triangles
+        joints=$A.joints
+        materials=$e.mats
+        animations=$A.animations.Count
+        texturedGlb=$textured
+        texturedGlbSha256=(Get-Sha256 $textured)
+        texturedGlbBytes=(Get-Item -LiteralPath $textured).Length
+        nativeMaterialIdentityClosure=$B.summary.nativeIdentityClosure
+        visualPbrTextureClosure=$B.summary.visualPbrTextureClosure
     }
 }
 
@@ -216,10 +227,10 @@ $Summary = [ordered]@{
         "base.ipak"=[ordered]@{path=$BaseIpak;sha256=$ActualBaseSha;resolvedTextures=40}
         "mp.ipak"=[ordered]@{path=$MpIpak;sha256=$ActualMpSha;resolvedTextures=2}
     }
-    resolutionContract=[ordered]@{path=$ResolutionContract;sha256=Get-Sha256 $ResolutionContract}
-    textureMaterialization=[ordered]@{path=$TextureProof;sha256=Get-Sha256 $TextureProof;summary=$Tex.summary}
-    surfaceAssignments=[ordered]@{path=$BindingSurfaceProof;sha256=Get-Sha256 $BindingSurfaceProof;rows=42}
-    goldenFixture=[ordered]@{path=$GoldenProof;sha256=Get-Sha256 $GoldenProof;referenceGlbSha256=$ExpectedReferenceGlbSha256}
+    resolutionContract=[ordered]@{path=$ResolutionContract;sha256=(Get-Sha256 $ResolutionContract)}
+    textureMaterialization=[ordered]@{path=$TextureProof;sha256=(Get-Sha256 $TextureProof);summary=$Tex.summary}
+    surfaceAssignments=[ordered]@{path=$BindingSurfaceProof;sha256=(Get-Sha256 $BindingSurfaceProof);rows=42}
+    goldenFixture=[ordered]@{path=$GoldenProof;sha256=(Get-Sha256 $GoldenProof);referenceGlbSha256=$ExpectedReferenceGlbSha256}
     portableTextureBackend=[ordered]@{python=$TexturePython;requirements=$Requirements;systemLzoDllRequired=$false}
     lods=$LodResults
     aggregate=[ordered]@{serializedLods=4;serializedSurfaces=42;verticesAcrossSerializedSurfaces=21188;trianglesAcrossSerializedSurfaces=21283;joints=102;benchmarkAnimations=6;exactTexturePayloads=42;baseIpakTextures=40;mpIpakTextures=2;allLodsTextured=$true;allLodsAnimated=$true;allSurfaceMaterialsExact=$true}
