@@ -1,5 +1,9 @@
 # T6 Nuketown raw-source regeneration checkpoint — 2026-09-05
 
+> **DIAGNOSTIC / FORENSIC INTERMEDIATE ONLY — NOT A VISUAL SUCCESSOR OR FULL-MAP CANDIDATE.**
+>
+> `mp_nuketown_2020_FRESH_RETAIL_GFXWORLD_v1.glb` contains only the freshly regenerated retail `GfxWorld` slice. It intentionally lacks the already-proven full-map static XModel population, full texture/material coverage, MapEnt cars, skybox, animation-support content, and other v25/v31 scene content. It MUST NOT be presented to the user for visual quality judgement as a successor build. Any future user-facing Nuketown candidate must first pass `manifests/maps/mp_nuketown_2020/T6_NUKETOWN_V25_RELEASE_FLOOR_V1.json` through `tools/t6_gltf_nonregression_guard_v1.py` and independently verify the full-map requirements recorded in that floor.
+
 This checkpoint records the first fresh Nuketown GfxWorld regeneration performed in the current execution environment directly from the connected Google Drive retail source package. No prior GLB was used as geometry input.
 
 ## Retail inputs materialized from Drive
@@ -123,13 +127,32 @@ Independent validation:
 - `trimesh` geometry count: **5,614**
 - `trimesh` node/geometry count: **5,614**
 
-## Proof boundary / next work
+## Non-regression boundary
 
-This checkpoint proves raw retail FF -> exact expanded XFile -> exact GfxWorld geometry/material identity regeneration in the current environment. It is **not yet the visual successor** to the older textured/static Nuketown builds because map/static XModels and retail texture bindings have not yet been reassembled into this fresh file.
+The fresh GLB above proves only raw retail FF -> exact expanded XFile -> exact `GfxWorld` geometry/material identity regeneration. It is deliberately below the project visual/full-map release floor and is not eligible for promotion.
 
-Immediate next stages:
+The minimum retained full-map floor is the reviewed v25 build:
 
-1. recover map-IPAK material images directly from the mounted `mp_nuketown_2020.ipak` and bind them to this fresh world;
+- **2,992** serialized static placements preserved
+- **2,921** primary statics visible
+- **6** parked/destructible MapEnt cars
+- retail skybox retained
+- **356** meshes
+- **711** used materials
+- **709** used materials with base-color bindings
+- **662** used materials with normal bindings
+- **9,088** primitives
+- **567,122** triangles
+- **809** embedded images
+- **3** animations / **1** skin / **5** scenes
+
+v31 is stronger still: it retains the entire v25 binary as an exact prefix and adds the proven generated-material shader-facing data. Therefore new raw-source work must be merged forward into the v25/v31 full-map architecture; it must never replace it with a thinner world-only artifact.
+
+## Immediate next work
+
+1. recover map-IPAK material images directly from the mounted `mp_nuketown_2020.ipak` and bind them to the fresh world;
 2. regenerate static XModel placements/models from the raw FF/shared zones instead of importing an old GLB;
-3. feed the newer generated-material/lightmap/normal/replay contracts into the regenerated artifact;
-4. keep shared `base.ipak` / `mp.ipak` requirements explicit until those large containers or exact targeted payloads are available.
+3. merge that fresh raw-source reconstruction into the retained v25/v31 full-map scene contract;
+4. feed the newer generated-material/lightmap/normal/replay contracts into the regenerated artifact;
+5. run the hard v25 release floor plus full-map requirement verification before any new downloadable/user-facing GLB is promoted;
+6. keep shared `base.ipak` / `mp.ipak` requirements explicit until those large containers or exact targeted payloads are available.
