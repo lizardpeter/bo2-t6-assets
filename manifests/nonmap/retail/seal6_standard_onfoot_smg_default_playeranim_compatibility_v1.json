@@ -1,0 +1,59 @@
+{
+  "format": "t6-third-person-animation-compatibility-v1",
+  "bodyModel": "c_usa_mp_seal6_smg_fb",
+  "authority": "retail mp/playeranim.script selection rules + retail common_mp XAnim track names + retail faction_seals_mp SEAL6 skeleton",
+  "retailSourceSha256": [
+    "1f6e08e08feea7576354c9f744a020c7371accb4aea8146326c39fee993f8e6f",
+    "b29f64663a9b943aafc19234c5d26dfea19d46a3d2f4b566bdeb08d180ed3cfe",
+    "dc049cb1eaf25e35f29586c2998823a4619a4df938d05c663fb094868bc385e8",
+    "151fdfa7cfbcfa4a27fe0792965a76ba279058c455c937928ef97442227fa426"
+  ],
+  "ownershipResolvedFromRetail": true,
+  "allRequiredTracksCompatible": true,
+  "animationCount": 221,
+  "selectionRuleCount": 244,
+  "weaponSelectionMetadataResolvedFromRetail": false,
+  "selectorProfile": {
+    "id": "standard_onfoot_smg_default_v1",
+    "selectors": {
+      "weaponclass": "smg",
+      "nextWeaponclass": "smg",
+      "playerAnimType": "default",
+      "nextPlayerAnimType": "default"
+    },
+    "forbiddenConditionKeys": ["mounted", "vehicle_name", "vehicle_seat_to"],
+    "concreteWeapon": null
+  },
+  "summary": {
+    "applicableRules": 244,
+    "uniqueApplicableAnimations": 221,
+    "resolvedApplicableAnimations": 221,
+    "unresolvedApplicableAnimations": 0,
+    "incompatibleApplicableAnimations": 0,
+    "exactTrackSubsets": 153,
+    "animationSupersetIntersections": 68,
+    "requiredBehaviorFamilies": 8,
+    "requiredBehaviorFamiliesClosed": 8
+  },
+  "behaviorFamilyCoverage": {
+    "idle/stance": {"ruleCount": 6, "uniqueAnimationCount": 6, "resolvedAnimationCount": 6, "allCompatible": true},
+    "walk/run/sprint": {"ruleCount": 24, "uniqueAnimationCount": 24, "resolvedAnimationCount": 24, "allCompatible": true},
+    "crouch/prone": {"ruleCount": 13, "uniqueAnimationCount": 10, "resolvedAnimationCount": 10, "allCompatible": true},
+    "jump/fall/land": {"ruleCount": 9, "uniqueAnimationCount": 8, "resolvedAnimationCount": 8, "allCompatible": true},
+    "weapon-ready/fire/reload": {"ruleCount": 27, "uniqueAnimationCount": 24, "resolvedAnimationCount": 24, "allCompatible": true},
+    "melee": {"ruleCount": 21, "uniqueAnimationCount": 12, "resolvedAnimationCount": 12, "allCompatible": true},
+    "turn/aim": {"ruleCount": 6, "uniqueAnimationCount": 6, "resolvedAnimationCount": 6, "allCompatible": true},
+    "death/reaction": {"ruleCount": 73, "uniqueAnimationCount": 72, "resolvedAnimationCount": 72, "allCompatible": true}
+  },
+  "bindingCanaries": [
+    {"name":"pb_stand_alert","bindingClass":"exact-track-subset","trackCount":68,"matchedTrackCount":68,"extraAnimationTrackCount":0,"rawStructOffset":662933,"numFrames":383,"frameRate":30.0},
+    {"name":"pb_smg_sprint","bindingClass":"animation-superset-intersection","trackCount":111,"matchedTrackCount":92,"extraAnimationTrackCount":19,"rawStructOffset":5203838,"numFrames":46,"frameRate":30.0},
+    {"name":"pt_stand_shoot_auto","bindingClass":"exact-track-subset","trackCount":55,"matchedTrackCount":55,"extraAnimationTrackCount":0,"rawStructOffset":7851319,"numFrames":18,"frameRate":30.0},
+    {"name":"pb_rifle_stand2crouch","bindingClass":"animation-superset-intersection","trackCount":111,"matchedTrackCount":92,"extraAnimationTrackCount":19,"rawStructOffset":8571890,"numFrames":20,"frameRate":30.0},
+    {"name":"pb_prone2sprint","bindingClass":"animation-superset-intersection","trackCount":111,"matchedTrackCount":92,"extraAnimationTrackCount":19,"rawStructOffset":8295521,"numFrames":15,"frameRate":30.0}
+  ],
+  "applicableAnimationNameSetSha256": "48574d1b25b85d8017531a5cc2133d150f3f156462ddd900cdf2aa39daae325e",
+  "unresolvedApplicableAnimationNames": [],
+  "incompatibleApplicableAnimationNames": [],
+  "proofBoundary": "This proves the SEAL6 body is compatible with every retail playeranim rule potentially selected by the standard on-foot smg/default profile. It deliberately does not claim MP7 or any other named weapon has playerAnimType=default until that weapon's retail WeaponDef metadata is separately hash-pinned."
+}
