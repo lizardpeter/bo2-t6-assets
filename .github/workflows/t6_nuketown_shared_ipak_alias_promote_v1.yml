@@ -1,0 +1,63 @@
+name: T6 Nuketown shared IPAK alias promote v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_shared_ipak_alias_promote_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LZO runtime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq liblzo2-2 >/dev/null
+      - name: Regenerate exact six-IPAK alias census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PYTHONPATH=tools python tools/t6_nuketown_shared_ipak_alias_census_v2.py \
+            --alias-bank manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64 \
+            --out /tmp/T6_NUKETOWN_SHARED_IPAK_PACKED_IMAGE_ALIAS_CENSUS_V2.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+      - name: Serialize proof and checkpoint
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64,hashlib,json,zlib
+          from pathlib import Path
+          raw=Path('/tmp/T6_NUKETOWN_SHARED_IPAK_PACKED_IMAGE_ALIAS_CENSUS_V2.json').read_bytes()
+          d=json.loads(raw)
+          s=d['summary']
+          if s != {'aliasCount':81,'resolved':74,'missing':7,'conflict':0,'exactPair':74,'dataHashByteIdentical':0,'uniquePayloadCount':74}:
+              raise SystemExit(f'unexpected census summary: {s}')
+          if d['failures'] and len(d['failures']) != 7:
+              raise SystemExit('unexpected failure count')
+          out=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_SHARED_IPAK_PACKED_IMAGE_ALIAS_CENSUS_V2.json.zlib.b64')
+          payload=base64.b64encode(zlib.compress(raw,9))+b'\n'
+          out.write_bytes(payload)
+          raw_sha=hashlib.sha256(raw).hexdigest(); stored_sha=hashlib.sha256(payload.rstrip()).hexdigest()
+          names=[x['name'] for x in d['failures']]
+          cp=Path('checkpoints/T6_NUKETOWN_SHARED_IPAK_TEXTURE_CLOSURE_V2_2026-09-06.md')
+          cp.write_text(f'''# T6 Nuketown shared-IPAK packed-image texture closure v2\n\nThe retail six-IPAK HTTP-range replay now source-closes **74 / 81** pointer-proven packed GfxImage aliases with **0 conflicts**.\n\n- exact `(nameHash,dataHash)` payloads: **74**\n- unique decompressed payloads: **74**\n- unresolved after all supplied retail IPAKs: **7**\n- `base.ipak` uses: **43**\n- `mp.ipak` uses: **4**\n- `mp_nuketown_2020.ipak` uses: **31**\n\nEvery promotion was decompressed with retail raw/LZO/0xCF-skip block semantics, independently CRC29-checked against the retained streamed dataHash, parsed as IWI27 and dimension-matched to the pointer-proven GfxImage record. No filename-similarity or same-name/wrong-data fallback is allowed.\n\n## Exact retained proof\n\n- raw census JSON bytes: **{len(raw):,}**\n- raw SHA-256: `{raw_sha}`\n- stored zlib+base64 bytes: **{len(payload):,}**\n- stored SHA-256 (without trailing newline): `{stored_sha}`\n\n## Still absent from these six IPAKs\n\n'''+''.join(f'- `{n}`\n' for n in names)+'''\nThese seven are not promoted as missing source data yet. They remain open until inline/embedded/generated ownership is checked against the FastFile/OAT-retained image population.\n''')
+          print(json.dumps({'summary':s,'rawBytes':len(raw),'rawSha256':raw_sha,'storedBytes':len(payload),'storedSha256':stored_sha,'missingNames':names},indent=2))
+          PY
+      - name: Commit exact proof
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_SHARED_IPAK_PACKED_IMAGE_ALIAS_CENSUS_V2.json.zlib.b64 checkpoints/T6_NUKETOWN_SHARED_IPAK_TEXTURE_CLOSURE_V2_2026-09-06.md
+          git commit -m 'Checkpoint exact Nuketown shared-IPAK texture closure v2'
+          git push
