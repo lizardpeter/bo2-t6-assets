@@ -88,7 +88,7 @@ def main() -> int:
                 "closureRequirement": "B is proven"
             }
         ],
-        "summary": {"gateCount": 2, "closed": 2, "partial": 0, "open": 0, "implementedAwaitingRetail": 0, "release100Percent": true}
+        "summary": {"gateCount": 2, "closed": 2, "partial": 0, "open": 0, "implementedAwaitingRetail": 0, "release100Percent": True}
     }
     s = validate(synthetic)
     assert s["release100Percent"] is True
