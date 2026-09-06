@@ -1,0 +1,73 @@
+name: T6 Nuketown packed Material image binding v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_packed_material_image_binding_v1.yml'
+      - 'tools/t6_nuketown_packed_image_material_binding_v1.py'
+      - 'manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build and validate exact packed Material bindings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python tools/t6_nuketown_packed_image_material_binding_v1.py \
+            --alias-bank manifests/maps/mp_nuketown_2020/NUKETOWN_PACKED_IMAGE_CROSSFAMILY_ALIAS_BANK_V1.json.zlib.b64 \
+            --closure manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64 \
+            --out /tmp/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json | tee /tmp/binding_summary.txt
+          python - <<'PY'
+          import base64,hashlib,json,zlib
+          from pathlib import Path
+          p=Path('/tmp/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json')
+          b=p.read_bytes(); d=json.loads(b); s=d['summary']
+          assert d['format']=='t6-nuketown-packed-material-image-binding-v1'
+          assert s['aliasCount']==81,s
+          assert s['aliasesWithBindingEvidence']==81,s
+          assert s['evidenceJoinCount']==94,s
+          assert s['packedMaterialCount']==49,s
+          assert s['conflictCount']==0,s
+          assert s['uniquePayloadCount']==81,s
+          assert 81 <= s['uniquePackedMaterialSlotBindings'] <= 94,s
+          # Every material/slot is unique and every binding retains an exact payload SHA.
+          pairs=[]; payloads=set(); aliases=set()
+          for m in d['materials']:
+            for r in m['bindings']:
+              pairs.append((m['material'],r['slot']))
+              assert len(r['payloadSha256'])==64
+              payloads.add(r['payloadSha256'])
+              for e in r['evidence']: aliases.add(e['aliasIndex'])
+          assert len(pairs)==len(set(pairs))==s['uniquePackedMaterialSlotBindings']
+          assert len(payloads)==81 and aliases==set(range(81))
+          stored=base64.b64encode(zlib.compress(b,9))+b'\n'
+          out=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
+          out.write_bytes(stored)
+          raw_sha=hashlib.sha256(b).hexdigest(); stored_sha=hashlib.sha256(stored.rstrip()).hexdigest()
+          cp=Path('checkpoints/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1_2026-09-06.md')
+          cp.write_text(f'''# T6 Nuketown packed Material -> exact GfxImage payload bindings v1\n\nThis checkpoint promotes the pointer-proven packed-image alias bank and the canonical 81/81 retail IPAK payload closure into explicit packed `Material` texture-slot bindings.\n\n## Result\n\n- packed Materials with exact bindings: **{s['packedMaterialCount']}**\n- exact packed Material/slot bindings: **{s['uniquePackedMaterialSlotBindings']}**\n- retained evidence joins: **{s['evidenceJoinCount']}**\n- aliases represented: **{s['aliasesWithBindingEvidence']} / {s['aliasCount']}**\n- unique exact retail payloads: **{s['uniquePayloadCount']}**\n- conflicts: **{s['conflictCount']}**\n\nEach binding preserves the exact packed Material identity, texture-table slot, semantic, sampler state, packed GfxImage virtual address, GfxImage name/hash/dataHash/dimensions, and exact retail IWI SHA-256.\n\nNo material-name suffix, visual similarity, slot-order guess, or old GLB assignment is used to promote a binding. Multiple witnesses are collapsed only when all identity fields agree exactly.\n\n## Proof artifact\n\n- raw JSON bytes: **{len(b):,}**\n- raw SHA-256: `{raw_sha}`\n- stored zlib+base64 bytes: **{len(stored):,}**\n- stored SHA-256 (without trailing newline): `{stored_sha}`\n''')
+          print('RAW_SHA256',raw_sha)
+          print('STORED_SHA256',stored_sha)
+          print('SUMMARY',json.dumps(s,sort_keys=True))
+          PY
+      - name: Commit exact binding closure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64 \
+                  checkpoints/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1_2026-09-06.md
+          git commit -m 'Promote exact Nuketown packed Material image bindings'
+          git pull --rebase origin main
+          git push origin HEAD:main
