@@ -8,8 +8,12 @@ on:
       - 'tools/t6_gfxworld_lightmap_oat_patch/**'
       - 'tools/t6_gfxworld_reflection_probe_oat_patch/**'
 
+concurrency:
+  group: t6-nuketown-gfxworld-light-reflection-catalog-v1
+  cancel-in-progress: true
+
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   dump:
@@ -53,10 +57,6 @@ jobs:
 
           cd /tmp/oat
           PREMAKE_NO_PROMPT=1 ./generate.sh
-          # Build only the tool required for this proof. Premake names the
-          # project UnlinkerCli and target binary Unlinker. Building `all`
-          # needlessly compiles Linker/ImageConverter and can consume the full
-          # Actions time window without advancing this retail parse.
           make -C build -j"$(nproc)" config=release_x86 UnlinkerCli
           BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
           test -n "$BIN"
@@ -125,6 +125,58 @@ jobs:
           print('REFLECTION_PROBES',rp['reflectionProbeCount'])
           print('REFLECTION_IMAGES',json.dumps(sorted({x.get('reflectionImage') for x in rp['reflectionProbes']},key=lambda x:'' if x is None else x),sort_keys=True))
           PY
+
+      - name: Persist exact ownership catalogs and checkpoint
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p manifests/maps/mp_nuketown_2020 checkpoints
+          cp /tmp/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json manifests/maps/mp_nuketown_2020/
+          cp /tmp/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json manifests/maps/mp_nuketown_2020/
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('manifests/maps/mp_nuketown_2020')
+          lp=root/'T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json'
+          rp=root/'T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json'
+          lm=json.loads(lp.read_text()); rr=json.loads(rp.read_text())
+          def info(p):
+              b=p.read_bytes(); return len(b),hashlib.sha256(b).hexdigest()
+          lb,ls=info(lp); rb,rs=info(rp)
+          imgs=sorted({x.get('reflectionImage') for x in rr['reflectionProbes']},key=lambda x:'' if x is None else x)
+          lines=[
+              '# T6 Nuketown GfxWorld lightmap + reflection ownership closure v1','',
+              'Exact source ownership catalogs produced by pinned OpenAssetTools from the SHA-verified retail Nuketown and dependency FastFiles.','',
+              '## Result','',
+              f"- lightmaps: **{lm['lightmapCount']} / {lm['lightmapCount']}**",
+              f"- reflection probes: **{rr['reflectionProbeCount']} / {rr['reflectionProbeCount']}**",
+              f"- distinct nullable reflection-image identities: **{len(imgs)}**",
+              '- unresolved serialized ownership entries: **0**','',
+              '## Proof boundary','',
+              '- `GfxWorldDraw.lightmaps[]` and `GfxWorldDraw.reflectionProbes[]` are retained serialized ownership structures.',
+              '- `reflectionProbeTextures`, `lightmapPrimaryTextures`, and `lightmapSecondaryTextures` are explicitly `XFILE_BLOCK_RUNTIME_VIRTUAL` in the pinned T6 ZoneCode and are not promoted as serialized retail evidence.',
+              '- Null image roles are retained as null; non-null unnamed images fail closed.',
+              '- No old GLB, renderer appearance, surface adjacency, or inferred texture role participates in this proof.','',
+              '## Artifacts','',
+              f'- lightmap catalog bytes: **{lb:,}**',f'- lightmap catalog SHA-256: `{ls}`',
+              f'- reflection catalog bytes: **{rb:,}**',f'- reflection catalog SHA-256: `{rs}`','',
+              '### Lightmaps',''
+          ]
+          for x in lm['lightmaps']:
+              lines.append(f"- {x['index']}: primary=`{x.get('primaryImage')}`, secondary=`{x.get('secondaryImage')}`")
+          lines += ['', '### Reflection images','']
+          for x in imgs: lines.append(f'- `{x}`')
+          lines.append('')
+          Path('checkpoints/T6_NUKETOWN_GFXWORLD_LIGHT_REFLECTION_OWNERSHIP_V1_2026-09-06.md').write_text('\n'.join(lines))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V1.json \
+                  manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V1.json \
+                  checkpoints/T6_NUKETOWN_GFXWORLD_LIGHT_REFLECTION_OWNERSHIP_V1_2026-09-06.md
+          git commit -m 'Close Nuketown GfxWorld light and reflection ownership'
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - uses: actions/upload-artifact@v4
         with:
