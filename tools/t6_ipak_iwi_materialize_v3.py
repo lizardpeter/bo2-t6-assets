@@ -9,7 +9,11 @@ Identity is fail-closed:
 - reconstructed payload CRC29, IWI27 metadata, dimensions, and PNG semantics are
   validated by the proven v1 implementation.
 
-Whole-container SHA-256 is always recorded as provenance.  Callers may also pin
+Retail command 0xCF is source-closed as IPAK padding: its source span is consumed
+but it emits no bytes into the reconstructed IWI. This is the same semantic used
+by t6_ipak_http_range_v2.py and is required by current shared retail containers.
+
+Whole-container SHA-256 is always recorded as provenance. Callers may also pin
 one or more container hashes with --expect-ipak-sha256, but container packaging
 is not itself an image identity: exact pair resolution + payload validation is.
 
@@ -19,13 +23,19 @@ field is retained as upstream evidence but is not used as an IPAK filename hash.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import importlib.util
 import json
+import struct
+import zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 V2_PATH = HERE / "t6_ipak_iwi_materialize_v2.py"
+IPAK_COMMAND_UNCOMPRESSED = 0x00
+IPAK_COMMAND_LZO = 0x01
+IPAK_COMMAND_SKIP = 0xCF
 
 
 def _load_v2():
@@ -146,6 +156,70 @@ def load_metadata_v3(paths: list[Path]) -> dict[str, dict]:
     return out
 
 
+def extract_entry_v3(path: Path, row: dict, lzo) -> bytes:
+    """v1 exact extraction plus retail 0xCF padding semantics."""
+    pos = int(row["absoluteOffset"])
+    end = pos + int(row["entrySpan"])
+    out = bytearray()
+    blocks = 0
+    with path.open("rb") as f:
+        while pos < end:
+            pos = base.align(pos, base.IPAK_BLOCK)
+            if pos >= end:
+                break
+            if pos + 128 > end:
+                raise TextureError("IPAK entry has truncated block header")
+            f.seek(pos)
+            hdr = f.read(128)
+            if len(hdr) != 128:
+                raise TextureError("IPAK block header short read")
+            command_word = struct.unpack_from("<I", hdr, 0)[0]
+            file_off = command_word & 0xFFFFFF
+            command_count = (command_word >> 24) & 0xFF
+            if command_count > 31:
+                raise TextureError(f"IPAK block command count {command_count} > 31")
+            commands = []
+            for i in range(command_count):
+                word = struct.unpack_from("<I", hdr, 4 + 4 * i)[0]
+                commands.append((word & 0xFFFFFF, (word >> 24) & 0xFF))
+            if any(comp in (IPAK_COMMAND_UNCOMPRESSED, IPAK_COMMAND_LZO) for _, comp in commands) and file_off != len(out):
+                raise TextureError(f"IPAK block output offset {file_off} != {len(out)}")
+            p = pos + 128
+            for span, comp in commands:
+                if p + span > end:
+                    raise TextureError("IPAK command crosses indexed entry span")
+                f.seek(p)
+                blob = f.read(span)
+                if len(blob) != span:
+                    raise TextureError("IPAK command short read")
+                if comp == IPAK_COMMAND_UNCOMPRESSED:
+                    out.extend(blob)
+                elif comp == IPAK_COMMAND_LZO:
+                    dst = ctypes.create_string_buffer(0x8000)
+                    n = ctypes.c_size_t(0x8000)
+                    src = ctypes.create_string_buffer(blob)
+                    rc = lzo(src, len(blob), dst, ctypes.byref(n), None)
+                    if rc != 0:
+                        raise TextureError(f"LZO decompression error {rc}")
+                    out.extend(dst.raw[:n.value])
+                elif comp == IPAK_COMMAND_SKIP:
+                    # Retail padding: consume the indexed source bytes but do not
+                    # advance the reconstructed IWI output stream.
+                    pass
+                else:
+                    raise TextureError(f"unsupported IPAK compression command {comp}")
+                p += span
+            pos = p
+            blocks += 1
+            if blocks > 10000:
+                raise TextureError("IPAK block runaway")
+    payload = bytes(out)
+    crc = zlib.crc32(payload) & 0x1FFFFFFF
+    if crc != int(row["dataHash"]):
+        raise TextureError(f"IPAK CRC29 {crc:08x} != index dataHash {int(row['dataHash']):08x}")
+    return payload
+
+
 def parse_named_path(value: str) -> tuple[str, Path]:
     if "=" not in value:
         p = Path(value)
@@ -206,12 +280,18 @@ def main() -> int:
         if "dataHash" in meta and meta["dataHash"] != t["dataHash"]:
             raise TextureError(f"{t['image']}: metadata dataHash mismatch")
         try:
-            payload = base.extract_entry(repo["path"], repo["ipak"]["dataSection"], row, lzo)
+            payload = extract_entry_v3(repo["path"], row, lzo)
             iwi_meta = base.parse_iwi27(payload)
             for field in ("width", "height", "depth"):
                 if field in meta and meta[field] not in (None, 0) and int(meta[field]) != int(iwi_meta[field]):
                     raise TextureError(f"{t['image']}: retained {field} {meta[field]} != IWI {iwi_meta[field]}")
-            uses = meta.get("uses") or t["target"].get("uses") or []
+            # Metadata manifests and the exact target identity manifest are both
+            # evidence. Never let a non-empty metadata use-list mask a proven
+            # target semantic such as normalMap.
+            uses = []
+            for use in list(meta.get("uses") or []) + list(t["target"].get("uses") or []):
+                if use not in uses:
+                    uses.append(use)
             normal = any(
                 (isinstance(x, str) and ("normalMap" in x or x.endswith(":normal")))
                 or (isinstance(x, dict) and (x.get("semanticName") == "normalMap" or x.get("semanticRaw") == 5))
@@ -238,6 +318,7 @@ def main() -> int:
             "iwiSha256": base.sha256_bytes(payload),
             "pngSha256": base.sha256_bytes(png),
             "retainedMetadata": meta,
+            "resolvedUses": uses,
             "iwi": png_meta,
             "crc29Validated": True,
             "exactKeyValidated": True,
@@ -272,7 +353,7 @@ def main() -> int:
         },
         "textures": materialized,
         "unresolved": unresolved,
-        "proofBoundary": "Whole-container SHA-256 is provenance and may optionally be pinned by the caller. Asset identity is exact: no retained mislabeled nameHash field, filename fallback, dataHash-only fallback, cross-repository substitution, or unsupported-format substitution is accepted. The exact proven image name is hashed with the retail T6 filename hash and paired with the exact streamed dataHash; the pair must be unique across the supplied retail IPAKs and its reconstructed payload must pass CRC29/IWI validation.",
+        "proofBoundary": "Whole-container SHA-256 is provenance and may optionally be pinned by the caller. Asset identity is exact: no retained mislabeled nameHash field, filename fallback, dataHash-only fallback, cross-repository substitution, or unsupported-format substitution is accepted. The exact proven image name is hashed with the retail T6 filename hash and paired with the exact streamed dataHash; the pair must be unique across the supplied retail IPAKs and its reconstructed payload must pass CRC29/IWI validation. Retail command 0xCF is consumed as source padding only and emits no reconstructed bytes.",
     }
     (a.outdir / "manifest.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(doc["summary"], indent=2, sort_keys=True))
