@@ -23,7 +23,6 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
-import struct
 import zipfile
 
 HERE=Path(__file__).resolve().parent
@@ -94,11 +93,16 @@ def verify_expand(path:Path):
     return expanded,{'path':str(path),'encryptedBytes':len(enc),'encryptedSha256':esh,'expandedBytes':len(expanded),'expandedSha256':xsh,'records':len(audit),'zoneName':summary['zoneName']}
 
 def exact_cstring_positions(data:bytes,name:str):
+    """Find exact terminating-NUL strings; preceding byte is not a delimiter.
+
+    Inline T6 names immediately follow fixed records, so the preceding byte is
+    legitimately fixed-record data. The caller validates that fixed record.
+    """
     b=name.encode('latin1');out=[];pos=0
     while True:
         p=data.find(b,pos)
         if p<0:break
-        if p+len(b)<len(data) and data[p+len(b)]==0 and (p==0 or data[p-1]==0):out.append(p)
+        if p+len(b)<len(data) and data[p+len(b)]==0:out.append(p)
         pos=p+1
     return out
 
@@ -113,8 +117,9 @@ def scan_material(data:bytes,requested:str):
             try:doc=MAT.audit(data,st,name)
             except Exception:continue
             rows.append({'requestedName':requested,'serializedName':name,'nameStart':p,'material':doc})
-    # Identical duplicates are okay; conflicting exact material tables are not.
-    fps={(r['serializedName'],r['material']['source']['materialFixedSha256'],r['material']['source']['textureTableSha256']) for r in rows}
+    # Identical duplicate serializations are okay. Distinct fixed/table bytes are
+    # competing exact definitions and this collector has no precedence proof for them.
+    fps={(r['material']['source']['materialFixedSha256'],r['material']['source']['textureTableSha256']) for r in rows}
     if len(fps)>1:
         raise RuntimeError(f'{requested}: conflicting strict common Material definitions: {sorted(fps)}')
     return rows
