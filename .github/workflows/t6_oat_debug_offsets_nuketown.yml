@@ -25,9 +25,9 @@ jobs:
           git -C /tmp/oat submodule update -q --init --recursive
           sed -i 's@// #define DEBUG_OFFSETS 1@#define DEBUG_OFFSETS 1@' /tmp/oat/src/ZoneLoading/Zone/Stream/ZoneInputStream.h
           cd /tmp/oat
-          ./generate.sh
+          PREMAKE_NO_PROMPT=1 ./generate.sh
           ./scripts/make-debug.sh
-          find build/bin -maxdepth 2 -type f -iname '*unlinker*' -o -iname 'Unlinker' | sort
+          find build/bin -maxdepth 2 -type f \( -iname '*unlinker*' -o -iname 'Unlinker' \) | sort
       - name: Download exact retail Nuketown FastFile and trace loader offsets
         shell: bash
         run: |
