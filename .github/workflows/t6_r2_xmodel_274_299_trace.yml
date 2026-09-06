@@ -33,7 +33,7 @@ jobs:
           from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL, parse_top_level_xasset_table
           from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable, scan_required_xmodels
           from t6_xmodel_serialized_walker import XModelWalker
-          from t6_clipmap_serialized_walker import PTR_FOLLOWING, PTR_INSERT, ptr_kind
+          from t6_clipmap_serialized_walker import ptr_kind
 
           data = pathlib.Path('/tmp/mp_nuketown_2020.expanded').read_bytes()
           table = parse_top_level_xasset_table(data)
@@ -63,29 +63,30 @@ jobs:
               out.append(row)
               print('WALK',idx,rec['name'],'start',rec['fixedSourceStart'],'end',w['assetSerializedEnd'],'blockers',len(w['blockers']))
 
-              # XModel fixed pointer fields. Only pointer-bearing fields are listed.
               xm_fields={0:'name',8:'boneNames',12:'parentList',16:'quats',20:'trans',24:'partClassification',28:'baseMat',32:'surfs',36:'materialHandles',152:'collSurfs',164:'boneInfo',200:'himip',216:'physPreset',224:'collmaps',228:'physConstraints'}
               for rel,label in xm_fields.items(): emit(idx,'XModel',label,rec['fixedSourceStart']+rel,u32(rec['fixedSourceStart']+rel))
 
               for s in w['sections']:
                   n=s['name']; a=s['start']
-                  if n.endswith('.Material.fixed'):
-                      for rel,label in {0:'name',92:'techniqueSet',96:'textureTable',100:'constantTable',104:'stateBitsTable',108:'thermalMaterial'}.items():
-                          emit(idx,n,label,a+rel,u32(a+rel))
+                  if n=='XModel.materialHandles.fixed':
+                      count=s.get('count',0)
+                      for j in range(count): emit(idx,n,f'[{j}].material',a+j*4,u32(a+j*4))
+                  elif n.endswith('.Material.fixed'):
+                      for rel,label in {0:'name',92:'techniqueSet',96:'textureTable',100:'constantTable',104:'stateBitsTable',108:'thermalMaterial'}.items(): emit(idx,n,label,a+rel,u32(a+rel))
                   elif n.endswith('.Material.textureTable.fixed'):
                       count=s.get('count',0)
                       for j in range(count): emit(idx,n,f'[{j}].image',a+j*16+12,u32(a+j*16+12))
                   elif n.endswith('.GfxImage.fixed'):
-                      emit(idx,n,'texture.loadDef',a,u32(a))
-                      emit(idx,n,'name',a+72,u32(a+72))
+                      emit(idx,n,'texture.loadDef',a,u32(a)); emit(idx,n,'name',a+72,u32(a+72))
                   elif n.endswith('.GfxImage.loadDef.fixed'):
                       emit(idx,n,'data',a+8,u32(a+8))
+                  elif n.endswith('.PhysPreset.fixed'):
+                      emit(idx,n,'name',a,u32(a)); emit(idx,n,'sndAliasPrefix',a+28,u32(a+28))
                   elif n=='XModel.surfs.fixed':
                       count=s.get('count',0)
                       for j in range(count):
                           b=a+j*80
-                          for rel,label in {12:'triIndices',24:'vertsBlend',28:'tensionData',32:'verts0',40:'vertList'}.items():
-                              emit(idx,f'XSurface[{j}]',label,b+rel,u32(b+rel))
+                          for rel,label in {12:'triIndices',24:'vertsBlend',28:'tensionData',32:'verts0',40:'vertList'}.items(): emit(idx,f'XSurface[{j}]',label,b+rel,u32(b+rel))
                   elif n.endswith('.vertList.fixed'):
                       count=s.get('count',0)
                       for j in range(count): emit(idx,n,f'[{j}].collisionTree',a+j*12+8,u32(a+j*12+8))
@@ -97,27 +98,35 @@ jobs:
                   elif n=='XModel.collmaps.fixed':
                       count=s.get('count',0)
                       for j in range(count): emit(idx,n,f'[{j}].geomList',a+j*4,u32(a+j*4))
+                  elif n.endswith('.geomList.fixed'):
+                      emit(idx,n,'geoms',a+4,u32(a+4))
+                  elif n.endswith('.geoms.fixed'):
+                      count=s.get('count',0)
+                      for j in range(count): emit(idx,n,f'[{j}].brush',a+j*68,u32(a+j*68))
+                  elif n.endswith('.brush.fixed'):
+                      for rel,label in {32:'sides',88:'verts',92:'planes'}.items(): emit(idx,n,label,a+rel,u32(a+rel))
+                  elif n.endswith('.sides.fixed'):
+                      count=s.get('count',0)
+                      for j in range(count): emit(idx,n,f'[{j}].plane',a+j*12,u32(a+j*12))
 
-          # The car material-handle source array begins here; only INSERTs from prior assets
-          # plus XAsset 289 prefix can affect its VIRTUAL destination base.
           car = next(r for r in out if r['xassetIndex']==289)
           car_mh = next(s for s in car['sections'] if s['name']=='XModel.materialHandles.fixed')
           car_mh_source=car_mh['start']
           before=[e for e in events if e['sourceOffset'] < car_mh_source]
           inserts=[e for e in before if e['kind']=='insert']
-          follows=[e for e in before if e['kind']=='following']
+          interval=[e for e in inserts if e['xassetIndex']>=274]
           print('CAR_MATERIAL_HANDLE_SOURCE',car_mh_source)
-          print('INSERT_COUNT_BEFORE_CAR_HANDLE',len(inserts))
-          print('INSERT_VIRTUAL_BYTES_PC32',len(inserts)*4)
-          print('INSERT_COUNTS_BY_FIELD',json.dumps(collections.Counter(e['field'] for e in inserts),sort_keys=True))
-          print('INSERT_COUNTS_BY_XASSET',json.dumps(collections.Counter(str(e['xassetIndex']) for e in inserts),sort_keys=True))
-          for e in inserts: print('INSERT_BEFORE_CAR',json.dumps(e,sort_keys=True))
+          print('INSERT_COUNT_BEFORE_CAR_HANDLE',len(inserts),'VIRTUAL_BYTES',len(inserts)*4)
+          print('INSERT_COUNT_X274_TO_CAR_HANDLE',len(interval),'VIRTUAL_BYTES',len(interval)*4)
+          print('INSERT_COUNTS_BY_FIELD',json.dumps(collections.Counter(e['field'] for e in interval),sort_keys=True))
+          print('INSERT_COUNTS_BY_XASSET',json.dumps(collections.Counter(str(e['xassetIndex']) for e in interval),sort_keys=True))
+          for e in interval: print('INSERT_X274_TO_CAR',json.dumps(e,sort_keys=True))
 
-          report={'format':'t6-nuketown-xmodel-270-299-pointer-sentinel-trace-v2',
+          report={'format':'t6-nuketown-xmodel-270-299-pointer-sentinel-trace-v3',
                   'retailFastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
                   'expandedSha256':'7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505',
                   'carMaterialHandleSource':car_mh_source,'insertCountBeforeCarMaterialHandle':len(inserts),
-                  'insertVirtualBytesPc32':len(inserts)*4,'insertEventsBeforeCarMaterialHandle':inserts,
+                  'insertVirtualBytesPc32':len(inserts)*4,'intervalInsertEvents':interval,
                   'events':events,'xmodels':out}
           p=pathlib.Path('/tmp/xmodel_270_299_pointer_trace.json'); p.write_text(json.dumps(report,indent=2)+'\n')
           print('TRACE_BYTES',p.stat().st_size)
