@@ -1,0 +1,140 @@
+name: SEAL6 full retail export
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - ".github/workflows/seal6-full-retail-export.yml"
+      - "scripts/t6_rebuild_seal6_full_retail_v1.ps1"
+      - "scripts/t6_build_seal6_smg_textured_animated_all_lods_v3.ps1"
+      - "tools/t6_xmodel_skeleton_normalize_v3.py"
+      - "tools/t6_xmodel_mesh_normalize_v4.py"
+      - "tools/t6_xanim_normalize_v1.py"
+      - "tools/t6_ipak_iwi_materialize_v3.py"
+      - "tools/t6_gltf_apply_materialized_textures_v1.py"
+      - "tools/t6_xanim_skinned_gltf_multianim_export_v1.py"
+      - "manifests/nonmap/retail/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python --version
+          pwsh --version
+      - name: Fetch exact retail source files from project R2 mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='https://r2.houseofkublai.com/bo2/zone/all'
+          mkdir -p /tmp/t6/zone/all
+          fetch() {
+            local name="$1"
+            echo "Fetching $name"
+            curl --fail --location --silent --show-error \
+              --retry 6 --retry-delay 2 --retry-all-errors --connect-timeout 30 \
+              "$root/$name" -o "/tmp/t6/zone/all/$name"
+          }
+          fetch faction_seals_mp.ff
+          fetch common_mp.ff
+          fetch base.ipak
+          fetch mp.ipak
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('/tmp/t6/zone/all')
+          expected={
+            'faction_seals_mp.ff': (3095232, '1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88'),
+            'common_mp.ff': (40307072, '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'),
+            'base.ipak': (2634379944, '6c3e68f846fd8ae7bc0bc1adfbeff642d5c8e3ecfc4bd9be3a880f452144fa02'),
+            'mp.ipak': (416966272, 'f97404b9bf5a4410ecd298e62a5cdbb3f9d5630b226d885310033842930632a5'),
+          }
+          rows=[]
+          for name,(size,sha) in expected.items():
+            p=root/name
+            actual_size=p.stat().st_size
+            h=hashlib.sha256()
+            with p.open('rb') as f:
+              for chunk in iter(lambda:f.read(8*1024*1024), b''):
+                h.update(chunk)
+            actual_sha=h.hexdigest()
+            row={'name':name,'bytes':actual_size,'sha256':actual_sha,'expectedBytes':size,'expectedSha256':sha,'exact':actual_size==size and actual_sha==sha}
+            rows.append(row)
+            if not row['exact']:
+              raise SystemExit(f'{name} identity mismatch: {row}')
+          Path('/tmp/t6/source_manifest.json').write_text(json.dumps({'format':'t6-seal6-export-r2-source-manifest-v1','files':rows},indent=2,sort_keys=True)+'\n')
+          print(json.dumps(rows,indent=2))
+          PY
+      - name: Rebuild exact SEAL6 package from retail bytes
+        shell: pwsh
+        run: |
+          ./scripts/t6_rebuild_seal6_full_retail_v1.ps1 `
+            -FactionSealsFastfile /tmp/t6/zone/all/faction_seals_mp.ff `
+            -CommonMpFastfile /tmp/t6/zone/all/common_mp.ff `
+            -BaseIpak /tmp/t6/zone/all/base.ipak `
+            -MpIpak /tmp/t6/zone/all/mp.ipak `
+            -Python python `
+            -OutRoot /tmp/seal6_rebuild `
+            -PackagePath /tmp/SEAL6_FULL_RETAIL_BLENDER.zip
+      - name: Final package validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, struct, zipfile
+          from pathlib import Path
+          package=Path('/tmp/SEAL6_FULL_RETAIL_BLENDER.zip')
+          if not package.is_file():
+            raise SystemExit('final package missing')
+          with zipfile.ZipFile(package) as z:
+            names=z.namelist()
+            glbs=[n for n in names if n.lower().endswith('.glb')]
+            if len(glbs) != 4:
+              raise SystemExit(f'expected four LOD GLBs in package, got {glbs}')
+            required=['build_summary.json','textures/manifest.json']
+            for suffix in required:
+              if not any(n.endswith(suffix) for n in names):
+                raise SystemExit(f'package missing {suffix}')
+          h=hashlib.sha256(package.read_bytes()).hexdigest()
+          summary=json.loads(Path('/tmp/seal6_rebuild/build/build_summary.json').read_text(encoding='utf-8-sig'))
+          agg=summary['aggregate']
+          expected={
+            'serializedLods':4,'serializedSurfaces':42,'verticesAcrossSerializedSurfaces':21188,
+            'trianglesAcrossSerializedSurfaces':21283,'joints':102,'benchmarkAnimations':6,
+            'exactTexturePayloads':42,'baseIpakTextures':40,'mpIpakTextures':2,
+            'allLodsTextured':True,'allLodsAnimated':True,'allSurfaceMaterialsExact':True,
+          }
+          for k,v in expected.items():
+            if agg.get(k)!=v:
+              raise SystemExit(f'aggregate mismatch {k}: {agg.get(k)!r} != {v!r}')
+          out={'format':'t6-seal6-final-package-validation-v1','package':str(package),'bytes':package.stat().st_size,'sha256':h,'glbs':glbs,'aggregate':agg}
+          Path('/tmp/seal6_rebuild/final_validation.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+      - name: Upload SEAL6 Blender package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          path: |
+            /tmp/SEAL6_FULL_RETAIL_BLENDER.zip
+            /tmp/SEAL6_FULL_RETAIL_BLENDER.zip.manifest.json
+            /tmp/seal6_rebuild/rebuild_provenance.json
+            /tmp/seal6_rebuild/final_validation.json
+            /tmp/t6/source_manifest.json
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
