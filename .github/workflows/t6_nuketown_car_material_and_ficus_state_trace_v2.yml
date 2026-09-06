@@ -1,0 +1,106 @@
+name: T6 Nuketown car material and Ficus state trace v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car_material_and_ficus_state_trace_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and expand exact retail FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+      - name: Trace exact car LOD0 materials and Ficus state
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import base64,hashlib,json,struct,zlib
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_xmodel_mesh_normalize_v2 import Normalizer
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          table=parse_top_level_xasset_table(data); prefix=walk_map_prefix_stringtable(data,table); logical=prefix['logicalToText']
+          expected={'ficus':('mlv/nt_tree_ficus_lrg_01_sway',24530208),'car01':('veh_t6_nuketown_2020_car01_clean',44523322),'car02':('veh_t6_nuketown_2020_car02_whole',41469954)}
+          report={'format':'t6-nuketown-car-material-and-ficus-state-trace-v2','expandedSha256':hashlib.sha256(data).hexdigest(),'models':{}}
+
+          def ptr(p):
+            if p==0:return {'kind':'null','raw':'0x00000000'}
+            if p==0xffffffff:return {'kind':'following','raw':'0xFFFFFFFF'}
+            if p==0xfffffffe:return {'kind':'insert','raw':'0xFFFFFFFE'}
+            e=(p-1)&0xffffffff;return {'kind':'packed','raw':f'0x{p:08X}','block':e>>29,'offset':e&0x1fffffff}
+          def decode_state(w0,w1):
+            src=w0&15;dst=(w0>>4)&15;op=(w0>>8)&7;atd=(w0>>11)&1;atm=(w0>>12)&1;cull=(w0>>14)&3;srca=(w0>>16)&15;dsta=(w0>>20)&15;opa=(w0>>24)&7
+            nontrivial=(op!=0) and not (src==2 and dst==1)
+            if nontrivial:am='BLEND';cut=None;reason='nontrivial-retail-blend'
+            elif not atd:am='MASK';cut=0.5 if atm else 1/255;reason='retail-alpha-test-ge128' if atm else 'retail-alpha-test-gt0'
+            else:am='OPAQUE';cut=None;reason='retail-alpha-test-disabled-and-no-blend'
+            return {'alphaMode':am,'alphaCutoff':cut,'doubleSided':cull==1,'cullFace':cull,'alphaTestDisabled':bool(atd),'alphaTestMode':atm,'srcBlendRgb':src,'dstBlendRgb':dst,'blendOpRgb':op,'srcBlendAlpha':srca,'dstBlendAlpha':dsta,'blendOpAlpha':opa,'reason':reason}
+          def choose_state(fs,count):
+            ent=list(data[fs+48:fs+84]);lit=[x for x in ent[4:26] if x!=255]
+            if lit:
+              if any(x>=count for x in lit):raise SystemExit('state index out of range')
+              u=sorted(set(lit));return (u[0],'lit-technique-consensus',ent) if len(u)==1 else (None,'lit-disagree',ent)
+            a,b=ent[2],ent[3]
+            if a!=255 and b!=255 and a==b and a<count:return a,'unlit-emissive-consensus',ent
+            return None,'no-visible-color-consensus',ent
+
+          walks={}
+          for key,(ename,start) in expected.items():
+            d=XModelWalker(data,start).walk_xmodel(); walks[key]=d
+            if d['blockers']:raise SystemExit(f'{key}: blockers {d["blockers"]}')
+            mesh=Normalizer(data,start,logical_to_text=logical).normalize()
+            if mesh['identity']['name']!=ename:raise SystemExit(f'{key}: packed-name normalizer identity drift {mesh["identity"]}')
+            lod0=mesh['xmodel']['lods'][0];si=int(lod0['surfIndex']);sn=int(lod0['numSurfs']);handles=d['xmodel']['materialHandles'];by={s['name']:s for s in d['sections']}
+            inline=[]
+            for m in (d.get('details') or {}).get('inlineMaterials',[]):
+              mm=dict(m);fs=by.get(m['label']+'.Material.fixed');ts=by.get(m['label']+'.Material.textureTable.fixed');ss=by.get(m['label']+'.Material.stateBitsTable');mm.update({'fixedStart':fs['start'] if fs else None,'textureTableStart':ts['start'] if ts else None,'stateBitsTableStart':ss['start'] if ss else None});tex=[]
+              if ts:
+                for j in range(m['textureCount']):
+                  q=ts['start']+16*j;ip=struct.unpack_from('<I',data,q+12)[0];tr={'slot':j,'semantic':data[q+7],'samplerState':data[q+6],'materialTextureNameHash':struct.unpack_from('<I',data,q)[0],'imagePointer':ptr(ip)};pref=f"{m['label']}.Material.textureTable[{j}].image.GfxImage";ns=by.get(pref+'.name')
+                  if ns:
+                    a=ns['start'];e=data.index(b'\0',a);tr['inlineImageName']=data[a:e].decode('latin1')
+                  tex.append(tr)
+              mm['textures']=tex;inline.append(mm)
+            lodhandles=[{'surfaceIndex':i,'handle':handles[i]} for i in range(si,si+sn)]
+            report['models'][key]={'name':ename,'fixedSourceStart':start,'lod0':lod0,'lod0MaterialHandles':lodhandles,'inlineMaterials':inline}
+            print('MODEL',key,ename,'LOD0',si,sn)
+            for r in lodhandles:print('HANDLE',key,json.dumps(r,sort_keys=True))
+            for m in inline:print('INLINE_MAT',key,json.dumps(m,sort_keys=True))
+
+          # Exact Ficus primary render state directly from each inline material record.
+          f=walks['ficus'];by={s['name']:s for s in f['sections']};want={'mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway'};states=[]
+          for m in (f.get('details') or {}).get('inlineMaterials',[]):
+            if m['name'] not in want:continue
+            fs=by[m['label']+'.Material.fixed']['start'];ss=by[m['label']+'.Material.stateBitsTable']['start'];idx,sel,ent=choose_state(fs,int(m['stateBitsCount']));r={'material':m['name'],'fixedStart':fs,'stateBitsCount':m['stateBitsCount'],'stateBitsEntry':ent,'selection':sel,'stateBitsTableStart':ss}
+            if idx is not None:
+              w0,w1=struct.unpack_from('<II',data,ss+20*idx);r.update({'stateBitsIndex':idx,'loadBits0':f'0x{w0:08X}','loadBits1':f'0x{w1:08X}',**decode_state(w0,w1)})
+            states.append(r);print('FICUS_STATE',json.dumps(r,sort_keys=True))
+          report['ficusRenderStates']=states
+
+          # Packed binding schema plus exact car packed offsets.
+          bp=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64');bind=json.loads(zlib.decompress(base64.b64decode(bp.read_bytes().strip())));print('PACKED_BIND_SUMMARY',json.dumps(bind['summary'],sort_keys=True));print('PACKED_BIND_FIRST',json.dumps(bind['materials'][:5],sort_keys=True))
+          offsets=sorted({int(r['handle']['offset']) for k in ('car01','car02') for r in report['models'][k]['lod0MaterialHandles'] if r['handle'].get('kind')=='packed' and r['handle'].get('block')==5});report['carLod0PackedMaterialOffsets']=offsets;report['packedBindingManifestSummary']=bind['summary'];print('CAR_PACKED_OFFSETS',offsets)
+          Path('/tmp/trace.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR_MATERIAL_AND_FICUS_STATE_TRACE_V2
+          path: /tmp/trace.json
+          if-no-files-found: error
