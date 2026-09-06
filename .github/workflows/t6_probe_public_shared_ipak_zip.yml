@@ -1,0 +1,104 @@
+name: T6 probe public shared IPAK ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_probe_public_shared_ipak_zip.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe remote ZIP central directory
+        shell: python
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+        run: |
+          import os, struct, urllib.request, json
+
+          url = os.environ['ZIP_URL']
+
+          def req_range(start, end=None):
+              h = {'Range': f'bytes={start}-' + ('' if end is None else str(end)), 'User-Agent': 'bo2-t6-assets-ipak-probe/1'}
+              r = urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=60)
+              b = r.read()
+              return b, dict(r.headers), r.status
+
+          # Resolve total length with a one-byte range request.
+          b, hdr, status = req_range(0, 0)
+          cr = hdr.get('Content-Range') or hdr.get('content-range')
+          if not cr or '/' not in cr:
+              raise SystemExit(f'no Content-Range; status={status} headers={hdr}')
+          total = int(cr.rsplit('/', 1)[1])
+          print('REMOTE_ZIP_BYTES', total)
+          print('RANGE_STATUS', status)
+          print('ACCEPT_RANGES', hdr.get('Accept-Ranges') or hdr.get('accept-ranges'))
+          print('ETAG', hdr.get('ETag') or hdr.get('etag'))
+
+          tail_n = min(total, 2 * 1024 * 1024)
+          tail_start = total - tail_n
+          tail, _, _ = req_range(tail_start, total - 1)
+          sig = b'PK\x05\x06'
+          p = tail.rfind(sig)
+          if p < 0:
+              raise SystemExit('EOCD not found in final 2 MiB')
+          eocd = tail[p:p+22]
+          if len(eocd) < 22:
+              raise SystemExit('truncated EOCD')
+          disk, cd_disk, disk_entries, entries, cd_size, cd_off, comment_len = struct.unpack_from('<4H2LH', eocd, 4)
+          print('EOCD', json.dumps({'disk':disk,'cdDisk':cd_disk,'diskEntries':disk_entries,'entries':entries,'cdSize':cd_size,'cdOffset':cd_off,'commentLen':comment_len}, sort_keys=True))
+          if disk or cd_disk or disk_entries != entries:
+              raise SystemExit('multi-disk ZIP unsupported')
+          if cd_off == 0xffffffff or cd_size == 0xffffffff or entries == 0xffff:
+              raise SystemExit('ZIP64 not yet supported by probe')
+
+          cd, _, _ = req_range(cd_off, cd_off + cd_size - 1)
+          if len(cd) != cd_size:
+              raise SystemExit(f'central directory short read {len(cd)} != {cd_size}')
+
+          targets = {
+              'zone/all/base.ipak',
+              'zone/all/mp.ipak',
+              'zone/all/patch_mp.ipak',
+              'zone/all/mp_nuketown_2020.ipak',
+              'zone/english/en_base.ipak',
+          }
+          found = {}
+          o = 0
+          n = 0
+          while o < len(cd):
+              if cd[o:o+4] != b'PK\x01\x02':
+                  raise SystemExit(f'bad central signature at {o}')
+              vals = struct.unpack_from('<6H3L5H2L', cd, o+4)
+              ver_made, ver_need, flags, method, mtime, mdate, crc32, csize, usize, nlen, xlen, clen, disk_start, int_attr, ext_attr, lhoff = vals
+              name = cd[o+46:o+46+nlen].decode('utf-8', 'replace')
+              if name in targets:
+                  found[name] = {
+                      'method': method,
+                      'flags': flags,
+                      'crc32': f'{crc32:08x}',
+                      'compressedSize': csize,
+                      'uncompressedSize': usize,
+                      'localHeaderOffset': lhoff,
+                  }
+              o += 46 + nlen + xlen + clen
+              n += 1
+          print('CENTRAL_ENTRIES_PARSED', n)
+          print('TARGETS', json.dumps(found, indent=2, sort_keys=True))
+          missing = sorted(targets - found.keys())
+          print('MISSING_TARGETS', json.dumps(missing))
+          if 'zone/all/base.ipak' not in found or 'zone/all/mp.ipak' not in found:
+              raise SystemExit('required base/mp IPAK entries not found')
+
+          # Read local headers too, so the exact compressed-data starts are known.
+          for name, row in sorted(found.items()):
+              h, _, _ = req_range(row['localHeaderOffset'], row['localHeaderOffset'] + 29)
+              if h[:4] != b'PK\x03\x04':
+                  raise SystemExit(f'{name}: bad local header signature')
+              _, _, method, _, _, _, _, _, nlen, xlen = struct.unpack_from('<5H3L2H', h, 4)
+              data_off = row['localHeaderOffset'] + 30 + nlen + xlen
+              row['localMethod'] = method
+              row['dataOffset'] = data_off
+              print('ENTRY', name, json.dumps(row, sort_keys=True))
