@@ -33,7 +33,10 @@ jobs:
           from pathlib import Path
           from t6_xmodel_serialized_walker import XModelWalker
           from t6_ipak_http_range_v2 import open_ipak
-          from t6_nuketown_ipak_partial_texture_export_v2 import r_hash_string
+
+          def r_hash_string(s,h=0):
+              for c in s.encode('latin1'): h=((33*h)^(c|0x20))&0xffffffff
+              return h
 
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
           d=XModelWalker(data,24530208).walk_xmodel(); x=d['xmodel']
@@ -72,7 +75,7 @@ jobs:
           ipaks=[]
           for u in urls:
               try: ipaks.append((u,open_ipak(u)))
-              except Exception as ex:
+              except Exception:
                   if u.endswith('dlc0_load_mp.ipak'): continue
                   raise
           for r in rows:
