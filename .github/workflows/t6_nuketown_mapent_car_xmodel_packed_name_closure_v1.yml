@@ -1,0 +1,154 @@
+name: T6 Nuketown MapEnt car XModel packed-name closure v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_mapent_car_xmodel_packed_name_closure_v1.yml'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail map and resolve packed-name car XModels
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+          PYTHONPATH=tools python - <<'PY'
+          import collections,hashlib,json,struct
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,parse_xmodel_fixed,_packed
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
+          ents=json.loads(Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json').read_text())
+          targets=sorted({e['model'] for e in ents['carEntities'] if e.get('destructibledef') and e.get('model')})
+          if targets != ['veh_t6_nuketown_2020_car01_clean','veh_t6_nuketown_2020_car02_whole']:
+            raise SystemExit(f'unexpected parked-car model set: {targets}')
+
+          table=parse_top_level_xasset_table(data)
+          prefix=walk_map_prefix_stringtable(data,table)
+          rev=collections.defaultdict(list)
+          for logical,text in prefix['logicalToText'].items(): rev[text].append(logical)
+
+          resolved=[]
+          for name in targets:
+            logicals=rev.get(name,[])
+            if len(logicals)!=1:
+              raise SystemExit(f'{name}: expected exactly one proven StringTable VIRTUAL address, got {logicals}')
+            logical=logicals[0]
+            raw=((5 << 29) | logical) + 1
+            if raw >= 2**32: raise SystemExit('packed pointer overflow')
+            needle=struct.pack('<I',raw)
+            occurrences=[]; start=prefix['sourceEnd']
+            while True:
+              i=data.find(needle,start)
+              if i<0: break
+              occurrences.append(i); start=i+1
+
+            candidates=[]
+            for pos in occurrences:
+              r=parse_xmodel_fixed(data,pos,prefix['logicalToText'])
+              if r is None or r['name']!=name: continue
+              # The packed pointer must be the first field of this exact record.
+              if r['fixedSourceStart']!=pos or r['namePointerRaw']!=raw:
+                raise SystemExit(f'{name}: parser accepted inconsistent candidate at {pos}')
+              walk=XModelWalker(data,pos).walk_xmodel()
+              x=walk['xmodel']
+              # A packed name has no following source string, so the walker may
+              # report no textual serialized name. Identity is independently
+              # proven by the StringTable pointer above; structure must still
+              # walk to a valid serialized boundary with zero blockers.
+              if walk['blockers']:
+                raise SystemExit(f'{name}: XModel walker blockers at {pos}: {walk["blockers"]}')
+              if x['namePointer']['kind']!='packed' or x['namePointer']['block']!=5 or x['namePointer']['offset']!=logical:
+                raise SystemExit(f'{name}: walker pointer mismatch: {x["namePointer"]}, logical={logical}')
+              candidates.append({
+                'fixedSourceStart':pos,
+                'nameLogicalVirtualOffset':logical,
+                'namePointerRaw':raw,
+                'namePointer':x['namePointer'],
+                'numBones':x['numBones'],'numRootBones':x['numRootBones'],
+                'numSurfs':x['numSurfs'],'numLods':x['numLods'],
+                'numCollSurfs':x['numCollSurfs'],'numCollmaps':x['numCollmaps'],
+                'radius':x['radius'],'mins':x['mins'],'maxs':x['maxs'],
+                'lods':x['lods'],
+                'serializedEnd':walk['assetSerializedEnd'],
+                'serializedBytes':walk['assetSerializedBytes'],
+                'serializedSha256':walk['assetSerializedSha256'],
+              })
+            if len(candidates)!=1:
+              raise SystemExit(f'{name}: expected one exact structurally valid XModel for packed name pointer 0x{raw:08X}; occurrences={occurrences}, candidates={candidates}')
+            resolved.append({'name':name,'packedPointerOccurrenceCount':len(occurrences),**candidates[0]})
+
+          # Six source entities must map exactly to these two closed XModels.
+          parked=[e for e in ents['carEntities'] if e.get('destructibledef')]
+          if len(parked)!=6: raise SystemExit(f'expected 6 parked cars, got {len(parked)}')
+          known={r['name'] for r in resolved}
+          if any(e['model'] not in known for e in parked): raise SystemExit('parked entity references unresolved model')
+
+          out={
+            'format':'t6-nuketown-mapent-car-xmodel-packed-name-closure-v1',
+            'map':'mp_nuketown_2020',
+            'expandedFastFile':{'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()},
+            'stringTable':prefix['assets']['stringTable'],
+            'proofMethod':'Exact MapEnt model token -> uniquely proven VIRTUAL StringTable logical address -> exact packed block-5 XModel.name pointer bytes -> native-valid XModel fixed record -> complete serialized XModel walker with zero blockers.',
+            'resolvedModels':resolved,
+            'parkedEntityCount':len(parked),
+            'parkedEntityIndices':[e['entityIndex'] for e in parked],
+            'unresolvedModels':[],
+          }
+          b=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode()
+          p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1.json')
+          p.write_bytes(b)
+          sha=hashlib.sha256(b).hexdigest()
+          cp=Path('checkpoints/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1_2026-09-06.md')
+          lines=['# T6 Nuketown MapEnt car XModel packed-name closure v1','',
+                 'Both parked/destructible car XModel identities are now source-closed without adjacent-name or old-GLB inference.','',
+                 '## Result','',
+                 '- parked/destructible MapEnt instances: **6 / 6**','- unique parked-car XModels: **2 / 2**','- unresolved models: **0**','']
+          for r in resolved:
+            lines += [f"### `{r['name']}`",'',
+                      f"- StringTable VIRTUAL offset: **{r['nameLogicalVirtualOffset']}**",
+                      f"- packed XModel.name pointer: `0x{r['namePointerRaw']:08X}`",
+                      f"- fixed source start: **{r['fixedSourceStart']}**",
+                      f"- bones / surfaces / LODs: **{r['numBones']} / {r['numSurfs']} / {r['numLods']}**",
+                      f"- serialized span: **{r['serializedBytes']:,} bytes**",
+                      f"- serialized SHA-256: `{r['serializedSha256']}`",'']
+          lines += ['## Proof boundary','',
+                    'Identity requires the exact MapEnt token, the exact self-calibrated StringTable VIRTUAL address, the exact packed block-5 name pointer at the first word of the XModel record, and a blocker-free complete XModel serialized walk. Literal string adjacency, mesh similarity, old scene assignments, and name guessing are not accepted.','',
+                    f'- machine-readable manifest bytes: **{len(b):,}**',f'- manifest SHA-256: `{sha}`','']
+          cp.write_text('\n'.join(lines))
+          print(json.dumps({'manifestBytes':len(b),'manifestSha256':sha,'resolved':resolved,'parkedEntityIndices':out['parkedEntityIndices']},indent=2))
+          PY
+
+      - name: Commit exact packed-name car XModel closure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1.json \
+                  checkpoints/T6_NUKETOWN_MAPENT_CAR_XMODEL_PACKED_NAME_CLOSURE_V1_2026-09-06.md
+          git commit -m 'Close Nuketown MapEnt car XModels through packed names'
+          git pull --rebase origin main
+          git push origin HEAD:main
