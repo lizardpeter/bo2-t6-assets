@@ -47,6 +47,18 @@ def png_dims(p:Path):
  b=p.read_bytes()
  if len(b)<24 or b[:8]!=b'\x89PNG\r\n\x1a\n' or b[12:16]!=b'IHDR':raise ApplyError(f'invalid PNG: {p}')
  return struct.unpack_from('>II',b,16)
+def exact_key_tuple(d:dict)->tuple[int,int]:
+ return int(d['nameHash'])&0xffffffff,int(d['dataHash'])&0x1fffffff
+def assert_exact_key(name:str,row:dict,expected_key:dict,*,cached:bool=False):
+ actual=exact_key_tuple(row);expected=exact_key_tuple(expected_key)
+ if actual!=expected:
+  prefix='cached ' if cached else ''
+  raise ApplyError(
+   f'{name}: {prefix}materialized exact key does not match binding plan; '
+   f'actual=(nameHash=0x{actual[0]:08x},dataHash=0x{actual[1]:08x},repository={row.get("repository")!r}) '
+   f'expected=(nameHash=0x{expected[0]:08x},dataHash=0x{expected[1]:08x},repository={expected_key.get("repository")!r},'
+   f'nameHashEvidence={expected_key.get("nameHashEvidence")!r},upstreamHashField={expected_key.get("upstreamHashField")!r})'
+  )
 
 def main()->int:
  ap=argparse.ArgumentParser();ap.add_argument('--glb',type=Path,required=True);ap.add_argument('--binding-plan',type=Path,required=True);ap.add_argument('--materialized-manifest',type=Path,required=True);ap.add_argument('--out',type=Path,required=True);ap.add_argument('--manifest',type=Path,required=True);a=ap.parse_args()
@@ -78,11 +90,11 @@ def main()->int:
  def texture_for(name:str,expected_key:dict|None=None):
   if name in texture_cache:
    row=texrows[name]
-   if expected_key is not None and (int(row['nameHash'])!=int(expected_key['nameHash']) or (int(row['dataHash'])&0x1fffffff)!=(int(expected_key['dataHash'])&0x1fffffff)):raise ApplyError(f'{name}: cached materialized exact key does not match binding plan')
+   if expected_key is not None:assert_exact_key(name,row,expected_key,cached=True)
    return texture_cache[name]
   row=texrows.get(name)
   if row is None:raise ApplyError(f'{name}: not present in materialization manifest')
-  if expected_key is not None and (int(row['nameHash'])!=int(expected_key['nameHash']) or (int(row['dataHash'])&0x1fffffff)!=(int(expected_key['dataHash'])&0x1fffffff)):raise ApplyError(f'{name}: materialized exact key does not match binding plan')
+  if expected_key is not None:assert_exact_key(name,row,expected_key)
   p=root/row['pngFile'];png=p.read_bytes()
   while len(binbuf)%4:binbuf.append(0)
   off=len(binbuf);binbuf.extend(png);bvs.append({'buffer':0,'byteOffset':off,'byteLength':len(png),'name':f'T6_{name}_PNG'});bvi=len(bvs)-1;images.append({'name':name,'bufferView':bvi,'mimeType':'image/png','extras':{'T6':{'retailIwiSha256':row['iwiSha256'],'pngSha256':row['pngSha256'],'nameHash':row['nameHash'],'dataHash':row['dataHash'],'crc29Validated':row.get('crc29Validated'),'exactKeyValidated':row.get('exactKeyValidated'),'sourceRepository':row.get('repository')}}});ii=len(images)-1;flags=int((row.get('iwi') or {}).get('flags',0));si=sampler_for(flags);textures.append({'name':name,'source':ii,'sampler':si});ti=len(textures)-1;texture_cache[name]=ti;embedded.append({'image':name,'textureIndex':ti,'pngBytes':len(png),'pngSha256':row['pngSha256'],'sourceRepository':row.get('repository')});return ti
