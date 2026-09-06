@@ -1,0 +1,136 @@
+{
+  "conclusion": {
+    "block": 5,
+    "conflicts": 0,
+    "material": "mc/mtl_ac_prs_vehicle_sheet_a",
+    "offset": 26834420,
+    "status": "exact-retail-material-pointer-resolution"
+  },
+  "format": "t6-nuketown-car-material-alias-proof-v1",
+  "loader": {
+    "commit": "2ca512abe7cb82d70a94d5ad7846043c3978862d",
+    "project": "Laupetin/OpenAssetTools",
+    "semantics": [
+      "XModel and Material fixed objects are TEMP assets while materialHandles is loaded from the normal VIRTUAL block.",
+      "asset pointer-array slots are registered with AddPointerLookup at their block-buffer address.",
+      "packed TEMP-asset pointers resolve with ConvertOffsetToAliasLookup against an already registered alias/pointer slot.",
+      "therefore a packed Material target cannot resolve to a future, not-yet-registered pointer slot."
+    ],
+    "sourceChecks": {
+      "loadTemplate": {
+        "bytes": 87959,
+        "checkedSnippets": [
+          "m_stream.AddPointerLookup(&{0}[index]",
+          "StructureComputations(info).IsAsset()",
+          "ConvertOffsetToAliasLookup"
+        ],
+        "path": "/tmp/oat/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLoadTemplate.cpp",
+        "sha256": "62be7b536423a82f5d5ec4b243a2c508e000457829be9c4c9b9304a13306ae8c"
+      },
+      "materialZoneCode": {
+        "bytes": 537,
+        "checkedSnippets": [
+          "use Material;",
+          "set block XFILE_BLOCK_TEMP;"
+        ],
+        "path": "/tmp/oat/src/ZoneCode/Game/T6/XAssets/Material.txt",
+        "sha256": "b8da956d692a41fb8a8ed388a4f94be1b1e513477ecc5fdaa9384ecd3fb63921"
+      },
+      "xmodelZoneCode": {
+        "bytes": 2151,
+        "checkedSnippets": [
+          "use XModel;",
+          "set block XFILE_BLOCK_TEMP;",
+          "set count materialHandles numsurfs;"
+        ],
+        "path": "/tmp/oat/src/ZoneCode/Game/T6/XAssets/XModel.txt",
+        "sha256": "38cd33ea15b5c47c8a8d751d8696a5fbf25aa1b5485a8b6bcedc517e39962767"
+      },
+      "zoneInputStream": {
+        "bytes": 20121,
+        "checkedSnippets": [
+          "void AddPointerLookup(void* alias, const void* blockPtr) override",
+          "void* ConvertOffsetToAliasLookup(const void* offset) override",
+          "m_pointer_redirect_lookup.find(offsetInt)"
+        ],
+        "path": "/tmp/oat/src/ZoneLoading/Zone/Stream/ZoneInputStream.cpp",
+        "sha256": "02aaff4632989c12299d9f418f87ee89d2bec80c0861cdb3128d5e929ebc8396"
+      }
+    }
+  },
+  "map": "mp_nuketown_2020",
+  "origin": {
+    "inlineMaterial": "mc/mtl_ac_prs_vehicle_sheet_a",
+    "materialHandleKind": "following",
+    "materialHandleRaw": 4294967295,
+    "materialHandleSourceOffset": 26959541,
+    "modelName": "ny_harbor_veh_civ_car_a_10",
+    "surfaceCount": 1,
+    "uniqueInlineOriginBeforeConsumers": true,
+    "xassetIndex": 289
+  },
+  "packedConsumerCount": 7,
+  "packedConsumers": [
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_11",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 290
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_2",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 291
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_4",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 292
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_6",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 293
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_7",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 294
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_8",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 295
+    },
+    {
+      "block": 5,
+      "modelName": "ny_harbor_veh_civ_car_a_9",
+      "offset": 26834420,
+      "raw": 2711188981,
+      "rawHex": "0xA19975F5",
+      "xassetIndex": 296
+    }
+  ],
+  "proofBoundary": "No old GLB assignment, render appearance, material/model name similarity, mesh similarity, adjacency-only inference, or fitted cursor constant participates. The identity follows from the exact retail pointer values plus pinned TEMP-asset alias-registration/resolution semantics.",
+  "source": {
+    "expandedBytes": 154653476,
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  }
+}
