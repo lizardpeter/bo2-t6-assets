@@ -1,0 +1,59 @@
+name: SEAL6 texture key contract smoke
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - ".github/workflows/seal6-key-contract-smoke.yml"
+      - "tools/t6_character_material_binding_plan_v1.py"
+      - "tools/t6_ipak_iwi_materialize_v3.py"
+      - "manifests/nonmap/retail/seal6_smg_exact_base_ipak_keys_v4.json"
+      - "manifests/nonmap/retail/seal6_smg_texture_keys_v4.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compare authoritative derived IPAK key inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(path):
+              d=json.loads(Path(path).read_text(encoding='utf-8-sig'))
+              return d.get('exactBaseIpakKeys') or d.get('exactStreamKeyImages') or d.get('exactIpakKeys') or []
+          def u32(v): return int(v,0) if isinstance(v,str) else int(v)
+          def rhash(s):
+              h=0
+              for c in s.encode('latin1'):
+                  h=((33*h)^(c|0x20))&0xffffffff
+              return h
+          a=rows('manifests/nonmap/retail/seal6_smg_exact_base_ipak_keys_v4.json')
+          b=rows('manifests/nonmap/retail/seal6_smg_texture_keys_v4.json')
+          A={r.get('image') or r.get('name'):r for r in a}
+          B={r.get('image') or r.get('name'):r for r in b}
+          if set(A)!=set(B):
+              raise SystemExit(f'image identity sets differ: onlyA={sorted(set(A)-set(B))}, onlyB={sorted(set(B)-set(A))}')
+          mism=[]
+          for name in sorted(A):
+              ar=A[name];br=B[name]
+              asp=ar.get('streamedPart0') or {};bsp=br.get('streamedPart0') or {}
+              adh=u32(asp.get('dataHash',asp.get('dataHashHex',ar.get('dataHash',ar.get('dataHashHex')))))&0x1fffffff
+              bdh=u32(bsp.get('dataHash',bsp.get('dataHashHex',br.get('dataHash',br.get('dataHashHex')))))&0x1fffffff
+              if adh!=bdh:mism.append((name,adh,bdh))
+              if name=='~-gc_gen_insidemouth_c':
+                  print(json.dumps({'image':name,'derivedNameHashHex':f'0x{rhash(name):08x}','exactManifestUpstreamHash':ar.get('nameHash',ar.get('nameHashHex')),'targetManifestUpstreamHash':br.get('nameHash',br.get('nameHashHex')),'exactManifestDataHashHex':f'0x{adh:08x}','targetManifestDataHashHex':f'0x{bdh:08x}'},indent=2))
+          if mism:raise SystemExit(f'dataHash mismatches: {mism}')
+          print(json.dumps({'images':len(A),'derivedFilenameHashPolicy':'R_HashString(exact image name)','dataHashSetsEqual':True},indent=2))
+          PY
