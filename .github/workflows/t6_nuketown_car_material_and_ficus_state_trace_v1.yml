@@ -31,60 +31,96 @@ jobs:
           import base64,hashlib,json,struct,zlib
           from pathlib import Path
           from t6_xmodel_serialized_walker import XModelWalker
-          from t6_nuketown_static_material_catalog_v1 import material_row
-          from t6_nuketown_material_render_state_apply_v1 import choose_state_entry,state_table_start,decode_state
 
           data=Path('/tmp/mp_nuketown_2020.expanded.bin').read_bytes()
-          targets={
-            'ficus':24530208,
-            'car01':44523322,
-            'car02':41469954,
-          }
+          targets={'ficus':24530208,'car01':44523322,'car02':41469954}
           report={'format':'t6-nuketown-car-material-and-ficus-state-trace-v1','expandedSha256':hashlib.sha256(data).hexdigest(),'models':{}}
+
+          def decode_state(w0,w1):
+            src=w0&0xF; dst=(w0>>4)&0xF; op=(w0>>8)&0x7
+            at_disabled=(w0>>11)&1; at_mode=(w0>>12)&1; cull=(w0>>14)&0x3
+            srca=(w0>>16)&0xF; dsta=(w0>>20)&0xF; opa=(w0>>24)&0x7
+            nontrivial=(op!=0) and not (src==2 and dst==1)
+            if nontrivial: alpha='BLEND'; cutoff=None; reason='nontrivial-retail-blend'
+            elif not at_disabled: alpha='MASK'; cutoff=0.5 if at_mode else 1/255; reason='retail-alpha-test-ge128' if at_mode else 'retail-alpha-test-gt0'
+            else: alpha='OPAQUE'; cutoff=None; reason='retail-alpha-test-disabled-and-no-blend'
+            return {'srcBlendRgb':src,'dstBlendRgb':dst,'blendOpRgb':op,'alphaTestDisabled':bool(at_disabled),'alphaTestMode':at_mode,'cullFace':cull,
+                    'srcBlendAlpha':srca,'dstBlendAlpha':dsta,'blendOpAlpha':opa,'alphaMode':alpha,'alphaCutoff':cutoff,'doubleSided':cull==1,'reason':reason}
+
+          def choose_state(fixed,state_count):
+            entries=list(data[fixed+48:fixed+84])
+            lit=[x for x in entries[4:26] if x!=255]
+            if lit:
+              bad=[x for x in lit if x>=state_count]
+              if bad: raise SystemExit(f'state entries out of range: {bad} / {state_count}')
+              uniq=sorted(set(lit))
+              if len(uniq)!=1: return None,'lit-disagree',entries
+              return uniq[0],'lit-technique-consensus',entries
+            u,e=entries[2],entries[3]
+            if u!=255 and e!=255 and u<state_count and e<state_count and u==e:
+              return u,'unlit-emissive-consensus',entries
+            return None,'no-visible-color-consensus',entries
+
+          walks={}
           for key,start in targets.items():
-            d=XModelWalker(data,start).walk_xmodel(); x=d['xmodel']
+            d=XModelWalker(data,start).walk_xmodel(); walks[key]=d; x=d['xmodel']
             if d['blockers']: raise SystemExit(f'{key}: blockers {d["blockers"]}')
-            lod0=x['lods'][0]
-            si=int(lod0['surfIndex']); sn=int(lod0['numSurfs'])
-            handles=x['materialHandles']
-            row={'name':x['name'],'fixedSourceStart':start,'numSurfs':x['numSurfs'],'lod0':lod0,'lod0MaterialHandles':[],'inlineMaterials':(d.get('details') or {}).get('inlineMaterials',[])}
-            for i in range(si,si+sn):
-              h=handles[i]
-              row['lod0MaterialHandles'].append({'surfaceIndex':i,'handle':h})
+            lod0=x['lods'][0]; si=int(lod0['surfIndex']); sn=int(lod0['numSurfs']); handles=x['materialHandles']
+            bysec={s['name']:s for s in d['sections']}
+            inline=[]
+            for m in (d.get('details') or {}).get('inlineMaterials',[]):
+              mm=dict(m); fs=bysec.get(m['label']+'.Material.fixed'); ts=bysec.get(m['label']+'.Material.textureTable.fixed'); ss=bysec.get(m['label']+'.Material.stateBitsTable')
+              mm['fixedStart']=fs['start'] if fs else None; mm['textureTableStart']=ts['start'] if ts else None; mm['stateBitsTableStart']=ss['start'] if ss else None
+              tex=[]
+              if ts:
+                for j in range(m['textureCount']):
+                  b=ts['start']+16*j; p=struct.unpack_from('<I',data,b+12)[0]
+                  rec={'slot':j,'nameHash':struct.unpack_from('<I',data,b)[0],'nameStart':data[b+4],'nameEnd':data[b+5],'samplerState':data[b+6],'semantic':data[b+7],'imagePointerRaw':f'0x{p:08X}'}
+                  if p not in (0,0xFFFFFFFF,0xFFFFFFFE):
+                    enc=(p-1)&0xffffffff; rec['imagePointer']={'kind':'packed','block':enc>>29,'offset':enc&0x1fffffff}
+                  else: rec['imagePointer']={'kind':'null' if p==0 else 'following' if p==0xffffffff else 'insert'}
+                  prefix=f"{m['label']}.Material.textureTable[{j}].image.GfxImage"
+                  ns=bysec.get(prefix+'.name')
+                  if ns:
+                    a=ns['start']; e=data.index(b'\0',a); rec['inlineImageName']=data[a:e].decode('latin1')
+                  tex.append(rec)
+              mm['textures']=tex; inline.append(mm)
+            row={'name':x['name'],'fixedSourceStart':start,'numSurfs':x['numSurfs'],'lod0':lod0,'lod0MaterialHandles':[],'inlineMaterials':inline}
+            for i in range(si,si+sn): row['lod0MaterialHandles'].append({'surfaceIndex':i,'handle':handles[i]})
             report['models'][key]=row
             print('MODEL',key,x['name'],'LOD0',si,sn)
             for rr in row['lod0MaterialHandles']: print('HANDLE',key,json.dumps(rr,sort_keys=True))
-            for m in row['inlineMaterials']: print('INLINE_MAT',key,json.dumps(m,sort_keys=True))
+            for m in inline: print('INLINE_MAT',key,json.dumps(m,sort_keys=True))
 
-          # Exact Ficus render states for the three LOD0 material identities.
-          ficus_names=['mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway']
+          # Exact Ficus render states straight from its inline Material records.
+          fd=walks['ficus']; bysec={s['name']:s for s in fd['sections']}; fdetails=(fd.get('details') or {}).get('inlineMaterials',[])
+          want={'mlv/mtl_p6_tree_ficus_lrg_01_bark1','mlv/t5_foliage_tree_standard_gobo_128','mlv/mtl_p6_tree_ficus_lrg_01_foliage_noshadow_sway'}
           states=[]
-          for name in ficus_names:
-            r=material_row(data,name)
-            if r.get('status')!='located': raise SystemExit(f'{name}: material catalog status {r}')
-            idx,selection,entries=choose_state_entry(data,r)
-            p=state_table_start(data,r)
-            q=p+20*idx
-            w0,w1=struct.unpack_from('<II',data,q)
-            st=decode_state(w0,w1)
-            states.append({'material':name,'materialRow':r,'stateBitsIndex':idx,'selection':selection,'stateBitsTableStart':p,'loadBits0':f'0x{w0:08X}','loadBits1':f'0x{w1:08X}',**st})
-            print('FICUS_STATE',json.dumps(states[-1],sort_keys=True,default=str))
+          for m in fdetails:
+            if m['name'] not in want: continue
+            fs=bysec[m['label']+'.Material.fixed']['start']; ss=bysec.get(m['label']+'.Material.stateBitsTable')
+            if not ss: raise SystemExit(f"{m['name']}: missing inline state table")
+            idx,selection,entries=choose_state(fs,int(m['stateBitsCount']))
+            row={'material':m['name'],'materialFixedStart':fs,'stateBitsCount':m['stateBitsCount'],'selection':selection,'stateBitsEntry':entries,'stateBitsTableStart':ss['start']}
+            if idx is not None:
+              q=ss['start']+20*idx; w0,w1=struct.unpack_from('<II',data,q); row.update({'stateBitsIndex':idx,'loadBits0':f'0x{w0:08X}','loadBits1':f'0x{w1:08X}',**decode_state(w0,w1)})
+            states.append(row); print('FICUS_STATE',json.dumps(row,sort_keys=True))
+          if {r['material'] for r in states}!=want: raise SystemExit('did not recover all Ficus LOD0 states')
           report['ficusRenderStates']=states
 
-          # Decode retained packed Material binding manifest schema and report candidate matches for car packed handles.
+          # Decode exact packed Material/image binding manifest; keep schema and car offsets for the next exact join.
           p=Path('manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PACKED_MATERIAL_IMAGE_BINDINGS_V1.json.zlib.b64')
-          raw=zlib.decompress(base64.b64decode(p.read_bytes().strip()))
-          bind=json.loads(raw)
+          bind=json.loads(zlib.decompress(base64.b64decode(p.read_bytes().strip())))
           print('PACKED_BIND_SUMMARY',json.dumps(bind['summary'],sort_keys=True))
-          print('PACKED_BIND_FIRST',json.dumps(bind['materials'][:3],indent=2,sort_keys=True))
-          # Preserve exact packed pointer offsets used by car LOD0 for later join.
+          print('PACKED_BIND_FIRST',json.dumps(bind['materials'][:3],sort_keys=True))
           offs=[]
           for key in ('car01','car02'):
             for rr in report['models'][key]['lod0MaterialHandles']:
               h=rr['handle']
               if h.get('kind')=='packed' and h.get('block')==5: offs.append(int(h['offset']))
           report['carLod0PackedMaterialOffsets']=sorted(set(offs))
-          Path('/tmp/trace.json').write_text(json.dumps(report,indent=2,sort_keys=True,default=str)+'\n')
+          report['packedBindingManifestSummary']=bind['summary']
+          Path('/tmp/trace.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           PY
       - uses: actions/upload-artifact@v4
         with:
