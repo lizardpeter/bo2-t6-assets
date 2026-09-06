@@ -6,6 +6,9 @@ on:
       - reversal/nonmap-assets
     paths:
       - ".github/workflows/seal6-r2-ipak-payload-audit.yml"
+      - "tools/t6_ipak_iwi_materialize_v3.py"
+      - "tools/t6_ipak_iwi_materialize_v2.py"
+      - "tools/t6_ipak_iwi_materialize_v1.py"
   workflow_dispatch:
 
 permissions:
@@ -74,7 +77,8 @@ jobs:
           rows=d.get('textures') or []
           if len(rows)!=42 or not all(x.get('crc29Validated') is True and x.get('exactKeyValidated') is True for x in rows):
             raise SystemExit('not every texture has exact-key + CRC29 closure')
-          Path('/tmp/t6/payload_audit_summary.json').write_text(json.dumps({'format':'t6-seal6-r2-ipak-payload-audit-v1','summary':s,'allExactKeyValidated':True,'allCrc29Validated':True},indent=2,sort_keys=True)+'\n')
+          src={x['name']:x for x in d.get('sourceIpaks') or []}
+          Path('/tmp/t6/payload_audit_summary.json').write_text(json.dumps({'format':'t6-seal6-r2-ipak-payload-audit-v2','summary':s,'sourceIpaks':src,'allExactKeyValidated':True,'allCrc29Validated':True},indent=2,sort_keys=True)+'\n')
           PY
       - name: Upload IPAK payload proof
         if: always()
