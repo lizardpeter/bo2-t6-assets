@@ -28,6 +28,34 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _scan_current_world_helper(helper, data: bytes, before: int):
+    """Normalize the retained helper's current front()/scan_tech() API.
+
+    Older special-shader tooling used parse_front()/scan_techsets().  The
+    authoritative current helper exposes front() -> (blocks, assets) and
+    scan_tech() rows with start/fmt/name.  Normalize only field names here; the
+    byte scan/pointer rules remain the helper's exact implementation.
+    """
+    if hasattr(helper, 'front') and hasattr(helper, 'scan_tech'):
+        blocks, _assets = helper.front(data)
+        rows = helper.scan_tech(data, blocks, before)
+        normalized = [
+            {
+                **row,
+                'fixedStart': int(row['start']),
+                'worldVertFormat': int(row['fmt']),
+            }
+            for row in rows
+        ]
+        return blocks, normalized
+    if hasattr(helper, 'parse_front') and hasattr(helper, 'scan_techsets'):
+        front = helper.parse_front(data)
+        blocks = front['blockSizes']
+        rows = helper.scan_techsets(data, blocks, before=before)
+        return blocks, rows
+    raise ValueError('world helper exposes neither supported retained scanning API')
+
+
 def build(root: Path, special_manifest: Path, parser_path: Path, helper_path: Path, family: str, out_dir: Path) -> dict:
     parser = load(parser_path, 'special_payload_parser')
     helper = load(helper_path, 'world_helper')
@@ -48,9 +76,8 @@ def build(root: Path, special_manifest: Path, parser_path: Path, helper_path: Pa
         got = sha(data)
         if got != cfg['sha']:
             raise ValueError(f'{map_name}: expanded SHA mismatch {got}')
-        front = helper.parse_front(data)
-        blocks = front['blockSizes']
-        rows = helper.scan_techsets(data, blocks, before=cfg['world'])[-(cfg['q1'] - cfg['q0'] + 1):]
+        blocks, all_rows = _scan_current_world_helper(helper, data, cfg['world'])
+        rows = all_rows[-(cfg['q1'] - cfg['q0'] + 1):]
         if len(rows) != cfg['q1'] - cfg['q0'] + 1:
             raise ValueError(f'{map_name}: TechniqueSet block count mismatch')
         for i, row in enumerate(rows):
@@ -112,9 +139,8 @@ def build(root: Path, special_manifest: Path, parser_path: Path, helper_path: Pa
                                 'stage': stage, 'sha256': digest, 'bytes': size, 'file': filename,
                                 'names': [], 'uses': [],
                             }
-                        else:
-                            if target.read_bytes() != blob:
-                                raise ValueError('SHA collision/different retained shader bytes')
+                        elif target.read_bytes() != blob:
+                            raise ValueError('SHA collision/different retained shader bytes')
                         prog = programs[key]
                         if shader.get('name') not in prog['names']:
                             prog['names'].append(shader.get('name'))
@@ -148,6 +174,7 @@ def build(root: Path, special_manifest: Path, parser_path: Path, helper_path: Pa
             'specialManifest': special_manifest.name,
             'parser': parser_path.name,
             'helper': helper_path.name,
+            'helperApiAdapter': 'front+scan_tech normalized to fixedStart+worldVertFormat when current API is present',
         },
         'techniqueSets': sorted(wanted),
         'programs': rows,
@@ -155,7 +182,7 @@ def build(root: Path, special_manifest: Path, parser_path: Path, helper_path: Pa
         'packedReferences': packed,
         'structuralValidation': structural,
         'summary': summary,
-        'proofBoundary': 'Exact bytes only for physically inline FOLLOW/INSERT DXBC programs in the five SHA-pinned expanded worlds. Family membership comes from the committed special-family census. Packed technique/shader references are retained unresolved and are never assigned by adjacency, names, or cross-map similarity.',
+        'proofBoundary': 'Exact bytes only for physically inline FOLLOW/INSERT DXBC programs in the five SHA-pinned expanded worlds. Family membership comes from the committed special-family census. Current helper front()/scan_tech() output is field-normalized only; pointer/scan semantics are unchanged. Packed technique/shader references are retained unresolved and are never assigned by adjacency, names, or cross-map similarity.',
     }
 
 
