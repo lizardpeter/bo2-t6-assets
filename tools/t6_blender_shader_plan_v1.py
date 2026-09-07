@@ -155,7 +155,7 @@ def build_plan(ir: dict, semantics: dict) -> dict:
         raise BlenderShaderPlanError(f"unsupported T6 shader IR {ir.get('format')!r}")
     if ir.get("techniqueType") != "lit":
         raise BlenderShaderPlanError("lprobe v1 Blender lowering only accepts exact T6 technique type 'lit'")
-    render_pass, vs, ps = _pass_shader_pair(ir)
+    _render_pass, vs, ps = _pass_shader_pair(ir)
     vs_sha, ps_sha = _shader_sha(vs), _shader_sha(ps)
     family = _family(semantics, vs_sha, ps_sha)
     textures, constants = _material_inputs(ir)
@@ -245,7 +245,7 @@ def build_plan(ir: dict, semantics: dict) -> dict:
             "pipelineState": "authoritative-metadata; arbitrary D3D destination blending is not claimed exact in Blender",
         },
         "forbiddenFallbacks": semantics.get("backendPolicy", {}).get("blender", {}).get("forbiddenFallbacks", []),
-        "completeRetailPixelOutputInBlender": false,
+        "completeRetailPixelOutputInBlender": False,
     }
 
 
