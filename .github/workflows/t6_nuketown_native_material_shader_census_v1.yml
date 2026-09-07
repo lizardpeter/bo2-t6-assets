@@ -8,6 +8,7 @@ on:
       - 'tools/t6_oat_material_shader_census_v2.py'
       - 'tools/t6_oat_material_shader_census_v3.py'
       - 'tools/test_t6_oat_material_shader_census_v3.py'
+      - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
       - 'tools/t6_oat_techset_binding_manifest_v1.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - '.github/workflows/t6_nuketown_native_material_shader_census_v1.yml'
@@ -121,6 +122,27 @@ jobs:
               print(f"{g['materialCount']:4d} mats type={g['techniqueType']} group={g['groupKey'][:12]} stages={','.join(stage)} techsets={len(g['techniqueSets'])}")
           PY
           fi
+          exit "$RC"
+
+      - name: Close exact shadowCookieOverlay Technique owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          PYTHONPATH=tools python3 tools/t6_oat_exact_technique_owner_closure_v1.py \
+            --census /tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V3.json \
+            --shader-root mp_nuketown_2020=/tmp/map_out \
+            --shader-root common_mp=/tmp/common_out \
+            --shader-root common_patch_mp=/tmp/common_patch_out \
+            --shader-root patch_mp=/tmp/patch_out \
+            --target-name pimp_technique_shadowoverlay_5255c888 \
+            --target-bytes 592 \
+            --target-sha256 cc2f2805aef4899b24ed1a181f816bfcdfd18c6ab876a1172cae11f0abd20d71 \
+            --out /tmp/proof/T6_SHADOWCOOKIEOVERLAY_NATIVE_OWNER_CLOSURE_V1.json \
+            2>&1 | tee /tmp/proof/shadowcookie_owner_closure.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "$RC" > /tmp/proof/shadowcookie_owner_closure_rc.txt
           exit "$RC"
 
       - name: Upload native shader census proof
