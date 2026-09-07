@@ -1,0 +1,50 @@
+{
+  "format": "t6-missing-retail-source-depot-focus-checkpoint-v1",
+  "scope": "Steam English retail FastFile source-recovery focus only",
+  "evidence": {
+    "workflow": ".github/workflows/t6-missing-source-depot-focus-v1.yml",
+    "runId": 34163812802,
+    "jobId": 101870794457,
+    "headCommit": "d2acdea92e8987b0d1c2c0e0267571f4ab7c6d13",
+    "artifact": {
+      "id": 10033478685,
+      "name": "T6_MISSING_RETAIL_SOURCE_DEPOT_FOCUS_V1",
+      "digest": "sha256:32733a96c0802205cb8a1322f75a6ebfe31780abeee87d81d33ebb707ba55612"
+    }
+  },
+  "inputs": {
+    "baseCatalog": "manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json",
+    "fullCatalog": "manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json",
+    "sourceAvailability": "manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json"
+  },
+  "missingSet": {
+    "fastFiles": 82,
+    "owningDepotCount": 1
+  },
+  "owningDepot": {
+    "depotId": 202974,
+    "manifestId": "8534031140633404768",
+    "label": "sp-content",
+    "catalogFastFiles": 84,
+    "missingFastFiles": 82,
+    "retainedPresentFastFiles": 2,
+    "retainedPresentPaths": [
+      "zone/all/code_post_gfx.ff",
+      "zone/all/code_pre_gfx.ff"
+    ]
+  },
+  "gates": {
+    "allMissingPathsHaveCatalogOwners": true,
+    "missingCountMatchesAvailabilityCheckpoint": true,
+    "missingSetOwnedBySingleDepot": true,
+    "sourceBytesRecovered": false,
+    "owningDepotByteIdentityClosed": false
+  },
+  "proofBoundary": [
+    "All 82 source-unavailable English-retail FastFile paths in the retained availability checkpoint are catalog-owned by the single Steam SP-content depot 202974 / manifest 8534031140633404768.",
+    "The owning depot declares 84 FastFiles; the retained flat source union currently contains exactly two of them, zone/all/code_post_gfx.ff and zone/all/code_pre_gfx.ff, leaving the other 82 as the missing set.",
+    "This closes source-recovery ownership scope only. It does not recover the missing bytes and does not treat SteamDB manifest metadata as a raw retail-file hash oracle.",
+    "The two retained-present FastFiles are source-availability controls only until exact owning-depot byte identity is independently established.",
+    "Whole-English-retail XModel/XAnim completeness remains blocked until the 82 missing FastFiles are recovered from an authorized source and audited."
+  ]
+}
