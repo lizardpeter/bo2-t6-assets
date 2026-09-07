@@ -32,10 +32,26 @@ jobs:
           import t6_retail_world_formats_45_proof_v1 as h
           from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
           from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
+          from t6_material_techset_top_level_walk_v1 import Cursor
+          from t6_xmodel_serialized_walker import XModelWalker
           d=Path('/tmp/map.expanded').read_bytes();blocks,assets=h.front(d)
           table=parse_top_level_xasset_table(d);prefix=walk_map_prefix_stringtable(d,table)
           ps=int(prefix['sourceEnd']);print('PREFIX_END',ps,'HEX',d[ps:ps+192].hex())
-          recs=scan_required_xmodels(d,ps,3,prefix['logicalToText']);print('FIRST_XMODELS',[(r['fixedSourceStart'],r['name']) for r in recs])
+          recs=scan_required_xmodels(d,ps,6,prefix['logicalToText']);print('FIRST_XMODELS',[(r['fixedSourceStart'],r['name']) for r in recs])
+          # Exact early source order is q3 TS, q4 XModel, q5 TS, q6 TS, q7 XModel, q8 TS, q9 XModel...
+          c=Cursor(d,ps,blocks)
+          try:
+            t3=c.techset();print('PARSE_Q3',t3['fixedStart'],t3['end'],t3['name'])
+            print('EXPECT_Q4_XMODEL',recs[0]['fixedSourceStart'])
+            w4=XModelWalker(d,c.p).walk_xmodel();print('PARSE_Q4',c.p,w4['assetSerializedEnd'],w4['xmodel'].get('name'),'blockers',w4['blockers']);c.p=w4['assetSerializedEnd']
+            t5=c.techset();print('PARSE_Q5',t5['fixedStart'],t5['end'],t5['name'])
+            t6=c.techset();print('PARSE_Q6',t6['fixedStart'],t6['end'],t6['name'])
+            print('EXPECT_Q7_XMODEL',recs[1]['fixedSourceStart'])
+            w7=XModelWalker(d,c.p).walk_xmodel();print('PARSE_Q7',c.p,w7['assetSerializedEnd'],w7['xmodel'].get('name'),'blockers',w7['blockers']);c.p=w7['assetSerializedEnd']
+            t8=c.techset();print('PARSE_Q8',t8['fixedStart'],t8['end'],t8['name'])
+            print('EXPECT_Q9_XMODEL',recs[2]['fixedSourceStart'])
+          except Exception as exc:
+            print('EARLY_PARSE_FAILURE_AT_CURSOR',c.p,repr(exc),'HEX',d[c.p:c.p+192].hex())
           q7=[q for q,(t,p) in enumerate(assets) if t==7]
           targets=[14,60,488]
           print('TYPE7_INDICES',json.dumps(q7))
@@ -43,5 +59,5 @@ jobs:
             print('TARGET',q,'rank_all_type7',q7.index(q),'context',[(i,assets[i][0],f'0x{assets[i][1]:08X}') for i in range(max(0,q-8),min(len(assets),q+9))])
           scans=h.scan_tech(d,blocks,63150420)
           print('FOLLOWING_NAME_SCANS',len(scans))
-          for i,r in enumerate(scans[:20]):print('SCAN',i,r['start'],r['fmt'],r['name'],'PREHEX',d[r['start']-16:r['start']+168].hex())
+          for i,r in enumerate(scans[:20]):print('SCAN',i,r['start'],r['fmt'],r['name'])
           PY
