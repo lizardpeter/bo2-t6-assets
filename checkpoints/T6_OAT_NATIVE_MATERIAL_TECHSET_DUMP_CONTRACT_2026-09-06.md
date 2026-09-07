@@ -4,6 +4,19 @@ Pinned OpenAssetTools revision: `9dca965366541504b71fa8cfb7ac049cb9b717e1`.
 
 This checkpoint records the exact native dump contract used by the Car01 proof path. It is source-level tooling evidence, not an inferred T6 shader interpretation.
 
+## Canonical T6 Unlinker asset selectors
+
+At the pinned revision, `src/Common/Game/T6/GameT6.cpp` defines the top-level asset type names. The relevant canonical names are:
+
+```text
+material
+techniqueset
+```
+
+It also registers `techset` as an alias for `techniqueset`.
+
+Therefore the earlier Car01 workflows that passed `--include-assets technique_set` used a nonexistent T6 asset selector. That spelling is retired. New native dumps must use `--include-assets techniqueset` (or the proven `techset` alias).
+
 ## Material binding is direct after loader resolution
 
 At the pinned OAT revision, `src/ObjWriting/Material/MaterialJsonDumper.cpp.template` writes the JSON `techniqueSet` field from:
