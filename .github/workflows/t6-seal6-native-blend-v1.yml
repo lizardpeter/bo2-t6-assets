@@ -1,0 +1,105 @@
+name: T6 SEAL6 native Blender export v1
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - .github/workflows/t6-seal6-native-blend-v1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native-blend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download authoritative SEAL6 full-retail artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          run-id: 34168820186
+          github-token: ${{ github.token }}
+          path: /tmp/seal6-artifact
+
+      - name: Unpack authoritative Blender bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/seal6-bundle
+          unzip -q /tmp/seal6-artifact/SEAL6_FULL_RETAIL_BLENDER.zip -d /tmp/seal6-bundle
+          test -s /tmp/seal6-bundle/lod0/seal6_smg_lod0_textured_animated.glb
+          sha256sum /tmp/seal6-bundle/lod0/seal6_smg_lod0_textured_animated.glb
+
+      - name: Install Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y blender
+          blender --version
+
+      - name: Import exact LOD0 GLB and save native blend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cat >/tmp/import_seal6.py <<'PY'
+          import bpy
+          from pathlib import Path
+
+          src = Path('/tmp/seal6-bundle/lod0/seal6_smg_lod0_textured_animated.glb')
+          out = Path('out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend').resolve()
+
+          bpy.ops.wm.read_factory_settings(use_empty=True)
+          bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
+
+          scene = bpy.context.scene
+          scene.name = 'T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1'
+
+          notice = bpy.data.texts.new('T6_EXPORT_NOTICE.txt')
+          notice.write(
+              'Source: authoritative SEAL6 full-retail artifact from GitHub Actions run 34168820186.\n'
+              'Geometry, 102-joint rig, skinning, requested retail animations, Material identities, and exact retail texture payloads are source-derived.\n'
+              'Portable glTF/Blender shader nodes remain an approximation of T6 TechniqueSet behavior and must not be treated as exact retail shader semantics.\n'
+              'No COLOR_0 promotion is used for the T6 packed vertex-color field.\n'
+          )
+
+          # Keep source provenance inside the .blend without modifying asset data.
+          scene['t6_source_run'] = '34168820186'
+          scene['t6_source_artifact'] = '10035056123'
+          scene['t6_source_glb'] = src.name
+          scene['t6_proof_boundary'] = 'exact retail asset data; portable shader approximation'
+
+          try:
+              bpy.ops.file.pack_all()
+          except Exception as exc:
+              print('pack_all warning:', exc)
+
+          bpy.ops.wm.save_as_mainfile(filepath=str(out), compress=False)
+          print('saved', out)
+          PY
+          blender --background --python /tmp/import_seal6.py
+          test -s out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend
+          sha256sum out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend | tee out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend.sha256
+
+      - name: Reopen native blend fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          blender --background out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend --python-expr "import bpy; assert len(bpy.data.armatures) >= 1; assert len(bpy.data.meshes) >= 1; assert len(bpy.data.actions) >= 1; print('armatures', len(bpy.data.armatures), 'meshes', len(bpy.data.meshes), 'actions', len(bpy.data.actions), 'materials', len(bpy.data.materials), 'images', len(bpy.data.images))"
+
+      - name: Upload native Blender file
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_SMG_LOD0_NATIVE_BLEND_V1
+          path: |
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_V1.blend.sha256
+          if-no-files-found: error
+          compression-level: 0
