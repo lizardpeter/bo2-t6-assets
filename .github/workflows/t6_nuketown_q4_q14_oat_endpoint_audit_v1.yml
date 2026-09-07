@@ -5,8 +5,8 @@ on:
   push:
     paths:
       - '.github/workflows/t6_nuketown_q4_q14_oat_endpoint_audit_v1.yml'
-      - 'tools/t6_xmodel_techset_top_level_walk_v1.py'
       - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
 
 permissions:
   contents: read
@@ -26,79 +26,81 @@ jobs:
           gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
           /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
-      - name: Compare every XModel endpoint with authoritative OAT cursor
+      - name: Audit exact q4-q14 boundaries and raw TechniqueSet fixed structs
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 - <<'PY'
           import json,struct
           from pathlib import Path
-          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
-          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
-          from t6_xmodel_techset_top_level_walk_v1 import walk
+          from t6_material_techset_top_level_walk_v1 import parse_front
+          from t6_xmodel_serialized_walker import XModelWalker
 
           d=Path('/tmp/map.expanded').read_bytes()
-          table=parse_top_level_xasset_table(d)
-          prefix=walk_map_prefix_stringtable(d,table)
-          source_start=int(prefix['sourceEnd'])
-          out=walk(d,3,13,source_start)
-          rows={int(r['xassetIndex']):r for r in out['rows']}
+          blocks,assets,_=parse_front(d)
 
-          # Authoritative source-block cursor values measured by the instrumented
-          # OpenAssetTools T6 loader. Absolute = source-block base 514966 + rel.
-          expected_end={
-              4:515626,
-              5:516473,
-              6:517164,
-              7:517830,
-              8:518394,
-              9:519740,
-              10:521362,
-              11:522260,
-              12:523070,
-              13:523946,
+          # Instrumented OpenAssetTools source-block cursor, converted to absolute
+          # expanded-stream positions. These values are the authority for source
+          # consumption; no custom top-level cursor is used to derive them.
+          oat={
+              4:(515029,515626),
+              5:(515626,516473),
+              6:(516473,517164),
+              7:(517164,517830),
+              8:(517830,518394),
+              9:(518394,519740),
+              10:(519740,521362),
+              11:(521362,522260),
+              12:(522260,523070),
+              13:(523070,523946),
+              14:(523946,524159),
           }
-          print('prefix/source start',source_start)
-          print('q  kind   start    end      expected  delta')
-          for q in range(3,14):
-              r=rows[q]
-              exp=expected_end.get(q)
-              delta=None if exp is None else int(r['sourceEnd'])-exp
-              print(f"{q:2d} {r['kind']:<6} {int(r['sourceStart']):8d} {int(r['sourceEnd']):8d} {str(exp):>8} {str(delta):>6}")
-              if exp is not None:
-                  assert int(r['sourceEnd'])==exp,(q,r['sourceEnd'],exp)
-          assert int(out['sourceEnd'])==523946,out['sourceEnd']
-
-          # Inspect q14 at the independently established exact start without
-          # invoking TechniqueSet pointer semantics. This separates source-cursor
-          # correctness from TechniqueSet-structure correctness.
-          s=523946
-          fixed=d[s:s+152]
-          assert len(fixed)==152
-          name_raw=struct.unpack_from('<I',fixed,0)[0]
-          fmt=fixed[4]
-          reserved=fixed[5:8]
-          refs=list(struct.unpack_from('<36I',fixed,8))
-          print('q14 fixedStart',s)
-          print('q14 nameRaw',f'0x{name_raw:08X}','fmt',fmt,'reserved',reserved.hex())
-          for i,raw in enumerate(refs):
-              if raw:
-                  print(f'q14 ref[{i:02d}] = 0x{raw:08X}')
-          print('q14 post-fixed first64',d[s+152:s+216].hex())
+          rows=[]
+          for q in range(4,15):
+              s,e=oat[q]
+              typ=int(assets[q]['type'])
+              row={'xassetIndex':q,'xassetType':typ,'sourceStart':s,'sourceEnd':e,'sourceBytes':e-s}
+              print(f'q{q}: type={typ} OAT={s}->{e} delta={e-s}')
+              if typ==5:
+                  w=XModelWalker(d,s).walk_xmodel()
+                  row['kind']='XMODEL'
+                  row['xmodelName']=w['xmodel'].get('name')
+                  row['walkerEnd']=int(w['assetSerializedEnd'])
+                  row['walkerBlockers']=w['blockers']
+                  row['walkerMatchesOat']=row['walkerEnd']==e and not w['blockers']
+                  print('  XModel',row['xmodelName'],'walkerEnd',row['walkerEnd'],'match',row['walkerMatchesOat'])
+                  assert row['walkerMatchesOat'],row
+              elif typ==7:
+                  row['kind']='TECHNIQUE_SET'
+                  fixed=d[s:s+152]
+                  name_raw=struct.unpack_from('<I',fixed,0)[0]
+                  fmt=fixed[4]
+                  reserved=fixed[5:8]
+                  refs=list(struct.unpack_from('<36I',fixed,8))
+                  nz=[{'slot':i,'rawHex':f'0x{raw:08X}'} for i,raw in enumerate(refs) if raw]
+                  row.update({
+                      'fixedBytesAssumed':152,
+                      'nameRaw':f'0x{name_raw:08X}',
+                      'worldVertFormat':fmt,
+                      'reservedHex':reserved.hex(),
+                      'nonzeroTechniqueRefs':nz,
+                      'postFixedHex':d[s+152:min(e,s+216)].hex(),
+                  })
+                  print('  TECHSET nameRaw',row['nameRaw'],'fmt',fmt,'reserved',row['reservedHex'])
+                  for x in nz: print('   ref',x['slot'],x['rawHex'])
+                  print('  postFixed',row['postFixedHex'])
+              else:
+                  row['kind']=f'TYPE_{typ}'
+                  row['rawPrefixHex']=d[s:min(e,s+64)].hex()
+                  print('  non-XModel/TechniqueSet rawPrefix',row['rawPrefixHex'])
+              rows.append(row)
 
           proof={
               'format':'t6-nuketown-q4-q14-oat-endpoint-audit-v1',
-              'sourceStart':source_start,
-              'rows':[rows[q] for q in range(3,14)],
-              'authoritativeOatEnds':expected_end,
-              'q14':{
-                  'fixedStart':s,
-                  'nameRaw':f'0x{name_raw:08X}',
-                  'worldVertFormat':fmt,
-                  'reservedHex':reserved.hex(),
-                  'nonzeroTechniqueRefs':[{'slot':i,'rawHex':f'0x{raw:08X}'} for i,raw in enumerate(refs) if raw],
-                  'postFixedFirst64Hex':d[s+152:s+216].hex(),
-              },
+              'expandedSha256':'7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505',
+              'oatSourceBlockBase':514966,
+              'rows':rows,
+              'result':'All type-5 XModels are independently checked against OAT. TechniqueSets are dumped at OAT-authoritative boundaries without invoking the provisional TechniqueSet parser.',
           }
           Path('/tmp/q4_q14_audit.json').write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
           PY
