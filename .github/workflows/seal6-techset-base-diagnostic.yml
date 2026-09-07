@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   diagnose:
@@ -30,6 +30,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: reversal/nonmap-assets
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -63,11 +66,27 @@ jobs:
           PYTHONPATH=tools python tools/t6_early_techset_source_order_walk_v2.py \
             /tmp/faction.expanded --end-asset 20 --targets 10,17,20 \
             --out /tmp/source_order_q0_q20.json
-      - name: Persist exact q20 nested TechniqueSet proof
+      - name: Generate exact q20 nested TechniqueSet proof
         run: |
           PYTHONPATH=tools python tools/t6_seal6_q20_nested_proof_v1.py \
             /tmp/source_order_q0_q20.json \
             --out /tmp/seal6_q20_nested_proof.json
+      - name: Persist exact q20 nested proof on branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst=manifests/nonmap/retail/faction_seals_mp_seal6_q20_techset_nested_proof_v1.json
+          cp /tmp/seal6_q20_nested_proof.json "$dst"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$dst"
+          if git diff --cached --quiet; then
+            echo 'q20 nested proof already identical'
+          else
+            git commit -m 'Persist exact SEAL6 q20 nested TechniqueSet proof'
+            git pull --rebase origin reversal/nonmap-assets
+            git push origin HEAD:reversal/nonmap-assets
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
