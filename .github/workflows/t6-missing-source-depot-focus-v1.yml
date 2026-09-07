@@ -1,0 +1,38 @@
+name: T6 missing retail source depot focus v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-missing-source-depot-focus-v1.yml'
+      - 'tools/t6_missing_source_depot_focus_v1.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
+      - 'manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Close missing set to owning depot inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 tools/t6_missing_source_depot_focus_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_MISSING_RETAIL_SOURCE_DEPOT_FOCUS_V1.json \
+            --require-single-owner-depot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MISSING_RETAIL_SOURCE_DEPOT_FOCUS_V1
+          path: /tmp/proof/T6_MISSING_RETAIL_SOURCE_DEPOT_FOCUS_V1.json
+          if-no-files-found: error
+          retention-days: 14
