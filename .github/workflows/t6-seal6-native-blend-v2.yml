@@ -1,0 +1,119 @@
+name: T6 SEAL6 native Blender export v2
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - tools/t6_gltf_rebase_geometry_v1.py
+      - .github/workflows/t6-seal6-native-blend-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native-blend-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download stale full-retail carrier artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          run-id: 34168820186
+          github-token: ${{ github.token }}
+          path: /tmp/fullretail
+
+      - name: Download authoritative geometry v3 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V3
+          run-id: 34168676623
+          github-token: ${{ github.token }}
+          path: /tmp/geometry
+
+      - name: Unpack carrier and rebase geometry fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fullretail-bundle out
+          unzip -q /tmp/fullretail/SEAL6_FULL_RETAIL_BLENDER.zip -d /tmp/fullretail-bundle
+          CARRIER=/tmp/fullretail-bundle/lod0/seal6_smg_lod0_textured_animated.glb
+          AUTH=/tmp/geometry/player-bodies/c_usa_mp_seal6_smg_fb/c_usa_mp_seal6_smg_fb_lod0.glb
+          test -s "$CARRIER"
+          test -s "$AUTH"
+          python tools/t6_gltf_rebase_geometry_v1.py \
+            --carrier "$CARRIER" \
+            --authority "$AUTH" \
+            --output out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.glb \
+            --report out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASE.json \
+            --require-primitives 14 \
+            --require-materials 12 \
+            --require-images 23 \
+            --require-animations 6
+          sha256sum out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.glb
+
+      - name: Install Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y blender python3-numpy
+          blender --version
+
+      - name: Import rebased GLB and save native blend
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/import_seal6_v2.py <<'PY'
+          import bpy
+          from pathlib import Path
+          src=Path('out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.glb').resolve()
+          out=Path('out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend').resolve()
+          bpy.ops.wm.read_factory_settings(use_empty=True)
+          bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
+          if len(bpy.data.armatures)!=1: raise RuntimeError(f'expected 1 armature, got {len(bpy.data.armatures)}')
+          if len(bpy.data.meshes)!=1: raise RuntimeError(f'expected 1 mesh, got {len(bpy.data.meshes)}')
+          if len(bpy.data.actions)!=6: raise RuntimeError(f'expected 6 actions, got {len(bpy.data.actions)}')
+          if len(bpy.data.materials)!=12: raise RuntimeError(f'expected 12 materials, got {len(bpy.data.materials)}')
+          if len(bpy.data.images)!=23: raise RuntimeError(f'expected 23 images, got {len(bpy.data.images)}')
+          for mesh in bpy.data.meshes:
+              if len(mesh.color_attributes)!=0: raise RuntimeError(f'unexpected Blender color attributes: {[x.name for x in mesh.color_attributes]}')
+          scene=bpy.context.scene
+          scene.name='T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED'
+          scene['t6_geometry_authority_run']='34168676623'
+          scene['t6_full_retail_carrier_run']='34168820186'
+          scene['t6_color0_removed']=True
+          scene['t6_winding_source']='authoritative geometry v3'
+          scene['t6_proof_boundary']='geometry/skin/animation/material identities source-derived; portable shader reduction still non-native'
+          notice=bpy.data.texts.new('T6_EXPORT_NOTICE.txt')
+          notice.write('This file rebases the full-retail material/animation carrier onto authoritative geometry-v3.\nAll 14 primitive POSITION/NORMAL/UV/JOINT/WEIGHT accessors were bit-identical between carrier and authority.\nEvery carrier index triplet was proven to be the exact opposite winding and was replaced with the authority index order.\nThe stale packed T6 field was removed from glTF COLOR_0 and no Blender color attribute is present.\nPortable material nodes still do not reproduce full native T6 TechniqueSet shader semantics.\n')
+          bpy.ops.file.pack_all()
+          bpy.ops.wm.save_as_mainfile(filepath=str(out), compress=False)
+          print('saved',out)
+          PY
+          blender --background --python /tmp/import_seal6_v2.py
+          test -s out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend
+          sha256sum out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend | tee out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend.sha256
+
+      - name: Reopen native blend fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          blender --background out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend --python-expr "import bpy; assert len(bpy.data.armatures)==1; assert len(bpy.data.meshes)==1; assert len(bpy.data.actions)==6; assert len(bpy.data.materials)==12; assert len(bpy.data.images)==23; assert all(len(m.color_attributes)==0 for m in bpy.data.meshes); print('reopen-ok', len(bpy.data.armatures), len(bpy.data.meshes), len(bpy.data.actions), len(bpy.data.materials), len(bpy.data.images))"
+
+      - name: Upload corrected Blender bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_SMG_LOD0_NATIVE_BLEND_V2_GEOMETRY_V3_REBASED
+          path: |
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.glb
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASE.json
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend
+            out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend.sha256
+          if-no-files-found: error
+          compression-level: 0
