@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/t6_unlit_crossmap_dxbc_v1.yml'
       - 'tools/t6_retail_special_family_dxbc_extract_v1.py'
+      - 'tools/t6_retail_world_helper_compat_v1.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'tools/t6_retail_special_shader_payload_census_v1.py'
       - 'tools/t6_retail_world_formats_45_proof_v1.py'
@@ -64,6 +65,7 @@ jobs:
           PYTHONPATH=tools python3 tools/t6_retail_special_family_dxbc_extract_v1.py \
             --root /tmp/corpus \
             --family unlit \
+            --helper tools/t6_retail_world_helper_compat_v1.py \
             --program-dir /tmp/proof/programs \
             --out /tmp/proof/T6_RETAIL_UNLIT_DIRECT_DXBC_V1.json \
             2>&1 | tee /tmp/proof/unlit_extract.log
