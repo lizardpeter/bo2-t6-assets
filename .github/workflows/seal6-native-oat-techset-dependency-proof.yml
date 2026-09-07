@@ -7,6 +7,9 @@ on:
     paths:
       - '.github/workflows/seal6-native-oat-techset-dependency-proof.yml'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v2.py'
+      - 'tools/t6_seal6_common_nested_proof_v1.py'
+      - 'tools/t6_techset_exact_name_diagnostic_v1.py'
+      - 'tools/bo2_t6_fastfile.py'
       - 'manifests/nonmap/retail/faction_seals_mp_seal6_techset_source_order_proof_v1.json'
 
 permissions:
@@ -64,6 +67,25 @@ jobs:
           curl -fL --retry 6 --retry-delay 2 -o /tmp/game/zone/all/patch_mp.ff \
             https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff
           sha256sum /tmp/game/zone/all/*.ff | sort > /tmp/proof/RETAIL_FASTFILE_SHA256SUMS.txt
+
+      - name: Build exact common_mp q10/q17 nested diagnostic
+        id: diagnostic
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bo2_t6_fastfile.py decrypt \
+            /tmp/game/zone/all/common_mp.ff \
+            --output /tmp/common_mp.expanded
+          test -s /tmp/common_mp.expanded
+          PYTHONPATH=tools python3 tools/t6_techset_exact_name_diagnostic_v1.py \
+            /tmp/common_mp.expanded \
+            --zone common_mp \
+            --name mc_sw4_3d_char_cloth_4z8fq5wu \
+            --name mc_sw4_3d_char_skin_j92387z3 \
+            --out /tmp/proof/common_mp_seal6_techsets.json
+          test -s /tmp/proof/common_mp_seal6_techsets.json
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
 
       - name: Dump faction Materials and TechniqueSets through native loader
         id: faction
@@ -194,6 +216,19 @@ jobs:
           PY
           echo 'ok=1' >> "$GITHUB_OUTPUT"
 
+      - name: Retain q10/q17 common nested payload behind native ownership
+        id: nested
+        if: steps.analyze.outputs.ok == '1' && steps.diagnostic.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_seal6_common_nested_proof_v1.py \
+            /tmp/proof/common_mp_seal6_techsets.json \
+            /tmp/proof/T6_SEAL6_NATIVE_OAT_TECHSET_DEPENDENCY_PROOF_V1.json \
+            --out /tmp/proof/T6_SEAL6_COMMON_NESTED_PROOF_V1.json
+          test -s /tmp/proof/T6_SEAL6_COMMON_NESTED_PROOF_V1.json
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
       - name: Upload native SEAL6 dependency evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -212,5 +247,8 @@ jobs:
           test -f /tmp/proof/faction_material_rc.txt && test "$(cat /tmp/proof/faction_material_rc.txt)" = 0
           test -f /tmp/proof/faction_techset_rc.txt && test "$(cat /tmp/proof/faction_techset_rc.txt)" = 0
           test -f /tmp/proof/common_techset_rc.txt && test "$(cat /tmp/proof/common_techset_rc.txt)" = 0
+          test "${{ steps.diagnostic.outputs.ok }}" = 1
           test "${{ steps.analyze.outputs.ok }}" = 1
+          test "${{ steps.nested.outputs.ok }}" = 1
           test -s /tmp/proof/T6_SEAL6_NATIVE_OAT_TECHSET_DEPENDENCY_PROOF_V1.json
+          test -s /tmp/proof/T6_SEAL6_COMMON_NESTED_PROOF_V1.json
