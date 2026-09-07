@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Apply only the host-compiler header fixes needed by pinned OAT 9dca965.
+"""Apply only host-compiler compatibility fixes needed by pinned OAT 9dca965.
 
-The pinned OpenAssetTools revision has two independent standard-library include
-omissions exposed by Ubuntu 24.04 / GCC 13.3.0:
+The pinned OpenAssetTools revision exposes three independent portability issues
+on Ubuntu 24.04 / GCC 13.3.0:
 
 * four legacy menu writers call ``std::format`` without including ``<format>``;
 * ``FlatXAnimDataWriter.cpp`` uses ``std::numeric_limits`` without including
-  ``<limits>``.
+  ``<limits>``;
+* ``XModelHighMipVolumeT5.cpp`` calls ``std::sqrtf`` even though this host's
+  standard C++ library exposes the overloaded function as ``std::sqrt``.
 
-This helper inserts only those missing includes. It deliberately does not touch
+This helper makes only those compatibility edits. It deliberately does not touch
 T6 loader, generated ZoneCode, FastFile, Material, TechniqueSet, shader, pointer,
 or stream semantics. Every source edit is fail-closed against the exact pinned
 layout so an unexpected upstream/source state cannot be silently accepted.
@@ -28,6 +30,7 @@ FORMAT_TARGETS = (
 )
 
 LIMITS_TARGET = "src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp"
+SQRT_TARGET = "src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp"
 
 
 def insert_once(path: Path, *, needle: str, insert: str, marker: str) -> str:
@@ -39,6 +42,23 @@ def insert_once(path: Path, *, needle: str, insert: str, marker: str) -> str:
     patched = text.replace(needle, insert, 1)
     if patched.count(marker) != 1:
         raise RuntimeError(f"{path}: failed to produce exactly one {marker.strip()!r}")
+    path.write_text(patched, encoding="utf-8")
+    return "patched"
+
+
+def replace_once(path: Path, *, old: str, new: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    if new in text:
+        if old in text:
+            raise RuntimeError(f"{path}: mixed old/new replacement state")
+        if text.count(new) != 1:
+            raise RuntimeError(f"{path}: expected exactly one patched expression")
+        return "already-patched"
+    if text.count(old) != 1:
+        raise RuntimeError(f"{path}: expected exactly one {old!r}")
+    patched = text.replace(old, new, 1)
+    if old in patched or patched.count(new) != 1:
+        raise RuntimeError(f"{path}: replacement did not close exactly")
     path.write_text(patched, encoding="utf-8")
     return "patched"
 
@@ -79,7 +99,18 @@ def main() -> int:
     statuses.append((LIMITS_TARGET, status))
     print(f"{status}: {LIMITS_TARGET}: <limits>")
 
-    # The pinned revision is expected to need all five edits. A mixed state
+    path = root / SQRT_TARGET
+    if not path.is_file():
+        raise SystemExit(f"Pinned OAT source missing: {SQRT_TARGET}")
+    status = replace_once(
+        path,
+        old="return std::sqrtf(v6) * 0.5f;",
+        new="return std::sqrt(v6) * 0.5f;",
+    )
+    statuses.append((SQRT_TARGET, status))
+    print(f"{status}: {SQRT_TARGET}: std::sqrtf -> std::sqrt")
+
+    # The pinned revision is expected to need all six edits. A mixed state
     # means the source tree is not the exact state this compatibility helper
     # was written for, so stop rather than altering an unknown revision.
     kinds = {status for _, status in statuses}
