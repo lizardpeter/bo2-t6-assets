@@ -21,6 +21,9 @@ invented roughness/metallic/specular values.
 - Exact retail FastFile expansion and GfxWorld/XModel extraction are already
   source-derived and regression-gated.
 - Canonical visible static placement/material identity work is retained.
+- The v25 full-map release floor contains 711 used materials, 9,088 primitives,
+  567,122 triangles and 809 embedded images while retaining the complete
+  canonical world/static/MapEnt/skybox population.
 - Generated-world shader population is exact for Nuketown:
   - 120 generated materials;
   - 34 exact TechniqueSets;
@@ -49,6 +52,20 @@ invented roughness/metallic/specular values.
   The opaque graph contains 37 nodes and the glass graph 18 nodes; material-local
   exact nodes, opaque normal decode, glass sqrt-alpha, Non-Color role copies and
   no specular->Principled metallic/roughness mapping all passed.
+- A generic exact scalar symbolic-DAG Blender compiler now exists:
+  `t6_blender_symbolic_dag_nodes_v1.py` + semantic-hardening v2.
+  It preserves SM4 base-2 `exp`/`log`, explicit saturate, select/branch tests,
+  reciprocal/rsqrt and the ordinary scalar arithmetic used by final-output DAGs.
+  `round_ne` and bitwise `and/or` remain deliberately fail-closed pending exact
+  backend semantics.
+- The generic symbolic-DAG compiler passed inside real Blender 4.0.2 in GitHub
+  Actions run 34142277643. Artifact `T6_BLENDER_SYMBOLIC_DAG_V2_TEST`
+  (artifact 10026353744) has digest
+  sha256:ff0f306e6cb30b24f870da9bb81ca7d1efe456af4ef75055b627134a5a45e3d3.
+- `t6_blender_symbolic_dag_capability_v1.py` now provides a fail-closed census of
+  which exact operations/resources are actually reachable from the 34 real
+  generated `o0` outputs, so remaining generated-family gaps can be measured
+  rather than guessed.
 
 ## Complete-export blockers
 
@@ -63,20 +80,23 @@ closed:
    - generated final-output DAG family;
    - newly unsolved family.
    No material may silently enter a generic glTF PBR path.
-3. Add a generic Blender compiler for the exact generated slot-4 DAG vocabulary
-   (`textureSample`, scalar/vector arithmetic, dot products, select/branch,
-   saturate, sqrt/rsq/exp/log/frc/round/rcp, discard) with exact source resource
-   names and sampling coordinates.
-4. Supply Blender representations for T6 global shader resources where a direct
+3. Run the new capability census against the retained/regenerated 34 real
+   generated final-output DAGs, then close only operations/sampling modes that
+   actually remain blocked. The generic scalar arithmetic compiler itself is
+   now real-Blender validated.
+4. Supply Blender representations for T6 shader resources where a direct
    Blender node has no equivalent. Expected important classes include:
    `modelLightingSampler` texture3D, `reflectionProbeSampler` cube+explicit LOD,
    primary/secondary lightmaps, grid/reflection SH constants, fog and HDR
    constants. Prefer exact bake/lookup representations over semantic guesses.
-5. Integrate exact per-technique Material state into Blender metadata and the
+5. Add exact textureSample resource/coordinate adapters for the generated DAG
+   compiler, including derivative/LOD/bias sampling modes used by the real 34
+   shaders; preserve DISCARD/alpha-test behavior explicitly.
+6. Integrate exact per-technique Material state into Blender metadata and the
    closest supported viewport/render setting. Any D3D11 blend equation Blender
    cannot reproduce exactly must be explicitly reported rather than approximated
    invisibly.
-6. Produce one fresh canonical Nuketown `.blend`, then verify scene counts,
+7. Produce one fresh canonical Nuketown `.blend`, then verify scene counts,
    material assignment cardinality, missing textures, missing shader plans,
    unresolved-family count, and no forbidden PBR fallback.
 
@@ -97,13 +117,21 @@ Even after the complete `.blend` gate passes, retail parity remains open until:
 
 ## Current practical assessment
 
-- **Scene/asset completeness needed to emit a useful full `.blend`: very close.**
-- **Shader-aware complete export with no silent fallback: last major integration
-  phase.**
-- **100% retail-render parity: materially further than file generation because
-  global renderer resources and some shader families remain open.**
+- **Raw scene/asset export:** already essentially complete; the canonical v25
+  scene proves the full geometry/placement/material/image population exists.
+- **Shader-aware complete `.blend` with no silent fallback:** approximately
+  **88-92% of the engineering path is closed**. The remaining work is dominated
+  by all-used-material shader classification, exact generated/global resource
+  adapters, and final integration/validation rather than missing asset reversal.
+- **Retail-equivalent visual rendering inside Blender:** approximately
+  **75-82% of the backend integration path is closed**. Source evidence is ahead
+  of the Blender backend; global model-light/reflection/lightmap/SH/fog/HDR,
+  some sampling modes, non-generated families and exact blend behavior remain.
+- **100% all-T6-shader converter beyond Nuketown:** lower than the Nuketown-only
+  numbers because representative MP/Zombies/DLC families still have to be
+  censused and source-closed before generalizing the backend.
 
-The immediate next operation is the all-used-material exact shader census,
-followed by generated-DAG Blender lowering. These two gates provide the fastest
-path from the current proven pieces to one complete fail-visible Nuketown
-`.blend`.
+The immediate next operation is the all-used-material exact shader census and
+real 34-shader generated-DAG capability census, followed by the resource/sampler
+adapters they prove are actually needed. Those are now the shortest path to one
+complete fail-visible Nuketown `.blend`.
