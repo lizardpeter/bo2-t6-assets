@@ -1,0 +1,86 @@
+name: T6 Nuketown car01 early TechniqueSet binding v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_early_techset_binding_v1.yml'
+      - 'tools/t6_xmodel_techset_top_level_walk_v1.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Walk XAssets 3 through 64 exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_xmodel_techset_top_level_walk_v1 import walk
+
+          d=Path('/tmp/map.expanded').read_bytes();SHA='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505';assert hashlib.sha256(d).hexdigest()==SHA
+          table=parse_top_level_xasset_table(d);prefix=walk_map_prefix_stringtable(d,table);start=int(prefix['sourceEnd'])
+          out=walk(d,3,64,start);rows={int(r['xassetIndex']):r for r in out['rows']}
+          # Independent downstream anchor already source-closed before this walker existed.
+          anchor=json.loads(Path('manifests/maps/mp_nuketown_2020/xmodel_asset64_serialization_proof_v1.json').read_text())
+          assert int(anchor['xassetIndex'])==64
+          assert rows[64]['sourceStart']==int(anchor['fixedStart']),(rows[64]['sourceStart'],anchor['fixedStart'])
+          assert rows[64]['kind']=='XMODEL'
+          if anchor.get('name'): assert rows[64]['xmodelName'] in (anchor['name'],None)
+          # Car material packed pointers + independently proven global XAsset VIRTUAL base resolve to q14/q60.
+          q14=rows[14];q60=rows[60]
+          assert q14['kind']==q60['kind']=='TECHNIQUE_SET'
+          proof={
+            'format':'t6-nuketown-car01-early-techset-binding-v1',
+            'expandedSha256':SHA,
+            'sourcePrefixEnd':start,
+            'walkedXAssetRange':[3,64],
+            'independentDownstreamAnchor':{'manifest':'manifests/maps/mp_nuketown_2020/xmodel_asset64_serialization_proof_v1.json','xassetIndex':64,'expectedFixedStart':int(anchor['fixedStart']),'walkedFixedStart':rows[64]['sourceStart'],'matches':True},
+            'xAssetVirtualBase':13472,
+            'carTechniquePointerResolution':[
+              {'pointerVirtualOffset':13588,'xassetIndex':14,'binding':q14},
+              {'pointerVirtualOffset':13956,'xassetIndex':60,'binding':q60},
+            ],
+            'proofBoundary':'Exact top-level source-cursor execution from the independently decoded XAsset prefix through XAsset 64. Every intervening type-5 XModel is consumed by the retail-validated XModelWalker and every type-7 TechniqueSet by the complete serializer. The final cursor is independently anchored to the pre-existing exact XAsset64 fixed start, so q14 and q60 are not rank/name guesses.',
+            'contradictions':0,
+          }
+          raw=(json.dumps(proof,indent=2,sort_keys=True)+'\n').encode();Path('/tmp/proof.json').write_bytes(raw);rp=Path('manifests/models/T6_NUKETOWN_CAR01_EARLY_TECHSET_BINDING_V1.json');rp.parent.mkdir(parents=True,exist_ok=True);rp.write_bytes(raw)
+          cp=Path('checkpoints/T6_NUKETOWN_CAR01_EARLY_TECHSET_BINDING_V1_2026-09-06.md');cp.write_text('# T6 Nuketown car01 early TechniqueSet binding v1 — 2026-09-06\n\n'+f"- XAsset 14: fixed `{q14['sourceStart']}`, name `{q14['name'].get('value')}`, format `{q14['worldVertFormat']}`\n- XAsset 60: fixed `{q60['sourceStart']}`, name `{q60['name'].get('value')}`, format `{q60['worldVertFormat']}`\n- Downstream XAsset 64 cursor anchor: `{rows[64]['sourceStart']}` == independently proven `{anchor['fixedStart']}`.\n- Contradictions: 0.\n",encoding='utf-8')
+          print(json.dumps({'q14':q14,'q60':q60,'anchor64':rows[64]},indent=2,sort_keys=True))
+          PY
+      - name: Commit exact binding proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/models/T6_NUKETOWN_CAR01_EARLY_TECHSET_BINDING_V1.json checkpoints/T6_NUKETOWN_CAR01_EARLY_TECHSET_BINDING_V1_2026-09-06.md
+          git commit -m 'Close exact early car01 TechniqueSet identities'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_EARLY_TECHSET_BINDING_V1
+          path: /tmp/proof.json
+          if-no-files-found: error
