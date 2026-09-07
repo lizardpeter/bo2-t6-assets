@@ -1,4 +1,4 @@
-name: T6 shadow owner provenance unit v3
+name: T6 shadow owner provenance unit v4
 
 on:
   workflow_dispatch:
@@ -10,6 +10,8 @@ on:
       - 'tools/test_t6_oat_material_shader_census_v4.py'
       - 'tools/t6_oat_parent_dependency_conflict_census_v1.py'
       - 'tools/test_t6_oat_parent_dependency_conflict_census_v1.py'
+      - 'tools/t6_oat_conflict_lineage_projection_v1.py'
+      - 'tools/test_t6_oat_conflict_lineage_projection_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
       - 'tools/test_t6_oat_exact_technique_owner_closure_v2.py'
@@ -32,6 +34,8 @@ jobs:
         run: PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
       - name: Test structured parent dependency conflicts
         run: PYTHONPATH=tools python3 tools/test_t6_oat_parent_dependency_conflict_census_v1.py
+      - name: Test non-authoritative conflict lineage projection
+        run: PYTHONPATH=tools python3 tools/test_t6_oat_conflict_lineage_projection_v1.py
       - name: Test exact Technique owner closure gates
         run: PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_owner_closure_v2.py
       - name: Test forensic Material dependency bundle
