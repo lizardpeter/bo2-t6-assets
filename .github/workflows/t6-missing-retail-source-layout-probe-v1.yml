@@ -1,0 +1,71 @@
+name: T6 missing retail source layout probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-missing-retail-source-layout-probe-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HEAD-probe likely retained full-game prefixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY' > /tmp/targets.tsv
+          prefixes = [
+              'https://r2.houseofkublai.com/bo2/pluto_t6_full_game',
+              'https://r2.houseofkublai.com/bo2/Plutonium/pluto_t6_full_game',
+              'https://r2.houseofkublai.com/bo2/full_game',
+              'https://r2.houseofkublai.com/bo2/game',
+          ]
+          paths = [
+              'zone/all/afghanistan.ff',
+              'zone/all/common.ff',
+              'zone/all/yemen.ff',
+          ]
+          for prefix in prefixes:
+              for path in paths:
+                  print(prefix, path, f'{prefix}/{path}', sep='\t')
+          PY
+          : > /tmp/proof/probe.tsv
+          while IFS=$'\t' read -r prefix path url; do
+            headers=$(mktemp)
+            code=$(curl -sS -L -I --max-time 20 --connect-timeout 10 -D "$headers" -o /dev/null -w '%{http_code}' "$url" || true)
+            len=$(awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); v=$2} END{print v}' "$headers")
+            type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/ {gsub("\r",""); $1=""; sub(/^ /,""); v=$0} END{print v}' "$headers")
+            printf '%s\t%s\t%s\t%s\t%s\n' "$code" "${len:-}" "${type:-}" "$prefix" "$path" | tee -a /tmp/proof/probe.tsv
+            rm -f "$headers"
+          done < /tmp/targets.tsv
+
+          python3 - <<'PY'
+          import json
+          rows=[]
+          for line in open('/tmp/proof/probe.tsv'):
+              code,length,ctype,prefix,path=line.rstrip('\n').split('\t')
+              rows.append({'httpStatus':int(code or 0),'contentLength':int(length) if length.isdigit() else None,'contentType':ctype or None,'prefix':prefix,'path':path})
+          hits=[r for r in rows if r['httpStatus'] in (200,206)]
+          out={
+            'format':'t6-missing-retail-source-layout-probe-v1',
+            'rows':rows,
+            'hits':hits,
+            'candidatePrefixes':sorted({r['prefix'] for r in hits}),
+            'proofBoundary':'HEAD availability only. A 200/206 response establishes retrievability at that candidate URL, not retail byte identity.'
+          }
+          open('/tmp/proof/T6_MISSING_RETAIL_SOURCE_LAYOUT_PROBE_V1.json','w').write(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'hits':hits,'candidatePrefixes':out['candidatePrefixes']},indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MISSING_RETAIL_SOURCE_LAYOUT_PROBE_V1
+          path: /tmp/proof/*
+          if-no-files-found: error
+          retention-days: 14
