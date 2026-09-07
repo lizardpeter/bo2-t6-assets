@@ -1,0 +1,46 @@
+name: T6 Blender symbolic DAG v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_blender_symbolic_dag_nodes_v1.py'
+      - 'tools/t6_blender_symbolic_dag_nodes_v2.py'
+      - 'tools/test_t6_blender_symbolic_dag_nodes_v2.py'
+      - '.github/workflows/t6_blender_symbolic_dag_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  blender:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq blender >/dev/null
+          blender --version | head -3
+      - name: Compile symbolic T6 DAG in Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools blender --background \
+            --python tools/test_t6_blender_symbolic_dag_nodes_v2.py \
+            2>&1 | tee /tmp/t6_symbolic_dag_v2.log
+          grep -F 'T6_BLENDER_SYMBOLIC_DAG_V2_TEST=' /tmp/t6_symbolic_dag_v2.log
+          test -s /tmp/T6_BLENDER_SYMBOLIC_DAG_V2_TEST.blend
+          test -s /tmp/T6_BLENDER_SYMBOLIC_DAG_V2_TEST.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_BLENDER_SYMBOLIC_DAG_V2_TEST
+          path: |
+            /tmp/T6_BLENDER_SYMBOLIC_DAG_V2_TEST.blend
+            /tmp/T6_BLENDER_SYMBOLIC_DAG_V2_TEST.json
+            /tmp/t6_symbolic_dag_v2.log
+          if-no-files-found: error
+          compression-level: 0
