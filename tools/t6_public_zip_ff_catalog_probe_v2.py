@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Safely probe a remote ZIP/ZIP64 central directory for canonical T6 FastFiles.
 
-The probe never downloads the archive payload. Every GET is an explicit byte
-range and the response status/Content-Range are validated before reading the
-body. ZIP64 EOCD is supported because full retail-game archives can exceed the
-classic 32-bit ZIP offsets.
+The probe never downloads the archive payload. Remote size discovery uses a
+bodyless HEAD request. Every archive-byte GET is an explicit byte range and the
+response status/Content-Range are validated before reading the body. ZIP64 EOCD
+is supported because full retail-game archives can exceed classic 32-bit ZIP
+offsets.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ def request(url: str, *, start: int, end: int, user_agent: str) -> tuple[bytes, 
     expected = end - start + 1
     req = urllib.request.Request(
         url,
-        headers={"Range": f"bytes={start}-{end}", "User-Agent": user_agent},
+        headers={"Range": f"bytes={start}-{end}", "User-Agent": user_agent, "Accept-Encoding": "identity"},
     )
     r = urllib.request.urlopen(req, timeout=60)
     try:
@@ -50,14 +51,26 @@ def request(url: str, *, start: int, end: int, user_agent: str) -> tuple[bytes, 
 
 
 def remote_size(url: str, user_agent: str) -> int:
-    data, headers = request(url, start=0, end=0, user_agent=user_agent)
-    if len(data) != 1:
-        raise AssertionError("one-byte range did not return one byte")
-    cr = headers["content-range"]
-    total = int(cr.rsplit("/", 1)[1])
-    if total <= 0:
-        raise RuntimeError(f"invalid remote size {total}")
-    return total
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": user_agent, "Accept-Encoding": "identity"},
+        method="HEAD",
+    )
+    r = urllib.request.urlopen(req, timeout=60)
+    try:
+        status = getattr(r, "status", None)
+        headers = {k.lower(): v for k, v in r.headers.items()}
+        if status not in (200, 206):
+            raise RuntimeError(f"HEAD returned status {status}")
+        raw = headers.get("content-length")
+        if not raw:
+            raise RuntimeError("HEAD response has no Content-Length")
+        total = int(raw)
+        if total <= 0:
+            raise RuntimeError(f"invalid remote size {total}")
+        return total
+    finally:
+        r.close()
 
 
 def parse_directory_location(url: str, total: int, user_agent: str) -> dict:
@@ -287,6 +300,7 @@ def main() -> int:
         "directory": loc,
         **parsed,
         "safety": {
+            "sizeDiscoveryBodylessHead": True,
             "requires206BeforeBodyRead": True,
             "maxCentralReadBytes": MAX_CENTRAL_BYTES,
             "archivePayloadDownloaded": False,
