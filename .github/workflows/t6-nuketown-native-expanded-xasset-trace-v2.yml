@@ -1,0 +1,173 @@
+name: T6 Nuketown native expanded XAsset trace v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-nuketown-native-expanded-xasset-trace-v2.yml'
+      - 'tools/t6_oat_expanded_xasset_trace_patch_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools with expanded-position trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_expanded_xasset_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_EXPANDED_XASSET_TRACE.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+
+      - name: Fetch exact retail Nuketown and independent expanded stream
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/out
+          curl -fL --retry 6 --retry-delay 1 -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          python3 tools/bo2_t6_fastfile.py decrypt /tmp/game/zone/all/mp_nuketown_2020.ff \
+            -o /tmp/mp_nuketown_2020.expanded --audit /tmp/proof/fastfile_audit.json
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+
+      - name: Run native loader and capture top-level expanded positions
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/out \
+            /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/oat_nuketown_trace.log
+          grep '^T6_EXPANDED_XASSET ' /tmp/proof/oat_nuketown_trace.log > /tmp/proof/T6_EXPANDED_XASSET_TRACE.txt
+          test -s /tmp/proof/T6_EXPANDED_XASSET_TRACE.txt
+
+      - name: Validate coordinate canary and close all XModel structural endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,re
+          from pathlib import Path
+          from t6_material_techset_top_level_walk_v1 import parse_front
+          from t6_xmodel_serialized_walker_v2 import XModelWalker
+
+          d=Path('/tmp/mp_nuketown_2020.expanded').read_bytes()
+          assert hashlib.sha256(d).hexdigest()=='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          blocks,assets,body=parse_front(d)
+          pat=re.compile(r'^T6_EXPANDED_XASSET index=(\d+) type=(\d+) beforeLocal=(\d+) afterLocal=(\d+) before=(\d+) after=(\d+)$')
+          trace=[]
+          for line in Path('/tmp/proof/T6_EXPANDED_XASSET_TRACE.txt').read_text().splitlines():
+              m=pat.fullmatch(line.strip())
+              if not m: raise SystemExit(f'bad trace line: {line!r}')
+              i,t,bl,al,b,a=map(int,m.groups())
+              trace.append({'xassetIndex':i,'type':t,'beforeLocal':bl,'afterLocal':al,'sourceStart':b,'sourceEnd':a})
+          assert len(trace)==len(assets),(len(trace),len(assets))
+          assert [r['xassetIndex'] for r in trace]==list(range(len(assets)))
+          for r,a in zip(trace,assets): assert r['type']==a['type'],(r,a)
+
+          # Independent coordinate canary, unchanged from v1.
+          assert trace[3]['type']==7,trace[3]
+          assert trace[3]['sourceStart']==125632,trace[3]
+          assert trace[3]['sourceEnd']==499456,trace[3]
+          assert trace[4]['type']==5,trace[4]
+          assert trace[4]['sourceStart']==499456,trace[4]
+
+          xrows=[];matches=0;failures=0;aliases=0
+          for r,a in zip(trace,assets):
+              if r['type']!=5: continue
+              rec={**r,'headerRaw':f"0x{a['headerRaw']:08X}",'nativeSerializedBytes':r['sourceEnd']-r['sourceStart']}
+              if r['sourceEnd']==r['sourceStart']:
+                  aliases+=1;rec['sourceKind']='zero-source-reference';rec['walkerAttempted']=False
+              else:
+                  rec['sourceKind']='native-source-consuming';rec['walkerAttempted']=True
+                  try:
+                      w=XModelWalker(d,r['sourceStart']).walk_xmodel()
+                      rec['walkerBlockers']=w['blockers']
+                      rec['walkerSourceEnd']=int(w['assetSerializedEnd'])
+                      rec['walkerEndpointMatchesNative']=not w['blockers'] and int(w['assetSerializedEnd'])==r['sourceEnd']
+                      rec['walkerName']=w['xmodel'].get('name')
+                      rec['numBones']=w['xmodel'].get('numBones')
+                      rec['numSurfs']=w['xmodel'].get('numSurfs')
+                      rec['inlineGfxImages']=w.get('details',{}).get('inlineGfxImages',[])
+                  except Exception as exc:
+                      rec['walkerException']=repr(exc);rec['walkerEndpointMatchesNative']=False
+                  if rec.get('walkerEndpointMatchesNative'): matches+=1
+                  else: failures+=1
+              xrows.append(rec)
+
+          out={
+            'format':'t6-nuketown-native-expanded-xasset-trace-v2',
+            'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'expandedSha256':hashlib.sha256(d).hexdigest(),
+            'coordinateSystem':'repository expanded FastFile byte offsets',
+            'coordinateCanary':{'q3':trace[3],'q4Start':trace[4]['sourceStart'],'passed':True},
+            'q4NativeBoundary':trace[4],
+            'q5NativeBoundary':trace[5],
+            'totals':{
+              'topLevelXAssets':len(assets),
+              'xmodelXAssets':len(xrows),
+              'xmodelNativeSourceConsuming':sum(r['sourceKind']=='native-source-consuming' for r in xrows),
+              'xmodelZeroSourceReferences':aliases,
+              'xmodelWalkerEndpointMatchesNative':matches,
+              'xmodelWalkerEndpointMismatchesOrFailures':failures,
+            },
+            'xmodels':xrows,
+            'gates':{
+              'nativeExpandedCoordinateValidated':True,
+              'allTopLevelXAssetsNativeTraced':len(trace)==len(assets),
+              'allSourceConsumingXModelsWalkerClosed':failures==0,
+              'zeroSourceXModelReferencesResolvedToIdentity':False if aliases else True,
+              'wholeZoneXModelPopulationClosed':failures==0 and aliases==0,
+            },
+            'proofBoundary':[
+              'The diagnostic position is validated against the independently proven q3 expanded-stream span 125632..499456 before later boundaries are used.',
+              'Native before/after positions establish top-level serialized source ownership/order; XModelWalker v2 is independently checked against every source-consuming native endpoint.',
+              'XModelWalker v2 consumes GfxImageLoadDef.resourceSize from +8 and its flexible data array directly per pinned T6 structure and ZoneCode contracts.',
+              'Zero-source XMODEL XAssets remain identity-resolution blockers until their packed/backreference semantics are resolved; they are never silently promoted.'
+            ]
+          }
+          Path('/tmp/proof/T6_NUKETOWN_NATIVE_EXPANDED_XASSET_TRACE_V2.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'coordinateCanary':out['coordinateCanary'],'q4':out['q4NativeBoundary'],'q5':out['q5NativeBoundary'],'totals':out['totals'],'gates':out['gates']},indent=2,sort_keys=True))
+          if failures or aliases:
+              raise SystemExit(f'XModel population not closed: failures={failures}, zeroSourceReferences={aliases}')
+          PY
+
+      - name: Upload compact v2 trace evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_NATIVE_EXPANDED_XASSET_TRACE_V2
+          path: |
+            /tmp/proof/T6_NUKETOWN_NATIVE_EXPANDED_XASSET_TRACE_V2.json
+            /tmp/proof/T6_EXPANDED_XASSET_TRACE.txt
+            /tmp/proof/OAT_9DCA_EXPANDED_XASSET_TRACE.patch
+            /tmp/proof/fastfile_audit.json
+            /tmp/proof/oat_build.log
+            /tmp/proof/oat_nuketown_trace.log
+          if-no-files-found: warn
+          retention-days: 14
