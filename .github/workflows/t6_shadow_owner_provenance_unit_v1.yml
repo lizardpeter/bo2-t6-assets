@@ -1,0 +1,28 @@
+name: T6 shadow owner provenance unit v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_material_shader_census_v1.py'
+      - 'tools/t6_oat_material_shader_census_v3.py'
+      - 'tools/t6_oat_material_shader_census_v4.py'
+      - 'tools/test_t6_oat_material_shader_census_v4.py'
+      - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
+      - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
+      - 'tools/test_t6_oat_exact_technique_owner_closure_v2.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - '.github/workflows/t6_shadow_owner_provenance_unit_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  provenance-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test parent-owned Technique provenance
+        run: PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
+      - name: Test exact Technique owner closure gates
+        run: PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_owner_closure_v2.py
