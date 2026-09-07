@@ -1,118 +1,30 @@
-name: T6 Nuketown q4-q14 OAT endpoint audit v1
+name: SUPERSEDED - T6 Nuketown q4-q14 OAT endpoint audit v1
+
+# RETIRED 2026-09-06.
+#
+# This workflow previously asserted that OpenAssetTools' serialized-source byte
+# counter could be converted to offsets in our expanded FastFile representation
+# with one additive base. That assumption is invalid. The historical failing run
+# is intentionally retained in GitHub Actions, while this workflow is disabled
+# from repeating the bad assertion.
+#
+# See checkpoints/T6_STREAM_COORDINATE_SYSTEMS_CORRECTION_2026-09-06.md.
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/t6_nuketown_q4_q14_oat_endpoint_audit_v1.yml'
-      - 'tools/t6_xmodel_serialized_walker.py'
-      - 'tools/t6_material_techset_top_level_walk_v1.py'
 
 permissions:
   contents: read
 
 jobs:
-  audit:
+  superseded:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Expand exact retail Nuketown
+      - name: Explain retirement
         shell: bash
         run: |
           set -euo pipefail
-          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
-          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
-          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
-          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
-          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
-      - name: Audit exact q4-q14 boundaries and raw TechniqueSet fixed structs
-        shell: bash
-        run: |
-          set -euo pipefail
-          PYTHONPATH=tools python3 - <<'PY'
-          import json,struct
-          from pathlib import Path
-          from t6_material_techset_top_level_walk_v1 import parse_front
-          from t6_xmodel_serialized_walker import XModelWalker
-
-          d=Path('/tmp/map.expanded').read_bytes()
-          blocks,assets,_=parse_front(d)
-
-          # OpenAssetTools reports source-block-relative positions.  The source
-          # block begins at absolute expanded-stream offset 499393, proven by the
-          # q3 TechniqueSet ending at 499456 while OAT reports q4 start=63.
-          OAT_SOURCE_BLOCK_BASE=499393
-          oat_rel={
-              4:(63,660),
-              5:(660,1507),
-              6:(1507,2198),
-              7:(2198,2864),
-              8:(2864,3428),
-              9:(3428,4774),
-              10:(4774,6396),
-              11:(6396,7294),
-              12:(7294,8104),
-              13:(8104,8980),
-              14:(8980,9193),
-          }
-          oat={q:(OAT_SOURCE_BLOCK_BASE+s,OAT_SOURCE_BLOCK_BASE+e) for q,(s,e) in oat_rel.items()}
-          assert oat[4]==(499456,500053)
-          assert oat[14]==(508373,508586)
-
-          rows=[]
-          for q in range(4,15):
-              s,e=oat[q]
-              typ=int(assets[q]['type'])
-              row={'xassetIndex':q,'xassetType':typ,'sourceStart':s,'sourceEnd':e,'sourceBytes':e-s,
-                   'oatRelativeStart':oat_rel[q][0],'oatRelativeEnd':oat_rel[q][1]}
-              print(f'q{q}: type={typ} OAT={s}->{e} delta={e-s}')
-              if typ==5:
-                  w=XModelWalker(d,s).walk_xmodel()
-                  row['kind']='XMODEL'
-                  row['xmodelName']=w['xmodel'].get('name')
-                  row['walkerEnd']=int(w['assetSerializedEnd'])
-                  row['walkerBlockers']=w['blockers']
-                  row['walkerMatchesOat']=row['walkerEnd']==e and not w['blockers']
-                  print('  XModel',row['xmodelName'],'walkerEnd',row['walkerEnd'],'match',row['walkerMatchesOat'])
-                  assert row['walkerMatchesOat'],row
-              elif typ==7:
-                  row['kind']='TECHNIQUE_SET'
-                  fixed=d[s:s+152]
-                  assert len(fixed)==152
-                  name_raw=struct.unpack_from('<I',fixed,0)[0]
-                  fmt=fixed[4]
-                  reserved=fixed[5:8]
-                  refs=list(struct.unpack_from('<36I',fixed,8))
-                  nz=[{'slot':i,'rawHex':f'0x{raw:08X}'} for i,raw in enumerate(refs) if raw]
-                  row.update({
-                      'fixedBytes':152,
-                      'nameRaw':f'0x{name_raw:08X}',
-                      'worldVertFormat':fmt,
-                      'reservedHex':reserved.hex(),
-                      'nonzeroTechniqueRefs':nz,
-                      'postFixedHex':d[s+152:min(e,s+216)].hex(),
-                  })
-                  print('  TECHSET nameRaw',row['nameRaw'],'fmt',fmt,'reserved',row['reservedHex'])
-                  for x in nz: print('   ref',x['slot'],x['rawHex'])
-                  print('  postFixed',row['postFixedHex'])
-              else:
-                  row['kind']=f'TYPE_{typ}'
-                  row['rawPrefixHex']=d[s:min(e,s+64)].hex()
-                  print('  non-XModel/TechniqueSet rawPrefix',row['rawPrefixHex'])
-              rows.append(row)
-
-          proof={
-              'format':'t6-nuketown-q4-q14-oat-endpoint-audit-v1',
-              'expandedSha256':'7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505',
-              'oatSourceBlockBase':OAT_SOURCE_BLOCK_BASE,
-              'rows':rows,
-              'result':'OAT source-relative positions are converted with the proven 499393 base. Every type-5 XModel is independently checked against the same absolute endpoint; TechniqueSets are dumped only at OAT-authoritative boundaries.',
-          }
-          Path('/tmp/q4_q14_audit.json').write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: T6_NUKETOWN_Q4_Q14_OAT_ENDPOINT_AUDIT_V1
-          path: /tmp/q4_q14_audit.json
-          if-no-files-found: error
+          cat checkpoints/T6_STREAM_COORDINATE_SYSTEMS_CORRECTION_2026-09-06.md
+          echo
+          echo 'This audit is retired: OAT source-byte positions and expanded-FastFile offsets are distinct coordinate systems.'
