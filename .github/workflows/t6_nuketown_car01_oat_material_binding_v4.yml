@@ -1,0 +1,242 @@
+name: T6 Nuketown Car01 OAT material binding v4
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_oat_material_binding_v4.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools Unlinker with minimal GCC compatibility patch
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff -- \
+            src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp \
+            src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp \
+            src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp \
+            src/ObjWriting/Game/T4/Menu/MenuWriterT4.cpp \
+            src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp \
+            src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp \
+            | tee /tmp/proof/OAT_9DCA_GCC_COMPAT_V3.patch
+
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+
+          set +e
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli \
+            2>&1 | tee /tmp/proof/oat_build.log
+          BUILD_RC=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$BUILD_RC" > /tmp/proof/build_rc.txt
+
+          if [ "$BUILD_RC" = 0 ]; then
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            BIN=$(realpath "$BIN")
+            printf '%s\n' "$BIN" > /tmp/unlinker_path
+            "$BIN" --no-color --help > /tmp/proof/unlinker_help.txt 2>&1
+            sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+            echo 'ok=1' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=0' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download exact retail Nuketown FastFile
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/oat_out
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Dump native Materials and TechniqueSets
+        id: dump
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -u
+          BIN=$(cat /tmp/unlinker_path)
+          FF=/tmp/game/zone/all/mp_nuketown_2020.ff
+          OUT=/tmp/oat_out
+
+          set +e
+          "$BIN" --no-color --verbose --include-assets material --output-folder "$OUT" "$FF" \
+            2>&1 | tee /tmp/proof/oat_material_dump.log
+          MATERIAL_RC=${PIPESTATUS[0]}
+          "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$OUT" "$FF" \
+            2>&1 | tee /tmp/proof/oat_techset_dump.log
+          TECHSET_RC=${PIPESTATUS[0]}
+          set -e
+
+          printf '%s\n' "$MATERIAL_RC" > /tmp/proof/material_rc.txt
+          printf '%s\n' "$TECHSET_RC" > /tmp/proof/techset_rc.txt
+          find "$OUT" -type f | sort > /tmp/proof/oat_output_files.txt || true
+          echo "material rc=$MATERIAL_RC"
+          echo "techniqueset rc=$TECHSET_RC"
+          if [ "$MATERIAL_RC" = 0 ] && [ "$TECHSET_RC" = 0 ]; then
+            echo 'ok=1' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=0' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve exact Car01 Material to TechniqueSet bindings
+        id: analyze
+        if: steps.dump.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+
+          OAT_COMMIT='9dca965366541504b71fa8cfb7ac049cb9b717e1'
+          FF_SHA='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+          TARGETS=[
+              'mc/mtl_nt_2020_car_01_glass_out',
+              'mc/mtl_nt_2020_car_01_exterior',
+              'mc/mtl_nt_2020_car_01_interior',
+              'mc/mtl_nt_2020_car_01_tire',
+              'mc/mtl_nt_2020_car_01_glass_in',
+          ]
+          root=Path('/tmp/oat_out')
+          proof=Path('/tmp/proof')
+          selected=proof/'oat_selected'
+
+          def sha(path):
+              h=hashlib.sha256()
+              h.update(path.read_bytes())
+              return h.hexdigest()
+
+          rows=[]
+          errors=[]
+          for target in TARGETS:
+              p=root/'materials'/f'{target}.json'
+              if not p.is_file():
+                  rows.append({'material':target,'resolved':False})
+                  errors.append({'material':target,'error':'missing exact native material JSON','path':str(p.relative_to(root))})
+                  continue
+              j=json.loads(p.read_text(encoding='utf-8'))
+              ts=j.get('techniqueSet')
+              if j.get('_type') != 'material' or j.get('_game') != 't6' or not isinstance(ts,str) or not ts:
+                  rows.append({'material':target,'resolved':False,'materialFile':str(p.relative_to(root))})
+                  errors.append({'material':target,'error':'invalid native material JSON or missing techniqueSet'})
+                  continue
+              dst=selected/p.relative_to(root)
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(p,dst)
+              rows.append({
+                  'material':target,
+                  'resolved':True,
+                  'materialFile':str(p.relative_to(root)),
+                  'materialSha256':sha(p),
+                  'techniqueSet':ts,
+              })
+
+          result={
+              'format':'t6-nuketown-car01-oat-material-binding-v4',
+              'proofBoundary':'Native pinned OAT T6 Material pointer resolution only; no q-index or stream-offset inference.',
+              'openAssetToolsCommit':OAT_COMMIT,
+              'fastFileSha256':FF_SHA,
+              'targets':rows,
+              'errors':errors,
+          }
+          out=proof/'T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          for row in rows:
+              print(row['material'],'->',row.get('techniqueSet','UNRESOLVED'))
+          if errors:
+              print(json.dumps(errors,indent=2))
+              raise SystemExit(1)
+          if len({r['techniqueSet'] for r in rows}) > 5:
+              raise SystemExit('impossible unique TechniqueSet count')
+          PY
+
+          python3 tools/t6_oat_techset_binding_manifest_v1.py \
+            --oat-root /tmp/oat_out \
+            --binding-manifest /tmp/proof/T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4.json \
+            --out /tmp/proof/T6_NUKETOWN_CAR01_OAT_SHADER_BINDINGS_V2.json
+
+          python3 - <<'PY'
+          import json
+          import shutil
+          from pathlib import Path
+
+          root=Path('/tmp/oat_out')
+          proof=Path('/tmp/proof')
+          selected=proof/'oat_selected'
+          m=json.loads((proof/'T6_NUKETOWN_CAR01_OAT_SHADER_BINDINGS_V2.json').read_text())
+          paths=set()
+          for ts in m['techsets']:
+              paths.add(ts['file']['path'])
+          for tech in m['techniques']:
+              paths.add(tech['file']['path'])
+              for p in tech['passes']:
+                  for shader in p['shaders']:
+                      b=shader.get('binary')
+                      if b:
+                          paths.add(b['path'])
+          for rel in sorted(paths):
+              src=root/rel
+              if not src.is_file():
+                  raise SystemExit(f'missing selected dependency {rel}')
+              dst=selected/rel
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(src,dst)
+          print('selected exact OAT dependencies:',len(paths))
+          PY
+
+          find /tmp/proof/oat_selected -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/OAT_SELECTED_SHA256SUMS.txt
+          sha256sum \
+            /tmp/proof/T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4.json \
+            /tmp/proof/T6_NUKETOWN_CAR01_OAT_SHADER_BINDINGS_V2.json \
+            > /tmp/proof/MANIFEST_SHA256SUMS.txt
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
+      - name: Upload exact native Car01 shader binding proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4
+          path: /tmp/proof
+          if-no-files-found: error
+
+      - name: Enforce proof closure
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/proof/build_rc.txt
+          test "$(cat /tmp/proof/build_rc.txt)" = 0
+          test -f /tmp/proof/material_rc.txt
+          test "$(cat /tmp/proof/material_rc.txt)" = 0
+          test -f /tmp/proof/techset_rc.txt
+          test "$(cat /tmp/proof/techset_rc.txt)" = 0
+          test "${{ steps.analyze.outputs.ok }}" = 1
+          test -s /tmp/proof/T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4.json
+          test -s /tmp/proof/T6_NUKETOWN_CAR01_OAT_SHADER_BINDINGS_V2.json
