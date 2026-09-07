@@ -13,7 +13,7 @@ import argparse
 import json
 from pathlib import Path
 
-from t6_early_techset_source_order_walk_v1 import walk
+from t6_early_techset_source_order_walk_v2 import walk
 
 
 def main() -> int:
@@ -55,6 +55,7 @@ def main() -> int:
 
     out = {
         "format": "t6-early-techset-source-order-prefix-probe-v1",
+        "walker": "t6-early-techset-source-order-walk-v2",
         "requestedEndAssetIndex": a.end_asset,
         "firstFailure": first_failure,
         "probes": probes,
