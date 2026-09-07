@@ -1,0 +1,89 @@
+name: T6 MP player body nested closure v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-mp-player-body-nested-closure-v1.yml'
+      - 'tools/t6_mp_player_body_nested_closure_v1.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker_v3.py'
+      - 'tools/bo2_t6_fastfile_v2.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_IDENTITY_RUN_ID: '34164196686'
+
+jobs:
+  close-30-bodies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download already-closed native XModel identity reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: T6_NATIVE_XMODEL_IDENTITY_SHARD_*
+          path: /tmp/identity-results
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          run-id: ${{ env.SOURCE_IDENTITY_RUN_ID }}
+
+      - name: Fetch and exactly expand the six proven faction FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/faction-ff /tmp/expanded /tmp/proof
+          python3 - <<'PY' > /tmp/factions.tsv
+          import json
+          p=json.load(open('manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json'))
+          assert p['format']=='t6-mp-player-body-faction-corpus-checkpoint-v1'
+          assert len(p['sources'])==6
+          for zone, hashes in sorted(p['sources'].items()):
+              assert isinstance(hashes,list) and len(hashes)==2
+              print(zone, hashes[0], hashes[1], sep='\t')
+          PY
+          while IFS=$'\t' read -r zone compressed_sha expanded_sha; do
+            echo "=== ${zone} ==="
+            ff="/tmp/faction-ff/${zone}.ff"
+            expanded="/tmp/expanded/${zone}.expanded"
+            curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 \
+              -o "$ff" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${compressed_sha}  ${ff}" | sha256sum -c -
+            python3 tools/bo2_t6_fastfile_v2.py decrypt "$ff" \
+              -o "$expanded" --audit "/tmp/proof/${zone}_fastfile_audit.json"
+            echo "${expanded_sha}  ${expanded}" | sha256sum -c -
+          done < /tmp/factions.tsv
+
+      - name: Close all 30 proven bodies through unchanged nested walker
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_mp_player_body_nested_closure_v1.py \
+            --body-corpus manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json \
+            --identity-results-root /tmp/identity-results \
+            --expanded-root /tmp/expanded \
+            --out /tmp/proof/T6_MP_PLAYER_BODY_NESTED_CLOSURE_V1.json \
+            --require-closed
+
+      - name: Upload 30-body nested closure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_PLAYER_BODY_NESTED_CLOSURE_V1
+          path: |
+            /tmp/proof/T6_MP_PLAYER_BODY_NESTED_CLOSURE_V1.json
+            /tmp/proof/*_fastfile_audit.json
+            /tmp/factions.tsv
+          if-no-files-found: warn
+          retention-days: 14
