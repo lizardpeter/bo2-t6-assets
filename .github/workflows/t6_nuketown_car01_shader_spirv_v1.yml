@@ -1,0 +1,136 @@
+name: T6 Nuketown Car01 exact shader SPIR-V v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_shader_spirv_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'manifests/models/T6_NUKETOWN_CAR01_NATIVE_SHADER_CLOSURE_V1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools Unlinker and install shader tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/map_out /tmp/common_out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib vkd3d-compiler spirv-tools >/dev/null
+
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff -- \
+            src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp \
+            src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp \
+            src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp \
+            src/ObjWriting/Game/T4/Menu/MenuWriterT4.cpp \
+            src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp \
+            src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp \
+            > /tmp/proof/OAT_9DCA_GCC_COMPAT_V3.patch
+
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+          vkd3d-compiler --version > /tmp/proof/vkd3d_version.txt
+          vkd3d-compiler -x dxbc-tpf --print-target-types > /tmp/proof/vkd3d_target_types.txt
+          spirv-dis --version > /tmp/proof/spirv_tools_version.txt
+
+      - name: Download exact retail map and shared FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          curl -fL --retry 4 -o /tmp/game/zone/all/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+
+      - name: Dump exact opaque and glass TechniqueSet dependency graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets techniqueset --output-folder /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/map_techset_dump.log
+          "$BIN" --no-color --verbose --include-assets techniqueset --output-folder /tmp/common_out /tmp/game/zone/all/common_mp.ff 2>&1 | tee /tmp/proof/common_techset_dump.log
+
+          test -f /tmp/map_out/techsets/mc_lit_sm_r0c0n0s0_zqq1fze7.techset
+          test -f /tmp/map_out/techniques/pimp_technique_lprobe_651eb933.tech
+          test -f /tmp/map_out/shader_bin/vs_pimp_shader_lprobe_347155f7.hlsl.cso
+          test -f /tmp/map_out/shader_bin/ps_pimp_shader_lprobe_4bceb0cc.hlsl.cso
+          test -f /tmp/common_out/techsets/mc_lit_sm_b0c0s0_2q396f5e.techset
+          test -f /tmp/common_out/techniques/pimp_technique_lprobe_de89e86a.tech
+          test -f /tmp/common_out/shader_bin/vs_pimp_shader_lprobe_eb01efa5.hlsl.cso
+          test -f /tmp/common_out/shader_bin/ps_pimp_shader_lprobe_5b74bfe9.hlsl.cso
+
+          echo '29708fd9f7c67405fb992eaca6b348f6b919f5c16403b2b7f6307221f8f1b24f  /tmp/map_out/techsets/mc_lit_sm_r0c0n0s0_zqq1fze7.techset' | sha256sum -c -
+          echo '1b415d0542e75c894a7cf30c9a2b66a537b6c7c7794adb7edee87b650ececc72  /tmp/map_out/techniques/pimp_technique_lprobe_651eb933.tech' | sha256sum -c -
+          echo 'c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319  /tmp/map_out/shader_bin/vs_pimp_shader_lprobe_347155f7.hlsl.cso' | sha256sum -c -
+          echo '5c88d806b6235333a637f54e03dca4fa4bec3a6ef27eada702a272dac50cef0a  /tmp/map_out/shader_bin/ps_pimp_shader_lprobe_4bceb0cc.hlsl.cso' | sha256sum -c -
+          echo '2dd8732f433d0109b3a5a4e23f0151f61d715616598771788906d9ecd0ce6bf8  /tmp/common_out/techsets/mc_lit_sm_b0c0s0_2q396f5e.techset' | sha256sum -c -
+          echo '568617758a2d437e6705aa9791071daba27033c2e3c8a77827f465ead21d472e  /tmp/common_out/techniques/pimp_technique_lprobe_de89e86a.tech' | sha256sum -c -
+          echo '0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5  /tmp/common_out/shader_bin/vs_pimp_shader_lprobe_eb01efa5.hlsl.cso' | sha256sum -c -
+          echo '40a214de6613cc5b1a73cb72150e0357c917d9c6db5d5491338b0e0ece38c80c  /tmp/common_out/shader_bin/ps_pimp_shader_lprobe_5b74bfe9.hlsl.cso' | sha256sum -c -
+
+      - name: Translate exact DXBC shaders and disassemble SPIR-V
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof/shaders
+          cp /tmp/map_out/shader_bin/ps_pimp_shader_lprobe_4bceb0cc.hlsl.cso /tmp/proof/shaders/opaque_lit_ps.dxbc
+          cp /tmp/map_out/shader_bin/vs_pimp_shader_lprobe_347155f7.hlsl.cso /tmp/proof/shaders/opaque_lit_vs.dxbc
+          cp /tmp/common_out/shader_bin/ps_pimp_shader_lprobe_5b74bfe9.hlsl.cso /tmp/proof/shaders/glass_lit_ps.dxbc
+          cp /tmp/common_out/shader_bin/vs_pimp_shader_lprobe_eb01efa5.hlsl.cso /tmp/proof/shaders/glass_lit_vs.dxbc
+
+          for stem in opaque_lit_ps opaque_lit_vs glass_lit_ps glass_lit_vs; do
+            vkd3d-compiler -x dxbc-tpf -b spirv-binary -o "/tmp/proof/shaders/${stem}.spv" "/tmp/proof/shaders/${stem}.dxbc"
+            spirv-val "/tmp/proof/shaders/${stem}.spv"
+            spirv-dis --raw-id "/tmp/proof/shaders/${stem}.spv" -o "/tmp/proof/shaders/${stem}.spvasm"
+          done
+
+          sha256sum /tmp/proof/shaders/* > /tmp/proof/SHADER_TRANSLATION_SHA256SUMS.txt
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/proof/shaders')
+          rows=[]
+          for stem in ('opaque_lit_ps','opaque_lit_vs','glass_lit_ps','glass_lit_vs'):
+              row={'stem':stem}
+              for ext in ('dxbc','spv','spvasm'):
+                  p=root/f'{stem}.{ext}'
+                  b=p.read_bytes()
+                  row[ext]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
+              rows.append(row)
+          out={
+              'format':'t6-nuketown-car01-exact-shader-spirv-v1',
+              'proofBoundary':'Exact SHA-verified OAT-emitted retail DXBC translated without semantic rewriting by vkd3d-compiler; SPIR-V validated by spirv-val and disassembled by spirv-dis.',
+              'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'mapFastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
+              'commonMpFastFileSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'shaders':rows,
+          }
+          Path('/tmp/proof/T6_NUKETOWN_CAR01_EXACT_SHADER_SPIRV_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - name: Upload exact shader translation proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_EXACT_SHADER_SPIRV_V1
+          path: /tmp/proof
+          if-no-files-found: error
