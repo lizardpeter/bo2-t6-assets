@@ -1,0 +1,270 @@
+name: T6 Nuketown Car01 OAT material binding v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_oat_material_binding_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          echo "$BIN" > /tmp/unlinker_path
+          "$BIN" --no-color --help | tee /tmp/unlinker_help.txt
+
+      - name: Download exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/materials /tmp/techsets /tmp/proof
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Dump Materials and TechniqueSets through native T6 loader
+        id: dump
+        shell: bash
+        run: |
+          set -u
+          BIN=$(cat /tmp/unlinker_path)
+
+          set +e
+          "$BIN" --no-color --verbose --include-assets material --output-folder /tmp/materials /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/oat_material_dump.log
+          MATERIAL_RC=${PIPESTATUS[0]}
+          "$BIN" --no-color --verbose --include-assets technique_set --output-folder /tmp/techsets /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/oat_techset_dump.log
+          TECHSET_RC=${PIPESTATUS[0]}
+          set -e
+
+          printf '%s\n' "$MATERIAL_RC" > /tmp/material_rc
+          printf '%s\n' "$TECHSET_RC" > /tmp/techset_rc
+          find /tmp/materials -type f | sort > /tmp/all_material_files.txt || true
+          find /tmp/techsets -type f | sort > /tmp/all_techset_files.txt || true
+          echo "material unlinker rc=$MATERIAL_RC"
+          echo "technique_set unlinker rc=$TECHSET_RC"
+          exit 0
+
+      - name: Resolve exact Car01 Material to TechniqueSet bindings
+        id: analyze
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          mkdir -p /tmp/proof/materials /tmp/proof/techsets /tmp/proof/techniques
+          set +e
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+
+          OAT_COMMIT='9dca965366541504b71fa8cfb7ac049cb9b717e1'
+          FF_SHA='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+          TARGETS=[
+              'mc/mtl_nt_2020_car_01_glass_out',
+              'mc/mtl_nt_2020_car_01_exterior',
+              'mc/mtl_nt_2020_car_01_interior',
+              'mc/mtl_nt_2020_car_01_tire',
+              'mc/mtl_nt_2020_car_01_glass_in',
+          ]
+          mroot=Path('/tmp/materials')
+          troot=Path('/tmp/techsets')
+          proot=Path('/tmp/proof')
+
+          def sha256(path):
+              h=hashlib.sha256()
+              with path.open('rb') as f:
+                  for b in iter(lambda:f.read(1024*1024), b''):
+                      h.update(b)
+              return h.hexdigest()
+
+          def rel(path, root):
+              return path.relative_to(root).as_posix()
+
+          def load_json(path):
+              try:
+                  return json.loads(path.read_text(errors='strict'))
+              except Exception:
+                  return None
+
+          material_files=[p for p in mroot.rglob('*') if p.is_file()]
+          material_json=[]
+          for p in material_files:
+              j=load_json(p)
+              if isinstance(j,dict) and j.get('_type')=='material':
+                  material_json.append((p,j))
+
+          rows=[]
+          errors=[]
+          resolved_techsets=[]
+
+          for target in TARGETS:
+              base=target.rsplit('/',1)[-1]
+              candidates=[]
+              for p,j in material_json:
+                  r=rel(p,mroot)
+                  # OAT material filenames preserve the asset name/path. Match
+                  # either the full retail asset name or its exact basename.
+                  path_no_suffix=r
+                  if target in path_no_suffix or base in p.name:
+                      candidates.append((p,j))
+
+              # Prefer candidates containing the complete retail asset path.
+              exact=[x for x in candidates if target in rel(x[0],mroot)]
+              if exact:
+                  candidates=exact
+              # De-duplicate identical paths only; anything else is ambiguous.
+              uniq={str(p):(p,j) for p,j in candidates}
+              candidates=list(uniq.values())
+
+              if len(candidates)!=1:
+                  errors.append({'target':target,'error':'material_match_count','count':len(candidates),
+                                 'candidates':[rel(p,mroot) for p,_ in candidates]})
+                  rows.append({'material':target,'resolved':False,
+                               'candidateFiles':[rel(p,mroot) for p,_ in candidates]})
+                  continue
+
+              p,j=candidates[0]
+              ts=j.get('techniqueSet')
+              if not isinstance(ts,str) or not ts:
+                  errors.append({'target':target,'error':'missing_techniqueSet','file':rel(p,mroot)})
+                  rows.append({'material':target,'resolved':False,'materialFile':rel(p,mroot),
+                               'materialSha256':sha256(p),'materialJson':j})
+                  continue
+
+              outm=proot/'materials'/f'{base}.json'
+              shutil.copyfile(p,outm)
+              row={'material':target,'resolved':True,'materialFile':rel(p,mroot),
+                   'materialSha256':sha256(p),'techniqueSet':ts,'materialJson':j}
+              rows.append(row)
+              if ts not in resolved_techsets:
+                  resolved_techsets.append(ts)
+
+          techset_rows=[]
+          all_tfiles=[p for p in troot.rglob('*') if p.is_file()]
+          for ts in resolved_techsets:
+              tsbase=ts.rsplit('/',1)[-1]
+              matches=[]
+              for p in all_tfiles:
+                  r=rel(p,troot)
+                  if p.name == f'{tsbase}.techset' or ts in r:
+                      matches.append(p)
+              matches=list(dict.fromkeys(matches))
+              if len(matches)!=1:
+                  errors.append({'techniqueSet':ts,'error':'techset_match_count','count':len(matches),
+                                 'candidates':[rel(p,troot) for p in matches]})
+                  techset_rows.append({'techniqueSet':ts,'resolved':False,
+                                       'candidateFiles':[rel(p,troot) for p in matches]})
+                  continue
+
+              p=matches[0]
+              text=p.read_text(errors='replace')
+              out=proot/'techsets'/f'{tsbase}.techset'
+              shutil.copyfile(p,out)
+
+              # OAT .techset is line-oriented. Preserve the exact file and also
+              # enumerate referenced .tech names for deterministic dependency capture.
+              names=[]
+              for line in text.splitlines():
+                  s=line.strip()
+                  if s and not s.startswith('"') and s.endswith(';'):
+                      names.append(s[:-1])
+              names=sorted(set(names))
+              deps=[]
+              for name in names:
+                  depmatches=[q for q in all_tfiles if q.name==f'{name}.tech']
+                  depinfo=[]
+                  for q in depmatches:
+                      safe=(tsbase+'__'+name).replace('/','_').replace('\\','_')+'.tech'
+                      dst=proot/'techniques'/safe
+                      if not dst.exists(): shutil.copyfile(q,dst)
+                      depinfo.append({'file':rel(q,troot),'sha256':sha256(q),'text':q.read_text(errors='replace')})
+                  deps.append({'name':name,'matches':depinfo})
+
+              techset_rows.append({'techniqueSet':ts,'resolved':True,'file':rel(p,troot),
+                                   'sha256':sha256(p),'text':text,'techniques':deps})
+
+          material_rc=int(Path('/tmp/material_rc').read_text().strip()) if Path('/tmp/material_rc').exists() else None
+          techset_rc=int(Path('/tmp/techset_rc').read_text().strip()) if Path('/tmp/techset_rc').exists() else None
+          result={
+              'format':'t6-nuketown-car01-oat-material-binding-v2',
+              'proofBoundary':'Native OAT T6 Material pointer resolution; no q-index or additive stream-offset inference.',
+              'openAssetToolsCommit':OAT_COMMIT,
+              'fastFileSha256':FF_SHA,
+              'unlinkerReturnCodes':{'material':material_rc,'technique_set':techset_rc},
+              'targets':rows,
+              'resolvedTechniqueSets':techset_rows,
+              'errors':errors,
+          }
+          (proot/'T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V2.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+
+          # Human-readable binding table in the Actions log.
+          print('=== exact native OAT Car01 Material -> TechniqueSet bindings ===')
+          for row in rows:
+              print(row['material'], '->', row.get('techniqueSet','UNRESOLVED'), 'file=',row.get('materialFile'))
+          print('=== exact unique TechniqueSets ===')
+          for ts in resolved_techsets:
+              print(ts)
+          if errors:
+              print('=== errors ===')
+              print(json.dumps(errors,indent=2))
+
+          if material_rc != 0 or techset_rc != 0 or errors or len(rows)!=len(TARGETS) or not all(r.get('resolved') for r in rows):
+              raise SystemExit(1)
+          PY
+          ANALYSIS_RC=$?
+          printf '%s\n' "$ANALYSIS_RC" > /tmp/analysis_rc
+          set -e
+
+          if [ -d /tmp/proof ]; then
+            find /tmp/proof -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 -r sha256sum > /tmp/proof/SHA256SUMS.txt
+          fi
+          exit 0
+
+      - name: Upload exact binding proof and raw OAT dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V2
+          path: |
+            /tmp/proof
+            /tmp/materials
+            /tmp/techsets
+            /tmp/oat_material_dump.log
+            /tmp/oat_techset_dump.log
+            /tmp/unlinker_help.txt
+            /tmp/all_material_files.txt
+            /tmp/all_techset_files.txt
+            /tmp/material_rc
+            /tmp/techset_rc
+            /tmp/analysis_rc
+          if-no-files-found: warn
+
+      - name: Enforce proof closure
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat /tmp/material_rc)" = 0
+          test "$(cat /tmp/techset_rc)" = 0
+          test "$(cat /tmp/analysis_rc)" = 0
+          test -s /tmp/proof/T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V2.json
