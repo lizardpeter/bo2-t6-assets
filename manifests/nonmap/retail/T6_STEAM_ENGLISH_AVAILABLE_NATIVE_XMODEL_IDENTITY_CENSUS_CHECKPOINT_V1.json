@@ -1,0 +1,54 @@
+{
+  "format": "t6-steam-english-available-native-xmodel-identity-census-checkpoint-v1",
+  "scope": "Steam English retail FastFile catalog, source-available subset only",
+  "evidence": {
+    "workflow": ".github/workflows/t6-steam-english-available-native-xmodel-identity-census-v1.yml",
+    "runId": 34164196686,
+    "headCommit": "3e7fd925780d3df7620097d7cc28d7846369c29b",
+    "artifact": {
+      "id": 10033829697,
+      "name": "T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_IDENTITY_CENSUS_V1",
+      "digest": "sha256:e654e9f4545a9f7c9135b6a2ffe5984d8d07eed7a71c064b3a7e722220b8f392"
+    }
+  },
+  "catalog": {
+    "declaredUniqueFastFilePaths": 297,
+    "sourceAvailablePaths": 215,
+    "sourceUnavailablePaths": 82,
+    "overlappingDepotPathsStillRequiringByteIdentityClosure": 6
+  },
+  "availableSourcePopulation": {
+    "reportedZones": 215,
+    "closedZones": 215,
+    "observedXModels": 22255,
+    "sourceConsuming": 21693,
+    "sourceConsumingEndpointClosed": 21693,
+    "sourceConsumingIdentityClosed": 21693,
+    "sourceConsumingInlineNameClosed": 19905,
+    "sourceConsumingPackedNameClosed": 1788,
+    "zeroSource": 562,
+    "zeroSourceNativeIdentityClosed": 562,
+    "failures": 0
+  },
+  "gates": {
+    "allAvailablePathsHaveReports": true,
+    "allAvailableZoneXModelPopulationsClosed": true,
+    "allSourceConsumingEndpointsClosed": true,
+    "allSourceConsumingIdentitiesClosed": true,
+    "allZeroSourceReferencesResolvedToIdentity": true,
+    "availableCorpusXModelCountMatchesExpected": true,
+    "zeroIdentityFailures": true,
+    "sourceContainerUnionComplete": false,
+    "overlappingDepotByteIdentityComplete": false,
+    "englishRetailXModelPopulationComplete": false
+  },
+  "proofBoundary": [
+    "Every one of the 215 currently source-available English-retail FastFile paths has a per-zone native XModel identity report and every per-zone population gate is closed.",
+    "All 21693 source-consuming XModel occurrences independently match the pinned native loader source endpoint and close identity through either exact inline XString equality or a structurally proven packed XString pointer plus the pinned native resolved XModel object name.",
+    "Exactly 19905 source-consuming rows close through inline names and 1788 close through packed-name native identity; packed-name rows are not treated as source-byte strings.",
+    "All 562 zero-source top-level XModel references resolve through the pinned native loader to non-null XModel object identities without source-byte scanning, adjacency inference, mesh similarity, or visual matching.",
+    "The 22255 count is a per-zone occurrence population, not a globally deduplicated unique-XModel count; repeated model names or payloads across zones remain separate occurrences here.",
+    "The 82 source-unavailable catalog paths and six multi-depot byte-identity cases remain explicit blockers, so this checkpoint does not claim complete English-retail XModel population or historical depot-byte closure.",
+    "Character classification, XAnim semantic pairing, Material/TechniqueSet/shader reconstruction, texture recovery, and export-format fidelity remain independent downstream gates."
+  ]
+}
