@@ -23,7 +23,7 @@ jobs:
           gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
           /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
-      - name: Test exact q5 start candidates
+      - name: Find exact q5 q6 TechniqueSet chain
         shell: bash
         run: |
           PYTHONPATH=tools python3 - <<'PY'
@@ -32,25 +32,54 @@ jobs:
           import t6_retail_world_formats_45_proof_v1 as h
           from t6_material_techset_top_level_walk_v1 import Cursor
           from t6_xmodel_serialized_walker import XModelWalker
+
           d=Path('/tmp/map.expanded').read_bytes();blocks,assets=h.front(d)
           q3=Cursor(d,125632,blocks).techset();assert q3['end']==499456
-          w4=XModelWalker(d,499456).walk_xmodel();assert not w4['blockers'];end=int(w4['assetSerializedEnd']);print('Q4_END',end,'MOD4',end%4,'MOD8',end%8)
-          print('AROUND_Q4_END',[(p,d[p:p+16].hex(),f'0x{struct.unpack_from("<I",d,p)[0]:08X}') for p in range(end-4,end+17)])
-          for p in range(end,end+17):
-            try:
-              c=Cursor(d,p,blocks);t=c.techset();print('Q5_CANDIDATE_OK',p,'END',t['end'],'NAME',t['name'],'FMT',t['worldVertFormat'])
-            except Exception as e:print('Q5_CANDIDATE_FAIL',p,repr(e))
-          # raw structural scan locally around the gap: fixed 152 with fmt/pad and valid 36 pointers.
-          cand=[]
-          for p in range(end,end+70000):
-            if p+152>len(d):break
+          w4=XModelWalker(d,499456).walk_xmodel();assert not w4['blockers'];lo=int(w4['assetSerializedEnd'])
+          hi=526241  # independently scanned next strict top-level XModel candidate; tested below
+          print('SEARCH_WINDOW',lo,hi,'bytes',hi-lo)
+
+          # Previous debug probe accidentally treated the 4-byte fmt/pad word as
+          # a TechniqueSet pointer and omitted ref[35]. Correct the native layout:
+          # name ptr @ +0, fmt/pad @ +4, 36 refs @ +8.
+          structural=[]
+          for p in range(lo,hi-152+1):
             if d[p+4]>8 or d[p+5:p+8]!=b'\0\0\0':continue
-            vals=struct.unpack_from('<37I',d,p)
+            namep=struct.unpack_from('<I',d,p)[0]
+            refs=struct.unpack_from('<36I',d,p+8)
             try:
-              h.dec(vals[0],blocks)
-              for x in vals[1:]:h.dec(x,blocks)
+              h.dec(namep,blocks)
+              for raw in refs:h.dec(raw,blocks)
             except Exception:continue
-            cand.append((p,f'0x{vals[0]:08X}',d[p+4],sum(x in (0xffffffff,0xfffffffe) for x in vals[1:])))
-            if len(cand)>=20:break
-          print('STRUCTURAL_NEAR_Q5',cand)
+            nonnull=sum(raw!=0 for raw in refs)
+            if not nonnull:continue
+            structural.append(p)
+          print('CORRECT_STRUCTURAL_CANDIDATES',structural)
+
+          parsed=[]
+          for p in structural:
+            try:
+              t=Cursor(d,p,blocks).techset()
+              if t['end']<=hi:
+                parsed.append((p,t))
+                print('PARSED',p,'END',t['end'],'FMT',t['worldVertFormat'],'NAME',t['name'])
+            except Exception as exc:
+              print('PARSE_REJECT',p,repr(exc))
+
+          chains=[]
+          for p,t5 in parsed:
+            p2=int(t5['end'])
+            try:
+              t6=Cursor(d,p2,blocks).techset()
+            except Exception:
+              continue
+            if int(t6['end'])==hi:
+              chains.append((p,t5,t6))
+              print('EXACT_CHAIN',p,'Q5_END',p2,'Q6_END',t6['end'],'Q5_NAME',t5['name'],'Q6_NAME',t6['name'])
+
+          # Also test each parser endpoint against a strict XModel at hi.
+          w7=XModelWalker(d,hi).walk_xmodel()
+          print('HI_XMODEL',w7['xmodel'].get('name'),'END',w7['assetSerializedEnd'],'BLOCKERS',w7['blockers'])
+          if len(chains)!=1:
+            raise SystemExit(f'expected one exact q5/q6 chain into {hi}, got {len(chains)}')
           PY
