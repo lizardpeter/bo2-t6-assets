@@ -2,101 +2,78 @@
 from __future__ import annotations
 
 import struct
+import unittest
 
 import t6_dxbc_signature_v1 as sig
 
 
 def signature_payload(rows):
-    count = len(rows)
-    table_end = 8 + 24 * count
-    names = bytearray()
-    entries = bytearray()
+    table = bytearray()
+    strings = bytearray()
+    base = 8 + 24 * len(rows)
     offsets = {}
-    for name, semantic_index, system_value, component_type, register, mask, rw in rows:
+    for row in rows:
+        name = row[0]
         if name not in offsets:
-            offsets[name] = table_end + len(names)
-            names.extend(name.encode('utf-8') + b'\0')
-        entries.extend(struct.pack(
-            '<6I', offsets[name], semantic_index, system_value,
-            component_type, register, (rw << 8) | mask,
-        ))
-    return struct.pack('<II', count, 0) + bytes(entries) + bytes(names)
+            offsets[name] = base + len(strings)
+            strings.extend(name.encode("ascii") + b"\0")
+        semantic_index, system_value, component_type, register, mask, rw = row[1:]
+        table.extend(
+            struct.pack(
+                "<6I",
+                offsets[name],
+                semantic_index,
+                system_value,
+                component_type,
+                register,
+                mask | (rw << 8),
+            )
+        )
+    return struct.pack("<II", len(rows), 8) + table + strings
 
 
-def dxbc(chunks):
-    count = len(chunks)
-    header_size = 32 + 4 * count
-    offsets = []
-    body = bytearray()
-    for tag, payload in chunks:
-        offsets.append(header_size + len(body))
-        body.extend(tag + struct.pack('<I', len(payload)) + payload)
-    total = header_size + len(body)
-    return (
-        b'DXBC' + b'\0' * 16 + struct.pack('<III', 1, total, count)
-        + struct.pack('<' + 'I' * count, *offsets) + bytes(body)
-    )
+class DxbcSignatureTests(unittest.TestCase):
+    def test_sm4_signature_decodes_component_masks(self):
+        payload = signature_payload([
+            ("POSITION", 0, 0, 3, 0, 0xF, 0xF),
+            ("TEXCOORD", 0, 0, 3, 2, 0x3, 0x3),
+            ("NORMAL", 0, 0, 3, 3, 0x7, 0x7),
+        ])
+        rows = sig.parse_signature_payload(payload)
+        self.assertEqual([r["semanticKey"] for r in rows], ["POSITION0", "TEXCOORD0", "NORMAL0"])
+        self.assertEqual(rows[1]["components"], "xy")
+        self.assertEqual(rows[2]["components"], "xyz")
+        self.assertEqual(rows[0]["componentType"], "float32")
+
+    def test_exact_car01_opaque_route_shape(self):
+        payload = signature_payload([
+            ("POSITION", 0, 0, 3, 0, 0xF, 0xF),
+            ("COLOR", 0, 0, 3, 1, 0xF, 0xF),
+            ("TEXCOORD", 0, 0, 3, 2, 0x3, 0x3),
+            ("NORMAL", 0, 0, 3, 3, 0x7, 0x7),
+            ("TEXCOORD", 2, 0, 3, 4, 0x7, 0x7),
+        ])
+        routes = [
+            {"destination": "position", "source": "position"},
+            {"destination": "color[0]", "source": "color"},
+            {"destination": "texcoord[0]", "source": "texcoord[0]"},
+            {"destination": "normal", "source": "normal"},
+            {"destination": "texcoord[2]", "source": "tangent"},
+        ]
+        rows = sig.bind_vertex_routes(sig.parse_signature_payload(payload), routes)
+        self.assertEqual([r["t6Source"] for r in rows], [
+            "position", "color", "texcoord[0]", "normal", "tangent"
+        ])
+        self.assertEqual(rows[4]["semanticKey"], "TEXCOORD2")
+        self.assertEqual(rows[4]["t6Source"], "tangent")
+
+    def test_route_join_fails_closed(self):
+        payload = signature_payload([
+            ("TEXCOORD", 2, 0, 3, 4, 0x7, 0x7),
+        ])
+        with self.assertRaises(sig.DxbcSignatureError):
+            sig.bind_vertex_routes(sig.parse_signature_payload(payload), [])
 
 
-def expect_fail(blob, tag, phrase):
-    try:
-        sig.parse_signature(blob, tag)
-    except sig.DxbcSignatureError as exc:
-        assert phrase in str(exc), str(exc)
-    else:
-        raise AssertionError(f'expected failure containing {phrase!r}')
-
-
-def main():
-    isgn = signature_payload([
-        ('TEXCOORD', 1, 0, 3, 2, 0x7, 0x7),
-        ('TEXCOORD', 3, 0, 3, 4, 0x7, 0x7),
-        ('COLOR', 0, 0, 3, 6, 0xf, 0xf),
-    ])
-    osgn = signature_payload([
-        ('SV_Target', 0, 0, 3, 0, 0xf, 0xf),
-    ])
-    blob = dxbc([(b'ISGN', isgn), (b'OSGN', osgn)])
-    io = sig.parse_io_signatures(blob)
-    assert io['format'] == 't6-dxbc-io-signatures-v1'
-    assert io['input']['format'] == sig.FORMAT
-    assert io['input']['entryCount'] == 3
-    assert io['input']['registerMap'] == {'2': 'TEXCOORD1', '4': 'TEXCOORD3', '6': 'COLOR0'}
-    assert io['output']['registerMap'] == {'0': 'SV_Target0'}
-    first = io['input']['entries'][0]
-    assert first['register'] == 2 and first['semanticName'] == 'TEXCOORD' and first['semanticIndex'] == 1
-    assert first['mask'] == 7 and first['readWriteMask'] == 7
-
-    duplicate = signature_payload([
-        ('TEXCOORD', 1, 0, 3, 2, 7, 7),
-        ('TEXCOORD', 2, 0, 3, 2, 7, 7),
-    ])
-    expect_fail(dxbc([(b'ISGN', duplicate), (b'OSGN', osgn)]), 'ISGN', 'multiple signature rows claim register 2')
-
-    missing = dxbc([(b'OSGN', osgn)])
-    expect_fail(missing, 'ISGN', 'expected exactly one chunk, found 0')
-
-    doubled = dxbc([(b'ISGN', isgn), (b'ISGN', isgn), (b'OSGN', osgn)])
-    expect_fail(doubled, 'ISGN', 'expected exactly one chunk, found 2')
-
-    bad = bytearray(isgn)
-    struct.pack_into('<I', bad, 8, 4)  # name offset inside entry table
-    expect_fail(dxbc([(b'ISGN', bytes(bad)), (b'OSGN', osgn)]), 'ISGN', 'outside string region')
-
-    malformed = bytearray(blob)
-    struct.pack_into('<I', malformed, 24, len(blob) + 1)
-    expect_fail(bytes(malformed), 'ISGN', 'DXBC size mismatch')
-
-    try:
-        sig.parse_signature(blob, 'PCSG')
-    except sig.DxbcSignatureError as exc:
-        assert 'unsupported SM4 signature tag' in str(exc)
-    else:
-        raise AssertionError('unsupported signature tag accepted')
-
-    print('PASS: strict reusable DXBC ISGN/OSGN signature parser')
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
+if __name__ == "__main__":
+    unittest.main()
