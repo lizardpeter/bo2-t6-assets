@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/t6_nuketown_car01_oat_material_binding_v3.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v2.py'
 
 permissions:
   contents: read
@@ -28,14 +29,15 @@ jobs:
           git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
           git -C /tmp/oat submodule update -q --init --recursive
 
-          python3 tools/t6_oat_9dca_format_compat_patch_v1.py /tmp/oat
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v2.py /tmp/oat
           git -C /tmp/oat diff --check
           git -C /tmp/oat diff -- \
             src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp \
             src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp \
             src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp \
             src/ObjWriting/Game/T4/Menu/MenuWriterT4.cpp \
-            | tee /tmp/proof/OAT_9DCA_GCC_FORMAT_COMPAT.patch
+            src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp \
+            | tee /tmp/proof/OAT_9DCA_GCC_HEADER_COMPAT.patch
 
           cd /tmp/oat
           PREMAKE_NO_PROMPT=1 ./generate.sh
