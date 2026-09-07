@@ -1,0 +1,95 @@
+name: T6 OAT Nuketown source cursor v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_oat_source_cursor_nuketown_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build pinned OpenAssetTools with exact source-byte counter
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          sed -i 's@// #define DEBUG_OFFSETS 1@#define DEBUG_OFFSETS 1@' /tmp/oat/src/ZoneLoading/Zone/Stream/ZoneInputStream.h
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/oat/src/ZoneLoading/Zone/Stream/ZoneInputStream.cpp')
+          s=p.read_text()
+          # Count every serialized-source byte loaded by ZoneInputStream. Runtime
+          # blocks are memset-only and correctly add zero. This counter is wholly
+          # independent of destination XBlock allocation/reset behavior.
+          s=s.replace('m_stream.Load(', 'DebugSourceLoad(')
+          anchor='''    private:\n        void LoadDataFromBlock(const XBlock& block, void* dst, const size_t size)\n'''
+          repl='''    private:\n        void DebugSourceLoad(void* dst, const size_t size)\n        {\n            m_stream.Load(dst, size);\n            m_debug_source_bytes += size;\n        }\n\n        void LoadDataFromBlock(const XBlock& block, void* dst, const size_t size)\n'''
+          if anchor not in s: raise SystemExit('private LoadDataFromBlock anchor drift')
+          s=s.replace(anchor,repl,1)
+          anchor2='''        size_t m_last_fill_size;\n'''
+          repl2='''        size_t m_last_fill_size;\n        size_t m_debug_source_bytes = 0;\n'''
+          if anchor2 not in s: raise SystemExit('member anchor drift')
+          s=s.replace(anchor2,repl2,1)
+          # DEBUG_OFFSETS is invoked by the generated top-level asset loop after
+          # each XAsset. Add the exact monotonically increasing source counter.
+          old='''                ss << " " << m_block_offsets[block->m_index];\n            }\n\n            con::debug(ss.str());\n'''
+          new='''                ss << " " << m_block_offsets[block->m_index];\n            }\n            ss << " source " << m_debug_source_bytes;\n\n            con::debug(ss.str());\n'''
+          if old not in s: raise SystemExit('DebugOffsets anchor drift')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh
+          find build/bin -maxdepth 3 -type f \( -iname '*unlinker*' -o -iname 'Unlinker' \) | sort
+      - name: Trace exact retail Nuketown early XAsset source cursors
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/out
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          "$BIN" --no-color --list /tmp/game/zone/all/mp_nuketown_2020.ff > /tmp/oat_trace.log 2>&1 || { tail -300 /tmp/oat_trace.log; exit 1; }
+          grep -E '^Asset ([0-9]|[1-6][0-9]|7[0-5]) ' /tmp/oat_trace.log | tee /tmp/early_source_cursors.txt
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          lines=Path('/tmp/early_source_cursors.txt').read_text().splitlines()
+          rows=[]
+          rx=re.compile(r'^Asset\s+(\d+)\s+(.*?)\s+source\s+(\d+)\s*$')
+          for line in lines:
+            m=rx.match(line)
+            if not m: raise SystemExit(f'unparsed debug line: {line!r}')
+            rows.append({'xassetIndex':int(m.group(1)),'destinationOffsets':m.group(2).split(),'sourceBytesAfterAsset':int(m.group(3))})
+          if not rows or rows[0]['xassetIndex']!=0: raise SystemExit('missing early rows')
+          # Adjacent source boundaries are the exact serialized byte intervals
+          # after the XFile header/tables already consumed before asset 0. Keep
+          # absolute counter values; a later step calibrates them to expanded
+          # offsets using independently known q3/q4 source starts.
+          out={'format':'t6-oat-nuketown-source-cursor-v1','openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1','fastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0','rows':rows}
+          Path('/tmp/T6_OAT_NUKETOWN_SOURCE_CURSOR_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(rows[:20],indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_OAT_NUKETOWN_SOURCE_CURSOR_V1
+          path: |
+            /tmp/T6_OAT_NUKETOWN_SOURCE_CURSOR_V1.json
+            /tmp/early_source_cursors.txt
+            /tmp/oat_trace.log
+          if-no-files-found: error
