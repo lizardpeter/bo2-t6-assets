@@ -90,7 +90,7 @@ class Cursor:
         for i,v in enumerate(vals):
             if v['type'] in (1,7) and inline(v['u']):literals.append({'argIndex':i,'sourceStart':self.take(16),'bytes':16})
             elif v['type'] in (1,7):dec(v['u'],self.blocks)
-        return {'fixedStart':s,'count':n,'literals':literals,'end':self.p}
+        return {'fixedStart':s,'count':n,'values':vals,'literals':literals,'end':self.p}
     def technique(self)->dict:
         s=self.p;namep=struct.unpack_from('<I',self.d,s)[0];flags,pc=struct.unpack_from('<HH',self.d,s+4)
         if not 1<=pc<=16:raise ValueError(f'bad passCount {pc} at {s}')
