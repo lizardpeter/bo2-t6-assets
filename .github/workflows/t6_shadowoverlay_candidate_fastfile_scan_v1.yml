@@ -1,0 +1,190 @@
+name: T6 shadowoverlay candidate FastFile scan v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_shadowoverlay_candidate_fastfile_scan_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build independently recovered retail FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/t6_expand_sha256.txt
+
+      - name: Extract, SHA-pin, expand, and exact-name scan renderer candidates
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/ff /tmp/expanded
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from t6_remote_zip_range_v1 import RemoteZip
+
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-shadowoverlay-candidate-scan/1')
+          entries,meta=rz.central_directory()
+          patterns=('gfx','common','patch','frontend','ui','code','load','menu')
+          candidates=[]
+          for e in entries:
+              name=e['name']
+              if not name.lower().endswith('.ff'):
+                  continue
+              base=name.rsplit('/',1)[-1].lower()
+              hits=[p for p in patterns if p in base]
+              if hits:
+                  candidates.append((e,hits))
+          candidates.sort(key=lambda x:x[0]['name'].lower())
+          rows=[]
+          for i,(e,tags) in enumerate(candidates):
+              raw=rz.extract(e,verify_crc=True)
+              digest=hashlib.sha256(raw).hexdigest()
+              fname=e['name'].rsplit('/',1)[-1]
+              local=Path('/tmp/ff')/f'{i:03d}_{fname}'
+              local.write_bytes(raw)
+              rows.append({
+                  'index':i,
+                  'zipPath':e['name'],
+                  'file':fname,
+                  'zoneName':fname[:-3],
+                  'tags':tags,
+                  'bytes':len(raw),
+                  'sha256':digest,
+                  'crc32':f"{e['crc32']:08x}",
+                  'localFile':str(local),
+              })
+              print(i,e['name'],len(raw),digest)
+          manifest={
+              'format':'t6-shadowoverlay-candidate-fastfile-inputs-v1',
+              'remoteZip':meta,
+              'candidateCount':len(rows),
+              'candidates':rows,
+              'proofBoundary':'Exact ZIP entry bytes are CRC-verified and SHA-256 pinned. Selection is filename-based and therefore candidate triage only.'
+          }
+          Path('/tmp/proof/T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_INPUTS_V1.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+          PY
+
+          cp /tmp/t6_expand_sha256.txt /tmp/proof/
+          : > /tmp/proof/expand_results.tsv
+          python3 - <<'PY' > /tmp/candidates.tsv
+          import json
+          d=json.load(open('/tmp/proof/T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_INPUTS_V1.json'))
+          for r in d['candidates']:
+              print(r['index'],r['zoneName'],r['localFile'],sep='\t')
+          PY
+
+          while IFS=$'\t' read -r idx zone file; do
+            out="/tmp/expanded/${idx}_${zone}.bin"
+            log="/tmp/proof/expand_${idx}_${zone}.log"
+            set +e
+            /tmp/t6_expand "$file" "$out" "$zone" 2>"$log"
+            rc=$?
+            set -e
+            if test "$rc" -eq 0; then
+              printf '%s\t%s\tgreen\t%s\t%s\n' "$idx" "$zone" "$(stat -c '%s' "$out")" "$(sha256sum "$out" | awk '{print $1}')" >> /tmp/proof/expand_results.tsv
+            else
+              printf '%s\t%s\tfail\t0\t-\n' "$idx" "$zone" >> /tmp/proof/expand_results.tsv
+              rm -f "$out"
+            fi
+          done < /tmp/candidates.tsv
+
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,pathlib
+          proof=pathlib.Path('/tmp/proof')
+          inp=json.loads((proof/'T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_INPUTS_V1.json').read_text())
+          by_index={int(r['index']):r for r in inp['candidates']}
+          statuses={}
+          for line in (proof/'expand_results.tsv').read_text().splitlines():
+              idx,zone,status,nbytes,sha=line.split('\t')
+              statuses[int(idx)]={'status':status,'expandedBytes':int(nbytes),'expandedSha256':None if sha=='-' else sha}
+
+          needles={
+              'exactTargetTechnique':b'pimp_technique_shadowoverlay_5255c888\x00',
+              'targetTechniqueStem':b'pimp_technique_shadowoverlay_',
+              'shadowCookieOverlay':b'shadowcookieoverlay\x00',
+              'shadowOverlayMaterialName':b'shadowoverlay\x00',
+              'knownStartupTechniqueSet':b'trivial_shadowoverlay_14e2e827\x00',
+          }
+          rows=[]
+          for idx,row in sorted(by_index.items()):
+              st=statuses[idx]
+              result={k:v for k,v in row.items() if k!='localFile'}
+              result.update(st)
+              result['hits']={}
+              if st['status']=='green':
+                  p=pathlib.Path('/tmp/expanded')/f"{idx}_{row['zoneName']}.bin"
+                  data=p.read_bytes()
+                  for label,needle in needles.items():
+                      offsets=[]; start=0
+                      while True:
+                          at=data.find(needle,start)
+                          if at<0: break
+                          offsets.append(at); start=at+1
+                      result['hits'][label]={'count':len(offsets),'offsets':offsets[:64]}
+              rows.append(result)
+          target=[r for r in rows if r.get('hits',{}).get('exactTargetTechnique',{}).get('count',0)]
+          cookie=[r for r in rows if r.get('hits',{}).get('shadowCookieOverlay',{}).get('count',0)]
+          shadow=[r for r in rows if r.get('hits',{}).get('shadowOverlayMaterialName',{}).get('count',0)]
+          result={
+              'format':'t6-shadowoverlay-candidate-fastfile-scan-v1',
+              'sourceInputsSha256':__import__('hashlib').sha256((proof/'T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_INPUTS_V1.json').read_bytes()).hexdigest(),
+              'rows':rows,
+              'summary':{
+                  'candidateCount':len(rows),
+                  'greenExpansionCount':sum(r['status']=='green' for r in rows),
+                  'failedExpansionCount':sum(r['status']!='green' for r in rows),
+                  'exactTargetTechniqueZoneCount':len(target),
+                  'shadowCookieOverlayNameZoneCount':len(cookie),
+                  'shadowOverlayNameZoneCount':len(shadow),
+                  'exactTargetZones':[r['zipPath'] for r in target],
+                  'shadowCookieOverlayZones':[r['zipPath'] for r in cookie],
+                  'shadowOverlayZones':[r['zipPath'] for r in shadow],
+              },
+              'proofBoundary':'Expanded-XFile byte/name triage only. Exact null-terminated name hits nominate physical FastFiles for native OAT/pointer proof. Absence is evidence only within successfully expanded candidate inputs and does not establish runtime global absence. Filename selection is not an ownership proof.'
+          }
+          (proof/'T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_SCAN_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          print('TARGET ZONES')
+          for r in target: print(r['zipPath'],r['sha256'])
+          print('SHADOWCOOKIEOVERLAY NAME ZONES')
+          for r in cookie: print(r['zipPath'],r['sha256'])
+          PY
+
+      - name: Assert scan has complete expansion coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_SCAN_V1.json'
+          d=json.load(open(p))
+          s=d['summary']
+          if s['failedExpansionCount']:
+              bad=[r['zipPath'] for r in d['rows'] if r['status']!='green']
+              raise SystemExit(f'candidate FastFile expansion failures: {bad}')
+          print('all candidate FastFiles expanded successfully')
+          PY
+
+      - name: Upload exact candidate scan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_CANDIDATE_FASTFILE_SCAN_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
