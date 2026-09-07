@@ -1,0 +1,73 @@
+name: T6 public game executable inventory v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_public_game_executable_inventory_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory executable and library entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-executable-inventory/1')
+          entries,meta=rz.central_directory()
+          rows=[]
+          for e in entries:
+              base=e['name'].rsplit('/',1)[-1]
+              low=base.lower()
+              if low.endswith(('.exe','.dll')):
+                  rows.append({
+                      'path':e['name'],
+                      'file':base,
+                      'compressedSize':e['compressedSize'],
+                      'uncompressedSize':e['uncompressedSize'],
+                      'method':e['method'],
+                      'flags':e['flags'],
+                      'crc32':f"{e['crc32']:08x}",
+                      'localHeaderOffset':e['localHeaderOffset'],
+                      't6NameCandidate':any(x in low for x in ('t6','blackops','black_ops','bo2','pluto')),
+                  })
+          rows.sort(key=lambda r:r['path'].lower())
+          exe=[r for r in rows if r['file'].lower().endswith('.exe')]
+          dll=[r for r in rows if r['file'].lower().endswith('.dll')]
+          doc={
+              'format':'t6-public-game-executable-inventory-v1',
+              'remoteZip':meta,
+              'entries':rows,
+              'summary':{
+                  'exeCount':len(exe),
+                  'dllCount':len(dll),
+                  't6NameCandidateCount':sum(r['t6NameCandidate'] for r in rows),
+              },
+              'proofBoundary':'ZIP64 central-directory inventory only. Names, sizes, methods, CRC32 and local-header offsets are exact archive metadata. No executable identity or game-version semantics are promoted until entry bytes are separately extracted, CRC-verified and SHA-256 pinned.'
+          }
+          pathlib.Path('/tmp/proof/T6_PUBLIC_GAME_EXECUTABLE_INVENTORY_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          pathlib.Path('/tmp/proof/executables.txt').write_text(''.join(f"{r['path']} bytes={r['uncompressedSize']} crc32={r['crc32']}\n" for r in exe))
+          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          print('EXECUTABLES')
+          for r in exe: print(r['path'],r['uncompressedSize'],r['crc32'])
+          PY
+      - name: Upload executable inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_PUBLIC_GAME_EXECUTABLE_INVENTORY_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
