@@ -60,24 +60,28 @@ jobs:
           PY
           : > /tmp/census/DOWNLOAD_STATUS.tsv
           while IFS=$'\t' read -r zone expected_raw; do
-            url="https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            if [[ "$zone" == en_* ]]; then
+              url="https://r2.houseofkublai.com/bo2/zone/english/${zone}.ff"
+            else
+              url="https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            fi
             raw="/tmp/census/raw/${zone}.ff"
             expanded="/tmp/census/expanded/${zone}.expanded"
             if curl -fL --retry 4 --retry-delay 2 -o "$raw" "$url"; then
               got=$(sha256sum "$raw" | awk '{print $1}')
               if [ -n "$expected_raw" ] && [ "$got" != "$expected_raw" ]; then
-                printf '%s\t%s\t%s\t%s\n' "$zone" raw_sha_mismatch "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+                printf '%s\t%s\t%s\t%s\t%s\n' "$zone" raw_sha_mismatch "$got" "$expected_raw" "$url" >> /tmp/census/DOWNLOAD_STATUS.tsv
                 rm -f "$raw"
                 continue
               fi
               if python3 tools/bo2_t6_fastfile.py decrypt "$raw" --output "$expanded"; then
-                printf '%s\t%s\t%s\t%s\n' "$zone" expanded "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+                printf '%s\t%s\t%s\t%s\t%s\n' "$zone" expanded "$got" "$expected_raw" "$url" >> /tmp/census/DOWNLOAD_STATUS.tsv
               else
-                printf '%s\t%s\t%s\t%s\n' "$zone" decrypt_failed "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+                printf '%s\t%s\t%s\t%s\t%s\n' "$zone" decrypt_failed "$got" "$expected_raw" "$url" >> /tmp/census/DOWNLOAD_STATUS.tsv
                 rm -f "$expanded"
               fi
             else
-              printf '%s\t%s\t-\t%s\n' "$zone" download_failed "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+              printf '%s\t%s\t-\t%s\t%s\n' "$zone" download_failed "$expected_raw" "$url" >> /tmp/census/DOWNLOAD_STATUS.tsv
               rm -f "$raw" "$expanded"
             fi
           done < /tmp/census/zones.tsv
