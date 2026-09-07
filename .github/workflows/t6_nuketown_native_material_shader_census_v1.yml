@@ -1,0 +1,124 @@
+name: T6 Nuketown native Material shader census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_material_shader_census_v1.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_nuketown_native_material_shader_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+
+      - name: Download SHA-pinned map and shared FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+
+      - name: Dump native map Materials and map/shared TechniqueSets
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/map_out /tmp/common_out /tmp/common_patch_out /tmp/patch_out
+
+          "$BIN" --no-color --verbose --include-assets material \
+            --output-folder /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff \
+            2>&1 | tee /tmp/proof/map_material_dump.log
+
+          "$BIN" --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff \
+            2>&1 | tee /tmp/proof/map_techset_dump.log
+          "$BIN" --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/common_out /tmp/game/zone/all/common_mp.ff \
+            2>&1 | tee /tmp/proof/common_techset_dump.log
+          "$BIN" --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/common_patch_out /tmp/game/zone/all/common_patch_mp.ff \
+            2>&1 | tee /tmp/proof/common_patch_techset_dump.log
+          "$BIN" --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/patch_out /tmp/game/zone/all/patch_mp.ff \
+            2>&1 | tee /tmp/proof/patch_techset_dump.log
+
+          find /tmp/map_out/materials -type f -name '*.json' | sort > /tmp/proof/map_material_files.txt
+          for root in map_out common_out common_patch_out patch_out; do
+            find "/tmp/$root/techsets" -type f -name '*.techset' 2>/dev/null | sort > "/tmp/proof/${root}_techset_files.txt" || true
+          done
+          wc -l /tmp/proof/*_files.txt | tee /tmp/proof/dump_counts.txt
+
+      - name: Census exact native lit shader pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          PYTHONPATH=tools python3 tools/t6_oat_material_shader_census_v1.py \
+            --material-root /tmp/map_out \
+            --shader-root /tmp/map_out \
+            --shader-root /tmp/common_out \
+            --shader-root /tmp/common_patch_out \
+            --shader-root /tmp/patch_out \
+            --out /tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V1.json \
+            2>&1 | tee /tmp/proof/census.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "$RC" > /tmp/proof/census_rc.txt
+          # Always retain the first exact ambiguity/failure if runtime zone
+          # precedence has to be modeled explicitly; do not hide it.
+          if test -s /tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V1.json; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V1.json')
+          d=json.loads(p.read_text())
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          for g in sorted(d['shaderPairGroups'],key=lambda x:(-x['materialCount'],x['pairKey']))[:30]:
+              ps=','.join(q['pixelShader']['sha256'][:12] for q in g['passes'])
+              vs=','.join(q['vertexShader']['sha256'][:12] for q in g['passes'])
+              print(f"{g['materialCount']:4d} mats pair={g['pairKey'][:12]} vs={vs} ps={ps} techsets={len(g['techniqueSets'])}")
+          PY
+          fi
+          exit "$RC"
+
+      - name: Upload native shader census proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
