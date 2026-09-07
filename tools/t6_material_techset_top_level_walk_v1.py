@@ -11,6 +11,8 @@ validated independently by t6_clipmap_serialized_walker_v3.py and
  t6_retail_special_shader_payload_census_v1.py, but is usable from the top-level
 XAsset list so early scattered TechniqueSets can be pinned to exact XAsset
 indices instead of inferred from a raw name scan.
+
+Numeric XAsset ids come only from t6_asset_types_v1.py.
 """
 from __future__ import annotations
 
@@ -20,11 +22,11 @@ import json
 import struct
 from pathlib import Path
 
+from t6_asset_types_v1 import MATERIAL, TECHNIQUE_SET as TECHSET
+
 FOLLOW=0xFFFFFFFF
 INSERT=0xFFFFFFFE
 MASK=(1<<29)-1
-MATERIAL=6
-TECHSET=7
 
 
 def dec(raw:int, blocks:tuple[int,...])->dict:
