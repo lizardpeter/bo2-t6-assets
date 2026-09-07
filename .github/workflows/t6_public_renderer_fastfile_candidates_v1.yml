@@ -1,0 +1,74 @@
+name: T6 public renderer FastFile candidates v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_public_renderer_fastfile_candidates_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select renderer/startup FastFile names from ZIP64 central directory
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          from t6_remote_zip_range_v1 import RemoteZip
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-renderer-ff-candidates/1')
+          entries,meta=rz.central_directory()
+          patterns=('gfx','common','patch','frontend','ui','code','load','menu')
+          rows=[]
+          all_ff_count=0
+          for e in entries:
+              name=e['name']
+              if not name.lower().endswith('.ff'):
+                  continue
+              all_ff_count+=1
+              base=name.rsplit('/',1)[-1].lower()
+              hits=[p for p in patterns if p in base]
+              if not hits:
+                  continue
+              rows.append({
+                  'path':name,
+                  'file':name.rsplit('/',1)[-1],
+                  'tags':hits,
+                  'uncompressedSize':e['uncompressedSize'],
+                  'compressedSize':e['compressedSize'],
+                  'crc32':f"{e['crc32']:08x}",
+                  'method':e['method'],
+                  'localHeaderOffset':e['localHeaderOffset'],
+              })
+          rows.sort(key=lambda r:r['path'].lower())
+          result={
+              'format':'t6-public-renderer-fastfile-candidates-v1',
+              'remoteZip':meta,
+              'allFastFileCount':all_ff_count,
+              'candidateCount':len(rows),
+              'candidates':rows,
+              'proofBoundary':'Filename-based candidate selection from the exact ZIP64 central directory only. These rows are possible renderer/startup search inputs, not ownership evidence. Individual FastFiles require byte extraction/SHA pinning and native asset proof before any owner claim.'
+          }
+          Path('/tmp/proof/T6_PUBLIC_RENDERER_FASTFILE_CANDIDATES_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('all_ff_count',all_ff_count)
+          print('candidate_count',len(rows))
+          for r in rows: print(r['path'])
+          PY
+      - name: Upload candidate inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_PUBLIC_RENDERER_FASTFILE_CANDIDATES_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
