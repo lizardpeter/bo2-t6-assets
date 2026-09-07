@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/t6-steam-full-zone-catalog-audit-v3.yml'
       - 'tools/t6_public_zip_ff_catalog_probe_v2.py'
+      - 'tools/t6_public_zip_ff_catalog_probe_v3.py'
       - 'tools/t6_steam_zone_catalog_audit_v2.py'
       - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
       - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
@@ -26,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/t6_steam_zone_catalog_audit_v2.py tools/t6_public_zip_ff_catalog_probe_v2.py
+          python3 -m py_compile tools/t6_steam_zone_catalog_audit_v2.py tools/t6_public_zip_ff_catalog_probe_v2.py tools/t6_public_zip_ff_catalog_probe_v3.py
           python3 tools/t6_steam_zone_catalog_audit_v2.py \
             --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
             --catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
@@ -80,11 +81,11 @@ jobs:
           test "$(wc -l < /tmp/T6_STEAM_FULL_ZONE_R2_PROBE_V3.tsv)" -eq 297
           awk -F '\t' '{c[$2]++} END {for (k in c) print k,c[k]}' /tmp/T6_STEAM_FULL_ZONE_R2_PROBE_V3.tsv | sort
 
-      - name: Probe public full-game ZIP using safe ZIP64 ranges
+      - name: Probe public full-game ZIP without weakening Range safety
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_public_zip_ff_catalog_probe_v2.py \
+          python3 tools/t6_public_zip_ff_catalog_probe_v3.py \
             --url https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip \
             --paths /tmp/T6_STEAM_FULL_ZONE_PATHS_V3.txt \
             --out-tsv /tmp/T6_STEAM_FULL_ZONE_ZIP_PROBE_V3.tsv \
@@ -93,9 +94,27 @@ jobs:
           python3 - <<'PY'
           import json
           p=json.load(open('/tmp/T6_STEAM_FULL_ZONE_ZIP_META_V3.json'))
+          assert p['format']=='t6-public-zip-ff-catalog-probe-v3'
           assert p['catalogPaths']==297
+          assert p['safety']['sizeDiscoveryBodylessHead'] is True
           assert p['safety']['requires206BeforeBodyRead'] is True
           assert p['safety']['archivePayloadDownloaded'] is False
+          if p['sourceProbeAvailable'] is False:
+              assert p['sourceProbeReason']=='rangeUnsupported',p
+              assert p['present']==0 and p['unavailable']==297,p
+              assert p['rangeFailure']['httpStatus'] != 206,p
+          else:
+              assert p['sourceProbeAvailable'] is True,p
+              assert p['sourceProbeReason'] is None,p
+              assert p['rangeFailure'] is None,p
+          print(json.dumps({
+            'sourceProbeAvailable':p['sourceProbeAvailable'],
+            'sourceProbeReason':p['sourceProbeReason'],
+            'present':p['present'],
+            'unavailable':p['unavailable'],
+            'rangeFailure':p['rangeFailure'],
+            'safety':p['safety'],
+          },indent=2,sort_keys=True))
           PY
 
       - name: Build combined source-container audit
@@ -112,15 +131,21 @@ jobs:
           python3 - <<'PY'
           import json
           p=json.load(open('/tmp/T6_STEAM_FULL_ZONE_CATALOG_AUDIT_V3.json'))
+          z=json.load(open('/tmp/T6_STEAM_FULL_ZONE_ZIP_META_V3.json'))
           assert p['gates']['catalogStructurallyValid'] is True
           assert p['gates']['englishRetailFfCatalogComplete'] is True
           assert p['gates']['overlappingDepotPathOwnershipAccounted'] is True
           assert p['gates']['overlappingDepotByteIdentityComplete'] is False
           assert p['gates']['wholeRetailAllLanguagesCatalogComplete'] is False
           assert p['gates']['populationInputIdentityComplete'] is False
+          if z['sourceProbeAvailable'] is False:
+              assert p['gates']['publicZipCompleteForCatalog'] is False
+              assert p['publicZipProbe']['present']==0
           print(json.dumps({
             'totals':p['totals'],
             'r2Present':None if p['r2Probe'] is None else p['r2Probe']['present'],
+            'zipSourceProbeAvailable':z['sourceProbeAvailable'],
+            'zipSourceProbeReason':z['sourceProbeReason'],
             'zipPresent':None if p['publicZipProbe'] is None else p['publicZipProbe']['present'],
             'unionPresent':p['sourceContainerUnion']['present'],
             'unionMissingCount':len(p['sourceContainerUnion']['missing']),
