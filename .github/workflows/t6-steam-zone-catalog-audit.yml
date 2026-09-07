@@ -1,0 +1,112 @@
+name: T6 Steam FastFile catalog audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-steam-zone-catalog-audit.yml'
+      - 'tools/t6_steam_zone_catalog_audit_v1.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate source catalog without mirror assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_steam_zone_catalog_audit_v1.py
+          python3 tools/t6_steam_zone_catalog_audit_v1.py \
+            --catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --seed manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json \
+            --out /tmp/T6_STEAM_ZONE_CATALOG_PREPROBE_V1.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/T6_STEAM_ZONE_CATALOG_PREPROBE_V1.json'))
+          assert p['catalogTotals']=={'depots':12,'ff':217}, p['catalogTotals']
+          assert p['gates']['catalogStructurallyValid'] is True
+          assert p['gates']['claimedScopeCatalogComplete'] is True
+          assert p['gates']['r2MirrorCompleteForCatalog'] is False
+          assert p['gates']['wholeRetailCatalogComplete'] is False
+          # The retained 18-zone seed includes two DLC maps intentionally outside
+          # this base-English+Nuketown v1 catalog: Mob of the Dead and Origins.
+          outside=p['seedCoverage']['outsideCatalogPaths']
+          assert outside==['zone/all/zm_prison.ff','zone/all/zm_tomb.ff'], outside
+          PY
+
+      - name: Probe every catalog FastFile on the retained R2 mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/probe
+          python3 - <<'PY' > /tmp/probe/paths.txt
+          import json
+          p=json.load(open('manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'))
+          for d in p['depots']:
+              for path in d['ff']:
+                  print(path)
+          PY
+          test "$(wc -l < /tmp/probe/paths.txt)" -eq 217
+          export R2_BASE='https://r2.houseofkublai.com/bo2'
+          probe_one() {
+            p="$1"
+            url="$R2_BASE/$p"
+            hdr=$(mktemp)
+            if curl -fsSIL --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 20 -o /dev/null -D "$hdr" "$url"; then
+              bytes=$(awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); v=$2} END{print v}' "$hdr")
+              printf '%s\tpresent\t%s\t%s\n' "$p" "${bytes:-unknown}" "$url"
+            else
+              printf '%s\tunavailable\t-\t%s\n' "$p" "$url"
+            fi
+            rm -f "$hdr"
+          }
+          export -f probe_one
+          xargs -P 16 -I{} bash -c 'probe_one "$1"' _ {} < /tmp/probe/paths.txt > /tmp/probe/unsorted.tsv
+          sort -t $'\t' -k1,1 /tmp/probe/unsorted.tsv > /tmp/T6_STEAM_ZONE_R2_PROBE_V1.tsv
+          test "$(wc -l < /tmp/T6_STEAM_ZONE_R2_PROBE_V1.tsv)" -eq 217
+          awk -F '\t' '{c[$2]++} END {for (k in c) print k,c[k]}' /tmp/T6_STEAM_ZONE_R2_PROBE_V1.tsv | sort
+
+      - name: Build fail-closed catalog audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_steam_zone_catalog_audit_v1.py \
+            --catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --seed manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json \
+            --probe-tsv /tmp/T6_STEAM_ZONE_R2_PROBE_V1.tsv \
+            --out /tmp/T6_STEAM_ZONE_CATALOG_AUDIT_V1.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/T6_STEAM_ZONE_CATALOG_AUDIT_V1.json'))
+          assert p['gates']['catalogStructurallyValid'] is True
+          assert p['gates']['claimedScopeCatalogComplete'] is True
+          # whole-retail closure is forbidden in v1 regardless of mirror result.
+          assert p['gates']['wholeRetailCatalogComplete'] is False
+          print(json.dumps({
+            'catalogTotals':p['catalogTotals'],
+            'seedCoverage':p['seedCoverage'],
+            'r2Probe':p['r2Probe'],
+            'gates':p['gates'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Upload compact source-catalog evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ZONE_CATALOG_AUDIT_V1
+          path: |
+            /tmp/T6_STEAM_ZONE_CATALOG_PREPROBE_V1.json
+            /tmp/T6_STEAM_ZONE_CATALOG_AUDIT_V1.json
+            /tmp/T6_STEAM_ZONE_R2_PROBE_V1.tsv
+          if-no-files-found: error
+          retention-days: 14
