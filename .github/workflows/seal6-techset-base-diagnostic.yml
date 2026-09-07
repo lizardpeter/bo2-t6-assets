@@ -1,0 +1,50 @@
+name: SEAL6 TechniqueSet base diagnostic
+
+on:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - ".github/workflows/seal6-techset-base-diagnostic.yml"
+      - "tools/t6_xasset_virtual_base_diagnostic_v1.py"
+      - "tools/t6_material_dependency_graph_v1.py"
+      - "tools/t6_material_techset_resolve_v1.py"
+      - "tools/t6_material_techset_top_level_walk_v1.py"
+      - "tools/t6_asset_types_v1.py"
+      - "tools/bo2_t6_fastfile.py"
+      - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
+      - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch and expand faction zone
+        run: |
+          curl --fail --location --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors \
+            'https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff' -o /tmp/faction.ff
+          python tools/bo2_t6_fastfile.py decrypt /tmp/faction.ff --output /tmp/faction.expanded
+      - name: Rebuild exact local/import graph
+        run: |
+          PYTHONPATH=tools python tools/t6_material_dependency_graph_v1.py \
+            /tmp/faction.expanded \
+            manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json \
+            --direct-proof manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json \
+            --zone faction_seals_mp --out /tmp/graph.json
+      - name: Emit non-promoting XAsset VIRTUAL-base diagnostic
+        run: |
+          PYTHONPATH=tools python tools/t6_xasset_virtual_base_diagnostic_v1.py \
+            /tmp/faction.expanded /tmp/graph.json --out /tmp/base.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_TECHSET_BASE_DIAGNOSTIC
+          path: /tmp/base.json
+          retention-days: 14
