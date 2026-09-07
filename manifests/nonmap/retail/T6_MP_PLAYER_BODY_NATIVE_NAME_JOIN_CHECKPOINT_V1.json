@@ -1,0 +1,45 @@
+{
+  "format": "t6-mp-player-body-native-name-join-checkpoint-v1",
+  "scope": "Exact join of the independently proven 30-body base MP faction corpus to the source-available native XModel name catalog",
+  "evidence": {
+    "workflow": ".github/workflows/t6-mp-player-body-native-name-join-v1.yml",
+    "runId": 34165817506,
+    "headCommit": "b127e8abb41037a9ce833e9eb93b97065a84d200",
+    "sourceNameCatalogRunId": 34165691247,
+    "artifact": {
+      "id": 10034099023,
+      "name": "T6_MP_PLAYER_BODY_NATIVE_NAME_JOIN_V1",
+      "digest": "sha256:d72c165ee72228f8b9dee15dd71eb6cff344c27a2c4a7737a893dfbda0021b54"
+    }
+  },
+  "summary": {
+    "provenBodyRows": 30,
+    "joinedBodies": 30,
+    "joinFailures": 0,
+    "distinctBodyNames": 30,
+    "globalOccurrenceSumForTheseNames": 40,
+    "bodiesRepeatedOutsideTheirProvenFactionZone": 6
+  },
+  "repeatedBodyNameProvenance": [
+    {"name":"c_mul_mp_cordis_assault_fb","occurrences":2,"zones":["zone/all/faction_cd_mp.ff","zone/all/faction_multiteam_mp.ff"]},
+    {"name":"c_usa_mp_fbi_assault_fb","occurrences":3,"zones":["zone/all/faction_fbi_mp.ff","zone/all/faction_multiteam_mp.ff","zone/all/faction_multiteam_sand_mp.ff"]},
+    {"name":"c_usa_mp_isa_assault_fb","occurrences":2,"zones":["zone/all/faction_isa_mp.ff","zone/all/faction_multiteam_mp.ff"]},
+    {"name":"c_chn_mp_pla_assault_fb","occurrences":3,"zones":["zone/all/faction_multiteam_mp.ff","zone/all/faction_multiteam_sand_mp.ff","zone/all/faction_pla_mp.ff"]},
+    {"name":"c_mul_mp_pmc_assault_fb","occurrences":3,"zones":["zone/all/faction_multiteam_mp.ff","zone/all/faction_multiteam_sand_mp.ff","zone/all/faction_pmc_mp.ff"]},
+    {"name":"c_usa_mp_seal6_assault_fb","occurrences":3,"zones":["zone/all/faction_multiteam_mp.ff","zone/all/faction_multiteam_sand_mp.ff","zone/all/faction_seals_mp.ff"]}
+  ],
+  "gates": {
+    "retainedBodyCorpusHasExpected30Bodies": true,
+    "allProvenBodyNamesUnique": true,
+    "allProvenBodiesPresentInGlobalNativeNameCatalog": true,
+    "allProvenBodiesPresentInExactExpectedFactionFastFile": true,
+    "allProvenBodiesRetain102BoneOneRootContract": true
+  },
+  "proofBoundary": [
+    "No XModel is classified as a player body by name syntax. Membership comes only from the previously retained direct-retail 30-body faction corpus proof.",
+    "Each of the 30 body identities is joined by exact case-sensitive native XModel name and exact expected faction FastFile path.",
+    "The six assault-body names repeated in multiteam zones are retained as repeated-name provenance only. Their payloads are not declared byte-identical across zones by this checkpoint.",
+    "This checkpoint proves identity/provenance for the 30 already-closed base MP player bodies; it does not claim that these are every character-related XModel in the game.",
+    "Nested mesh completion, exact Material/TechniqueSet/shader reconstruction, texture closure, animation selection, and portable export fidelity remain separate downstream gates."
+  ]
+}
