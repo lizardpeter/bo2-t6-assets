@@ -1,0 +1,225 @@
+name: T6 Nuketown Car01 glass TechniqueSet shared v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_glass_techset_shared_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools Unlinker
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff -- \
+            src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp \
+            src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp \
+            src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp \
+            src/ObjWriting/Game/T4/Menu/MenuWriterT4.cpp \
+            src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp \
+            src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp \
+            | tee /tmp/proof/OAT_9DCA_GCC_COMPAT_V3.patch
+
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          set +e
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli \
+            2>&1 | tee /tmp/proof/oat_build.log
+          BUILD_RC=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$BUILD_RC" > /tmp/proof/build_rc.txt
+          test "$BUILD_RC" = 0
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          BIN=$(realpath "$BIN")
+          printf '%s\n' "$BIN" > /tmp/unlinker_path
+          "$BIN" --no-color --help > /tmp/proof/unlinker_help.txt 2>&1
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
+      - name: Download exact shared retail FastFiles
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all
+          for f in common_mp.ff common_patch_mp.ff patch_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+
+      - name: Dump shared-zone TechniqueSets
+        id: dump
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -u
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/shared_out
+          : > /tmp/proof/shared_dump_rc.tsv
+
+          for zone in common_mp common_patch_mp patch_mp; do
+            OUT="/tmp/shared_out/$zone"
+            mkdir -p "$OUT"
+            set +e
+            "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$OUT" "/tmp/game/zone/all/$zone.ff" \
+              2>&1 | tee "/tmp/proof/${zone}_techset_dump.log"
+            RC=${PIPESTATUS[0]}
+            set -e
+            printf '%s\t%s\n' "$zone" "$RC" >> /tmp/proof/shared_dump_rc.tsv
+            find "$OUT" -type f | sort > "/tmp/proof/${zone}_output_files.txt" || true
+          done
+
+          if awk -F '\t' '$2 != 0 { bad=1 } END { exit bad }' /tmp/proof/shared_dump_rc.tsv; then
+            echo 'ok=1' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=0' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Locate and close exact glass TechniqueSet
+        id: analyze
+        if: steps.dump.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          target='mc_lit_sm_b0c0s0_2q396f5e'
+          roots={
+              'common_mp': Path('/tmp/shared_out/common_mp'),
+              'common_patch_mp': Path('/tmp/shared_out/common_patch_mp'),
+              'patch_mp': Path('/tmp/shared_out/patch_mp'),
+          }
+          shas={
+              'common_mp':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'common_patch_mp':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+              'patch_mp':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+          }
+          hits=[]
+          for zone,root in roots.items():
+              p=root/'techsets'/f'{target}.techset'
+              if p.is_file():
+                  b=p.read_bytes()
+                  hits.append({
+                      'zone':zone,
+                      'fastFile':f'{zone}.ff',
+                      'fastFileSha256':shas[zone],
+                      'root':str(root),
+                      'techsetPath':str(p.relative_to(root)),
+                      'techsetSize':len(b),
+                      'techsetSha256':hashlib.sha256(b).hexdigest(),
+                  })
+          result={
+              'format':'t6-car01-glass-techset-shared-source-v1',
+              'targetTechniqueSet':target,
+              'proofBoundary':'Exact native OAT TechniqueSet dump from SHA-pinned retail shared FastFiles only.',
+              'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'hits':hits,
+          }
+          out=Path('/tmp/proof/T6_CAR01_GLASS_TECHSET_SHARED_SOURCE_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          if len(hits) != 1:
+              raise SystemExit(f'expected exactly one shared-zone TechniqueSet hit, got {len(hits)}')
+          hit=hits[0]
+          binding={
+              'format':'t6-car01-glass-shared-binding-v1',
+              'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'fastFileSha256':hit['fastFileSha256'],
+              'targets':[
+                  {'material':'mc/mtl_nt_2020_car_01_glass_out','resolved':True,'techniqueSet':target},
+                  {'material':'mc/mtl_nt_2020_car_01_glass_in','resolved':True,'techniqueSet':target},
+              ],
+          }
+          Path('/tmp/proof/T6_CAR01_GLASS_SHARED_BINDING_V1.json').write_text(json.dumps(binding,indent=2,sort_keys=True)+'\n')
+          Path('/tmp/selected_root').write_text(hit['root']+'\n')
+          PY
+
+          ROOT=$(cat /tmp/selected_root)
+          python3 tools/t6_oat_techset_binding_manifest_v1.py \
+            --oat-root "$ROOT" \
+            --binding-manifest /tmp/proof/T6_CAR01_GLASS_SHARED_BINDING_V1.json \
+            --out /tmp/proof/T6_CAR01_GLASS_SHADER_BINDINGS_V1.json
+
+          python3 - <<'PY'
+          import json
+          import shutil
+          from pathlib import Path
+
+          root=Path(Path('/tmp/selected_root').read_text().strip())
+          proof=Path('/tmp/proof')
+          selected=proof/'oat_selected'
+          m=json.loads((proof/'T6_CAR01_GLASS_SHADER_BINDINGS_V1.json').read_text())
+          paths=set()
+          for ts in m['techsets']:
+              paths.add(ts['file']['path'])
+          for tech in m['techniques']:
+              paths.add(tech['file']['path'])
+              for p in tech['passes']:
+                  for shader in p['shaders']:
+                      b=shader.get('binary')
+                      if b:
+                          paths.add(b['path'])
+          for rel in sorted(paths):
+              src=root/rel
+              if not src.is_file():
+                  raise SystemExit(f'missing selected dependency {rel}')
+              dst=selected/rel
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(src,dst)
+          print('selected exact shared OAT dependencies:',len(paths))
+          PY
+
+          find /tmp/proof/oat_selected -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/OAT_SELECTED_SHA256SUMS.txt
+          sha256sum \
+            /tmp/proof/T6_CAR01_GLASS_TECHSET_SHARED_SOURCE_V1.json \
+            /tmp/proof/T6_CAR01_GLASS_SHARED_BINDING_V1.json \
+            /tmp/proof/T6_CAR01_GLASS_SHADER_BINDINGS_V1.json \
+            > /tmp/proof/MANIFEST_SHA256SUMS.txt
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
+      - name: Upload shared glass TechniqueSet proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_GLASS_TECHSET_SHARED_V1
+          path: /tmp/proof
+          if-no-files-found: error
+
+      - name: Enforce closure
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/proof/build_rc.txt
+          test "$(cat /tmp/proof/build_rc.txt)" = 0
+          test "${{ steps.dump.outputs.ok }}" = 1
+          test "${{ steps.analyze.outputs.ok }}" = 1
+          test -s /tmp/proof/T6_CAR01_GLASS_TECHSET_SHARED_SOURCE_V1.json
+          test -s /tmp/proof/T6_CAR01_GLASS_SHADER_BINDINGS_V1.json
