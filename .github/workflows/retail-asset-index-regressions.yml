@@ -1,0 +1,29 @@
+name: Retail asset index regressions
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - ".github/workflows/retail-asset-index-regressions.yml"
+      - "tools/t6_retail_asset_index_v1.py"
+      - "tools/test_t6_retail_asset_index_v1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile exact-index code
+        run: |
+          python -m py_compile tools/t6_retail_asset_index_v1.py tools/test_t6_retail_asset_index_v1.py
+      - name: Run fail-closed resolver regressions
+        run: |
+          python tools/test_t6_retail_asset_index_v1.py
