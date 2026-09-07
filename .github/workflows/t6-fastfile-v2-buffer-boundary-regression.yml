@@ -1,0 +1,83 @@
+name: T6 FastFile v2 buffer-boundary regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-fastfile-v2-buffer-boundary-regression.yml'
+      - 'tools/bo2_t6_fastfile_v2.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'tools/t6_raw_xasset_inventory.py'
+
+permissions:
+  contents: read
+
+jobs:
+  regress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch three retail controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          curl -fL --retry 6 -o /tmp/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          curl -fL --retry 6 -o /tmp/nuketown.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          curl -fL --retry 6 -o /tmp/downhill.ff https://r2.houseofkublai.com/bo2/zone/all/mp_downhill.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/common_mp.ff' | sha256sum -c -
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/nuketown.ff' | sha256sum -c -
+
+      - name: Expand with v2 and retain boundary evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bo2_t6_fastfile_v2.py decrypt /tmp/common_mp.ff -o /tmp/common_mp.expanded --audit /tmp/proof/common_mp_v2_audit.json
+          python3 tools/bo2_t6_fastfile_v2.py decrypt /tmp/nuketown.ff -o /tmp/nuketown.expanded --audit /tmp/proof/nuketown_v2_audit.json
+          python3 tools/bo2_t6_fastfile_v2.py decrypt /tmp/downhill.ff -o /tmp/downhill.expanded --audit /tmp/proof/downhill_v2_audit.json
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/common_mp.expanded' | sha256sum -c -
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/nuketown.expanded' | sha256sum -c -
+
+      - name: Require downhill raw XAsset front to parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from t6_raw_xasset_inventory import parse_front
+          d=Path('/tmp/downhill.expanded').read_bytes()
+          front=parse_front(d); front.pop('_blocks',None)
+          audit=json.load(open('/tmp/proof/downhill_v2_audit.json'))
+          s=audit['summary']
+          assert s['vanillaBoundarySkipEvents'] > 0, s
+          assert s['vanillaBoundarySkipBytes'] > 0, s
+          assert front['asset_count'] > 0, front
+          out={
+            'format':'t6-fastfile-v2-buffer-boundary-regression',
+            'downhillCompressedSha256':s['encryptedSha256'],
+            'downhillExpandedSha256':s['expandedSha256'],
+            'downhillExpandedBytes':s['expandedStreamBytes'],
+            'boundarySkipEvents':s['vanillaBoundarySkipEvents'],
+            'boundarySkipBytes':s['vanillaBoundarySkipBytes'],
+            'downhillXAssetCount':front['asset_count'],
+            'downhillXAssetTypeCounts':front['asset_type_counts'],
+            'canonicalControlsPassed':True,
+            'proofBoundary':[
+              'The 0x80000 boundary rule comes from pinned OAT ProcessorXChunks::AdvanceStream and T6 ZoneConstants::VANILLA_BUFFER_SIZE.',
+              'Common_mp and mp_nuketown_2020 retain their independently established expanded SHA-256 values under v2.',
+              'mp_downhill is not assigned an expected expanded hash a priori; this regression proves complete DEFLATE expansion plus a structurally valid raw XAsset front after applying the native boundary rule.'
+            ]
+          }
+          Path('/tmp/proof/T6_FASTFILE_V2_BUFFER_BOUNDARY_REGRESSION.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_FASTFILE_V2_BUFFER_BOUNDARY_REGRESSION
+          path: /tmp/proof/*
+          if-no-files-found: error
+          retention-days: 14
