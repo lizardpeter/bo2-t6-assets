@@ -1,0 +1,146 @@
+{
+  "format": "t6-nuketown-car01-native-shader-closure-v1",
+  "proofBoundary": "Native pinned OpenAssetTools T6 Material pointer resolution and native TechniqueSet/technique/shader dumps only. No q-index, source-offset, naming, appearance, PBR-role, roughness, or metallic inference participates in identity closure.",
+  "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+  "mapFastFile": {
+    "name": "mp_nuketown_2020.ff",
+    "sha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0"
+  },
+  "nativeMapBindingProof": {
+    "workflowRun": 34132417627,
+    "artifactId": 10022923599,
+    "artifactName": "T6_NUKETOWN_CAR01_OAT_MATERIAL_BINDING_V4",
+    "artifactDigest": "sha256:10a73e83c5c66f98ce45639ca40a0749e65f3702f111ea66a4ecedb078cea44e"
+  },
+  "sharedGlassProof": {
+    "workflowRun": 34133502541,
+    "artifactId": 10023377934,
+    "artifactName": "T6_NUKETOWN_CAR01_GLASS_TECHSET_SHARED_V1",
+    "artifactDigest": "sha256:efa1b0d8e04fe7b922d9356247c563235d51f9532a47ef2a463cccc8a839c530",
+    "uniqueOwner": {
+      "fastFile": "common_mp.ff",
+      "sha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77"
+    }
+  },
+  "techniqueSets": {
+    "opaque": {
+      "name": "mc_lit_sm_r0c0n0s0_zqq1fze7",
+      "fileSha256": "29708fd9f7c67405fb992eaca6b348f6b919f5c16403b2b7f6307221f8f1b24f",
+      "fileSize": 1648,
+      "normalLitTechnique": {
+        "name": "pimp_technique_lprobe_651eb933",
+        "fileSha256": "1b415d0542e75c894a7cf30c9a2b66a537b6c7c7794adb7edee87b650ececc72",
+        "vertexShader": {
+          "name": "pimp_shader_lprobe_347155f7.hlsl",
+          "sha256": "c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319",
+          "size": 8940
+        },
+        "pixelShader": {
+          "name": "pimp_shader_lprobe_4bceb0cc.hlsl",
+          "sha256": "5c88d806b6235333a637f54e03dca4fa4bec3a6ef27eada702a272dac50cef0a",
+          "size": 9852,
+          "materialInputs": ["specularMap", "normalMap", "colorMap", "occlusionAmount"]
+        },
+        "vertexRouting": ["position", "color[0]", "texcoord[0]", "normal", "tangent"]
+      }
+    },
+    "glass": {
+      "name": "mc_lit_sm_b0c0s0_2q396f5e",
+      "uniqueOwnerFastFile": "common_mp.ff",
+      "fileSha256": "2dd8732f433d0109b3a5a4e23f0151f61d715616598771788906d9ecd0ce6bf8",
+      "fileSize": 1528,
+      "normalLitTechnique": {
+        "name": "pimp_technique_lprobe_de89e86a",
+        "fileSha256": "568617758a2d437e6705aa9791071daba27033c2e3c8a77827f465ead21d472e",
+        "vertexShader": {
+          "name": "pimp_shader_lprobe_eb01efa5.hlsl",
+          "sha256": "0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5",
+          "size": 8272
+        },
+        "pixelShader": {
+          "name": "pimp_shader_lprobe_5b74bfe9.hlsl",
+          "sha256": "40a214de6613cc5b1a73cb72150e0357c917d9c6db5d5491338b0e0ece38c80c",
+          "size": 9568,
+          "materialInputs": ["specularMap", "colorMap", "occlusionAmount"]
+        },
+        "vertexRouting": ["position", "color[0]", "texcoord[0]", "normal"]
+      }
+    }
+  },
+  "materials": [
+    {
+      "name": "mc/mtl_nt_2020_car_01_glass_out",
+      "nativeMaterialJsonSha256": "f0969b6dbd41eb03310c1736db35da655c468179144c721fc2294daaa2d2e7ce",
+      "techniqueSet": "mc_lit_sm_b0c0s0_2q396f5e",
+      "cameraRegion": "litTrans",
+      "sortKey": 39,
+      "depthWrite": false,
+      "primaryRgbBlend": "srcalpha + destination * invsrcalpha",
+      "textures": {
+        "specularMap": "~~-ghydro_car_glass_s-rgb&~-r~cbf2456a",
+        "normalMap": "$identitynormalmap",
+        "colorMap": "~-ghydro_car_glass_c"
+      },
+      "occlusionAmount": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "mc/mtl_nt_2020_car_01_exterior",
+      "nativeMaterialJsonSha256": "16856b416e3a75bd8ec4806298d3bf587b8db9de929f5a4f22ee32ff67599952",
+      "techniqueSet": "mc_lit_sm_r0c0n0s0_zqq1fze7",
+      "cameraRegion": "litOpaque",
+      "sortKey": 4,
+      "depthWrite": true,
+      "textures": {
+        "specularMap": "~~-ghydro_car_exterior_sr-rgb~94d68574",
+        "normalMap": "hydro_car_exterior_n",
+        "colorMap": "~-ghydro_car_exterior_c"
+      },
+      "occlusionAmount": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "mc/mtl_nt_2020_car_01_interior",
+      "nativeMaterialJsonSha256": "9456632dbb9cb9e5d96371fd073d48cb5b8898a775f2ec8f3c4dfdd502196ffa",
+      "techniqueSet": "mc_lit_sm_r0c0n0s0_zqq1fze7",
+      "cameraRegion": "litOpaque",
+      "sortKey": 4,
+      "depthWrite": true,
+      "textures": {
+        "specularMap": "~~-ghydro_car_interior_sr-rgb~73c89539",
+        "normalMap": "hydro_car_interior_n",
+        "colorMap": "~-ghydro_car_interior_c"
+      },
+      "occlusionAmount": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "mc/mtl_nt_2020_car_01_tire",
+      "nativeMaterialJsonSha256": "5adc5e19f7761f538ac58b171381e4d23d5968eb8fe488191fd701524481873e",
+      "techniqueSet": "mc_lit_sm_r0c0n0s0_zqq1fze7",
+      "cameraRegion": "litOpaque",
+      "sortKey": 4,
+      "depthWrite": true,
+      "textures": {
+        "specularMap": "~~-ghydro_car_wheel_sr-rgb&~-~c2af62e2",
+        "normalMap": "hydro_car_wheel_n",
+        "colorMap": "~-ghydro_car_wheel_c"
+      },
+      "occlusionAmount": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "mc/mtl_nt_2020_car_01_glass_in",
+      "nativeMaterialJsonSha256": "f54d699530fc46fd845a047a0b2da4f8c2a8b5b397ce81eec23421547e867592",
+      "techniqueSet": "mc_lit_sm_b0c0s0_2q396f5e",
+      "cameraRegion": "litTrans",
+      "sortKey": 38,
+      "depthWrite": false,
+      "primaryRgbBlend": "srcalpha + destination * invsrcalpha",
+      "textures": {
+        "specularMap": "~~-ghydro_car_glass_s-rgb&~-r~cbf2456a",
+        "normalMap": "$identitynormalmap",
+        "colorMap": "~-ghydro_car_glass_c"
+      },
+      "occlusionAmount": [1.0, 1.0, 1.0, 1.0]
+    }
+  ],
+  "portablePreviewWarning": "The existing stock-glTF Car01 preview is not retail shader exact: it maps only portable PBR channels and currently hard-codes metallicFactor 0.0 and roughnessFactor 0.8. Those values are not part of this native closure and must not be promoted as T6-derived material semantics.",
+  "nextStep": "Disassemble/translate the exact normal-lit DXBC shaders and reconstruct their operations in the Blender material path; then integrate into the fresh full-map scene and rerun the v25/v31 visual non-regression floor."
+}
