@@ -1,0 +1,43 @@
+name: SEAL6 common TechniqueSet reference diagnostic
+
+on:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - ".github/workflows/seal6-common-techset-reference-diagnostic.yml"
+      - "tools/t6_techset_exact_name_diagnostic_v1.py"
+      - "tools/t6_material_techset_top_level_walk_v1.py"
+      - "tools/t6_asset_types_v1.py"
+      - "tools/bo2_t6_fastfile.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch and expand common_mp
+        run: |
+          curl --fail --location --silent --show-error --retry 6 --retry-delay 2 --retry-all-errors \
+            'https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff' -o /tmp/common_mp.ff
+          python tools/bo2_t6_fastfile.py decrypt /tmp/common_mp.ff --output /tmp/common_mp.expanded
+      - name: Enumerate exact SEAL6 TechniqueSet dependency names
+        run: |
+          PYTHONPATH=tools python tools/t6_techset_exact_name_diagnostic_v1.py \
+            /tmp/common_mp.expanded \
+            --zone common_mp \
+            --name mc_sw4_3d_char_cloth_4z8fq5wu \
+            --name mc_sw4_3d_char_skin_j92387z3 \
+            --out /tmp/common_mp_seal6_techsets.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_COMMON_TECHSET_REFERENCE_DIAGNOSTIC
+          path: /tmp/common_mp_seal6_techsets.json
+          retention-days: 14
