@@ -1,0 +1,152 @@
+name: T6 Nuketown Car01 DXBC ABI v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_dxbc_abi_v1.yml'
+      - 'tools/t6_dxbc_rdef_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact DXBC/SPIR-V and reflection artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shader /tmp/reflect /tmp/abi
+          for spec in \
+            '10024117840:/tmp/shader.zip:/tmp/shader' \
+            '10024424249:/tmp/reflect.zip:/tmp/reflect'; do
+            IFS=: read -r id zip out <<< "$spec"
+            curl -fL --retry 4 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -o "$zip" \
+              "https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/${id}/zip"
+            unzip -q "$zip" -d "$out"
+          done
+          echo '5c88d806b6235333a637f54e03dca4fa4bec3a6ef27eada702a272dac50cef0a  /tmp/shader/shaders/opaque_lit_ps.dxbc' | sha256sum -c -
+          echo '40a214de6613cc5b1a73cb72150e0357c917d9c6db5d5491338b0e0ece38c80c  /tmp/shader/shaders/glass_lit_ps.dxbc' | sha256sum -c -
+          echo 'c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319  /tmp/shader/shaders/opaque_lit_vs.dxbc' | sha256sum -c -
+          echo '0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5  /tmp/shader/shaders/glass_lit_vs.dxbc' | sha256sum -c -
+
+      - name: Extract exact resource ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          for stem in opaque_lit_ps glass_lit_ps opaque_lit_vs glass_lit_vs; do
+            python3 tools/t6_dxbc_rdef_v1.py \
+              "/tmp/shader/shaders/${stem}.dxbc" \
+              --spirv-reflection "/tmp/reflect/reflection/${stem}.json" \
+              --glsl "/tmp/reflect/glsl/${stem}.glsl" \
+              --out "/tmp/abi/${stem}.json" >/dev/null
+          done
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/abi')
+          op=json.loads((root/'opaque_lit_ps.json').read_text())
+          gp=json.loads((root/'glass_lit_ps.json').read_text())
+          ov=json.loads((root/'opaque_lit_vs.json').read_text())
+          gv=json.loads((root/'glass_lit_vs.json').read_text())
+
+          def by_name(doc):
+              out={}
+              for r in doc['resources']:
+                  out.setdefault(r['name'],[]).append(r)
+              return out
+          def reg(rows, kind):
+              xs=[r for r in rows if r['resourceType']==kind]
+              assert len(xs)==1,(kind,xs)
+              return xs[0]
+          def assert_pair(doc,name,t,s):
+              rows=by_name(doc)[name]
+              tex=reg(rows,'texture'); samp=reg(rows,'sampler')
+              assert tex['register']==t,(name,tex)
+              assert samp['register']==s,(name,samp)
+              assert tex['translatedSpirv']['set']==0
+              assert samp['translatedSpirv']['set']==0
+              return {
+                  'name':name,
+                  'textureRegister':t,
+                  'samplerRegister':s,
+                  'textureSpirvBinding':tex['translatedSpirv']['binding'],
+                  'samplerSpirvBinding':samp['translatedSpirv']['binding'],
+                  'dimension':tex['dimension'],
+              }
+
+          opaque_resources=[
+              assert_pair(op,'colorMapSampler','t0','s0'),
+              assert_pair(op,'normalMapSampler','t1','s1'),
+              assert_pair(op,'specularMapSampler','t2','s2'),
+              assert_pair(op,'modelLightingSampler','t13','s13'),
+              assert_pair(op,'reflectionProbeSampler','t15','s15'),
+          ]
+          glass_resources=[
+              assert_pair(gp,'colorMapSampler','t0','s0'),
+              assert_pair(gp,'specularMapSampler','t1','s1'),
+              assert_pair(gp,'modelLightingSampler','t13','s13'),
+              assert_pair(gp,'reflectionProbeSampler','t15','s15'),
+          ]
+          assert 'normalMapSampler' not in by_name(gp)
+
+          def used(doc):
+              return {(r['register'],r['vec4Slot'],r['variable']) for r in doc['translatedSpirv']['usedConstants']}
+          assert used(op)=={
+              ('b0',20,'hdrControl0'),
+              ('b0',56,'lightingLookupScale'),
+              ('b1',42,'occlusionAmount'),
+          },used(op)
+          assert used(gp)==used(op)
+
+          expected_vs={
+              ('b0',26,'fogColor'),('b0',27,'fogConsts'),('b0',28,'fogConsts2'),
+              ('b0',29,'sunFogDir'),('b0',30,'sunFogColor'),('b0',31,'sunFog'),
+              ('b0',36,'viewProjectionMatrix'),('b0',37,'viewProjectionMatrix'),
+              ('b0',38,'viewProjectionMatrix'),('b0',39,'viewProjectionMatrix'),
+              ('b3',0,'worldMatrix'),('b3',1,'worldMatrix'),('b3',2,'worldMatrix'),('b3',3,'worldMatrix'),
+              ('b3',4,'gridLightingCoordsAndVis'),
+              ('b3',5,'gridLightingSH0'),('b3',6,'gridLightingSH1'),('b3',7,'gridLightingSH2'),
+              ('b3',8,'reflectionLightingSH0'),('b3',9,'reflectionLightingSH1'),('b3',10,'reflectionLightingSH2'),
+          }
+          assert used(ov)==expected_vs,(used(ov)-expected_vs,expected_vs-used(ov))
+          assert used(gv)==expected_vs,(used(gv)-expected_vs,expected_vs-used(gv))
+
+          # Prove original D3D cbuffer registers survive the translation join.
+          def cbs(doc): return {c['name']:c['register'] for c in doc['constantBuffers']}
+          assert cbs(op)['PerSceneConsts']=='b0' and cbs(op)['PerObjectConsts']=='b1'
+          assert cbs(ov)['PerSceneConsts']=='b0' and cbs(ov)['dlights']=='b3'
+
+          rows=[]
+          for p in sorted(root.glob('*.json')):
+              rows.append({'file':p.name,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          bundle={
+              'format':'t6-nuketown-car01-dxbc-abi-bundle-v1',
+              'proofBoundary':'Direct DXBC RDEF resource and cbuffer metadata joined to SHA-pinned validated SPIR-V reflection by preserved D3D register identity; hard assertions cover all material/global samplers and all translated constant slots actually read by the normal-lit shaders.',
+              'opaquePixelResources':opaque_resources,
+              'glassPixelResources':glass_resources,
+              'records':rows,
+          }
+          (root/'T6_NUKETOWN_CAR01_DXBC_ABI_BUNDLE_V1.json').write_text(json.dumps(bundle,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(bundle,indent=2,sort_keys=True))
+          PY
+          find /tmp/abi -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/abi/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_DXBC_ABI_V1
+          path: /tmp/abi
+          if-no-files-found: error
