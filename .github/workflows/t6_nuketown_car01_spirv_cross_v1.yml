@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq spirv-cross jq >/dev/null
-          spirv-cross --version 2>&1 | tee /tmp/spirv_cross_version.txt
+          dpkg-query -W -f='${Package} ${Version}\n' spirv-cross | tee /tmp/spirv_cross_version.txt
 
       - name: Download exact previously-validated shader artifact
         shell: bash
