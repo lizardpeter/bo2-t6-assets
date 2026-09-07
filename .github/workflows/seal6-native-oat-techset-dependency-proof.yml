@@ -1,0 +1,216 @@
+name: SEAL6 native OAT TechniqueSet dependency proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/seal6-native-oat-techset-dependency-proof.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v2.py'
+      - 'manifests/nonmap/retail/faction_seals_mp_seal6_techset_source_order_proof_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v2.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_HOST_PORTABILITY.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          set +e
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "$rc" > /tmp/proof/build_rc.txt
+          if [ "$rc" = 0 ]; then
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            BIN=$(realpath "$BIN")
+            echo "$BIN" > /tmp/unlinker_path
+            "$BIN" --no-color --help > /tmp/proof/unlinker_help.txt 2>&1
+            echo 'ok=1' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=0' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download exact retail dependency set
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/faction_out /tmp/common_out
+          curl -fL --retry 6 --retry-delay 2 -o /tmp/game/zone/all/faction_seals_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff
+          curl -fL --retry 6 --retry-delay 2 -o /tmp/game/zone/all/common_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          curl -fL --retry 6 --retry-delay 2 -o /tmp/game/zone/all/patch_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff
+          sha256sum /tmp/game/zone/all/*.ff | sort > /tmp/proof/RETAIL_FASTFILE_SHA256SUMS.txt
+
+      - name: Dump faction Materials and TechniqueSets through native loader
+        id: faction
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -u
+          BIN=$(cat /tmp/unlinker_path)
+          FF=/tmp/game/zone/all/faction_seals_mp.ff
+          set +e
+          "$BIN" --no-color --verbose --include-assets material --output-folder /tmp/faction_out "$FF" \
+            2>&1 | tee /tmp/proof/oat_faction_material.log
+          mrc=${PIPESTATUS[0]}
+          "$BIN" --no-color --verbose --include-assets techniqueset --output-folder /tmp/faction_out "$FF" \
+            2>&1 | tee /tmp/proof/oat_faction_techset.log
+          trc=${PIPESTATUS[0]}
+          set -e
+          echo "$mrc" > /tmp/proof/faction_material_rc.txt
+          echo "$trc" > /tmp/proof/faction_techset_rc.txt
+          find /tmp/faction_out -type f | sort > /tmp/proof/faction_output_files.txt || true
+          if [ "$mrc" = 0 ] && [ "$trc" = 0 ]; then echo 'ok=1' >> "$GITHUB_OUTPUT"; else echo 'ok=0' >> "$GITHUB_OUTPUT"; fi
+
+      - name: Dump canonical common_mp TechniqueSets through native loader
+        id: common
+        if: steps.build.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -u
+          BIN=$(cat /tmp/unlinker_path)
+          FF=/tmp/game/zone/all/common_mp.ff
+          set +e
+          "$BIN" --no-color --verbose --include-assets techniqueset --output-folder /tmp/common_out "$FF" \
+            2>&1 | tee /tmp/proof/oat_common_techset.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "$rc" > /tmp/proof/common_techset_rc.txt
+          find /tmp/common_out -type f | sort > /tmp/proof/common_output_files.txt || true
+          if [ "$rc" = 0 ]; then echo 'ok=1' >> "$GITHUB_OUTPUT"; else echo 'ok=0' >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build fail-closed SEAL6 dependency proof
+        id: analyze
+        if: steps.faction.outputs.ok == '1' && steps.common.outputs.ok == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,shutil
+          from pathlib import Path
+
+          repo=Path('.')
+          faction=Path('/tmp/faction_out')
+          common=Path('/tmp/common_out')
+          proof=Path('/tmp/proof')
+          selected=proof/'selected'
+          src=json.loads((repo/'manifests/nonmap/retail/faction_seals_mp_seal6_techset_source_order_proof_v1.json').read_text())
+          targets={int(x['xassetIndex']):x for x in src['targetTechniqueSets']}
+          expected={}
+          for q,row in targets.items():
+              for m in row['materials']:
+                  expected[m]=(q,row['canonicalName'])
+
+          def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          errors=[]; materials=[]
+          for material,(q,techset) in sorted(expected.items()):
+              p=faction/'materials'/f'{material}.json'
+              rec={'material':material,'q':q,'expectedTechniqueSet':techset,'path':p.relative_to(faction).as_posix()}
+              if not p.is_file():
+                  rec['resolved']=False; errors.append(f'missing faction native Material JSON: {material}'); materials.append(rec); continue
+              j=json.loads(p.read_text())
+              got=j.get('techniqueSet')
+              rec.update({'resolved':got==techset,'nativeTechniqueSet':got,'sha256':sha(p),'bytes':p.stat().st_size})
+              if j.get('_type')!='material' or j.get('_game')!='t6': errors.append(f'invalid native T6 Material JSON: {material}')
+              if got!=techset: errors.append(f'{material}: native techniqueSet {got!r} != expected {techset!r}')
+              dst=selected/'materials'/f'{material}.json'; dst.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,dst)
+              materials.append(rec)
+
+          defs=[]
+          for q in (10,17,20):
+              name=targets[q]['canonicalName']
+              root=common if q in (10,17) else faction
+              zone='common_mp' if q in (10,17) else 'faction_seals_mp'
+              p=root/'techsets'/f'{name}.techset'
+              rec={'q':q,'name':name,'definitionZone':zone,'path':p.relative_to(root).as_posix()}
+              if not p.is_file():
+                  rec['resolved']=False; errors.append(f'q{q}: missing native full TechniqueSet dump {p}'); defs.append(rec); continue
+              text=p.read_text(errors='strict')
+              technique_names=[]
+              for line in text.splitlines():
+                  s=line.strip()
+                  if s and not s.startswith('"') and s.endswith(';'): technique_names.append(s[:-1].strip())
+              rec.update({'resolved':True,'sha256':sha(p),'bytes':p.stat().st_size,'techniqueBindingCount':len(technique_names),'uniqueTechniques':sorted(set(technique_names))})
+              if not technique_names: errors.append(f'q{q}: native TechniqueSet dump has no technique bindings')
+              dst=selected/'techsets'/p.name; dst.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,dst)
+              for tn in sorted(set(technique_names)):
+                  tp=root/'techniques'/f'{tn}.tech'
+                  if not tp.is_file(): errors.append(f'q{q}: missing native technique {tn}'); continue
+                  td=selected/'techniques'/tp.name; td.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(tp,td)
+              defs.append(rec)
+
+          result={
+            'format':'t6-seal6-native-oat-techset-dependency-proof-v1',
+            'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'sourceOrderProof':{
+              'format':src['format'],
+              'expandedSha256':src['source']['expandedSha256'],
+              'xassetArrayVirtualBase':src['xassetVirtualLayout']['xassetArrayVirtualBase'],
+            },
+            'materials':materials,
+            'techniqueSetDefinitions':defs,
+            'errors':errors,
+            'proofBoundary':[
+              'q10/q17/q20 identities come only from the already-persisted faction loader-order/XAsset VIRTUAL-lattice proof.',
+              'Material bindings here come from pinned native OAT after its T6 loader has resolved Material::techniqueSet pointers; no q-index, scan-rank, name-occurrence, adjacency or visual inference is used.',
+              'q10 and q17 full canonical definitions are required from native common_mp output; q20 full definition is required from native faction_seals_mp output.',
+              'This proof establishes exact native TechniqueSet ownership/dependency resolution and retained technique files; it does not assign PBR semantics to shader arguments.'
+            ]
+          }
+          out=proof/'T6_SEAL6_NATIVE_OAT_TECHSET_DEPENDENCY_PROOF_V1.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          for r in materials: print(r['material'],'q'+str(r['q']),'->',r.get('nativeTechniqueSet'))
+          for r in defs: print('q'+str(r['q']),r['definitionZone'],r['name'],r.get('bytes'))
+          if selected.exists():
+              with (proof/'SELECTED_SHA256SUMS.txt').open('w') as f:
+                  for p in sorted(x for x in selected.rglob('*') if x.is_file()): f.write(f'{sha(p)}  {p.relative_to(proof).as_posix()}\n')
+          if errors:
+              print(json.dumps(errors,indent=2)); raise SystemExit(1)
+          print('SEAL6 native dependency proof CLOSED')
+          PY
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
+      - name: Upload native SEAL6 dependency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_NATIVE_OAT_TECHSET_DEPENDENCY_PROOF
+          path: /tmp/proof
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce closure
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/proof/build_rc.txt && test "$(cat /tmp/proof/build_rc.txt)" = 0
+          test -f /tmp/proof/faction_material_rc.txt && test "$(cat /tmp/proof/faction_material_rc.txt)" = 0
+          test -f /tmp/proof/faction_techset_rc.txt && test "$(cat /tmp/proof/faction_techset_rc.txt)" = 0
+          test -f /tmp/proof/common_techset_rc.txt && test "$(cat /tmp/proof/common_techset_rc.txt)" = 0
+          test "${{ steps.analyze.outputs.ok }}" = 1
+          test -s /tmp/proof/T6_SEAL6_NATIVE_OAT_TECHSET_DEPENDENCY_PROOF_V1.json
