@@ -1,0 +1,73 @@
+name: T6 Nuketown XModel source-order control v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-nuketown-xmodel-source-order-control-v1.yml'
+      - 'tools/t6_nuketown_xmodel_source_order_control_v1.py'
+      - 'tools/t6_xmodel_techset_top_level_walk_v1.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/bo2_t6_fastfile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch and expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 1 -o /tmp/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          python3 tools/bo2_t6_fastfile.py decrypt /tmp/mp_nuketown_2020.ff -o /tmp/mp_nuketown_2020.expanded --audit /tmp/fastfile_audit.json
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+
+      - name: Run exact expanded-stream source-order control
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_nuketown_xmodel_source_order_control_v1.py \
+            tools/t6_xmodel_techset_top_level_walk_v1.py \
+            tools/t6_xmodel_serialized_walker.py \
+            tools/t6_material_techset_top_level_walk_v1.py
+          PYTHONPATH=tools python3 tools/t6_nuketown_xmodel_source_order_control_v1.py \
+            /tmp/mp_nuketown_2020.expanded \
+            --out /tmp/T6_NUKETOWN_XMODEL_SOURCE_ORDER_CONTROL_V1.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/T6_NUKETOWN_XMODEL_SOURCE_ORDER_CONTROL_V1.json'))
+          assert p['expandedSha256']=='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+          assert p['coordinateSystem']=='repository expanded FastFile byte offsets'
+          assert p['retiredOatCoordinateTranslationUsed'] is False
+          assert p['mapPrefixSourceEnd']==125632
+          assert p['canaries']['q3']['sourceEnd']==499456
+          assert p['canaries']['q4']['sourceStart']==499456
+          assert p['canaries']['q4']['sourceEnd']==515650
+          assert p['canaries']['q4']['name']=='nt_2020_air_vent'
+          assert p['walk']['xmodelsSourceClosed']==10
+          assert p['gates']['q4ThroughQ13XModelSourceOrderClosed'] is True
+          assert p['gates']['wholeZoneXModelPopulationClosed'] is False
+          PY
+
+      - name: Upload compact proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_XMODEL_SOURCE_ORDER_CONTROL_V1
+          path: |
+            /tmp/T6_NUKETOWN_XMODEL_SOURCE_ORDER_CONTROL_V1.json
+            /tmp/fastfile_audit.json
+          if-no-files-found: error
+          retention-days: 14
