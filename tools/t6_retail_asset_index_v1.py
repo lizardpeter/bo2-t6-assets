@@ -213,26 +213,39 @@ class RetailAssetIndex:
 
     def resolve(self, asset_type: str, name: str, search_order: Sequence[str] | None = None) -> AssetDefinition:
         candidates = list(self.candidates(asset_type, name))
-        if not candidates: raise MissingAssetError(f"no definition for {asset_type}:{name}")
+        if not candidates:
+            raise MissingAssetError(f"no definition for {asset_type}:{name}")
+
+        rank: dict[str, int] | None = None
+        if search_order is not None:
+            rank = {z: i for i, z in enumerate(search_order)}
+            candidates = [x for x in candidates if x.zone in rank]
+            if not candidates:
+                raise MissingAssetError(
+                    f"{asset_type}:{name} exists, but not in dependency closure {list(search_order)!r}"
+                )
+
         identities = {x.content_identity for x in candidates}
         if len(identities) == 1:
-            if search_order:
-                rank = {z:i for i,z in enumerate(search_order)}
-                candidates.sort(key=lambda x:(rank.get(x.zone,len(rank)),x.zone,x.start))
-            else: candidates.sort(key=lambda x:(x.zone,x.start))
+            if rank is not None:
+                candidates.sort(key=lambda x: (rank[x.zone], x.zone, x.start))
+            else:
+                candidates.sort(key=lambda x: (x.zone, x.start))
             return candidates[0]
-        if not search_order:
+
+        if rank is None:
             detail = ", ".join(f"{x.zone}@{x.start}:sha256={x.sha256[:12]}" for x in candidates)
-            raise AmbiguousAssetError(f"conflicting definitions for {asset_type}:{name}; dependency order required: {detail}")
-        rank = {z:i for i,z in enumerate(search_order)}
-        ranked = [x for x in candidates if x.zone in rank]
-        if not ranked:
-            raise MissingAssetError(f"{asset_type}:{name} exists, but not in dependency closure {list(search_order)!r}")
-        best_rank = min(rank[x.zone] for x in ranked)
-        best = [x for x in ranked if rank[x.zone] == best_rank]
+            raise AmbiguousAssetError(
+                f"conflicting definitions for {asset_type}:{name}; dependency order required: {detail}"
+            )
+
+        best_rank = min(rank[x.zone] for x in candidates)
+        best = [x for x in candidates if rank[x.zone] == best_rank]
         if len({x.content_identity for x in best}) != 1:
-            raise AmbiguousAssetError(f"multiple conflicting definitions for {asset_type}:{name} at dependency rank {best_rank}")
-        return sorted(best,key=lambda x:(x.zone,x.start))[0]
+            raise AmbiguousAssetError(
+                f"multiple conflicting definitions for {asset_type}:{name} at dependency rank {best_rank}"
+            )
+        return sorted(best, key=lambda x: (x.zone, x.start))[0]
 
     def references_for(self, asset_type: str, name: str) -> tuple[AssetReference, ...]:
         return tuple(x for x in self.references if x.asset_type == asset_type and x.name == name)
