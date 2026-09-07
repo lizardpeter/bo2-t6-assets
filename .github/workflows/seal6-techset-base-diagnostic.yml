@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/seal6-techset-base-diagnostic.yml"
       - "tools/t6_xasset_virtual_base_diagnostic_v1.py"
+      - "tools/t6_techset_fixed_record_census_diagnostic_v1.py"
       - "tools/t6_material_dependency_graph_v1.py"
       - "tools/t6_material_techset_resolve_v1.py"
       - "tools/t6_material_techset_top_level_walk_v1.py"
@@ -43,8 +44,14 @@ jobs:
         run: |
           PYTHONPATH=tools python tools/t6_xasset_virtual_base_diagnostic_v1.py \
             /tmp/faction.expanded /tmp/graph.json --out /tmp/base.json
+      - name: Emit pointer-agnostic TechniqueSet fixed-record census
+        run: |
+          PYTHONPATH=tools python tools/t6_techset_fixed_record_census_diagnostic_v1.py \
+            /tmp/faction.expanded --out /tmp/techset_census.json
       - uses: actions/upload-artifact@v4
         with:
           name: SEAL6_TECHSET_BASE_DIAGNOSTIC
-          path: /tmp/base.json
+          path: |
+            /tmp/base.json
+            /tmp/techset_census.json
           retention-days: 14
