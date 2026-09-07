@@ -4,13 +4,15 @@
 The input Material report must already prove full local Material definitions and
 retain each serialized Material::techniqueSet packed VIRTUAL pointer. This tool:
 
-1. solves the XAsset pointer-field VIRTUAL base from all target Material pointers,
-2. maps each pointer to an exact inline type-7 XAsset index,
-3. independently enumerates every inline top-level TechniqueSet serialization in
+1. independently derives the top-level XAsset-array VIRTUAL base by replaying
+   T6 XAssetList front allocations (ScriptStrings, dependencies, then XAssets),
+2. requires every target Material pointer to land on that exact XAsset lattice,
+3. maps each pointer to an exact inline type-7 XAsset index,
+4. independently enumerates every inline top-level TechniqueSet serialization in
    source order and requires a 1:1 count with inline type-7 XAsset headers,
-4. replays the full source-closed TechniqueSet serializer at the resolved start,
+5. replays the full source-closed TechniqueSet serializer at the resolved start,
    including techniques, passes, shaders, vertex declarations and arguments,
-5. hashes the complete serialized TechniqueSet extent.
+6. hashes the complete serialized TechniqueSet extent.
 
 No TechniqueSet is chosen from its name or Material naming convention.
 """
@@ -25,6 +27,7 @@ from typing import Any
 
 from t6_asset_types_v1 import TECHNIQUE_SET
 from t6_material_techset_top_level_walk_v1 import Cursor, FOLLOW, INSERT, dec, parse_front
+from t6_xasset_virtual_layout_v1 import derive_xasset_array_virtual_base
 
 FORMAT="t6-material-techset-resolve-v1"
 
@@ -89,9 +92,11 @@ def scan_inline_techsets(data:bytes,blocks:tuple[int,...])->list[dict[str,Any]]:
     return out
 
 
-def solve_base(rows:list[dict[str,Any]],assets:list[dict[str,Any]])->int:
-    # A full local Material cannot resolve its TechniqueSet through an imported
-    # type-7 XAsset header. Restrict the lattice before intersecting bases.
+def solve_base(rows:list[dict[str,Any]],assets:list[dict[str,Any]],expected_base:int)->tuple[int,list[int]]:
+    # Full local Materials in this resolver must target inline type-7 XAssets.
+    # Pointer intersections remain a useful cross-check, but they no longer get
+    # to choose the base: the XAsset array base is independently derived from
+    # the T6 XAssetList loader's VIRTUAL allocation order.
     q={i for i,a in enumerate(assets) if int(a["type"])==TECHNIQUE_SET and int(a["headerRaw"]) in (FOLLOW,INSERT)}
     if not q:raise ResolveError("zone has no inline TechniqueSet XAssets")
     sets=[]
@@ -100,15 +105,20 @@ def solve_base(rows:list[dict[str,Any]],assets:list[dict[str,Any]])->int:
         if not isinstance(p,dict) or p.get("kind")!="packed" or int(p.get("block",-1))!=5:
             raise ResolveError(f"{row['material']}: TechniqueSet pointer is not packed VIRTUAL: {p!r}")
         off=int(p["offset"]);sets.append({off-4-8*i for i in q})
-    shared={x for x in set.intersection(*sets) if x>=0}
-    if len(shared)!=1:raise ResolveError(f"TechniqueSet XAsset pointer-field base ambiguous after inline-XAsset constraint: {len(shared)} candidates")
-    return next(iter(shared))
+    shared=sorted(x for x in set.intersection(*sets) if x>=0)
+    if expected_base not in shared:
+        raise ResolveError(
+            f"loader-derived XAsset VIRTUAL base {expected_base} is not compatible with Material pointers; candidates={shared}"
+        )
+    return expected_base,shared
 
 
 def build(expanded:Path,report_path:Path,zone:str)->dict[str,Any]:
     data=expanded.read_bytes();digest=sha256(data);report=json.loads(report_path.read_text(encoding="utf-8-sig"));src,materials=report_materials(report)
     if int(src.get("expandedBytes",-1))!=len(data) or str(src.get("expandedSha256") or "").lower()!=digest:raise ResolveError("Material report source fingerprint mismatch")
-    blocks,assets,_=parse_front(data);base=solve_base(materials,assets)
+    blocks,assets,_=parse_front(data)
+    layout=derive_xasset_array_virtual_base(data)
+    base,candidates=solve_base(materials,assets,int(layout["xassetArrayVirtualBase"]))
     inline_q=[i for i,a in enumerate(assets) if int(a["type"])==TECHNIQUE_SET and int(a["headerRaw"]) in (FOLLOW,INSERT)]
     scanned=scan_inline_techsets(data,blocks)
     if len(scanned)!=len(inline_q):raise ResolveError(f"inline TechniqueSet parser count {len(scanned)} != inline XAsset count {len(inline_q)}")
@@ -129,7 +139,7 @@ def build(expanded:Path,report_path:Path,zone:str)->dict[str,Any]:
         if old is not None and (old["start"],old["serializedSha256"])!=(d["start"],d["serializedSha256"]):raise ResolveError(f"TechniqueSet XAsset {q}: conflicting replay")
         defs[q]=d
         bindings.append({"material":row["material"],"materialStart":row["start"],"techniqueSetPointerVirtualOffset":off,"techniqueSetXAssetIndex":q,"techniqueSet":name,"techniqueSetStart":d["start"],"techniqueSetSha256":d["serializedSha256"]})
-    return {"format":FORMAT,"zone":zone,"source":{"expandedBytes":len(data),"expandedSha256":digest},"xassetPointerFieldVirtualBase":base,"bindings":bindings,"techniqueSets":[defs[q] for q in sorted(defs)],"summary":{"materials":len(bindings),"uniqueTechniqueSets":len(defs),"inlineTechniqueSetXAssets":len(inline_q),"allBindingsExact":True},"proofBoundary":"Material::techniqueSet is resolved only through its packed VIRTUAL offset onto the exact inline type-7 XAsset pointer-field lattice. Serialized TechniqueSet identity/start is assigned by a fail-closed 1:1 inline type-7 XAsset/source-order census and then fully replayed with the source-closed serializer."}
+    return {"format":FORMAT,"zone":zone,"source":{"expandedBytes":len(data),"expandedSha256":digest},"xassetVirtualLayout":layout,"xassetPointerFieldVirtualBase":base,"pointerIntersectionCandidateBases":candidates,"bindings":bindings,"techniqueSets":[defs[q] for q in sorted(defs)],"summary":{"materials":len(bindings),"uniqueTechniqueSets":len(defs),"inlineTechniqueSetXAssets":len(inline_q),"allBindingsExact":True,"xassetBaseDerivedFromLoaderOrder":True},"proofBoundary":"Material::techniqueSet is resolved through its packed VIRTUAL offset onto the exact inline type-7 XAsset pointer-field lattice. The XAsset-array VIRTUAL base is independently derived by replaying T6 XAssetList loader allocation order; the 24-byte fixed XAssetList is loaded before XFILE_BLOCK_VIRTUAL and therefore contributes zero block bytes. Serialized TechniqueSet identity/start is assigned by a fail-closed 1:1 inline type-7 XAsset/source-order census and then fully replayed with the source-closed serializer."}
 
 
 def main()->int:
