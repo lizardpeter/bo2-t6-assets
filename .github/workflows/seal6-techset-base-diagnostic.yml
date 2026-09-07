@@ -10,6 +10,8 @@ on:
       - "tools/t6_material_dependency_graph_v1.py"
       - "tools/t6_material_techset_resolve_v1.py"
       - "tools/t6_material_techset_top_level_walk_v1.py"
+      - "tools/t6_early_techset_source_order_walk_v1.py"
+      - "tools/t6_xmodel_serialized_walker.py"
       - "tools/t6_asset_types_v1.py"
       - "tools/bo2_t6_fastfile.py"
       - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
@@ -48,10 +50,18 @@ jobs:
         run: |
           PYTHONPATH=tools python tools/t6_techset_fixed_record_census_diagnostic_v1.py \
             /tmp/faction.expanded --out /tmp/techset_census.json
+      - name: Replay exact top-level source order through q20
+        run: |
+          PYTHONPATH=tools python tools/t6_early_techset_source_order_walk_v1.py \
+            /tmp/faction.expanded --end-asset 20 --targets 10,17,20 \
+            --out /tmp/source_order_q0_q20.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: SEAL6_TECHSET_BASE_DIAGNOSTIC
           path: |
             /tmp/base.json
             /tmp/techset_census.json
+            /tmp/source_order_q0_q20.json
+          if-no-files-found: warn
           retention-days: 14
