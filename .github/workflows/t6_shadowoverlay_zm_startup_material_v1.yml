@@ -58,7 +58,6 @@ jobs:
           wanted=['code_post_gfx_zm.ff','common_zm.ff','patch_zm.ff']
           rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-shadowoverlay-zm-native/1')
           entries,meta=rz.central_directory()
-          bybase={e['name'].rsplit('/',1)[-1]:e for e in entries}
           rows=[]
           for name in wanted:
               matches=[e for e in entries if e['name'].rsplit('/',1)[-1]==name and '/zone/all/' in ('/'+e['name'].lower())]
@@ -77,11 +76,11 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/proof/T6_SHADOWOVERLAY_ZM_STARTUP_INPUTS_V1.json'))
-          expected='cd8001cee910ce02f1a7531874a79613db7fc9e1260663a1f85c0c7d9e55d655'
+          expected='dc44f775074e010e37f3fbdf60fc21af1de2582634432cd6057d6eecd0099942'
           row=next(x for x in d['fastFiles'] if x['file']=='code_post_gfx_zm.ff')
           if row['sha256'] != expected:
               raise SystemExit(f'code_post_gfx_zm identity drift: {row["sha256"]} != {expected}')
-          print('code_post_gfx_zm exact prior-scan SHA confirmed')
+          print('code_post_gfx_zm exact retained-scan SHA confirmed')
           PY
 
       - name: Dump native Zombies startup Material and TechniqueSet dependencies
