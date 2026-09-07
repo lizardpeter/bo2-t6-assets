@@ -11,6 +11,7 @@ on:
       - "tools/t6_material_techset_resolve_v1.py"
       - "tools/t6_material_techset_top_level_walk_v1.py"
       - "tools/t6_early_techset_source_order_walk_v1.py"
+      - "tools/t6_early_techset_source_order_walk_v2.py"
       - "tools/t6_early_techset_source_order_probe_v1.py"
       - "tools/t6_xmodel_serialized_walker.py"
       - "tools/t6_asset_types_v1.py"
@@ -52,14 +53,13 @@ jobs:
           PYTHONPATH=tools python tools/t6_techset_fixed_record_census_diagnostic_v1.py \
             /tmp/faction.expanded --out /tmp/techset_census.json
       - name: Probe exact early source-order prefixes
-        continue-on-error: true
         run: |
           PYTHONPATH=tools python tools/t6_early_techset_source_order_probe_v1.py \
             /tmp/faction.expanded --end-asset 20 \
             --out /tmp/source_order_prefix_probe.json
       - name: Replay exact top-level source order through q20
         run: |
-          PYTHONPATH=tools python tools/t6_early_techset_source_order_walk_v1.py \
+          PYTHONPATH=tools python tools/t6_early_techset_source_order_walk_v2.py \
             /tmp/faction.expanded --end-asset 20 --targets 10,17,20 \
             --out /tmp/source_order_q0_q20.json
       - uses: actions/upload-artifact@v4
