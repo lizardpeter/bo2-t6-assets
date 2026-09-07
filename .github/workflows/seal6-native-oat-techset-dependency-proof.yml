@@ -6,7 +6,7 @@ on:
     branches: [reversal/nonmap-assets]
     paths:
       - '.github/workflows/seal6-native-oat-techset-dependency-proof.yml'
-      - 'tools/t6_oat_9dca_gcc_compat_patch_v2.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - 'tools/t6_seal6_common_nested_proof_v1.py'
       - 'tools/t6_techset_exact_name_diagnostic_v1.py'
       - 'tools/bo2_t6_fastfile.py'
@@ -33,7 +33,7 @@ jobs:
           git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
           git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
           git -C /tmp/oat submodule update -q --init --recursive
-          python3 tools/t6_oat_9dca_gcc_compat_patch_v2.py /tmp/oat
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
           git -C /tmp/oat diff --check
           git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_HOST_PORTABILITY.patch
           cd /tmp/oat
