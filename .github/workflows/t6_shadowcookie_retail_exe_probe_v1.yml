@@ -1,0 +1,173 @@
+name: T6 shadowCookie retail EXE probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retail_shadowcookie_material_probe_v1.py'
+      - '.github/workflows/t6_shadowcookie_retail_exe_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  retail-exe-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install exact probe dependency
+        run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+
+      - name: Range-extract exact retail t6mp.exe from public game ZIP
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
+          EXPECTED_BYTES: '12850328'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import binascii, hashlib, json, os, struct, urllib.request, zlib
+          from pathlib import Path
+
+          url=os.environ['ZIP_URL']
+          expected_sha=os.environ['EXPECTED_SHA256'].lower()
+          expected_bytes=int(os.environ['EXPECTED_BYTES'])
+
+          def req_range(start, end):
+              h={'Range':f'bytes={start}-{end}','User-Agent':'bo2-t6-assets-shadowcookie-proof/1'}
+              r=urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=90)
+              b=r.read()
+              return b,dict(r.headers),r.status
+
+          first,hdr,status=req_range(0,0)
+          cr=hdr.get('Content-Range') or hdr.get('content-range')
+          if not cr or '/' not in cr:
+              raise SystemExit(f'no Content-Range status={status}')
+          total=int(cr.rsplit('/',1)[1])
+          tail_n=min(total,4*1024*1024)
+          tail_start=total-tail_n
+          tail,_,_=req_range(tail_start,total-1)
+          p=tail.rfind(b'PK\x05\x06')
+          if p<0:
+              raise SystemExit('EOCD not found')
+          if len(tail)-p<22:
+              raise SystemExit('truncated EOCD')
+          disk,cd_disk,disk_entries,entries,cd_size,cd_off,comment_len=struct.unpack_from('<4H2LH',tail,p+4)
+          if disk or cd_disk or disk_entries!=entries:
+              raise SystemExit('multi-disk ZIP unsupported')
+          if cd_off==0xffffffff or cd_size==0xffffffff or entries==0xffff:
+              raise SystemExit('ZIP64 central directory not supported by this exact probe')
+          cd,_,_=req_range(cd_off,cd_off+cd_size-1)
+          if len(cd)!=cd_size:
+              raise SystemExit(f'central directory short read {len(cd)} != {cd_size}')
+
+          candidates=[]
+          o=0
+          while o<len(cd):
+              if cd[o:o+4]!=b'PK\x01\x02':
+                  raise SystemExit(f'bad central directory signature at {o}')
+              vals=struct.unpack_from('<6H3L5H2L',cd,o+4)
+              ver_made,ver_need,flags,method,mtime,mdate,crc32,csize,usize,nlen,xlen,clen,disk_start,int_attr,ext_attr,lhoff=vals
+              name=cd[o+46:o+46+nlen].decode('utf-8','replace')
+              base=name.rsplit('/',1)[-1].lower()
+              if base.endswith('.exe') and ('t6mp' in base or (usize==expected_bytes)):
+                  candidates.append({'name':name,'flags':flags,'method':method,'crc32':crc32,'compressedSize':csize,'uncompressedSize':usize,'localHeaderOffset':lhoff})
+              o+=46+nlen+xlen+clen
+
+          if not candidates:
+              raise SystemExit('no candidate t6mp executable entries found')
+
+          observed=[]
+          winner=None
+          winner_bytes=None
+          for row in candidates:
+              h,_,_=req_range(row['localHeaderOffset'],row['localHeaderOffset']+29)
+              if h[:4]!=b'PK\x03\x04':
+                  raise SystemExit(f"{row['name']}: bad local header")
+              _,flags,method,_,_,_,_,_,nlen,xlen=struct.unpack_from('<5H3L2H',h,4)
+              if flags & 0x1:
+                  observed.append({**row,'status':'encrypted_entry_rejected'})
+                  continue
+              data_off=row['localHeaderOffset']+30+nlen+xlen
+              comp,_,_=req_range(data_off,data_off+row['compressedSize']-1)
+              if len(comp)!=row['compressedSize']:
+                  raise SystemExit(f"{row['name']}: compressed short read")
+              if method==0:
+                  raw=comp
+              elif method==8:
+                  raw=zlib.decompress(comp,-15)
+              else:
+                  observed.append({**row,'status':f'unsupported_method_{method}'})
+                  continue
+              digest=hashlib.sha256(raw).hexdigest()
+              crc=binascii.crc32(raw)&0xffffffff
+              obs={**row,'actualBytes':len(raw),'actualSha256':digest,'actualCrc32':f'{crc:08x}','centralCrc32':f"{row['crc32']:08x}"}
+              if crc!=row['crc32']:
+                  obs['status']='crc_mismatch'
+              elif len(raw)==expected_bytes and digest==expected_sha:
+                  obs['status']='exact_match'
+                  if winner is not None:
+                      raise SystemExit('more than one exact executable entry matched')
+                  winner=obs
+                  winner_bytes=raw
+              else:
+                  obs['status']='identity_mismatch'
+              observed.append(obs)
+
+          Path('/tmp/proof/executable_candidates.json').write_text(json.dumps(observed,indent=2,sort_keys=True)+'\n')
+          if winner is None or winner_bytes is None:
+              raise SystemExit('no candidate matched the pinned retail executable identity')
+          Path('/tmp/t6mp.exe').write_bytes(winner_bytes)
+          source={
+              'format':'t6-retail-executable-remote-source-v1',
+              'url':url,
+              'remoteZipBytes':total,
+              'etag':hdr.get('ETag') or hdr.get('etag'),
+              'entry':winner,
+              'expectedBytes':expected_bytes,
+              'expectedSha256':expected_sha,
+              'status':'exact_sha_pinned_entry_recovered',
+          }
+          Path('/tmp/proof/executable_source.json').write_text(json.dumps(source,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(source,indent=2,sort_keys=True))
+          PY
+
+          echo '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1  /tmp/t6mp.exe' | sha256sum -c -
+          test "$(stat -c '%s' /tmp/t6mp.exe)" = 12850328
+
+      - name: Probe exact T6 shadow-cookie/global Material evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_retail_shadowcookie_material_probe_v1.py \
+            /tmp/t6mp.exe \
+            --out /tmp/proof/T6_RETAIL_SHADOWCOOKIE_MATERIAL_PROBE_V1.json \
+            | tee /tmp/proof/probe.log
+          strings -a /tmp/t6mp.exe | grep -Ei 'shadow|cookie|overlay' > /tmp/proof/shadow_cookie_overlay_strings.txt || true
+          grep -Ei 'shadowcookieoverlay|shadowcookieblur|shadowoverlay|shadowcaster|shadowclear' /tmp/proof/shadow_cookie_overlay_strings.txt \
+            > /tmp/proof/key_shadow_material_strings.txt || true
+          wc -l /tmp/proof/*strings.txt | tee /tmp/proof/string_counts.txt
+
+      - name: Assert executable bytes are not archived
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e /tmp/proof/t6mp.exe
+          if find /tmp/proof -type f -size +8M | grep -q .; then
+            echo 'unexpected large proof file; refusing artifact' >&2
+            find /tmp/proof -type f -size +8M -ls >&2
+            exit 1
+          fi
+
+      - name: Upload exact static probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_SHADOWCOOKIE_MATERIAL_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
