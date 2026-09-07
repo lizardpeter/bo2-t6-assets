@@ -1,0 +1,149 @@
+name: T6 Zombies startup shadowoverlay Material v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_oat_material_dependency_bundle_v1.py'
+      - 'tools/test_t6_oat_material_dependency_bundle_v1.py'
+      - 'tools/t6_oat_material_shader_census_v1.py'
+      - 'tools/t6_oat_material_shader_census_v3.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_shadowoverlay_zm_startup_material_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  close-zm-family:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test forensic dependency bundler
+        run: PYTHONPATH=tools python3 tools/test_t6_oat_material_dependency_bundle_v1.py
+
+      - name: Build pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+
+      - name: Extract and SHA-pin exact Zombies startup/shared FastFiles
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          wanted=['code_post_gfx_zm.ff','common_zm.ff','patch_zm.ff']
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-shadowoverlay-zm-native/1')
+          entries,meta=rz.central_directory()
+          bybase={e['name'].rsplit('/',1)[-1]:e for e in entries}
+          rows=[]
+          for name in wanted:
+              matches=[e for e in entries if e['name'].rsplit('/',1)[-1]==name and '/zone/all/' in ('/'+e['name'].lower())]
+              if len(matches)!=1:
+                  raise SystemExit(f'{name}: expected one zone/all archive entry, got {len(matches)}')
+              e=matches[0]
+              raw=rz.extract(e,verify_crc=True)
+              p=pathlib.Path('/tmp/game')/name
+              p.write_bytes(raw)
+              rows.append({'file':name,'zipPath':e['name'],'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'crc32':f"{e['crc32']:08x}"})
+          result={'format':'t6-shadowoverlay-zm-startup-inputs-v1','remoteZip':meta,'fastFiles':rows}
+          pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_ZM_STARTUP_INPUTS_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
+
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_SHADOWOVERLAY_ZM_STARTUP_INPUTS_V1.json'))
+          expected='cd8001cee910ce02f1a7531874a79613db7fc9e1260663a1f85c0c7d9e55d655'
+          row=next(x for x in d['fastFiles'] if x['file']=='code_post_gfx_zm.ff')
+          if row['sha256'] != expected:
+              raise SystemExit(f'code_post_gfx_zm identity drift: {row["sha256"]} != {expected}')
+          print('code_post_gfx_zm exact prior-scan SHA confirmed')
+          PY
+
+      - name: Dump native Zombies startup Material and TechniqueSet dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for zone in code_post_gfx_zm common_zm patch_zm; do
+            mkdir -p "/tmp/${zone}_out"
+            if test "$zone" = code_post_gfx_zm; then
+              "$BIN" --no-color --verbose --include-assets material \
+                --output-folder "/tmp/${zone}_out" "/tmp/game/${zone}.ff" \
+                2>&1 | tee "/tmp/proof/${zone}_material_dump.log"
+            fi
+            "$BIN" --no-color --verbose --include-assets techniqueset \
+              --output-folder "/tmp/${zone}_out" "/tmp/game/${zone}.ff" \
+              2>&1 | tee "/tmp/proof/${zone}_techset_dump.log"
+          done
+          find /tmp/code_post_gfx_zm_out/materials -type f -name '*.json' | sort > /tmp/proof/code_post_gfx_zm_material_files.txt
+          grep -Ri -n -i 'shadowoverlay\|shadowcookie' /tmp/code_post_gfx_zm_out/materials > /tmp/proof/zm_shadow_named_material_hits.txt || true
+          for zone in code_post_gfx_zm common_zm patch_zm; do
+            find "/tmp/${zone}_out" -type f | sort > "/tmp/proof/${zone}_files.txt"
+          done
+
+      - name: Archive exact Zombies shadowoverlay dependency family
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_oat_material_dependency_bundle_v1.py \
+            --material-root code_post_gfx_zm=/tmp/code_post_gfx_zm_out \
+            --shader-root code_post_gfx_zm=/tmp/code_post_gfx_zm_out \
+            --shader-root common_zm=/tmp/common_zm_out \
+            --shader-root patch_zm=/tmp/patch_zm_out \
+            --material-name shadowoverlay \
+            --out /tmp/proof/shadowoverlay_zm_dependency_bundle \
+            | tee /tmp/proof/shadowoverlay_zm_dependency_bundle.log
+
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/proof/shadowoverlay_zm_dependency_bundle/manifest.json')
+          d=json.loads(p.read_text())
+          target='pimp_technique_shadowoverlay_5255c888'
+          declared=[r['technique'] for r in d['techniques']]
+          result={
+              'format':'t6-shadowoverlay-zm-exact-dependency-family-classification-v1',
+              'material':'shadowoverlay',
+              'materialPhysicalCopyCount':d['summary']['materialPhysicalCopyCount'],
+              'techniqueSets':sorted({r['techniqueSet'] for r in d['techniqueSets']}),
+              'declaredTechniques':declared,
+              'targetTechnique':target,
+              'targetDeclaredByThisFamily':target in declared,
+              'proofBoundary':'Direct native OAT dependency bundle for the SHA-pinned Zombies startup Material named shadowoverlay. A false targetDeclaredByThisFamily excludes only this exact Material->TechniqueSet family and does not claim global target absence.'
+          }
+          pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_ZM_DEPENDENCY_FAMILY_CLASSIFICATION_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload exact Zombies startup dependency proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_ZM_STARTUP_MATERIAL_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
