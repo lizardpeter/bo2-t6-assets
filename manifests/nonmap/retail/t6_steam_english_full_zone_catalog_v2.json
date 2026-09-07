@@ -1,0 +1,58 @@
+{
+  "format": "t6-steam-english-full-zone-catalog-v2",
+  "extends": "manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json",
+  "scope": {
+    "description": "English PC FastFile install catalog: base SP/MP/Zombies, Nuketown 2025, Nuketown Zombies, and Revolution/Uprising/Vengeance/Apocalypse MP+Zombies content and English localization depots.",
+    "completeForEnglishRetailFfScope": true,
+    "wholeRetailAllLanguagesComplete": false,
+    "excluded": [
+      "French, Italian, German, Spanish, Japanese, Polish and Russian localization depots",
+      "executables, audio banks, video, IPAK, CLUMP, redists and soundtrack files",
+      "personalization/extra-slot DLC when it does not expose FastFiles"
+    ]
+  },
+  "source": {
+    "kind": "Steam depot manifests mirrored by SteamDB",
+    "retrievedDate": "2026-09-07",
+    "notes": [
+      "SteamDB is a third-party mirror and is not Valve. Depot/file enumeration is provenance for the source catalog, not a substitute for exact retail-file hashes.",
+      "Overlapping FastFile paths installed by multiple DLC depots are retained as multiple depot ownership entries. Their byte identity is a separate gate."
+    ]
+  },
+  "additionalDepots": [
+    {"depotId":219097,"manifestId":"8079780212554400363","label":"revolution-mp-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219097/","expectedFfCount":8,"ff":["zone/all/dlc1_load_mp.ff","zone/all/faction_multiteam_snow_mp.ff","zone/all/faction_pmc_snow_mp.ff","zone/all/faction_seals_snow_mp.ff","zone/all/mp_downhill.ff","zone/all/mp_hydro.ff","zone/all/mp_mirage.ff","zone/all/mp_skate.ff"]},
+    {"depotId":219096,"manifestId":"6083944898681218397","label":"revolution-zm-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219096/","expectedFfCount":5,"ff":["zone/all/dlc1_load_zm.ff","zone/all/zm_highrise.ff","zone/all/zm_highrise_patch.ff","zone/all/zm_transit_dr.ff","zone/all/zm_transit_dr_patch.ff"]},
+    {"depotId":233171,"manifestId":"3252521344750599734","label":"revolution-mp-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/233171/","expectedFfCount":7,"ff":["zone/english/en_faction_multiteam_snow_mp.ff","zone/english/en_faction_pmc_snow_mp.ff","zone/english/en_faction_seals_snow_mp.ff","zone/english/en_mp_downhill.ff","zone/english/en_mp_hydro.ff","zone/english/en_mp_mirage.ff","zone/english/en_mp_skate.ff"]},
+    {"depotId":233181,"manifestId":"4664140994489092100","label":"revolution-zm-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/233181/","expectedFfCount":2,"ff":["zone/english/en_dlc1_load_zm.ff","zone/english/en_zm_highrise.ff"]},
+    {"depotId":219098,"manifestId":"1749099087036763551","label":"uprising-mp-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219098/","expectedFfCount":5,"ff":["zone/all/dlc2_load_mp.ff","zone/all/mp_concert.ff","zone/all/mp_magma.ff","zone/all/mp_studio.ff","zone/all/mp_vertigo.ff"]},
+    {"depotId":219099,"manifestId":"8312826338200556582","label":"uprising-zm-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219099/","expectedFfCount":5,"ff":["zone/all/dlc2_load_zm.ff","zone/all/so_zclassic_zm_prison.ff","zone/all/so_zencounter_zm_prison.ff","zone/all/zm_prison.ff","zone/all/zm_prison_patch.ff"]},
+    {"depotId":238801,"manifestId":"5208633284234102366","label":"uprising-mp-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/238801/","expectedFfCount":4,"ff":["zone/english/en_mp_concert.ff","zone/english/en_mp_magma.ff","zone/english/en_mp_studio.ff","zone/english/en_mp_vertigo.ff"]},
+    {"depotId":238811,"manifestId":"411175400606548323","label":"uprising-zm-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/238811/","expectedFfCount":2,"ff":["zone/english/en_dlc2_load_zm.ff","zone/english/en_zm_prison.ff"]},
+    {"depotId":219101,"manifestId":"8727583105200031460","label":"vengeance-mp-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219101/","expectedFfCount":11,"ff":["zone/all/dlc3_load_mp.ff","zone/all/faction_cd_sand_mp.ff","zone/all/faction_isa_sand_mp.ff","zone/all/faction_multiteam_sand_mp.ff","zone/all/faction_multiteam_wet_mp.ff","zone/all/faction_pla_wet_mp.ff","zone/all/faction_seals_wet_mp.ff","zone/all/mp_bridge.ff","zone/all/mp_castaway.ff","zone/all/mp_paintball.ff","zone/all/mp_uplink.ff"]},
+    {"depotId":219102,"manifestId":"5735097321577510919","label":"vengeance-zm-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219102/","expectedFfCount":5,"ff":["zone/all/dlc3_load_zm.ff","zone/all/so_zclassic_zm_buried.ff","zone/all/so_zencounter_zm_buried.ff","zone/all/zm_buried.ff","zone/all/zm_buried_patch.ff"]},
+    {"depotId":247161,"manifestId":"3827317568665009753","label":"vengeance-mp-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/247161/","expectedFfCount":10,"ff":["zone/english/en_faction_cd_sand_mp.ff","zone/english/en_faction_isa_sand_mp.ff","zone/english/en_faction_multiteam_sand_mp.ff","zone/english/en_faction_multiteam_wet_mp.ff","zone/english/en_faction_pla_wet_mp.ff","zone/english/en_faction_seals_wet_mp.ff","zone/english/en_mp_bridge.ff","zone/english/en_mp_castaway.ff","zone/english/en_mp_paintball.ff","zone/english/en_mp_uplink.ff"]},
+    {"depotId":247169,"manifestId":"1779924028979804934","label":"vengeance-zm-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/247169/","expectedFfCount":2,"ff":["zone/english/en_dlc3_load_zm.ff","zone/english/en_zm_buried.ff"]},
+    {"depotId":219103,"manifestId":"8054447117850293655","label":"apocalypse-mp-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219103/","expectedFfCount":8,"ff":["zone/all/dlc4_load_mp.ff","zone/all/faction_multiteam_snow_mp.ff","zone/all/faction_pmc_snow_mp.ff","zone/all/faction_seals_snow_mp.ff","zone/all/mp_dig.ff","zone/all/mp_frostbite.ff","zone/all/mp_pod.ff","zone/all/mp_takeoff.ff"]},
+    {"depotId":219104,"manifestId":"580718828309419192","label":"apocalypse-zm-content","zoneFolder":"all","sourceUrl":"https://steamdb.info/depot/219104/","expectedFfCount":3,"ff":["zone/all/dlc4_load_zm.ff","zone/all/zm_tomb.ff","zone/all/zm_tomb_patch.ff"]},
+    {"depotId":255561,"manifestId":"7076696022158943069","label":"apocalypse-mp-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/255561/","expectedFfCount":7,"ff":["zone/english/en_faction_multiteam_snow_mp.ff","zone/english/en_faction_pmc_snow_mp.ff","zone/english/en_faction_seals_snow_mp.ff","zone/english/en_mp_dig.ff","zone/english/en_mp_frostbite.ff","zone/english/en_mp_pod.ff","zone/english/en_mp_takeoff.ff"]},
+    {"depotId":255569,"manifestId":"577328094221422745","label":"apocalypse-zm-english","zoneFolder":"english","sourceUrl":"https://steamdb.info/depot/255569/","expectedFfCount":2,"ff":["zone/english/en_dlc4_load_zm.ff","zone/english/en_zm_tomb.ff"]}
+  ],
+  "expectedOverlappingDepotPaths": {
+    "zone/all/faction_multiteam_snow_mp.ff": [219097,219103],
+    "zone/all/faction_pmc_snow_mp.ff": [219097,219103],
+    "zone/all/faction_seals_snow_mp.ff": [219097,219103],
+    "zone/english/en_faction_multiteam_snow_mp.ff": [233171,255561],
+    "zone/english/en_faction_pmc_snow_mp.ff": [233171,255561],
+    "zone/english/en_faction_seals_snow_mp.ff": [233171,255561]
+  },
+  "totals": {
+    "baseDepots": 12,
+    "additionalDepots": 16,
+    "depots": 28,
+    "baseDepotFfEntries": 217,
+    "additionalDepotFfEntries": 86,
+    "depotFfEntries": 303,
+    "uniqueFfPaths": 297,
+    "overlappingUniquePaths": 6
+  }
+}
