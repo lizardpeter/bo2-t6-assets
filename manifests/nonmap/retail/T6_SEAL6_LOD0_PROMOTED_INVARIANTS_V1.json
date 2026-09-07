@@ -1,0 +1,53 @@
+{
+  "format": "t6-promoted-invariants-v1",
+  "asset": "c_usa_mp_seal6_smg_fb",
+  "scope": "LOD0 portable/full-retail handoff",
+  "knowledgePolicy": "docs/MONOTONIC_REVERSAL_POLICY.md",
+  "authority": {
+    "geometryLabel": "SEAL6 geometry-v3",
+    "rule": "candidate geometry must be compared directly against the promoted geometry-v3 authority artifact; carrier files are not authority"
+  },
+  "promotedInvariants": {
+    "primitiveCount": 14,
+    "totalVertices": 13490,
+    "totalTriangles": 14968,
+    "jointCount": 102,
+    "forbiddenAttributes": [
+      "COLOR_0"
+    ],
+    "requiredAnimationNames": [
+      "pb_stand_alert",
+      "pb_stand_ads",
+      "pb_smg_sprint",
+      "pb_combatrun_forward_loop",
+      "pb_standjump_takeoff",
+      "pt_stand_shoot_auto"
+    ],
+    "minimumMaterialCount": 12,
+    "minimumEmbeddedImageCount": 23,
+    "exactGeometryAuthorityComparison": {
+      "required": true,
+      "primitiveOrder": true,
+      "attributeSet": true,
+      "attributePayloads": true,
+      "indexPayloads": true
+    }
+  },
+  "knownRetailCoverage": {
+    "exactRetailTexturePayloadsRecovered": 42,
+    "note": "42 recovered retail payloads are source truth. The current 23-image portable visualization is a lower-fidelity representation and must not be confused with full retail shader closure. Future promoted material work should raise portable coverage monotonically rather than freezing this approximation."
+  },
+  "materialFidelityStatus": {
+    "status": "open",
+    "reason": "the existing portable material reducer discards proven multi-input retail shader data on head, arms, eyes/cornea, inside-mouth, and other materials",
+    "promotionRule": "do not mark material/shader fidelity exact until the retained Material/TechniqueSet/GfxImage evidence is reconstructed and render-canary validated"
+  },
+  "regressionsThisManifestForbids": [
+    "reintroduction of COLOR_0",
+    "use of stale/opposite triangle winding",
+    "mutation of promoted geometry attributes relative to geometry-v3",
+    "loss of any of the six recovered retail animations",
+    "drop below the currently demonstrated 12 materials or 23 embedded visualization images without an explicit superseding proof",
+    "promotion of a carrier artifact as geometry authority"
+  ]
+}
