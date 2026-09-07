@@ -1,0 +1,135 @@
+name: T6 shadowoverlay shader disassembly v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_shadowoverlay_shader_disassembly_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  disassemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_RUN: '34167293973'
+      SOURCE_ARTIFACT: T6_SHADOWOVERLAY_ZM_STARTUP_MATERIAL_V1
+      PS_REL: shadowoverlay_zm_dependency_bundle/files/code_post_gfx_zm/shader_bin/ps_pimp_shader_trivial_3981dec1.hlsl.cso
+      VS_REL: shadowoverlay_zm_dependency_bundle/files/code_post_gfx_zm/shader_bin/vs_pimp_shader_hdr_933ab43.hlsl.cso
+      PS_SHA: 2ef171c239a7c98542a961252362761828747bd288ee21e3fde542d48aa5de0e
+      VS_SHA: 630a2f147e43f6bca732a73cbeea52ca5d4a65c48324ee784b84c67d7ef23909
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download retained native dependency artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir /tmp/source
+          test -f "/tmp/source/$PS_REL"
+          test -f "/tmp/source/$VS_REL"
+          echo "$PS_SHA  /tmp/source/$PS_REL" | sha256sum -c -
+          echo "$VS_SHA  /tmp/source/$VS_REL" | sha256sum -c -
+          test "$(stat -c '%s' "/tmp/source/$PS_REL")" -eq 5600
+          test "$(stat -c '%s' "/tmp/source/$VS_REL")" -eq 3040
+          cat > /tmp/proof/source_identity.txt <<EOF
+          source_run=$SOURCE_RUN
+          source_artifact=$SOURCE_ARTIFACT
+          source_artifact_digest=sha256:3746d02226be11978f2e4c915541bf1cbc73f4476cf102f2284a502fe5b9412f
+          pixel_shader=pimp_shader_trivial_3981dec1.hlsl
+          pixel_shader_bytes=5600
+          pixel_shader_sha256=$PS_SHA
+          vertex_shader=pimp_shader_hdr_933ab43.hlsl
+          vertex_shader_bytes=3040
+          vertex_shader_sha256=$VS_SHA
+          EOF
+
+      - name: Install and pin DXBC disassembler
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vkd3d-compiler >/dev/null
+          command -v vkd3d-compiler
+          vkd3d-compiler --version | tee /tmp/proof/vkd3d_compiler_version.txt
+          sha256sum "$(command -v vkd3d-compiler)" | tee /tmp/proof/vkd3d_compiler_sha256.txt
+          dpkg-query -W -f='${Package} ${Version}\n' vkd3d-compiler | tee /tmp/proof/vkd3d_compiler_package.txt
+          vkd3d-compiler -x dxbc-tpf --print-target-types | tee /tmp/proof/vkd3d_target_types.txt
+          grep -q 'd3d-asm' /tmp/proof/vkd3d_target_types.txt
+
+      - name: Disassemble exact shadowoverlay shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=$(command -v vkd3d-compiler)
+          "$TOOL" -x dxbc-tpf -b d3d-asm --formatting=-colour,+header,+signatures,+offsets \
+            -o /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm "/tmp/source/$PS_REL" \
+            2> /tmp/proof/pimp_shader_trivial_3981dec1.ps.stderr.txt
+          "$TOOL" -x dxbc-tpf -b d3d-asm --formatting=-colour,+header,+signatures,+offsets \
+            -o /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm "/tmp/source/$VS_REL" \
+            2> /tmp/proof/pimp_shader_hdr_933ab43.vs.stderr.txt
+          test -s /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm
+          test -s /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm
+          sha256sum /tmp/proof/*.d3dasm | tee /tmp/proof/disassembly_sha256.txt
+          cat /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm
+
+      - name: Extract bounded pixel-shader execution evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,pathlib
+          p=pathlib.Path('/tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm')
+          text=p.read_text(encoding='utf-8',errors='strict')
+          lines=text.splitlines()
+          executable=[]
+          declarations=[]
+          for line in lines:
+              s=line.strip()
+              if not s or s.startswith('//'):
+                  continue
+              if re.match(r'^(ps_|vs_|gs_|hs_|ds_|cs_)',s):
+                  continue
+              if s.startswith('dcl_'):
+                  declarations.append(s)
+              else:
+                  executable.append(s)
+          doc={
+              'format':'t6-shadowoverlay-pixel-shader-disassembly-evidence-v1',
+              'source':{
+                  'shader':'pimp_shader_trivial_3981dec1.hlsl',
+                  'bytes':5600,
+                  'sha256':'2ef171c239a7c98542a961252362761828747bd288ee21e3fde542d48aa5de0e',
+                  'nativeTechnique':'pimp_technique_trivial_7bf1260',
+                  'nativeArgument':'colorMapSampler = sampler.feedbackSampler',
+                  'sourceRun':34167293973,
+                  'sourceArtifact':'T6_SHADOWOVERLAY_ZM_STARTUP_MATERIAL_V1',
+                  'sourceArtifactDigest':'sha256:3746d02226be11978f2e4c915541bf1cbc73f4476cf102f2284a502fe5b9412f'
+              },
+              'declarations':declarations,
+              'executableLines':executable,
+              'summary':{
+                  'declarationCount':len(declarations),
+                  'executableLineCount':len(executable),
+                  'sampleInstructionCount':sum(1 for x in executable if re.search(r'\bsample(?:_[a-z]+)?\b',x)),
+                  'storeOrOutputCount':sum(1 for x in executable if re.search(r'\b(?:mov|store_[a-z]+)\b',x)),
+              },
+              'proofBoundary':'Exact disassembly of the SHA-pinned native shadowoverlay pixel shader. This proves shader declarations/instructions only. The Technique independently binds its material sampler argument to sampler.feedbackSampler. This stage does not identify the engine object behind feedbackSampler, renderer-global Material storage, pass scheduling, render-target lifetime, or high-level visual semantics unless those follow directly from the disassembled instructions.'
+          }
+          pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_PIXEL_SHADER_DISASSEMBLY_EVIDENCE_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload exact disassembly evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
