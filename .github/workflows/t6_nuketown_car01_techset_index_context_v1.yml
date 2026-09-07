@@ -30,7 +30,12 @@ jobs:
           import json
           from pathlib import Path
           import t6_retail_world_formats_45_proof_v1 as h
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable,scan_required_xmodels
           d=Path('/tmp/map.expanded').read_bytes();blocks,assets=h.front(d)
+          table=parse_top_level_xasset_table(d);prefix=walk_map_prefix_stringtable(d,table)
+          ps=int(prefix['sourceEnd']);print('PREFIX_END',ps,'HEX',d[ps:ps+192].hex())
+          recs=scan_required_xmodels(d,ps,3,prefix['logicalToText']);print('FIRST_XMODELS',[(r['fixedSourceStart'],r['name']) for r in recs])
           q7=[q for q,(t,p) in enumerate(assets) if t==7]
           targets=[14,60,488]
           print('TYPE7_INDICES',json.dumps(q7))
@@ -38,5 +43,5 @@ jobs:
             print('TARGET',q,'rank_all_type7',q7.index(q),'context',[(i,assets[i][0],f'0x{assets[i][1]:08X}') for i in range(max(0,q-8),min(len(assets),q+9))])
           scans=h.scan_tech(d,blocks,63150420)
           print('FOLLOWING_NAME_SCANS',len(scans))
-          for i,r in enumerate(scans):print('SCAN',i,r['start'],r['fmt'],r['name'])
+          for i,r in enumerate(scans[:20]):print('SCAN',i,r['start'],r['fmt'],r['name'],'PREHEX',d[r['start']-16:r['start']+168].hex())
           PY
