@@ -33,8 +33,10 @@ def main() -> int:
     if manifest.get("format") != MANIFEST_FORMAT:
         raise ValueError(f"unexpected population manifest format {manifest.get('format')!r}")
 
-    available = [z for z in manifest.get("zones", []) if z.get("sourceAvailable")]
-    unavailable = [z for z in manifest.get("zones", []) if not z.get("sourceAvailable")]
+    manifest_zones = manifest.get("zones", [])
+    available = [z for z in manifest_zones if z.get("sourceAvailable")]
+    unavailable = [z for z in manifest_zones if not z.get("sourceAvailable")]
+    overlaps = [z for z in manifest_zones if z.get("overlappingDepotOwnership")]
     expected_paths = {z["path"] for z in available}
     if len(expected_paths) != len(available):
         raise ValueError("population manifest contains duplicate source-available paths")
@@ -110,10 +112,12 @@ def main() -> int:
         "scope": "Steam English retail FastFile catalog, source-available subset only",
         "populationManifestFormat": MANIFEST_FORMAT,
         "catalog": {
-            "declaredUniqueFastFilePaths": len(manifest.get("zones", [])),
+            "declaredUniqueFastFilePaths": len(manifest_zones),
             "sourceAvailablePaths": len(available),
             "sourceUnavailablePaths": len(unavailable),
             "missingAvailableReports": missing_reports,
+            "overlappingDepotPathsStillRequiringByteIdentityClosure": len(overlaps),
+            "overlappingDepotPaths": sorted(z["path"] for z in overlaps),
         },
         "availableSourcePopulation": {
             "reportedZones": len(reports),
@@ -127,6 +131,7 @@ def main() -> int:
             "A zone is closed only when its per-zone v2 native XModel identity adapter closes all source-consuming endpoints, inline/packed name identities, and zero-source native identities.",
             "The available-corpus XModel total is a per-zone population count and is not a global unique-identity count; repeated XModels across zones remain repeated here.",
             "The source-unavailable catalog paths remain explicit blockers. Closing every available zone does not establish complete English-retail XModel population until those source bytes are recovered and audited.",
+            "The retained multi-depot overlap paths remain explicit byte-identity blockers. Auditing the current flat-R2 bytes does not prove that every historical owning depot contained byte-identical FastFiles.",
             "This aggregate makes no character classification, animation semantic, material, texture, TechniqueSet, shader, or export-fidelity claim.",
         ],
     }
