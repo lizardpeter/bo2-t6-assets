@@ -1,0 +1,166 @@
+name: T6 MP player body geometry export v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-mp-player-body-geometry-export-v1.yml'
+      - 'tools/t6_mp_player_body_geometry_export_v1.py'
+      - 'tools/t6_mp_player_body_nested_closure_v1.py'
+      - 'tools/t6_xmodel_mesh_normalize_v1.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v2.py'
+      - 'tools/t6_xanim_skinned_gltf_export_v4.py'
+      - 'tools/t6_xanim_gltf_export_v3.py'
+      - 'tools/t6_xanim_gltf_export_v2.py'
+      - 'tools/t6_xanim_rigid_gltf_export_v3.py'
+      - 'tools/t6_xanim_quaternion_semantics.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker_v3.py'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/bo2_t6_fastfile_v2.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_IDENTITY_RUN_ID: '34164196686'
+
+jobs:
+  export-30-bodies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile and run exporter self-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_mp_player_body_geometry_export_v1.py \
+            tools/t6_xmodel_mesh_normalize_v1.py \
+            tools/t6_xmodel_skeleton_normalize_v2.py \
+            tools/t6_xanim_skinned_gltf_export_v4.py
+          PYTHONPATH=tools python3 tools/t6_mp_player_body_geometry_export_v1.py --self-test
+
+      - name: Download already-closed native XModel identity reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: T6_NATIVE_XMODEL_IDENTITY_SHARD_*
+          path: /tmp/identity-results
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          run-id: ${{ env.SOURCE_IDENTITY_RUN_ID }}
+
+      - name: Fetch and exactly expand the six proven faction FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/faction-ff /tmp/expanded /tmp/proof /tmp/player-bodies
+          python3 - <<'PY' > /tmp/factions.tsv
+          import json
+          p=json.load(open('manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json'))
+          assert p['format']=='t6-mp-player-body-faction-corpus-checkpoint-v1'
+          assert len(p['sources'])==6
+          for zone, hashes in sorted(p['sources'].items()):
+              assert isinstance(hashes,list) and len(hashes)==2
+              print(zone, hashes[0], hashes[1], sep='\t')
+          PY
+          while IFS=$'\t' read -r zone compressed_sha expanded_sha; do
+            echo "=== ${zone} ==="
+            ff="/tmp/faction-ff/${zone}.ff"
+            expanded="/tmp/expanded/${zone}.expanded"
+            curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 \
+              -o "$ff" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${compressed_sha}  ${ff}" | sha256sum -c -
+            python3 tools/bo2_t6_fastfile_v2.py decrypt "$ff" \
+              -o "$expanded" --audit "/tmp/proof/${zone}_fastfile_audit.json"
+            echo "${expanded_sha}  ${expanded}" | sha256sum -c -
+          done < /tmp/factions.tsv
+
+      - name: Export all 30 proven player bodies at all four LODs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_mp_player_body_geometry_export_v1.py \
+            --body-corpus manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json \
+            --identity-results-root /tmp/identity-results \
+            --expanded-root /tmp/expanded \
+            --out-root /tmp/player-bodies \
+            --audit /tmp/proof/T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V1.json \
+            --require-closed
+
+      - name: Reparse every GLB and enforce portable proof boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from t6_mp_player_body_geometry_export_v1 import parse_glb
+          audit=json.load(open('/tmp/proof/T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V1.json'))
+          assert audit['format']=='t6-mp-player-body-geometry-export-v1'
+          assert audit['bodyCount']==30
+          assert audit['glbCount']==120
+          assert all(audit['gates'].values()), audit['gates']
+          files=sorted(Path('/tmp/player-bodies').rglob('*.glb'))
+          assert len(files)==120, len(files)
+          for p in files:
+              js,binbuf=parse_glb(p.read_bytes())
+              assert len(js.get('skins',[]))==1, p
+              assert len(js['skins'][0]['joints'])==102, p
+              assert 'animations' not in js, p
+              for forbidden in ('materials','textures','images','samplers'):
+                  assert forbidden not in js, (p,forbidden)
+              for m in js.get('meshes',[]):
+                  for prim in m.get('primitives',[]):
+                      attrs=prim.get('attributes') or {}
+                      assert 'COLOR_0' not in attrs, p
+                      assert all(k in attrs for k in ('POSITION','NORMAL','TEXCOORD_0','JOINTS_0','WEIGHTS_0')), (p,attrs)
+              assert js['buffers'][0]['byteLength']==len(binbuf), p
+          print(json.dumps({'glbsReparsed':len(files),'skins102':len(files),'color0':0,'portableMaterials':0},indent=2))
+          PY
+
+      - name: Prove deterministic SEAL6 SMG regeneration
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/repeat-player-body
+          mkdir -p /tmp/repeat-player-body
+          PYTHONPATH=tools python3 tools/t6_mp_player_body_geometry_export_v1.py \
+            --body-corpus manifests/nonmap/retail/mp_player_body_faction_corpus_checkpoint_v1.json \
+            --identity-results-root /tmp/identity-results \
+            --expanded-root /tmp/expanded \
+            --out-root /tmp/repeat-player-body \
+            --audit /tmp/proof/T6_MP_PLAYER_BODY_SEAL6_SMG_REPEAT_V1.json \
+            --only-name c_usa_mp_seal6_smg_fb \
+            --require-closed
+          for lod in 0 1 2 3; do
+            a="/tmp/player-bodies/c_usa_mp_seal6_smg_fb/c_usa_mp_seal6_smg_fb_lod${lod}.glb"
+            b="/tmp/repeat-player-body/c_usa_mp_seal6_smg_fb/c_usa_mp_seal6_smg_fb_lod${lod}.glb"
+            cmp "$a" "$b"
+            sha256sum "$a" "$b"
+          done
+
+      - name: Upload authoritative 30-body geometry/skeleton pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V1
+          path: |
+            /tmp/player-bodies/**/*.glb
+            /tmp/proof/T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V1.json
+            /tmp/proof/T6_MP_PLAYER_BODY_SEAL6_SMG_REPEAT_V1.json
+            /tmp/proof/*_fastfile_audit.json
+            /tmp/factions.tsv
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
