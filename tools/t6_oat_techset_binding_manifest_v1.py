@@ -169,11 +169,16 @@ def parse_pass(lines: list[tuple[int, str]], root: Path) -> tuple[dict[str, Any]
                 shader['binary'] = None
                 errors.append(f'line {lineno}: missing shader binary {bin_path.relative_to(root).as_posix()}')
             shaders.append(shader)
-            # The shader's opening brace is the next syntax line; track by
-            # current nesting depth and consider assignments after declaration
-            # to belong to the most recently declared shader until its block
-            # closes.
-            shader_stack.append({'shader': shader, 'declaration_depth': depth})
+            # OAT emits the opening brace on the following line. Keep the
+            # declaration alive until that block has actually opened and then
+            # returned to the declaration depth. The v1 parser originally
+            # popped here immediately because the declaration line itself does
+            # not change brace depth, dropping every shader argument.
+            shader_stack.append({
+                'shader': shader,
+                'declaration_depth': depth,
+                'block_started': False,
+            })
 
         assign = ASSIGN_RE.match(raw)
         if assign and shader_stack:
@@ -199,7 +204,14 @@ def parse_pass(lines: list[tuple[int, str]], root: Path) -> tuple[dict[str, Any]
                 shader_stack[-1]['shader']['arguments'].append(arg)
 
         depth += raw.count('{') - raw.count('}')
-        while shader_stack and depth <= shader_stack[-1]['declaration_depth']:
+        for entry in shader_stack:
+            if depth > entry['declaration_depth']:
+                entry['block_started'] = True
+        while (
+            shader_stack
+            and shader_stack[-1]['block_started']
+            and depth <= shader_stack[-1]['declaration_depth']
+        ):
             shader_stack.pop()
 
     if len(state_maps) != 1:
