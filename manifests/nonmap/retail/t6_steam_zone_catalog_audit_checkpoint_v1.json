@@ -1,0 +1,58 @@
+{
+  "format": "t6-steam-zone-catalog-audit-checkpoint-v1",
+  "catalog": "manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json",
+  "producer": "tools/t6_steam_zone_catalog_audit_v1.py",
+  "workflow": {
+    "path": ".github/workflows/t6-steam-zone-catalog-audit.yml",
+    "runId": 34152608694,
+    "jobId": 101837823479,
+    "headCommit": "d7e499b96b98abf499040c7822ec078e05089039",
+    "conclusion": "success"
+  },
+  "artifact": {
+    "id": 10029869308,
+    "name": "T6_STEAM_ZONE_CATALOG_AUDIT_V1",
+    "bytes": 4767,
+    "digest": "sha256:c973382e68ff7a09e863f1e4e87b2a67d39754e7c8f403ba1fed2612d28e7c92"
+  },
+  "sourceCatalog": {
+    "depots": 12,
+    "fastFilePaths": 217,
+    "catalogStructurallyValid": true,
+    "completeForClaimedBaseEnglishNuketownScope": true,
+    "wholeRetailComplete": false
+  },
+  "r2MirrorProbe": {
+    "pathsProbed": 217,
+    "present": 135,
+    "unavailable": 82,
+    "missingProbeRows": 0,
+    "unknownProbeRows": 0,
+    "malformedRows": 0,
+    "completeForCatalog": false,
+    "unavailableClassification": "All 82 unavailable paths are zone/all single-player/common-SP content from the Steam SP depot; no MP, Zombies, English overlay, shared MP-map, or Nuketown path in this v1 catalog was reported unavailable."
+  },
+  "retainedSeedCoverage": {
+    "seedZones": 18,
+    "matched": 16,
+    "outsideV1Catalog": ["zone/all/zm_prison.ff", "zone/all/zm_tomb.ff"],
+    "reason": "Mob of the Dead and Origins are Uprising/Apocalypse Zombies DLC and are intentionally outside the base-English+Nuketown v1 catalog."
+  },
+  "gates": {
+    "catalogStructurallyValid": true,
+    "claimedScopeCatalogComplete": true,
+    "r2MirrorCompleteForCatalog": false,
+    "wholeRetailCatalogComplete": false
+  },
+  "proofBoundary": [
+    "SteamDB mirrors Steam depot manifests and is not Valve; source-path enumeration is not raw-file hash proof.",
+    "A flat R2 404 proves only that the path is absent from https://r2.houseofkublai.com/bo2 at that location; it does not prove absence from other retained source containers such as pluto_t6_full_game.zip.",
+    "This checkpoint does not promote any new XAnimParts or XModel population completeness claim.",
+    "The independent 24,855 common_mp + patch_mp XAnimParts regression boundary and green SEAL6 q10/q17 native TechniqueSet closure remain unchanged."
+  ],
+  "next": [
+    "Extend the Steam source catalog through Revolution, Uprising, Vengeance, and Apocalypse MP/Zombies plus English depots.",
+    "Audit the public pluto_t6_full_game.zip central directory as a second source-container availability proof for the Steam FF catalog.",
+    "Only after source-corpus closure, run exact per-zone XAsset/XAnim/XModel population accounting."
+  ]
+}
