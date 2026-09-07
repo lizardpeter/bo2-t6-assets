@@ -1,10 +1,11 @@
-name: T6 shadowoverlay shader disassembly v3
+name: T6 shadowoverlay shader semantics v4
 
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/t6_shadowoverlay_shader_disassembly_v1.yml'
+      - 'tools/t6_shadowoverlay_shader_semantics_v1.py'
 
 permissions:
   contents: read
@@ -71,80 +72,34 @@ jobs:
           TOOL=$(find /tmp/dxbc-spirv/builddir -type f -name dxbc_disasm -perm -111 | head -1)
           test -n "$TOOL"
           realpath "$TOOL" > /tmp/dxbc_disasm_path
-          printf 'repository=https://github.com/doitsujin/dxbc-spirv.git\ncommit=%s\n' "$DXBC_SPIRV_COMMIT" \
-            > /tmp/proof/dxbc_disassembler_source.txt
+          printf 'repository=https://github.com/doitsujin/dxbc-spirv.git\ncommit=%s\n' "$DXBC_SPIRV_COMMIT" > /tmp/proof/dxbc_disassembler_source.txt
           sha256sum "$TOOL" | tee /tmp/proof/dxbc_disassembler_sha256.txt
-          "$TOOL" --help > /tmp/proof/dxbc_disassembler_help.txt 2>&1 || true
 
-      - name: Disassemble exact shadowoverlay shaders
+      - name: Disassemble exact native shaders
         shell: bash
         run: |
           set -euo pipefail
           TOOL=$(cat /tmp/dxbc_disasm_path)
-          "$TOOL" "/tmp/source/$PS_REL" > /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm \
-            2> /tmp/proof/pimp_shader_trivial_3981dec1.ps.stderr.txt
-          "$TOOL" "/tmp/source/$VS_REL" > /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm \
-            2> /tmp/proof/pimp_shader_hdr_933ab43.vs.stderr.txt
+          "$TOOL" "/tmp/source/$PS_REL" > /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm 2> /tmp/proof/pimp_shader_trivial_3981dec1.ps.stderr.txt
+          "$TOOL" "/tmp/source/$VS_REL" > /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm 2> /tmp/proof/pimp_shader_hdr_933ab43.vs.stderr.txt
           test -s /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm
           test -s /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm
           sha256sum /tmp/proof/*.d3dasm | tee /tmp/proof/disassembly_sha256.txt
-          cat /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm
 
-      - name: Extract bounded pixel-shader execution evidence
+      - name: Close exact pixel-shader arithmetic
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json,re,pathlib
-          p=pathlib.Path('/tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm')
-          text=p.read_text(encoding='utf-8',errors='strict')
-          lines=text.splitlines()
-          executable=[]
-          declarations=[]
-          for line in lines:
-              s=line.strip()
-              if not s or s.startswith('//'):
-                  continue
-              if re.match(r'^(ps_|vs_|gs_|hs_|ds_|cs_)',s):
-                  continue
-              if s.startswith('dcl_'):
-                  declarations.append(s)
-              else:
-                  executable.append(s)
-          doc={
-              'format':'t6-shadowoverlay-pixel-shader-disassembly-evidence-v1',
-              'source':{
-                  'shader':'pimp_shader_trivial_3981dec1.hlsl',
-                  'bytes':5600,
-                  'sha256':'2ef171c239a7c98542a961252362761828747bd288ee21e3fde542d48aa5de0e',
-                  'nativeTechnique':'pimp_technique_trivial_7bf1260',
-                  'nativeArgument':'colorMapSampler = sampler.feedbackSampler',
-                  'sourceRun':34167293973,
-                  'sourceArtifact':'T6_SHADOWOVERLAY_ZM_STARTUP_MATERIAL_V1',
-                  'sourceArtifactDigest':'sha256:3746d02226be11978f2e4c915541bf1cbc73f4476cf102f2284a502fe5b9412f'
-              },
-              'disassembler':{
-                  'repository':'https://github.com/doitsujin/dxbc-spirv.git',
-                  'commit':'dcd27e1dfdb579e978fda948be5ff67be7b7c8b7'
-              },
-              'declarations':declarations,
-              'executableLines':executable,
-              'summary':{
-                  'declarationCount':len(declarations),
-                  'executableLineCount':len(executable),
-                  'sampleInstructionCount':sum(1 for x in executable if re.search(r'\bsample(?:_[a-z]+)?\b',x,re.I)),
-                  'storeOrOutputCount':sum(1 for x in executable if re.search(r'\b(?:mov|store_[a-z]+)\b',x,re.I)),
-              },
-              'proofBoundary':'Exact disassembly of the SHA-pinned native shadowoverlay pixel shader. This proves shader declarations/instructions only. The Technique independently binds its material sampler argument to sampler.feedbackSampler. This stage does not identify the engine object behind feedbackSampler, renderer-global Material storage, pass scheduling, render-target lifetime, or high-level visual semantics unless those follow directly from the disassembled instructions.'
-          }
-          pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_PIXEL_SHADER_DISASSEMBLY_EVIDENCE_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
-          PY
+          PYTHONPATH=tools python3 tools/t6_shadowoverlay_shader_semantics_v1.py \
+            --pixel-cso "/tmp/source/$PS_REL" \
+            --disasm /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm \
+            --out /tmp/proof/T6_SHADOWOVERLAY_SHADER_SEMANTICS_V1.json
+          cat /tmp/proof/T6_SHADOWOVERLAY_SHADER_SEMANTICS_V1.json
 
-      - name: Upload exact disassembly evidence
+      - name: Upload exact shader semantics evidence
         uses: actions/upload-artifact@v4
         with:
-          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V3
+          name: T6_SHADOWOVERLAY_SHADER_SEMANTICS_V1
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
