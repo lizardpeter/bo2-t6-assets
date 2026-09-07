@@ -1,0 +1,74 @@
+name: T6 Steam English population input manifest v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-steam-english-population-input-manifest-v1.yml'
+      - 'tools/t6_steam_english_population_manifest_v1.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
+      - 'manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate fail-closed 297-path population input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 -m py_compile tools/t6_steam_english_population_manifest_v1.py
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - name: Enforce retained proof boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json'))
+          assert p['format']=='t6-steam-english-population-input-manifest-v1'
+          assert p['catalog']['depotFfEntries']==303
+          assert p['catalog']['uniqueFfPaths']==297
+          assert p['catalog']['overlappingUniquePaths']==6
+          assert len(p['zones'])==297
+          assert p['sourceAvailability']['present']==215
+          assert p['sourceAvailability']['unavailable']==82
+          assert sum(z['sourceAvailable'] for z in p['zones'])==215
+          assert sum(not z['sourceAvailable'] for z in p['zones'])==82
+          assert sum(z['overlappingDepotOwnership'] for z in p['zones'])==6
+          assert p['gates']['catalogStructurallyClosed'] is True
+          assert p['gates']['englishRetailFfCatalogComplete'] is True
+          assert p['gates']['sourceContainerUnionComplete'] is False
+          assert p['gates']['overlapByteIdentityComplete'] is False
+          assert p['gates']['populationInputIdentityComplete'] is False
+          assert p['gates']['wholeRetailAllLanguagesCatalogComplete'] is False
+          assert p['corpusClaim']['complete'] is False
+          missing=[z['path'] for z in p['zones'] if not z['sourceAvailable']]
+          assert len(missing)==82
+          print(json.dumps({
+            'catalog':p['catalog'],
+            'sourceAvailability':p['sourceAvailability'],
+            'gates':p['gates'],
+            'firstMissing':missing[:10],
+          },indent=2,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1
+          path: /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+          if-no-files-found: error
+          retention-days: 14
