@@ -1,0 +1,73 @@
+name: T6 Steam English available native XModel name catalog v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-steam-english-available-native-xmodel-name-catalog-v1.yml'
+      - 'tools/t6_native_xmodel_name_catalog_v1.py'
+      - 'tools/t6_steam_english_population_manifest_v1.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
+      - 'manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_IDENTITY_RUN_ID: '34164196686'
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild authoritative population-input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/all-results
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - name: Download already-closed 16 shard reports from authoritative identity run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: T6_NATIVE_XMODEL_IDENTITY_SHARD_*
+          path: /tmp/all-results
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          run-id: ${{ env.SOURCE_IDENTITY_RUN_ID }}
+
+      - name: Build exact native-name/provenance catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          find /tmp/all-results -type f -name '*.xmodel-identity.json' | sort > /tmp/proof/report_paths.txt
+          test "$(wc -l < /tmp/proof/report_paths.txt)" -eq 215
+          python3 tools/t6_native_xmodel_name_catalog_v1.py \
+            --population-manifest /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json \
+            --results-root /tmp/all-results \
+            --expect-available-zones 215 \
+            --expect-occurrences 22255 \
+            --out /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_NAME_CATALOG_V1.json \
+            --require-closed
+
+      - name: Upload exact native XModel name catalog
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_NAME_CATALOG_V1
+          path: |
+            /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+            /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_NAME_CATALOG_V1.json
+            /tmp/proof/report_paths.txt
+          if-no-files-found: warn
+          retention-days: 14
