@@ -39,27 +39,33 @@ jobs:
           d=Path('/tmp/map.expanded').read_bytes()
           blocks,assets,_=parse_front(d)
 
-          # Instrumented OpenAssetTools source-block cursor, converted to absolute
-          # expanded-stream positions. These values are the authority for source
-          # consumption; no custom top-level cursor is used to derive them.
-          oat={
-              4:(515029,515626),
-              5:(515626,516473),
-              6:(516473,517164),
-              7:(517164,517830),
-              8:(517830,518394),
-              9:(518394,519740),
-              10:(519740,521362),
-              11:(521362,522260),
-              12:(522260,523070),
-              13:(523070,523946),
-              14:(523946,524159),
+          # OpenAssetTools reports source-block-relative positions.  The source
+          # block begins at absolute expanded-stream offset 499393, proven by the
+          # q3 TechniqueSet ending at 499456 while OAT reports q4 start=63.
+          OAT_SOURCE_BLOCK_BASE=499393
+          oat_rel={
+              4:(63,660),
+              5:(660,1507),
+              6:(1507,2198),
+              7:(2198,2864),
+              8:(2864,3428),
+              9:(3428,4774),
+              10:(4774,6396),
+              11:(6396,7294),
+              12:(7294,8104),
+              13:(8104,8980),
+              14:(8980,9193),
           }
+          oat={q:(OAT_SOURCE_BLOCK_BASE+s,OAT_SOURCE_BLOCK_BASE+e) for q,(s,e) in oat_rel.items()}
+          assert oat[4]==(499456,500053)
+          assert oat[14]==(508373,508586)
+
           rows=[]
           for q in range(4,15):
               s,e=oat[q]
               typ=int(assets[q]['type'])
-              row={'xassetIndex':q,'xassetType':typ,'sourceStart':s,'sourceEnd':e,'sourceBytes':e-s}
+              row={'xassetIndex':q,'xassetType':typ,'sourceStart':s,'sourceEnd':e,'sourceBytes':e-s,
+                   'oatRelativeStart':oat_rel[q][0],'oatRelativeEnd':oat_rel[q][1]}
               print(f'q{q}: type={typ} OAT={s}->{e} delta={e-s}')
               if typ==5:
                   w=XModelWalker(d,s).walk_xmodel()
@@ -73,13 +79,14 @@ jobs:
               elif typ==7:
                   row['kind']='TECHNIQUE_SET'
                   fixed=d[s:s+152]
+                  assert len(fixed)==152
                   name_raw=struct.unpack_from('<I',fixed,0)[0]
                   fmt=fixed[4]
                   reserved=fixed[5:8]
                   refs=list(struct.unpack_from('<36I',fixed,8))
                   nz=[{'slot':i,'rawHex':f'0x{raw:08X}'} for i,raw in enumerate(refs) if raw]
                   row.update({
-                      'fixedBytesAssumed':152,
+                      'fixedBytes':152,
                       'nameRaw':f'0x{name_raw:08X}',
                       'worldVertFormat':fmt,
                       'reservedHex':reserved.hex(),
@@ -98,9 +105,9 @@ jobs:
           proof={
               'format':'t6-nuketown-q4-q14-oat-endpoint-audit-v1',
               'expandedSha256':'7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505',
-              'oatSourceBlockBase':514966,
+              'oatSourceBlockBase':OAT_SOURCE_BLOCK_BASE,
               'rows':rows,
-              'result':'All type-5 XModels are independently checked against OAT. TechniqueSets are dumped at OAT-authoritative boundaries without invoking the provisional TechniqueSet parser.',
+              'result':'OAT source-relative positions are converted with the proven 499393 base. Every type-5 XModel is independently checked against the same absolute endpoint; TechniqueSets are dumped only at OAT-authoritative boundaries.',
           }
           Path('/tmp/q4_q14_audit.json').write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
           PY
