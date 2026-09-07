@@ -51,6 +51,63 @@ jobs:
             /tmp/seal6_universal/faction_seals_mp.ff \
             --output /tmp/seal6_universal/faction_seals_mp.ff.expanded
 
+      - name: Diagnose 104 vs 112 byte Material layouts from exact names
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, struct
+          from pathlib import Path
+
+          data = Path('/tmp/seal6_universal/faction_seals_mp.ff.expanded').read_bytes()
+          proof = json.load(open('manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json', encoding='utf-8'))
+          names = []
+          for x in proof.get('surfaceMaterialSequence', []):
+              n = x[1:] if x.startswith(',') else x
+              if n not in names:
+                  names.append(n)
+          full = json.load(open('manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json', encoding='utf-8'))
+          for x in (full.get('bodyMaterials') or {}).get('directInline', []):
+              n = str(x.get('name') or '')
+              n = n[1:] if n.startswith(',') else n
+              if n and n not in names:
+                  names.append(n)
+
+          def ptrs(start, off):
+              if start < 0 or start + off + 20 > len(data): return None
+              return [f'0x{x:08X}' for x in struct.unpack_from('<5I', data, start + off)]
+
+          rows=[]
+          for name in names:
+              variants=[name]
+              if not name.startswith(','): variants.append(','+name)
+              hits=[]
+              for variant in variants:
+                  needle=variant.encode('ascii')+b'\0'
+                  pos=0
+                  while True:
+                      at=data.find(needle,pos)
+                      if at<0: break
+                      for fixed in (104,112):
+                          st=at-fixed
+                          if st>=0:
+                              hits.append({
+                                  'serializedName':variant,
+                                  'nameOffset':at,
+                                  'fixedBytes':fixed,
+                                  'candidateStart':st,
+                                  'namePtr':f'0x{struct.unpack_from("<I",data,st)[0]:08X}',
+                                  'counts76':list(data[st+76:st+82]),
+                                  'counts84':list(data[st+84:st+90]),
+                                  'ptrs84':ptrs(st,84),
+                                  'ptrs92':ptrs(st,92),
+                                  'headHex':data[st:st+112].hex(),
+                              })
+                      pos=at+1
+              rows.append({'material':name,'candidates':hits})
+          print(json.dumps(rows,indent=2))
+          PY
+
       - name: Rebuild independent exact Material to TechniqueSet proof
         shell: bash
         run: |
