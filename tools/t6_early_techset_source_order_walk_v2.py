@@ -5,12 +5,13 @@ V1 deliberately failed closed when an FxElemVisuals Material handle used a
 FOLLOWING/INSERT sentinel. Retail faction_seals_mp reaches that case in q8.
 T6 ZoneCode marks this union member as a Material asset reference, so an inline
 handle must invoke the ordinary Material loader at the current source cursor.
-This adapter changes only that one dispatch rule and delegates all other source
-consumption to v1.
+This adapter changes only that dispatch rule, delegates all other source
+consumption to v1, and hashes every source-derived top-level serialized extent.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -49,10 +50,16 @@ def install() -> None:
 def walk(expanded: Path, start_asset: int, end_asset: int, targets: set[int]) -> dict[str, Any]:
     install()
     out = v1.walk(expanded, start_asset, end_asset, targets)
+    data = expanded.read_bytes()
+    for row in out["rows"]:
+        a = int(row["sourceStart"])
+        b = int(row["sourceEnd"])
+        row["serializedSha256"] = hashlib.sha256(data[a:b]).hexdigest()
     out["format"] = "t6-early-techset-source-order-walk-v2"
     out["v2Rule"] = (
         "FxElemVisuals material FOLLOWING/INSERT handles dispatch Cursor.material() "
-        "at the exact current source cursor; packed/null handles consume no source bytes."
+        "at the exact current source cursor; packed/null handles consume no source bytes. "
+        "Every replayed top-level serialized extent is SHA-256 hashed from the retail expanded stream."
     )
     return out
 
@@ -77,6 +84,7 @@ def main() -> int:
                 "q": r["xassetIndex"],
                 "start": r["sourceStart"],
                 "end": r["sourceEnd"],
+                "sha256": r["serializedSha256"],
                 "name": ((r.get("node") or {}).get("name") or {}).get("value"),
             }
             for r in out["targetTechniqueSets"]
