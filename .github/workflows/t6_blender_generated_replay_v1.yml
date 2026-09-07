@@ -1,0 +1,48 @@
+name: T6 Blender generated replay v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_blender_symbolic_dag_nodes_v1.py'
+      - 'tools/t6_blender_symbolic_dag_nodes_v2.py'
+      - 'tools/t6_blender_symbolic_dag_nodes_v3.py'
+      - 'tools/t6_blender_generated_retail_output_v1.py'
+      - 'tools/t6_blender_generated_replay_v1.py'
+      - 'tools/test_t6_blender_generated_replay_v1.py'
+      - '.github/workflows/t6_blender_generated_replay_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  blender:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq blender >/dev/null
+          blender --version | head -3
+      - name: Compile v51 replay contract in Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools blender --background \
+            --python tools/test_t6_blender_generated_replay_v1.py \
+            2>&1 | tee /tmp/t6_generated_replay.log
+          grep -F 'T6_BLENDER_GENERATED_REPLAY_TEST=' /tmp/t6_generated_replay.log
+          test -s /tmp/T6_BLENDER_GENERATED_REPLAY_V1_TEST.blend
+          test -s /tmp/T6_BLENDER_GENERATED_REPLAY_V1_TEST.json
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_BLENDER_GENERATED_REPLAY_V1_TEST
+          path: |
+            /tmp/T6_BLENDER_GENERATED_REPLAY_V1_TEST.blend
+            /tmp/T6_BLENDER_GENERATED_REPLAY_V1_TEST.json
+            /tmp/t6_generated_replay.log
+          if-no-files-found: error
