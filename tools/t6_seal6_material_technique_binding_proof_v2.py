@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
-"""Close all SEAL6 Material -> MaterialTechniqueSet bindings from retained retail proof.
+"""Close SEAL6 Material -> MaterialTechniqueSet bindings from retail bytes.
 
-v1 intentionally consumed only the packed-owner ledger. That ledger retains exact
-raw Material starts for packed-reuse owners, but the target SMG XModel also owns
-four direct-inline Materials. Three of those happen to be duplicated by packed
-owners elsewhere; the iris is not, so its raw start is absent from that ledger.
+The packed-owner ledger was produced while older tooling treated the T6 PC32
+Material fixed record as 104 bytes.  Direct-inline evidence was later recovered
+with the source-closed 112-byte layout.  Therefore a retained packed-owner
+`ownerMaterialRawStart` is treated only as a legacy near-start, never blindly as
+an authoritative definition start.
 
-The earlier exact faction_seals_mp full-player proof already retains every direct
-inline Material's serialized start, byte length and SHA-256. This adapter verifies
-that retained byte slice against the exact expanded retail FastFile, supplements
-only the missing direct-inline owner starts in a transient copy of the ledger,
-and delegates the actual Material::techniqueSet pointer proof to v1.
+For every retained owner row this revision tests only the legacy start and its
++/-8-byte layout-rebase candidates.  A candidate is promoted only when the exact
+112-byte Material parser validates the fixed fields and the serialized inline
+name at candidate+112 equals the already-proven Material identity.  The result
+must be unique.  Direct-inline serialized intervals remain SHA-256 gated.
 
-This revision also replaces v1's stale 104-byte Material fixed-record view with
-the source-closed T6 PC32 112-byte layout used by the generic top-level walker on
-main: counts at +84..+86 and the five child pointers at +92.  The compatibility
-patch is local to this proof process; it does not weaken any pointer validation.
-
-No Material start, TechniqueSet identity, texture role, or shader behavior is
-chosen from naming, surface order, adjacency, or appearance.
+TechniqueSet identity is still derived only from Material::techniqueSet packed
+VIRTUAL pointer resolution through the type-7 XAsset pointer-field lattice.
 """
 from __future__ import annotations
 
@@ -36,6 +32,8 @@ import t6_seal6_material_technique_binding_proof_v1 as v1
 MATERIAL_FIXED_BYTES = 112
 MATERIAL_COUNTS_OFFSET = 84
 MATERIAL_CHILD_POINTERS_OFFSET = 92
+LEGACY_FIXED_BYTES = 104
+LEGACY_REBASE_DELTA = MATERIAL_FIXED_BYTES - LEGACY_FIXED_BYTES
 
 
 class ProofError(RuntimeError):
@@ -64,7 +62,7 @@ def parse_start(row: dict) -> int:
 
 
 def material_fixed_112(data: bytes, start: int, blocks: tuple[int, ...], expected_name: str) -> dict:
-    """Read only source-closed fields required for Material -> TechniqueSet proof."""
+    """Read source-closed fields required for Material -> TechniqueSet proof."""
     if start < 0 or start + MATERIAL_FIXED_BYTES > len(data):
         raise v1.ProofError(f"Material fixed record out of range at {start}")
     fixed = data[start:start + MATERIAL_FIXED_BYTES]
@@ -76,7 +74,7 @@ def material_fixed_112(data: bytes, start: int, blocks: tuple[int, ...], expecte
     texture_count = fixed[MATERIAL_COUNTS_OFFSET]
     constant_count = fixed[MATERIAL_COUNTS_OFFSET + 1]
     state_count = fixed[MATERIAL_COUNTS_OFFSET + 2]
-    if not (0 < texture_count <= 64 and constant_count <= 64 and 0 < state_count <= 64):
+    if not (texture_count <= 64 and constant_count <= 64 and state_count <= 64):
         raise v1.ProofError(
             f"{expected_name}: invalid Material cardinalities {texture_count}/{constant_count}/{state_count}"
         )
@@ -88,8 +86,6 @@ def material_fixed_112(data: bytes, start: int, blocks: tuple[int, ...], expecte
         raise v1.ProofError(
             f"{expected_name}: TechniqueSet pointer is not packed VIRTUAL: 0x{technique_raw:08x}"
         )
-    # Child allocation modes are decoded, but only the TechniqueSet pointer is
-    # used to establish identity. Thermal Material may legitimately be non-null.
     texture_dec = v1.decode_pointer(texture_ptr, blocks)
     constant_dec = v1.decode_pointer(constant_ptr, blocks)
     state_dec = v1.decode_pointer(state_ptr, blocks)
@@ -122,15 +118,54 @@ def material_fixed_112(data: bytes, start: int, blocks: tuple[int, ...], expecte
     }
 
 
+def normalize_material_start_112(
+    data: bytes,
+    blocks: tuple[int, ...],
+    retained_start: int,
+    expected_name: str,
+) -> dict:
+    """Rebase one legacy near-start onto the unique valid 112-byte Material start."""
+    candidates: list[dict] = []
+    tried: list[dict] = []
+    for start in dict.fromkeys((
+        int(retained_start),
+        int(retained_start) - LEGACY_REBASE_DELTA,
+        int(retained_start) + LEGACY_REBASE_DELTA,
+    )):
+        try:
+            fixed = material_fixed_112(data, start, blocks, expected_name)
+        except (v1.ProofError, ValueError, struct.error) as exc:
+            tried.append({"start": start, "valid": False, "error": str(exc)})
+            continue
+        tried.append({"start": start, "valid": True, "fixedSha256": fixed["fixedSha256"]})
+        candidates.append(fixed)
+    if len(candidates) != 1:
+        raise ProofError(
+            f"{expected_name}: legacy Material start {retained_start} rebases to "
+            f"{len(candidates)} valid 112-byte candidates; tried={tried!r}"
+        )
+    fixed = candidates[0]
+    return {
+        "retainedStart": int(retained_start),
+        "retainedStartHex": f"0x{int(retained_start):X}",
+        "exactStart": int(fixed["start"]),
+        "exactStartHex": f"0x{int(fixed['start']):X}",
+        "delta": int(fixed["start"]) - int(retained_start),
+        "fixed": fixed,
+        "tried": tried,
+        "evidence": (
+            "unique valid source-closed 112-byte Material parse within the legacy +/-8-byte "
+            "layout-rebase window, including exact serialized inline Material identity"
+        ),
+    }
+
+
 def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
     data = expanded.read_bytes()
     digest = sha256_bytes(data)
     if len(data) != v1.EXPECTED_EXPANDED_BYTES or digest != v1.EXPECTED_EXPANDED_SHA256:
         raise ProofError(f"faction_seals_mp expanded identity mismatch: {len(data)} / {digest}")
 
-    # v1's pointer/XAsset/TechniqueSet proof is still useful; only its old Material
-    # field offsets were stale. Patch that reader with the generic source-closed
-    # T6 PC32 layout for this process before any Material is admitted.
     v1.material_fixed = material_fixed_112
 
     ledger = json.loads(owner_ledger.read_text(encoding="utf-8-sig"))
@@ -153,17 +188,36 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
             f"target sequence has {len(target_materials)} unique materials, expected {v1.EXPECTED_MATERIALS}"
         )
 
+    blocks, _assets = v1.parse_front(data)
+    derived = copy.deepcopy(ledger)
+    rebases: list[dict] = []
     have: dict[str, int] = {}
-    for row in ledger.get("uniqueHandleOwners", []):
+    for row in derived.get("uniqueHandleOwners", []):
         name = canonical(str(row.get("materialName") or ""))
-        start = row.get("ownerMaterialRawStart")
-        if not name or start is None:
+        retained = row.get("ownerMaterialRawStart")
+        if not name or retained is None:
             continue
-        start = int(start)
+        normalized = normalize_material_start_112(data, blocks, int(retained), name)
+        exact = int(normalized["exactStart"])
+        row["legacyOwnerMaterialRawStart"] = int(retained)
+        row["ownerMaterialRawStart"] = exact
+        row["ownerMaterialRawStartNormalization"] = {
+            "delta": normalized["delta"],
+            "evidence": normalized["evidence"],
+        }
+        rebases.append({
+            "material": name,
+            "retainedStart": normalized["retainedStart"],
+            "exactStart": exact,
+            "delta": normalized["delta"],
+            "fixedSha256": normalized["fixed"]["fixedSha256"],
+            "serializedName": normalized["fixed"]["serializedName"],
+            "evidence": normalized["evidence"],
+        })
         prev = have.get(name)
-        if prev is not None and prev != start:
-            raise ProofError(f"conflicting retained Material raw starts for {name}")
-        have[name] = start
+        if prev is not None and prev != exact:
+            raise ProofError(f"conflicting normalized Material starts for {name}: {prev} != {exact}")
+        have[name] = exact
 
     missing = sorted(target_materials - set(have))
     direct_rows = {
@@ -174,9 +228,7 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
     if not missing:
         raise ProofError("v2 expected at least one direct-inline owner omission; base ledger already closes all materials")
 
-    blocks, _assets = v1.parse_front(data)
     supplements: list[dict] = []
-    derived = copy.deepcopy(ledger)
     target_model = str((ledger.get("summary") or {}).get("targetModel") or "")
     for name in missing:
         row = direct_rows.get(name)
@@ -204,7 +256,10 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
             "fixedBytes": MATERIAL_FIXED_BYTES,
             "fixedSha256": fixed["fixedSha256"],
             "techniqueSetPointerRaw": fixed["techniqueSetPointerRaw"],
-            "evidence": "exact retained direct-inline Material serialized interval + byte-for-byte SHA-256 verification against current retail expanded stream",
+            "evidence": (
+                "exact retained direct-inline Material serialized interval + byte-for-byte SHA-256 "
+                "verification against current retail expanded stream + valid 112-byte fixed parse"
+            ),
         }
         supplements.append(supplement)
         derived.setdefault("uniqueHandleOwners", []).append({
@@ -235,6 +290,10 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
         b = bound.get(s["material"])
         if b is None or int(b.get("materialRawStart", -1)) != s["materialRawStart"]:
             raise ProofError(f"delegated TechniqueSet proof did not preserve exact start for {s['material']}")
+    for r in rebases:
+        b = bound.get(r["material"])
+        if b is None or int(b.get("materialRawStart", -1)) != r["exactStart"]:
+            raise ProofError(f"delegated TechniqueSet proof did not preserve normalized start for {r['material']}")
 
     out["format"] = "t6-seal6-material-technique-binding-proof-v2"
     out["producer"] = "tools/t6_seal6_material_technique_binding_proof_v2.py"
@@ -252,20 +311,23 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
         "fixedBytes": MATERIAL_FIXED_BYTES,
         "countsOffset": MATERIAL_COUNTS_OFFSET,
         "childPointersOffset": MATERIAL_CHILD_POINTERS_OFFSET,
+        "legacyFixedBytes": LEGACY_FIXED_BYTES,
+        "legacyRebaseDelta": LEGACY_REBASE_DELTA,
         "authority": "source-closed generic T6 PC32 Material walker",
     }
+    out["legacyOwnerStartRebases"] = rebases
     out["directInlineOwnerSupplements"] = supplements
-    out.setdefault("summary", {})["directInlineOwnerSupplements"] = len(supplements)
+    out.setdefault("summary", {})["legacyOwnerStartRebases"] = len(rebases)
+    out["summary"]["legacyOwnerStartsShifted"] = sum(1 for x in rebases if x["delta"] != 0)
+    out["summary"]["directInlineOwnerSupplements"] = len(supplements)
     out["summary"]["all13MaterialStartsExact"] = len(out.get("bindings", [])) == v1.EXPECTED_MATERIALS
     out["summary"]["allTechniqueSetBindingsExact"] = True
     out["proofBoundary"] = (
-        "All Material raw starts are retail-source-derived. Packed/reused starts come from the exact XModel Material-handle owner ledger; "
-        "any missing direct-inline start must come from the retained full-player direct-inline serialized interval and its entire byte slice "
-        "must SHA-256 match the current exact expanded faction_seals_mp stream. The 112-byte Material field layout is the source-closed T6 "
-        "PC32 layout used by the generic top-level walker. TechniqueSet identity is then derived only from the serialized Material::techniqueSet "
-        "packed VIRTUAL pointer, exact type-7 XAsset pointer-field lattice and matching inline MaterialTechniqueSet. Names are used only to join "
-        "two already-exact proof records for the same Material identity, never to search for a raw start or choose a TechniqueSet. Pass arguments "
-        "and shader arithmetic remain a separate decoding stage."
+        "Packed Material identity remains sourced from exact XModel Material-handle alias proof. Legacy packed-owner raw starts are not trusted "
+        "as definition starts: each is rebased only within the 104->112-byte +/-8 window and promoted only when exactly one candidate passes the "
+        "source-closed 112-byte Material parser and serialized inline identity check. Missing direct-inline starts require a retained full serialized "
+        "interval whose complete SHA-256 matches the current expanded retail stream. TechniqueSet identity is then derived only from serialized "
+        "Material::techniqueSet packed VIRTUAL pointer resolution through the exact type-7 XAsset pointer-field lattice."
     )
     return out
 
