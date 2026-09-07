@@ -1,0 +1,113 @@
+name: T6 Nuketown generated Blender capability v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_blender_symbolic_dag_capability_v1.py'
+      - 'tools/t6_nuketown_generated_shader_recipe_recover_v1.py'
+      - 'tools/t6_generated_slot4_final_output_symbolic_v3.py'
+      - 'tools/t6_blender_symbolic_dag_nodes_v2.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_nuketown_generated_blender_capability_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  capability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat_out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+
+      - name: Download and expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/game/zone/all/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+
+      - name: Dump exact map TechniqueSet dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/oat_out /tmp/game/zone/all/mp_nuketown_2020.ff \
+            2>&1 | tee /tmp/proof/oat_techset_dump.log
+          find /tmp/oat_out/techsets -type f -name '*.techset' | sort > /tmp/proof/techsets.txt
+          find /tmp/oat_out/shader_bin -type f -name 'ps_*.cso' | sort > /tmp/proof/pixel_shaders.txt
+          wc -l /tmp/proof/techsets.txt /tmp/proof/pixel_shaders.txt | tee /tmp/proof/oat_counts.txt
+
+      - name: Recover canonical 120/34/34 generated recipes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_generated_shader_recipe_recover_v1.py \
+            --expanded-world /tmp/mp_nuketown_2020.expanded \
+            --oat-root /tmp/oat_out \
+            --out /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V1.json \
+            2>&1 | tee /tmp/proof/recipe_recovery.log
+
+      - name: Rebuild exact final-output DAGs and Blender capability census
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_generated_slot4_final_output_symbolic_v3.py \
+            --recipes /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V1.json \
+            --oat-root /tmp/oat_out \
+            --strict-nuketown \
+            --out /tmp/proof/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_SYMBOLIC_V3.json \
+            2>&1 | tee /tmp/proof/final_output_symbolic.log
+
+          PYTHONPATH=tools python3 tools/t6_blender_symbolic_dag_capability_v1.py \
+            /tmp/proof/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_SYMBOLIC_V3.json \
+            --out /tmp/proof/T6_NUKETOWN_GENERATED_BLENDER_DAG_CAPABILITY_V1.json \
+            2>&1 | tee /tmp/proof/blender_capability.log
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/proof/T6_NUKETOWN_GENERATED_BLENDER_DAG_CAPABILITY_V1.json')
+          d=json.loads(p.read_text())
+          print('CAPABILITY SUMMARY')
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          blocked=[x for x in d['shaders'] if not x['arithmeticLowerableByV2']]
+          print('BLOCKED SHADERS',len(blocked))
+          for row in blocked:
+              print(row['sha256'],json.dumps(row['blockers'],sort_keys=True))
+          PY
+
+      - name: Upload exact generated capability proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_GENERATED_BLENDER_CAPABILITY_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
