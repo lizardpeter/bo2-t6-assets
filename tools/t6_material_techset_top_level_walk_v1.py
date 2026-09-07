@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exact T6 PC32 top-level Material/MaterialTechniqueSet serialized walker v1.
 
-This closes the source cursor for runs of XAsset types 5 (Material) and 7
+This closes the source cursor for runs of XAsset types 6 (Material) and 7
 (MaterialTechniqueSet), including nested FOLLOWING/INSERT GfxImage, technique,
 shader, vertex-declaration and argument allocations. Packed/null references
 consume no source bytes.
@@ -23,7 +23,7 @@ from pathlib import Path
 FOLLOW=0xFFFFFFFF
 INSERT=0xFFFFFFFE
 MASK=(1<<29)-1
-MATERIAL=5
+MATERIAL=6
 TECHSET=7
 
 
