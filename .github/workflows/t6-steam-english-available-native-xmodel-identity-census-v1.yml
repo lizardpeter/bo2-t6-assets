@@ -1,0 +1,254 @@
+name: T6 Steam English available native XModel identity census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-steam-english-available-native-xmodel-identity-census-v1.yml'
+      - 'tools/t6_native_xmodel_zone_identity_closure_v2.py'
+      - 'tools/t6_native_xmodel_available_census_aggregate_v1.py'
+      - 'tools/t6_steam_english_population_manifest_v1.py'
+      - 'tools/t6_oat_expanded_xasset_trace_patch_v1.py'
+      - 'tools/t6_oat_resolved_xasset_identity_trace_patch_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+      - 'tools/bo2_t6_fastfile_v2.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
+      - 'manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  build-oat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build one pinned traced OAT runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_expanded_xasset_trace_patch_v1.py /tmp/oat
+          python3 tools/t6_oat_resolved_xasset_identity_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_XMODEL_IDENTITY_TRACE.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          file "$BIN" | tee /tmp/proof/unlinker_file.txt
+          ldd "$BIN" | tee /tmp/proof/unlinker_ldd.txt || true
+          tar -C /tmp/oat/build -czf /tmp/proof/oat_build_bin.tgz bin
+
+      - name: Upload pinned traced OAT runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_PINNED_OAT_XMODEL_IDENTITY_RUNTIME_V1
+          path: |
+            /tmp/proof/oat_build_bin.tgz
+            /tmp/proof/OAT_9DCA_XMODEL_IDENTITY_TRACE.patch
+            /tmp/proof/oat_build.log
+            /tmp/proof/unlinker_file.txt
+            /tmp/proof/unlinker_ldd.txt
+          if-no-files-found: error
+          retention-days: 2
+
+  audit-shards:
+    needs: build-oat
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned OAT runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: T6_PINNED_OAT_XMODEL_IDENTITY_RUNTIME_V1
+          path: /tmp/oat-artifact
+
+      - name: Restore pinned traced OAT runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/oat-runtime /tmp/proof /tmp/results /tmp/errors /tmp/game
+          tar -xzf /tmp/oat-artifact/oat_build_bin.tgz -C /tmp/oat-runtime
+          BIN=$(find /tmp/oat-runtime/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          chmod +x "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+
+      - name: Build authoritative population-input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - name: Select this shard's source-available paths
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/shard.tsv
+          import json,os
+          p=json.load(open('/tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json'))
+          shard=int(os.environ['SHARD'])
+          rows=[z for z in p['zones'] if z['sourceAvailable']]
+          for i,z in enumerate(rows):
+            if i % 16 != shard:
+              continue
+            safe=z['path'].replace('/','__')+'.xmodel-identity.json'
+            print(z['path'],z['flatR2Url'],safe,sep='\t')
+          PY
+          echo "shard=${SHARD} paths=$(wc -l < /tmp/shard.tsv)"
+          cat /tmp/shard.tsv
+
+      - name: Native-close every XModel population in shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          while IFS=$'\t' read -r path url safe; do
+            test -n "$path"
+            echo "=== ${path} ==="
+            rm -rf /tmp/current.expanded /tmp/current_audit.json \
+              /tmp/current-out /tmp/current_oat.log /tmp/current_source.txt /tmp/current_identity.txt
+            rm -rf /tmp/game/zone
+            mkdir -p /tmp/current-out "/tmp/game/$(dirname "$path")"
+            ff="/tmp/game/${path}"
+
+            if ! curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 -o "$ff" "$url"; then
+              printf '{"path":%s,"stage":"fetch","error":"curl failed"}\n' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$path")" > "/tmp/errors/${safe}.error.json"
+              continue
+            fi
+            if ! python3 tools/bo2_t6_fastfile_v2.py decrypt "$ff" -o /tmp/current.expanded --audit /tmp/current_audit.json; then
+              printf '{"path":%s,"stage":"expand","error":"FastFile v2 expansion failed"}\n' "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$path")" > "/tmp/errors/${safe}.error.json"
+              continue
+            fi
+
+            set +e
+            "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/current-out \
+              "$ff" > /tmp/current_oat.log 2>&1
+            oat_rc=$?
+            set -e
+            grep '^T6_EXPANDED_XASSET ' /tmp/current_oat.log > /tmp/current_source.txt || true
+            grep '^T6_RESOLVED_XASSET ' /tmp/current_oat.log > /tmp/current_identity.txt || true
+            if [ "$oat_rc" -ne 0 ] || [ ! -s /tmp/current_source.txt ] || [ ! -s /tmp/current_identity.txt ]; then
+              cp /tmp/current_oat.log "/tmp/errors/${safe}.oat.log"
+              python3 - "$path" "$oat_rc" "/tmp/errors/${safe}.error.json" <<'PY'
+          import json,sys
+          path,rc,out=sys.argv[1],int(sys.argv[2]),sys.argv[3]
+          json.dump({'path':path,'stage':'native-loader','oatExitCode':rc,'error':'native trace missing or OAT failed'},open(out,'w'),indent=2,sort_keys=True)
+          open(out,'a').write('\n')
+          PY
+              continue
+            fi
+
+            set +e
+            PYTHONPATH=tools python3 tools/t6_native_xmodel_zone_identity_closure_v2.py \
+              /tmp/current.expanded --zone "$path" \
+              --source-trace /tmp/current_source.txt \
+              --identity-trace /tmp/current_identity.txt \
+              --out "/tmp/results/${safe}"
+            adapter_rc=$?
+            set -e
+            if [ "$adapter_rc" -ne 0 ]; then
+              cp /tmp/current_oat.log "/tmp/errors/${safe}.oat.log"
+              python3 - "$path" "$adapter_rc" "/tmp/errors/${safe}.error.json" <<'PY'
+          import json,sys
+          path,rc,out=sys.argv[1],int(sys.argv[2]),sys.argv[3]
+          json.dump({'path':path,'stage':'identity-adapter','adapterExitCode':rc,'error':'identity adapter raised before producing a valid report'},open(out,'w'),indent=2,sort_keys=True)
+          open(out,'a').write('\n')
+          PY
+            fi
+          done < /tmp/shard.tsv
+
+      - name: Upload shard native XModel census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NATIVE_XMODEL_IDENTITY_SHARD_${{ matrix.shard }}
+          path: |
+            /tmp/results/*.xmodel-identity.json
+            /tmp/errors/*
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    needs: audit-shards
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild authoritative population-input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/all-results
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_NATIVE_XMODEL_IDENTITY_SHARD_*
+          path: /tmp/all-results
+          merge-multiple: true
+
+      - name: Aggregate fail-closed 215-zone native XModel census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_native_xmodel_available_census_aggregate_v1.py \
+            --population-manifest /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json \
+            --results-root /tmp/all-results \
+            --expect-available-zones 215 \
+            --expect-xmodels 22255 \
+            --out /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_IDENTITY_CENSUS_V1.json \
+            --strict-available
+
+      - name: Upload aggregate native XModel census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_IDENTITY_CENSUS_V1
+          path: |
+            /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+            /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_IDENTITY_CENSUS_V1.json
+            /tmp/all-results/*.error.json
+            /tmp/all-results/*.oat.log
+          if-no-files-found: warn
+          retention-days: 14
