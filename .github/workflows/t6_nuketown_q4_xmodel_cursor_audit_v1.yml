@@ -7,7 +7,7 @@ on:
       - '.github/workflows/t6_nuketown_q4_xmodel_cursor_audit_v1.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit:
@@ -36,33 +36,48 @@ jobs:
           d=Path('/tmp/map.expanded').read_bytes(); blocks,assets=h.front(d)
           q3=Cursor(d,125632,blocks).techset(); assert q3['end']==499456
           w=XModelWalker(d,499456).walk_xmodel(); assert not w['blockers'],w['blockers']
-          x=w['xmodel']
-          print('Q4_IDENTITY',x.get('name'),'END',w['assetSerializedEnd'],'BYTES',w['assetSerializedBytes'])
-          print('Q4_XMODEL',json.dumps(x,indent=2,sort_keys=True))
-          print('Q4_DETAILS',json.dumps(w.get('details',{}),indent=2,sort_keys=True))
-          print('Q4_SECTIONS')
-          for s in w['sections']:
-            print(s['start'],s['end'],s['end']-s['start'],s['name'],json.dumps(s.get('meta',{}),sort_keys=True))
           e=int(w['assetSerializedEnd'])
-          print('TAIL_HEX_0_1024',d[e:e+1024].hex())
-          print('TAIL_ASCII',repr(d[e:e+65536].decode('latin1','replace')))
-          # Find strong TechniqueSet fixed-record candidates up to the next known
-          # following-name TechniqueSet. Require native fmt/pad, all 36 pointers
-          # valid against declared zone block sizes, and >=1 non-null technique.
           def okptr(v):
-            if v in (0,0xffffffff,0xfffffffe):return True
-            try:k,b,o=h.dec(v,blocks);return k=='packed'
-            except Exception:return False
+            if v in (0,0xffffffff,0xfffffffe): return True
+            try: k,b,o=h.dec(v,blocks); return k=='packed'
+            except Exception: return False
           cand=[]
           for p in range(e,580597-152+1):
-            if d[p+4]>8 or d[p+5:p+8]!=b'\0\0\0':continue
+            if d[p+4]>8 or d[p+5:p+8]!=b'\0\0\0': continue
             namep=struct.unpack_from('<I',d,p)[0]
-            if not okptr(namep):continue
+            if not okptr(namep): continue
             refs=struct.unpack_from('<36I',d,p+8)
-            if not all(okptr(v) for v in refs):continue
+            if not all(okptr(v) for v in refs): continue
             nn=[v for v in refs if v]
-            if not nn:continue
-            cand.append({'p':p,'nameRaw':f'0x{namep:08X}','fmt':d[p+4],'nonnull':len(nn),'follow':sum(v==0xffffffff for v in refs),'insert':sum(v==0xfffffffe for v in refs),'packed':sum(v not in (0,0xffffffff,0xfffffffe) for v in refs)})
-          print('STRONG_CANDIDATE_COUNT',len(cand))
-          print('STRONG_FIRST_200',json.dumps(cand[:200],indent=2))
+            if not nn: continue
+            cand.append({'sourceOffset':p,'nameRaw':f'0x{namep:08X}','worldVertFormat':d[p+4],
+                         'nonNullTechniqueRefs':len(nn),
+                         'followingRefs':sum(v==0xffffffff for v in refs),
+                         'insertRefs':sum(v==0xfffffffe for v in refs),
+                         'packedRefs':sum(v not in (0,0xffffffff,0xfffffffe) for v in refs)})
+          out={
+            'format':'t6-nuketown-q4-xmodel-cursor-audit-v1',
+            'expandedSha256':hashlib.sha256(d).hexdigest(),
+            'q3':{'sourceStart':125632,'sourceEnd':q3['end'],'name':q3.get('name')},
+            'q4':{
+              'sourceStart':499456,'customWalkerSourceEnd':e,
+              'serializedBytes':w['assetSerializedBytes'],'xmodel':w['xmodel'],
+              'details':w.get('details',{}),'sections':w['sections']},
+            'tail':{'hex256':d[e:e+256].hex(),'ascii4096':d[e:e+4096].decode('latin1','replace')},
+            'strongTechniqueSetCandidatesUntil580597':cand,
+          }
+          p=Path('manifests/maps/mp_nuketown_2020/q4_xmodel_source_cursor_audit_v1.json')
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print('Q4',out['q4']['xmodel'].get('name'),'END',e,'CANDIDATES',len(cand))
           PY
+      - name: Persist audit manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifests/maps/mp_nuketown_2020/q4_xmodel_source_cursor_audit_v1.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record exact Nuketown q4 XModel source cursor audit'
+          git push
