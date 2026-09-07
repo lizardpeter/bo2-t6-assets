@@ -35,25 +35,58 @@ jobs:
           PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
           PYTHONPATH=tools python3 tools/test_t6_oat_parent_dependency_conflict_census_v1.py
 
-      - name: Build pinned OAT Unlinker
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build or verify pinned OAT Unlinker
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/proof /tmp/game/zone/all
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq g++-multilib >/dev/null
-          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
-          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
-          git -C /tmp/oat submodule update -q --init --recursive
-          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
-          git -C /tmp/oat diff --check
-          cd /tmp/oat
-          PREMAKE_NO_PROMPT=1 ./generate.sh
-          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
-          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
-          test -n "$BIN"
-          realpath "$BIN" > /tmp/unlinker_path
-          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat-unlinker-cache
+          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
+          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+
+          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
+            test -x "$CACHE_BIN"
+            test -f "$CACHE_META"
+            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
+            grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
+            printf 'cache_hit=true\n' | tee /tmp/proof/oat_cache.txt
+          else
+            printf 'cache_hit=false\n' | tee /tmp/proof/oat_cache.txt
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+            test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
+            git -C /tmp/oat submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+            git -C /tmp/oat diff --check
+            cd /tmp/oat
+            PREMAKE_NO_PROMPT=1 ./generate.sh
+            make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            install -m 0755 "$BIN" "$CACHE_BIN"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > "$CACHE_META"
+          fi
+
+          printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > /tmp/proof/oat_source_identity.txt
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
+
+      - name: Save exact pinned OAT Unlinker cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
 
       - name: Download SHA-pinned map and shared FastFiles
         shell: bash
