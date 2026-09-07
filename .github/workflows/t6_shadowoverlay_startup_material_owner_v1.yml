@@ -1,4 +1,4 @@
-name: T6 shadowCookieOverlay startup Material owner v2
+name: T6 shadowCookieOverlay startup Material owner v3
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - 'tools/test_t6_oat_material_shader_census_v4.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
+      - 'tools/t6_oat_material_dependency_bundle_v1.py'
       - 'tools/t6_oat_techset_binding_manifest_v1.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
 
@@ -29,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_material_dependency_bundle_v1.py
 
       - name: Build pinned OAT Unlinker
         shell: bash
@@ -121,6 +123,46 @@ jobs:
           done
           grep -Ri -n -i 'shadowcookie\|shadowoverlay' /tmp/code_post_gfx_out/materials /tmp/code_post_gfx_mp_out/materials /tmp/en_code_post_gfx_out/materials /tmp/en_code_post_gfx_mp_out/materials \
             > /tmp/proof/startup_shadow_named_material_hits.txt || true
+
+      - name: Archive exact native shadowoverlay dependency family
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_oat_material_dependency_bundle_v1.py \
+            --material-root code_post_gfx=/tmp/code_post_gfx_out \
+            --material-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out \
+            --material-root en_code_post_gfx=/tmp/en_code_post_gfx_out \
+            --material-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out \
+            --shader-root code_post_gfx=/tmp/code_post_gfx_out \
+            --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out \
+            --shader-root en_code_post_gfx=/tmp/en_code_post_gfx_out \
+            --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out \
+            --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out \
+            --shader-root common_mp=/tmp/common_mp_out \
+            --shader-root common_patch_mp=/tmp/common_patch_mp_out \
+            --shader-root patch_mp=/tmp/patch_mp_out \
+            --material-name shadowoverlay \
+            --out /tmp/proof/shadowoverlay_dependency_bundle \
+            | tee /tmp/proof/shadowoverlay_dependency_bundle.log
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/proof/shadowoverlay_dependency_bundle/manifest.json')
+          d=json.loads(p.read_text())
+          target='pimp_technique_shadowoverlay_5255c888'
+          declared=[r['technique'] for r in d['techniques']]
+          result={
+              'format':'t6-shadowoverlay-exact-dependency-family-classification-v1',
+              'material':'shadowoverlay',
+              'materialPhysicalCopyCount':d['summary']['materialPhysicalCopyCount'],
+              'techniqueSets':sorted({r['techniqueSet'] for r in d['techniqueSets']}),
+              'declaredTechniques':declared,
+              'targetTechnique':target,
+              'targetDeclaredByThisFamily':target in declared,
+              'proofBoundary':'Exact physical OAT dependency bundle for the native startup Material named shadowoverlay. A false targetDeclaredByThisFamily excludes only this exact Material->TechniqueSet family; it is not a global target absence claim.'
+          }
+          pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_DEPENDENCY_FAMILY_CLASSIFICATION_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
 
       - name: Census every non-empty startup Material zone with parent provenance
         shell: bash
@@ -226,7 +268,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: T6_SHADOWCOOKIEOVERLAY_STARTUP_MATERIAL_OWNER_V2
+          name: T6_SHADOWCOOKIEOVERLAY_STARTUP_MATERIAL_OWNER_V3
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
