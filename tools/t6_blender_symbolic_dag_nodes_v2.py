@@ -21,6 +21,7 @@ FORMAT = "t6-blender-symbolic-dag-nodes-v2"
 BlenderSymbolicDagError = v1.BlenderSymbolicDagError
 bpy = v1.bpy
 literal32 = v1.literal32
+_BASE_COMPILE_OP = v1._compile_op
 
 
 def _compile_op_v2(nodes, links, op: str, args: list, node_id: int):
@@ -42,7 +43,7 @@ def _compile_op_v2(nodes, links, op: str, args: list, node_id: int):
         raise BlenderSymbolicDagError(
             "SM4 round_ne is nearest-even; Blender ROUND tie semantics are not yet proven equivalent"
         )
-    return v1._compile_op(nodes, links, op, args, node_id)
+    return _BASE_COMPILE_OP(nodes, links, op, args, node_id)
 
 
 def compile_scalar_dag(
