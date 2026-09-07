@@ -1,0 +1,126 @@
+name: T6 Nuketown q4 XModel source-read trace v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-nuketown-q4-xmodel-source-read-trace-v1.yml'
+      - 'tools/t6_oat_xmodel_q4_source_read_trace_patch_v1.py'
+      - 'tools/t6_oat_expanded_xasset_trace_patch_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/bo2_t6_fastfile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  trace-q4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools with q4 source-read trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_expanded_xasset_trace_patch_v1.py /tmp/oat
+          python3 tools/t6_oat_xmodel_q4_source_read_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_Q4_SOURCE_READ_TRACE.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+
+      - name: Fetch and expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/out
+          curl -fL --retry 6 --retry-delay 1 -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          python3 tools/bo2_t6_fastfile.py decrypt /tmp/game/zone/all/mp_nuketown_2020.ff \
+            -o /tmp/mp_nuketown_2020.expanded --audit /tmp/proof/fastfile_audit.json
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+
+      - name: Trace native q4 source reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/out \
+            /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/oat_nuketown_q4_trace.log
+          grep '^T6_EXPANDED_XASSET ' /tmp/proof/oat_nuketown_q4_trace.log > /tmp/proof/T6_EXPANDED_XASSET_TRACE.txt
+          grep '^T6_SOURCE_READ ' /tmp/proof/oat_nuketown_q4_trace.log > /tmp/proof/T6_Q4_SOURCE_READS.txt
+          test -s /tmp/proof/T6_Q4_SOURCE_READS.txt
+
+      - name: Compare q4 walker with native read sequence
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_xmodel_serialized_walker.py \
+            /tmp/mp_nuketown_2020.expanded --asset-start 499456 \
+            --out /tmp/proof/T6_Q4_XMODEL_WALKER.json
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          q4_start=499456;q4_end=525881;walker_end=515650
+          pat=re.compile(r'^T6_SOURCE_READ func=(\S+) size=(\d+) before=(\d+) after=(\d+)$')
+          rows=[]
+          for line in Path('/tmp/proof/T6_Q4_SOURCE_READS.txt').read_text().splitlines():
+              m=pat.fullmatch(line.strip())
+              if not m: raise SystemExit(f'bad source-read line: {line!r}')
+              fn,size,b,a=m.groups(); rows.append({'func':fn,'size':int(size),'before':int(b),'after':int(a)})
+          if not rows: raise SystemExit('empty native source-read trace')
+          if rows[0]['before'] != q4_start: raise SystemExit(f"first q4 read starts {rows[0]['before']} not {q4_start}")
+          if rows[-1]['after'] < q4_end: raise SystemExit(f"last q4 read ends {rows[-1]['after']} before q4 end {q4_end}")
+          covering=[r for r in rows if r['before'] < walker_end <= r['after']]
+          after=[r for r in rows if r['before'] >= walker_end and r['before'] < q4_end]
+          summary={
+            'format':'t6-nuketown-q4-xmodel-source-read-trace-v1',
+            'q4NativeStart':q4_start,
+            'q4NativeEnd':q4_end,
+            'q4NativeBytes':q4_end-q4_start,
+            'walkerEnd':walker_end,
+            'walkerUnderreadBytes':q4_end-walker_end,
+            'nativeReadCountIntersectingQ4':len(rows),
+            'readCoveringWalkerEnd':covering,
+            'readsBeginningAtOrAfterWalkerEndBeforeNativeEnd':after,
+            'proofBoundary':[
+              'Native source-read instrumentation is diagnostic only and is restricted to the independently validated q4 expanded-stream interval.',
+              'No fitted byte count is used to promote the walker; the missing serializer must be identified structurally before closure.'
+            ]
+          }
+          Path('/tmp/proof/T6_NUKETOWN_Q4_XMODEL_SOURCE_READ_TRACE_V1.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload q4 diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_Q4_XMODEL_SOURCE_READ_TRACE_V1
+          path: |
+            /tmp/proof/T6_NUKETOWN_Q4_XMODEL_SOURCE_READ_TRACE_V1.json
+            /tmp/proof/T6_Q4_XMODEL_WALKER.json
+            /tmp/proof/T6_Q4_SOURCE_READS.txt
+            /tmp/proof/T6_EXPANDED_XASSET_TRACE.txt
+            /tmp/proof/OAT_9DCA_Q4_SOURCE_READ_TRACE.patch
+            /tmp/proof/fastfile_audit.json
+            /tmp/proof/oat_build.log
+            /tmp/proof/oat_nuketown_q4_trace.log
+          if-no-files-found: warn
+          retention-days: 14
