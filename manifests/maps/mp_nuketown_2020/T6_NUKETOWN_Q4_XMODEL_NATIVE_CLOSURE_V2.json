@@ -1,0 +1,103 @@
+{
+  "format": "t6-nuketown-q4-xmodel-native-closure-v2",
+  "asset": {
+    "name": "nt_2020_air_vent",
+    "topLevelXAssetIndex": 4,
+    "xassetType": 5,
+    "expandedSourceStart": 499456,
+    "expandedSourceEnd": 525881,
+    "serializedBytes": 26425
+  },
+  "retailSource": {
+    "fastFile": "mp_nuketown_2020.ff",
+    "compressedSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+  },
+  "nativeBoundaryProof": {
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "workflowRun": 34156699233,
+    "jobId": 101849911214,
+    "artifactId": 10031402131,
+    "artifactName": "T6_NUKETOWN_NATIVE_EXPANDED_XASSET_TRACE_V1",
+    "artifactDigest": "sha256:0f44bc458bf3177c2399d6e9d8a5f13969a797f650ef0673f36bdd713ec228e6",
+    "coordinateCanary": {
+      "q3Type": 7,
+      "q3ExpandedSourceStart": 125632,
+      "q3ExpandedSourceEnd": 499456,
+      "passed": true
+    },
+    "q4": {
+      "type": 5,
+      "expandedSourceStart": 499456,
+      "expandedSourceEnd": 525881
+    },
+    "q5": {
+      "type": 7,
+      "expandedSourceStart": 525881,
+      "expandedSourceEnd": 526062
+    }
+  },
+  "independentStructuralWalkProof": {
+    "walker": "tools/t6_xmodel_serialized_walker_v2.py",
+    "workflowRun": 34159004761,
+    "jobId": 101856701366,
+    "artifactId": 10031944782,
+    "artifactName": "T6_NUKETOWN_Q4_XMODEL_WALK_V2",
+    "artifactDigest": "sha256:e8bdf5f29594b90fc42b4d35ab3c20cdb0ae4a1855e52087865229ead79d91c4",
+    "sourceStart": 499456,
+    "sourceEnd": 525881,
+    "expectedEndMatches": true,
+    "blockers": [],
+    "numBones": 1,
+    "numSurfs": 1
+  },
+  "v1MismatchRootCause": {
+    "supersededWalkerEnd": 515650,
+    "nativeEnd": 525881,
+    "underreadBytes": 10231,
+    "cause": "The inherited T6 GfxImageLoadDef walker read resourceSize from offset +0 and treated +8 as a serialized data pointer. Pinned T6 native layout places resourceSize at +8 and ZoneCode serializes data directly as a flexible inline array of resourceSize bytes.",
+    "firstOmittedPayload": {
+      "imageName": "$identitynormalmap",
+      "resourceSize": 4,
+      "sourceStart": 515350,
+      "sourceEnd": 515354
+    },
+    "downstreamCursorEffects": [
+      {
+        "bytes": 4,
+        "meaning": "$identitynormalmap inline GfxImageLoadDef.data"
+      },
+      {
+        "bytes": 39,
+        "meaning": "third inline GfxImage name after cursor resynchronization"
+      },
+      {
+        "bytes": 12,
+        "meaning": "third inline GfxImageLoadDef fixed prefix after cursor resynchronization"
+      },
+      {
+        "bytes": 10176,
+        "meaning": "212 XModel collision triangles at 48 bytes each; v1 had misread the collision-triangle pointer after the four-byte drift"
+      }
+    ],
+    "accountingCheck": "4 + 39 + 12 + 10176 = 10231"
+  },
+  "nativeContracts": {
+    "gfxImageZoneCode": "OpenAssetTools src/ZoneCode/Game/T6/XAssets/GfxImage.txt at pinned commit: GfxImageLoadDef data arraysize is resourceSize",
+    "gfxImageLoadDefLayout": "OpenAssetTools T6_Assets.h at pinned commit: levelCount +0, flags +1, format +4, resourceSize +8, flexible data begins +12"
+  },
+  "gates": {
+    "nativeExpandedCoordinateValidated": true,
+    "topLevelQ4OwnershipNativeTraced": true,
+    "q4StructuralWalkerClosesNativeEndpoint": true,
+    "q4XModelSerializedSourceClosed": true,
+    "all444NuketownXModelsClosed": false
+  },
+  "proofBoundary": [
+    "The native coordinate system is trusted only after the independent q3 expanded-stream canary 125632..499456 passes.",
+    "The q4 endpoint 525881 comes from pinned native OAT source consumption; the structural walker is required to reach it independently and is not fitted to it.",
+    "The historical v1 endpoint 515650 is superseded and non-promoting.",
+    "This manifest closes only top-level q4 nt_2020_air_vent. It does not promote the full 444-XMODEL Nuketown population until the separate v2 whole-zone native trace succeeds.",
+    "No name scan, adjacency, visual matching, or mesh similarity establishes ownership."
+  ]
+}
