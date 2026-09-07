@@ -77,18 +77,25 @@ jobs:
           bpy.ops.wm.read_factory_settings(use_empty=True)
           bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
           if len(bpy.data.armatures)!=1: raise RuntimeError(f'expected 1 armature, got {len(bpy.data.armatures)}')
-          if len(bpy.data.meshes)!=1: raise RuntimeError(f'expected 1 mesh, got {len(bpy.data.meshes)}')
           if len(bpy.data.actions)!=6: raise RuntimeError(f'expected 6 actions, got {len(bpy.data.actions)}')
           if len(bpy.data.materials)!=12: raise RuntimeError(f'expected 12 materials, got {len(bpy.data.materials)}')
           if len(bpy.data.images)!=23: raise RuntimeError(f'expected 23 images, got {len(bpy.data.images)}')
+          mesh_objects=[o for o in bpy.data.objects if o.type=='MESH']
+          verts=sum(len(o.data.vertices) for o in mesh_objects)
+          tris=sum(len(o.data.polygons) for o in mesh_objects)
+          if verts!=13490: raise RuntimeError(f'expected 13490 imported vertices, got {verts}; meshes={[o.name for o in mesh_objects]}')
+          if tris!=14968: raise RuntimeError(f'expected 14968 imported triangles, got {tris}; meshes={[o.name for o in mesh_objects]}')
           for mesh in bpy.data.meshes:
               if len(mesh.color_attributes)!=0: raise RuntimeError(f'unexpected Blender color attributes: {[x.name for x in mesh.color_attributes]}')
+          print('mesh-objects',[(o.name,len(o.data.vertices),len(o.data.polygons)) for o in mesh_objects])
           scene=bpy.context.scene
           scene.name='T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED'
           scene['t6_geometry_authority_run']='34168676623'
           scene['t6_full_retail_carrier_run']='34168820186'
           scene['t6_color0_removed']=True
           scene['t6_winding_source']='authoritative geometry v3'
+          scene['t6_imported_vertices']=verts
+          scene['t6_imported_triangles']=tris
           scene['t6_proof_boundary']='geometry/skin/animation/material identities source-derived; portable shader reduction still non-native'
           notice=bpy.data.texts.new('T6_EXPORT_NOTICE.txt')
           notice.write('This file rebases the full-retail material/animation carrier onto authoritative geometry-v3.\nAll 14 primitive POSITION/NORMAL/UV/JOINT/WEIGHT accessors were bit-identical between carrier and authority.\nEvery carrier index triplet was proven to be the exact opposite winding and was replaced with the authority index order.\nThe stale packed T6 field was removed from glTF COLOR_0 and no Blender color attribute is present.\nPortable material nodes still do not reproduce full native T6 TechniqueSet shader semantics.\n')
@@ -104,7 +111,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          blender --background out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend --python-expr "import bpy; assert len(bpy.data.armatures)==1; assert len(bpy.data.meshes)==1; assert len(bpy.data.actions)==6; assert len(bpy.data.materials)==12; assert len(bpy.data.images)==23; assert all(len(m.color_attributes)==0 for m in bpy.data.meshes); print('reopen-ok', len(bpy.data.armatures), len(bpy.data.meshes), len(bpy.data.actions), len(bpy.data.materials), len(bpy.data.images))"
+          cat >/tmp/reopen_seal6_v2.py <<'PY'
+          import bpy
+          assert len(bpy.data.armatures)==1
+          assert len(bpy.data.actions)==6
+          assert len(bpy.data.materials)==12
+          assert len(bpy.data.images)==23
+          objs=[o for o in bpy.data.objects if o.type=='MESH']
+          assert sum(len(o.data.vertices) for o in objs)==13490
+          assert sum(len(o.data.polygons) for o in objs)==14968
+          assert all(len(m.color_attributes)==0 for m in bpy.data.meshes)
+          print('reopen-ok',[(o.name,len(o.data.vertices),len(o.data.polygons)) for o in objs])
+          PY
+          blender --background out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.blend --python /tmp/reopen_seal6_v2.py
 
       - name: Upload corrected Blender bundle
         uses: actions/upload-artifact@v4
