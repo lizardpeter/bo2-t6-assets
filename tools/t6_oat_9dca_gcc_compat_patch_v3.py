@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply only the host-compiler fixes needed by pinned OAT 9dca965.
+"""Apply the bounded host-build fixes needed by pinned OAT 9dca965.
 
 The pinned OpenAssetTools revision exposes three host portability issues on
 Ubuntu 24.04 / GCC 13.3.0:
@@ -10,11 +10,16 @@ Ubuntu 24.04 / GCC 13.3.0:
 * the T5 high-mip-volume helper calls non-standard ``std::sqrtf`` instead of
   the standard overloaded ``std::sqrt`` already provided by ``<cmath>``.
 
-This helper applies only those narrowly bounded fixes. It deliberately does not
-touch T6 loader, generated ZoneCode, FastFile, Material, TechniqueSet, shader,
-pointer, or stream semantics. Every source edit is fail-closed against the
-exact pinned layout so an unexpected upstream/source state cannot be silently
-accepted.
+The SEAL6 proof needs only the ``UnlinkerCli`` product. The pinned legacy debug
+script builds every OAT project, so this helper also narrows that script's make
+target from ``all`` to ``UnlinkerCli``. Premake keeps the project's declared
+linked dependencies; this only avoids unrelated executables/tests and does not
+change the resulting Unlinker source or runtime semantics.
+
+This helper deliberately does not touch T6 loader, generated ZoneCode,
+FastFile, Material, TechniqueSet, shader, pointer, or stream semantics. Every
+edit is fail-closed against the exact pinned layout so an unexpected
+upstream/source state cannot be silently accepted.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ FORMAT_TARGETS = (
 
 LIMITS_TARGET = "src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp"
 SQRT_TARGET = "src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp"
+BUILD_SCRIPT_TARGET = "scripts/make-debug.sh"
 
 
 def insert_once(path: Path, *, needle: str, insert: str, marker: str) -> str:
@@ -108,6 +114,17 @@ def main() -> int:
     )
     statuses.append((SQRT_TARGET, status))
     print(f"{status}: {SQRT_TARGET}: std::sqrtf -> std::sqrt")
+
+    path = root / BUILD_SCRIPT_TARGET
+    if not path.is_file():
+        raise SystemExit(f"Pinned OAT build script missing: {BUILD_SCRIPT_TARGET}")
+    status = replace_once(
+        path,
+        needle="make -C build -j$(nproc) config=debug_x86 all\n",
+        replacement="make -C build -j$(nproc) config=debug_x86 UnlinkerCli\n",
+    )
+    statuses.append((BUILD_SCRIPT_TARGET, status))
+    print(f"{status}: {BUILD_SCRIPT_TARGET}: all -> UnlinkerCli")
 
     kinds = {status for _, status in statuses}
     if len(kinds) != 1:
