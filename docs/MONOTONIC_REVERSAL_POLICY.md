@@ -1,73 +1,95 @@
 # Monotonic reversal policy
 
-This repository treats reverse-engineering conclusions as cumulative machine-enforced knowledge, not disposable chat context.
+This repository treats reverse-engineering conclusions as cumulative knowledge, not disposable chat context.
+
+The objective is **not** to make experimentation rigid. It is to make sure later work starts from what is already known, understands which artifacts are authoritative or stale, and does not accidentally present an old limitation as a new result.
 
 ## Core rule
 
-Once a property is promoted as source/native-proven, every later extractor, converter, Blender handoff, or portable export that claims the same fidelity level MUST preserve it. A later artifact may add fidelity, but it may not silently weaken a promoted invariant.
+Knowledge should accumulate monotonically even when experiments remain flexible.
 
-Knowledge progresses only in this direction:
+A useful progression is:
 
-`unknown -> observed -> structurally/source/native-proven -> promoted invariant -> mandatory regression gate`
+`unknown -> observed -> structurally/source/native-proven -> promoted knowledge -> reused context`
 
-A promoted invariant can be changed only by an explicit superseding proof that identifies the old assertion, the new assertion, and the independent evidence for the change. Exporter convenience, visual plausibility, stale artifacts, adjacency, names, or compatibility shortcuts are never sufficient reasons to weaken a promoted invariant.
+Hard regression gates are reserved for artifacts that are being **promoted as authoritative or retail-closed**. Exploratory scripts, temporary conversions, diagnostics, and experiments may intentionally violate promoted assumptions when that helps answer a question; they simply must not silently replace the current authority or be mistaken for a promoted result.
 
-## Promotion rules
+## Two operating modes
 
-1. **Promote facts, not artifacts.** Artifacts are evidence carriers. The durable knowledge is the exact invariant plus its provenance.
-2. **Fail closed.** Missing authority, missing evidence, missing expected fields, or an unrecognized representation fails promotion.
-3. **Compare to authority mechanically.** Where exact canonical bytes or structures exist, compare against them rather than re-deriving a heuristic expectation.
-4. **No stale carrier authority.** A file retained only to carry materials, animation, or metadata cannot become geometry authority merely because it is convenient.
-5. **No silent fidelity downgrade.** A portable approximation must declare which proven retail inputs it omits. It cannot be labeled exact/full-retail while discarding them.
-6. **Monotonic minimums.** Proven coverage counters such as recovered textures, bound material inputs, animations, or closed identities may increase but must never decrease without an explicit superseding proof.
-7. **Forbidden regressions stay forbidden.** Once a representation defect is closed, encode it as a negative invariant (for example, `COLOR_0` must not reappear on the promoted SEAL6 LOD0 geometry).
-8. **Lineage is mandatory.** Every promoted output must identify the authority/evidence versions it consumed. An output with unknown or stale lineage is not promotable.
-9. **Visual canaries complement structural gates.** Render tests are required for shading/material work, but screenshots never replace structural/source proof.
-10. **One-way deprecation.** Superseded exporters and artifacts remain clearly marked as non-authoritative and must not be accepted by current promotion workflows.
+### Exploration mode
 
-## Required pipeline shape
+Exploration should stay fast and permissive.
 
-Every fidelity-sensitive build should have four stages:
+- Try alternate decoders, carriers, shaders, coordinate transforms, and representations freely.
+- Old artifacts may be inspected or reused deliberately when useful.
+- Temporary outputs do not need every production invariant.
+- A failed experiment is useful evidence and should not require ceremony.
+- The important requirement is awareness: the experiment should know when it is using something superseded and should not accidentally inherit that component as authority.
 
-1. **Extract** source/native evidence.
-2. **Construct** the candidate artifact.
-3. **Verify** candidate structure directly against promoted invariants and exact authorities.
-4. **Promote** only after all gates pass and emit a machine-readable proof receipt containing invariant IDs, authority identifiers, observed values, and hashes.
+### Promotion mode
 
-A candidate that skips stage 3 is an inspection artifact, never a promoted artifact.
+Promotion is where fail-closed checks belong.
+
+An artifact labeled exact, authoritative, full-retail, source-closed, native-closed, or otherwise promoted should preserve the knowledge already established for the layer it claims.
+
+If a promoted artifact changes a previously established fact, that should be an explicit new discovery with evidence rather than an unnoticed side effect of a conversion step.
+
+## Knowledge retention rules
+
+1. **Retain conclusions with provenance.** Record what was learned, why it is believed, and which evidence or run established it.
+2. **Track authority by layer.** Geometry, materials, textures, animations, shader semantics, and identity may have different current authorities. A convenient carrier for one layer is not automatically authority for another.
+3. **Record supersession.** When v3 fixes v2, preserve the fact that v2 is stale for that layer. Later work should therefore naturally avoid using v2 as authority without needing a blanket prohibition on opening it.
+4. **Separate known truth from portable approximation.** For example, 42 recovered retail texture payloads can be proven source truth even while the current Blender material representation exposes only 23 visualization images.
+5. **Carry unresolved limitations forward.** A later step should inherit known open problems instead of rediscovering or forgetting them.
+6. **Prefer comparative checks at promotion.** Where an exact authority exists, a promoted candidate should be compared against it rather than relying on memory or a heuristic.
+7. **Use negative regression tests selectively.** Defects that are especially easy to reintroduce, such as the SEAL6 `COLOR_0` misuse, deserve a small targeted promotion gate. Not every discovery needs a hard assertion.
+8. **Keep lineage visible.** Promoted outputs should identify which geometry/material/animation authorities they consumed so stale combinations are obvious.
+9. **Use visual canaries for visual work.** Structural correctness and visual correctness are different. Material/shader promotion should include deterministic render inspection, while render appearance never replaces source/native proof.
+10. **Do not let process replace reasoning.** Gates are a safety net, not a substitute for understanding why a choice makes sense in the current state of the reversal.
+
+## Practical pipeline
+
+For substantial work, think in four stages without forcing every experiment through bureaucracy:
+
+1. **Understand current knowledge** — read the latest authority/supersession context for the layers being touched.
+2. **Experiment/build** — work freely.
+3. **Validate claimed layers** — before calling the result authoritative, compare only the layers it claims against their current promoted knowledge.
+4. **Update knowledge** — record new conclusions, superseded assumptions, remaining blockers, and artifact lineage so the next piece of work starts ahead of this one.
 
 ## Regression classes
 
 ### Structural
 
-Examples: vertex/index changes, bone count, primitive count, winding, UV/joint/weight mutations, reappearance of a forbidden attribute.
+Examples: vertex/index changes, bone count, primitive count, winding, UV/joint/weight mutations, or reappearance of an unsafe standard semantic.
 
-These should be checked by exact candidate-vs-authority comparison whenever possible.
+Exact comparison is useful for promotion when a canonical geometry authority exists, but exploratory geometry experiments remain allowed.
 
 ### Semantic/source binding
 
-Examples: Material identity, GfxImage identity, TechniqueSet ownership, animation identity, pointer/backreference semantics.
+Examples: Material identity, GfxImage identity, TechniqueSet ownership, animation identity, and pointer/backreference semantics.
 
-These require the existing source/native proof path. Names, adjacency, visual similarity, or ordering do not substitute.
+These continue to require the appropriate source/native evidence before they are promoted. Names, adjacency, or visual similarity may guide exploration but do not become proof by themselves.
 
 ### Fidelity/coverage
 
 Examples: 42 proven retail texture payloads collapsing to 23 visualization images, or a five-input retail material collapsing to one base color plus one normal.
 
-The export must publish explicit coverage counts and omissions. A higher-fidelity promoted build establishes a new minimum that later builds cannot fall below.
+The key is to preserve that distinction in context. An approximation can still be useful; it simply should not cause us to forget that a higher-fidelity source representation is already known.
 
 ### Visual
 
-A promoted material/shader change should include deterministic Blender render canaries from fixed camera/light/world settings. Visual comparison catches classes of errors that structural counts cannot, while structural/source gates prevent a visually plausible approximation from being mistaken for retail truth.
+For material/shader work, fixed Blender render canaries are valuable because they catch errors that counts and hashes cannot. They complement rather than replace structural/source evidence.
 
-## SEAL6 lesson encoded
+## SEAL6 lesson
 
-The SEAL6 handoff regression occurred because a stale full-retail GLB was used as a carrier after geometry-v3 had already closed two defects. The stale carrier reintroduced `COLOR_0` and the old triangle winding even though both were previously solved.
+The SEAL6 handoff regression happened because a stale full-retail GLB was reused after geometry-v3 had already fixed two geometry-carrier defects. The stale carrier reintroduced `COLOR_0` and the old triangle winding.
 
-The permanent rule is therefore:
+The durable lesson is not “never use old files.” It is:
 
-- geometry authority is explicit and versioned;
-- carrier files are never implicit authority;
-- every future SEAL6 LOD0 candidate is compared mechanically against the promoted geometry authority before Blender or downstream promotion;
-- `COLOR_0` is a forbidden regression for that promoted geometry;
-- material fidelity is tracked separately and monotonically, so fixing geometry cannot conceal a material downgrade and improving materials cannot replace geometry proof.
+- remember that geometry-v3 is the current geometry authority;
+- remember that the older full-retail GLB is useful only as a carrier for layers it still contains correctly;
+- when combining layers from different artifacts, explicitly keep authority per layer in mind;
+- before promoting the combined result, compare the geometry portion to geometry-v3 and confirm the known `COLOR_0` defect did not return;
+- separately preserve the known material limitation that the portable 23-image representation is not equivalent to the 42 recovered retail texture payloads.
+
+That keeps the project cumulative without making experimentation cumbersome.
