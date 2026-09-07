@@ -1,0 +1,109 @@
+name: T6 Nuketown q4-q14 OAT endpoint audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_q4_q14_oat_endpoint_audit_v1.yml'
+      - 'tools/t6_xmodel_techset_top_level_walk_v1.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/map.ff' | sha256sum -c -
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Compare every XModel endpoint with authoritative OAT cursor
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,struct
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
+          from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
+          from t6_xmodel_techset_top_level_walk_v1 import walk
+
+          d=Path('/tmp/map.expanded').read_bytes()
+          table=parse_top_level_xasset_table(d)
+          prefix=walk_map_prefix_stringtable(d,table)
+          source_start=int(prefix['sourceEnd'])
+          out=walk(d,3,13,source_start)
+          rows={int(r['xassetIndex']):r for r in out['rows']}
+
+          # Authoritative source-block cursor values measured by the instrumented
+          # OpenAssetTools T6 loader. Absolute = source-block base 514966 + rel.
+          expected_end={
+              4:515626,
+              5:516473,
+              6:517164,
+              7:517830,
+              8:518394,
+              9:519740,
+              10:521362,
+              11:522260,
+              12:523070,
+              13:523946,
+          }
+          print('prefix/source start',source_start)
+          print('q  kind   start    end      expected  delta')
+          for q in range(3,14):
+              r=rows[q]
+              exp=expected_end.get(q)
+              delta=None if exp is None else int(r['sourceEnd'])-exp
+              print(f"{q:2d} {r['kind']:<6} {int(r['sourceStart']):8d} {int(r['sourceEnd']):8d} {str(exp):>8} {str(delta):>6}")
+              if exp is not None:
+                  assert int(r['sourceEnd'])==exp,(q,r['sourceEnd'],exp)
+          assert int(out['sourceEnd'])==523946,out['sourceEnd']
+
+          # Inspect q14 at the independently established exact start without
+          # invoking TechniqueSet pointer semantics. This separates source-cursor
+          # correctness from TechniqueSet-structure correctness.
+          s=523946
+          fixed=d[s:s+152]
+          assert len(fixed)==152
+          name_raw=struct.unpack_from('<I',fixed,0)[0]
+          fmt=fixed[4]
+          reserved=fixed[5:8]
+          refs=list(struct.unpack_from('<36I',fixed,8))
+          print('q14 fixedStart',s)
+          print('q14 nameRaw',f'0x{name_raw:08X}','fmt',fmt,'reserved',reserved.hex())
+          for i,raw in enumerate(refs):
+              if raw:
+                  print(f'q14 ref[{i:02d}] = 0x{raw:08X}')
+          print('q14 post-fixed first64',d[s+152:s+216].hex())
+
+          proof={
+              'format':'t6-nuketown-q4-q14-oat-endpoint-audit-v1',
+              'sourceStart':source_start,
+              'rows':[rows[q] for q in range(3,14)],
+              'authoritativeOatEnds':expected_end,
+              'q14':{
+                  'fixedStart':s,
+                  'nameRaw':f'0x{name_raw:08X}',
+                  'worldVertFormat':fmt,
+                  'reservedHex':reserved.hex(),
+                  'nonzeroTechniqueRefs':[{'slot':i,'rawHex':f'0x{raw:08X}'} for i,raw in enumerate(refs) if raw],
+                  'postFixedFirst64Hex':d[s+152:s+216].hex(),
+              },
+          }
+          Path('/tmp/q4_q14_audit.json').write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_Q4_Q14_OAT_ENDPOINT_AUDIT_V1
+          path: /tmp/q4_q14_audit.json
+          if-no-files-found: error
