@@ -5,7 +5,7 @@ The input Material report must already prove full local Material definitions and
 retain each serialized Material::techniqueSet packed VIRTUAL pointer. This tool:
 
 1. solves the XAsset pointer-field VIRTUAL base from all target Material pointers,
-2. maps each pointer to an exact type-7 XAsset index,
+2. maps each pointer to an exact inline type-7 XAsset index,
 3. independently enumerates every inline top-level TechniqueSet serialization in
    source order and requires a 1:1 count with inline type-7 XAsset headers,
 4. replays the full source-closed TechniqueSet serializer at the resolved start,
@@ -63,7 +63,6 @@ def scan_inline_techsets(data:bytes,blocks:tuple[int,...])->list[dict[str,Any]]:
         off=data.find(b"\xff\xff\xff\xff",off)
         if off<0:break
         if off+152>=len(data):break
-        # name pointer must itself be FOLLOWING/INSERT; this scan searches FOLLOWING.
         if int.from_bytes(data[off:off+4],"little") not in (FOLLOW,INSERT):off+=1;continue
         world=data[off+4]
         if world>8 or data[off+5:off+8]!=b"\0\0\0":off+=1;continue
@@ -91,17 +90,18 @@ def scan_inline_techsets(data:bytes,blocks:tuple[int,...])->list[dict[str,Any]]:
 
 
 def solve_base(rows:list[dict[str,Any]],assets:list[dict[str,Any]])->int:
-    q={i for i,a in enumerate(assets) if int(a["type"])==TECHNIQUE_SET}
-    if not q:raise ResolveError("zone has no TechniqueSet XAssets")
+    # A full local Material cannot resolve its TechniqueSet through an imported
+    # type-7 XAsset header. Restrict the lattice before intersecting bases.
+    q={i for i,a in enumerate(assets) if int(a["type"])==TECHNIQUE_SET and int(a["headerRaw"]) in (FOLLOW,INSERT)}
+    if not q:raise ResolveError("zone has no inline TechniqueSet XAssets")
     sets=[]
     for row in rows:
         p=row.get("techniqueSetPointer")
         if not isinstance(p,dict) or p.get("kind")!="packed" or int(p.get("block",-1))!=5:
             raise ResolveError(f"{row['material']}: TechniqueSet pointer is not packed VIRTUAL: {p!r}")
         off=int(p["offset"]);sets.append({off-4-8*i for i in q})
-    shared=set.intersection(*sets)
-    shared={x for x in shared if x>=0}
-    if len(shared)!=1:raise ResolveError(f"TechniqueSet XAsset pointer-field base ambiguous: {len(shared)} candidates")
+    shared={x for x in set.intersection(*sets) if x>=0}
+    if len(shared)!=1:raise ResolveError(f"TechniqueSet XAsset pointer-field base ambiguous after inline-XAsset constraint: {len(shared)} candidates")
     return next(iter(shared))
 
 
@@ -129,7 +129,7 @@ def build(expanded:Path,report_path:Path,zone:str)->dict[str,Any]:
         if old is not None and (old["start"],old["serializedSha256"])!=(d["start"],d["serializedSha256"]):raise ResolveError(f"TechniqueSet XAsset {q}: conflicting replay")
         defs[q]=d
         bindings.append({"material":row["material"],"materialStart":row["start"],"techniqueSetPointerVirtualOffset":off,"techniqueSetXAssetIndex":q,"techniqueSet":name,"techniqueSetStart":d["start"],"techniqueSetSha256":d["serializedSha256"]})
-    return {"format":FORMAT,"zone":zone,"source":{"expandedBytes":len(data),"expandedSha256":digest},"xassetPointerFieldVirtualBase":base,"bindings":bindings,"techniqueSets":[defs[q] for q in sorted(defs)],"summary":{"materials":len(bindings),"uniqueTechniqueSets":len(defs),"inlineTechniqueSetXAssets":len(inline_q),"allBindingsExact":True},"proofBoundary":"Material::techniqueSet is resolved only through its packed VIRTUAL offset onto the exact type-7 XAsset pointer-field lattice. Serialized TechniqueSet identity/start is assigned by a fail-closed 1:1 inline type-7 XAsset/source-order census and then fully replayed with the source-closed serializer."}
+    return {"format":FORMAT,"zone":zone,"source":{"expandedBytes":len(data),"expandedSha256":digest},"xassetPointerFieldVirtualBase":base,"bindings":bindings,"techniqueSets":[defs[q] for q in sorted(defs)],"summary":{"materials":len(bindings),"uniqueTechniqueSets":len(defs),"inlineTechniqueSetXAssets":len(inline_q),"allBindingsExact":True},"proofBoundary":"Material::techniqueSet is resolved only through its packed VIRTUAL offset onto the exact inline type-7 XAsset pointer-field lattice. Serialized TechniqueSet identity/start is assigned by a fail-closed 1:1 inline type-7 XAsset/source-order census and then fully replayed with the source-closed serializer."}
 
 
 def main()->int:
