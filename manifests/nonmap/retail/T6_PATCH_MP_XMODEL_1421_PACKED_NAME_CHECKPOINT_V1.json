@@ -1,0 +1,49 @@
+{
+  "format": "t6-patch-mp-xmodel-1421-packed-name-checkpoint-v1",
+  "scope": "Single-row proof for the sole v1 MP native XModel identity-closure failure",
+  "evidence": {
+    "workflow": ".github/workflows/t6-patch-mp-xmodel-1421-name-pointer-v1.yml",
+    "runId": 34164029027,
+    "headCommit": "70b2636710ba450e8aafd270b92ac6587fddc343",
+    "artifact": {
+      "id": 10033551454,
+      "name": "T6_PATCH_MP_XMODEL_1421_NAME_POINTER_PROOF_V1",
+      "digest": "sha256:1ccc500d185d20fdf47fc8bcf2ec94c273d364631977a8d9013815facf825f7f"
+    },
+    "retainedNativeIdentityRun": 34160939955,
+    "retainedNativeIdentityArtifact": 10032808095
+  },
+  "asset": {
+    "zone": "patch_mp",
+    "xassetIndex": 1421,
+    "sourceStart": 8415722,
+    "nativeSourceEnd": 8417423,
+    "serializedBytes": 1701,
+    "rawNamePointer": "0xA0793AF6",
+    "namePointer": {
+      "kind": "packed",
+      "block": 5,
+      "blockName": "VIRTUAL",
+      "offset": 7944949
+    },
+    "walkerName": null,
+    "walkerSourceEnd": 8417423,
+    "walkerBlockers": [],
+    "nativeResolvedName": "void",
+    "nativeResolvedOwnerIndex": 1421,
+    "nativeResolvedSeenEarlier": false
+  },
+  "gates": {
+    "rawNamePointerIsPacked": true,
+    "walkerConsumesNoInlineName": true,
+    "walkerEndpointMatchesRetainedNativeEndpoint": true,
+    "pinnedNativeLoaderResolvesNonNullXModelName": true
+  },
+  "conclusion": "The v1 MP identity closure rejected a structurally valid source-consuming XModel because it required a source-walker name even when the XModel fixed record stores its name as a packed XString pointer. The v2 pointer-kind-aware identity rule is therefore required; no asset-name special case is justified or used.",
+  "proofBoundary": [
+    "The exact expanded patch_mp stream is 14713756 bytes with SHA-256 1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9.",
+    "The raw name pointer is read directly at the retained native source start for XAsset 1421 and classified with the generic T6 packed-pointer decoder.",
+    "The structural walker independently reaches the retained native source endpoint with zero blockers while consuming no inline name bytes.",
+    "The native resolved name void comes only from the independently retained pinned-OAT identity trace. It is not scanned or inferred from source bytes, adjacency, or model content."
+  ]
+}
