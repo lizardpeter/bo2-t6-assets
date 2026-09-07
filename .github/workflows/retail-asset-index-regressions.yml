@@ -7,7 +7,10 @@ on:
     paths:
       - ".github/workflows/retail-asset-index-regressions.yml"
       - "tools/t6_retail_asset_index_v1.py"
+      - "tools/t6_material_handle_proof_to_index_v1.py"
+      - "tools/t6_material_techset_top_level_walk_v1.py"
       - "tools/test_t6_retail_asset_index_v1.py"
+      - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
   workflow_dispatch:
 
 permissions:
@@ -21,9 +24,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Compile exact-index code
+      - name: Compile universal-index code
         run: |
-          python -m py_compile tools/t6_retail_asset_index_v1.py tools/test_t6_retail_asset_index_v1.py
+          python -m py_compile \
+            tools/t6_retail_asset_index_v1.py \
+            tools/t6_material_handle_proof_to_index_v1.py \
+            tools/t6_material_techset_top_level_walk_v1.py \
+            tools/test_t6_retail_asset_index_v1.py
       - name: Run fail-closed resolver regressions
         run: |
           python tools/test_t6_retail_asset_index_v1.py
+      - name: Import real SEAL6 Material handles as references only
+        run: |
+          python tools/t6_material_handle_proof_to_index_v1.py \
+            /tmp/does-not-exist.json \
+            manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json \
+            --source-zone faction_seals_mp \
+            --out /tmp/seal6-reference-index.json
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/seal6-reference-index.json',encoding='utf-8'))
+          assert p['format']=='t6-retail-asset-index-v1'
+          assert p['summary']['definitionCount']==0
+          assert p['summary']['referenceCount']==13
+          assert len({r['name'] for r in p['references']})==13
+          assert all(r['proof']['ownerMaterialRawStartIsDefinitionStart'] is False for r in p['references'])
+          assert p['zones']['faction_seals_mp']['sha256']=='21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30'
+          print(json.dumps(p['summary'],indent=2,sort_keys=True))
+          PY
