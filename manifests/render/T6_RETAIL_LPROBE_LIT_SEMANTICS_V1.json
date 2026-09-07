@@ -1,0 +1,144 @@
+{
+  "format": "t6-retail-lprobe-lit-semantics-v1",
+  "proofBoundary": "Equations are direct semantic normalization of SHA-pinned retail T6 DXBC translated by vkd3d-compiler, validated by spirv-val, reflected/pretty-printed by SPIRV-Cross, and joined to original symbolic resources/constants through DXBC RDEF. Shader-family membership is by exact DXBC SHA-256 only. No generic PBR metallic/roughness interpretation is introduced.",
+  "proof": {
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "shaderTranslationRun": 34135251770,
+    "shaderTranslationArtifactId": 10024117840,
+    "shaderTranslationArtifactDigest": "sha256:e8a4688c50866abe5ca82dacdfc3958dd6c1887fd7ec45145e7dc29bfab03334",
+    "spirvReflectionRun": 34137147350,
+    "spirvReflectionArtifactId": 10024424249,
+    "spirvReflectionArtifactDigest": "sha256:ccdc1a8d2f71a54545a9dce9469011f4221f891540151b4f9387ed8448c218ef",
+    "dxbcAbiRun": 34137851195,
+    "dxbcAbiArtifactId": 10024687246,
+    "dxbcAbiArtifactDigest": "sha256:20a680b901255b14828411fd3633445d372e86f69e3a2783461710e14d0b94db",
+    "realVertexRoutingRun": 34139712285
+  },
+  "sharedSemantics": {
+    "encodedTextureDomain": "Material color/specular samples are consumed as stored numeric data. RGB is explicitly squared in the retail pixel shader; final output RGB is explicitly square-rooted. Blender/backend color-management must not silently replace those shader operations.",
+    "normalVertexDecode": {
+      "expression": "decodeSignedComponent(q) = (q < 0.5) ? 2*q : 2*q - 2; N = normalize(world3x3 * decodeSigned(vsNormal))",
+      "note": "This is the exact vertex-shader operation on its D3D vertex input. A source-normalization stage may provide the algebraically decoded vector directly only when equivalence to the retail input-format decode is separately preserved."
+    },
+    "fog": {
+      "sourceConstants": ["fogColor", "fogConsts", "fogConsts2", "sunFogDir", "sunFogColor", "sunFog"],
+      "vsOutputs": ["fogVisibility", "fogColor"],
+      "pixelOpaque": "foggedRgb = fogColor + fogVisibility * (litRgb - fogColor)"
+    },
+    "lightingLookup": {
+      "expression": "m = max(abs(N.x), abs(N.y), abs(N.z)); lookupUVW = N * lightingLookupScale.xyz / m + gridLightingCoordsAndVis.xyz; modelLighting = sample3D(modelLightingSampler, lookupUVW).rgb^2 * occlusionAmount.z",
+      "resources": ["modelLightingSampler", "lightingLookupScale", "gridLightingCoordsAndVis", "occlusionAmount.z"]
+    },
+    "reflectionLightingRatio": {
+      "expression": "reflectionRatio = max(gridLightingSH(N), 0.1) denominator/inverse pair as emitted by the retail VS: output = max(gridLightingSH(N),0.1) / max(reflectionLightingSH(N),0.1) in the exact translated register order retained by the shader proof",
+      "note": "Backends must consume/reproduce the exact retained VS SH equation rather than infer a physical reflection-probe intensity from this label.",
+      "resources": ["gridLightingSH0", "gridLightingSH1", "gridLightingSH2", "reflectionLightingSH0", "reflectionLightingSH1", "reflectionLightingSH2"]
+    },
+    "reflectionProbe": {
+      "viewVector": "V = normalize(vsWorldPosition.xyz)",
+      "reflectionVector": "R = V - 2*N*dot(N,V)",
+      "grazing": "g = exp2(-9.27999973297119140625 * saturate(dot(N,-V)))",
+      "probeLod": "lod = 4.0 - 4.0 * specularSample.a",
+      "probeDecode": "probeRgb = sampleCubeLod(reflectionProbeSampler, R, lod).rgb / (sample.a + 1e-6)",
+      "fresnel": [
+        "p0 = 1.0416667461395263671875 * specularSample.a",
+        "p1 = 0.4749999940395355224609375 * specularSample.a",
+        "p2 = 0.01822919957339763641357421875 * specularSample.a - 0.015625",
+        "p3 = 0.25 * specularSample.a + 0.75",
+        "q = p0 * min(g, p1) + p2",
+        "F = saturate(specularSample.rgb^2 * (p3 - q) + q)"
+      ],
+      "reflectionRgb": "probeRgb * F * occlusionAmount.y * reflectionLightingRatio",
+      "resources": ["specularMapSampler", "reflectionProbeSampler", "occlusionAmount.y", "reflectionLightingRatio"]
+    },
+    "outputEncoding": "outRgb = sqrt(max-or-source-domain retail arithmetic result after hdrControl0.x multiplication); no generic sRGB transfer function is substituted for the explicit square/sqrt pair"
+  },
+  "families": [
+    {
+      "id": "lprobe-lit-normal-spec-color-v1",
+      "techniqueType": "lit",
+      "vertexShader": {
+        "assetName": "pimp_shader_lprobe_347155f7.hlsl",
+        "dxbcSha256": "c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319",
+        "spirvSha256": "559acb7eccf8a3b156e585325bdcf28d4b8808afd5aa9cbe4157705a6ea0753a"
+      },
+      "pixelShader": {
+        "assetName": "pimp_shader_lprobe_4bceb0cc.hlsl",
+        "dxbcSha256": "5c88d806b6235333a637f54e03dca4fa4bec3a6ef27eada702a272dac50cef0a",
+        "spirvSha256": "6f83020c1425cf5e7a10ec81c18e01c3fa996da86aa3353397be2f8235b6eb22"
+      },
+      "vertexInputs": [
+        {"semantic": "POSITION0", "t6Source": "position", "note": "POSITION.w is the retail binormal-sign source used by this VS"},
+        {"semantic": "COLOR0", "t6Source": "color"},
+        {"semantic": "TEXCOORD0", "t6Source": "texcoord[0]"},
+        {"semantic": "NORMAL0", "t6Source": "normal"},
+        {"semantic": "TEXCOORD2", "t6Source": "tangent"}
+      ],
+      "materialInputs": ["colorMapSampler", "normalMapSampler", "specularMapSampler", "occlusionAmount"],
+      "normalMap": {
+        "decodeXY": "xy = normalMapSample.xy * 4.01574802398681640625 - 2.01574802398681640625",
+        "basis": "B = sign(POSITION.w) * cross(N,T); surfaceN = normalize(N + xy.x*T + xy.y*B)",
+        "note": "The retail shader consumes RG only for this normal perturbation. Blender Normal Map/Tangent nodes are not an exact substitute."
+      },
+      "color": {
+        "encodedRgb": "colorMapSample.rgb * vertexColor.rgb",
+        "linearLikeRgb": "encodedRgb^2"
+      },
+      "finalRgb": "litRgb = 32 * modelLighting * linearLikeRgb + reflectionRgb; foggedRgb = fogColor + fogVisibility*(litRgb-fogColor); out.rgb = sqrt(foggedRgb * hdrControl0.x)",
+      "finalAlpha": "1.0",
+      "pipelineStateExample": {
+        "class": "opaque-state selected per Material.stateBitsEntry[techniqueTypeIndex]; family does not hard-code one material state"
+      }
+    },
+    {
+      "id": "lprobe-lit-glass-spec-color-v1",
+      "techniqueType": "lit",
+      "vertexShader": {
+        "assetName": "pimp_shader_lprobe_eb01efa5.hlsl",
+        "dxbcSha256": "0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5",
+        "spirvSha256": "105887acfa4dd90ff6856407ab3250bc428b8c02ca24d7cc3ca52031ceed2eae"
+      },
+      "pixelShader": {
+        "assetName": "pimp_shader_lprobe_5b74bfe9.hlsl",
+        "dxbcSha256": "40a214de6613cc5b1a73cb72150e0357c917d9c6db5d5491338b0e0ece38c80c",
+        "spirvSha256": "b1f08a1083ab6afa558408817f7cf99c24a68dcd1b30e542d0b6f8013da72d7b"
+      },
+      "vertexInputs": [
+        {"semantic": "POSITION0", "t6Source": "position"},
+        {"semantic": "COLOR0", "t6Source": "color"},
+        {"semantic": "TEXCOORD0", "t6Source": "texcoord[0]"},
+        {"semantic": "NORMAL0", "t6Source": "normal"}
+      ],
+      "materialInputs": ["colorMapSampler", "specularMapSampler", "occlusionAmount"],
+      "normal": "surfaceN = normalize(transformed vertex normal); the Material's identity normalMap is not a pixel-shader resource for this family",
+      "color": {
+        "alphaEncoded": "colorMapSample.a * vertexColor.a",
+        "encodedRgb": "colorMapSample.rgb * vertexColor.rgb",
+        "linearLikeRgb": "encodedRgb^2"
+      },
+      "finalRgb": "diffuseRgb = 32 * modelLighting * linearLikeRgb; reflectionUnpremul = reflectionRgb / alphaEncoded; litUnpremul = diffuseRgb + reflectionUnpremul; fogPremul = alphaEncoded*fogColor; premulFogged = fogPremul + fogVisibility*(alphaEncoded*litUnpremul - fogPremul); out.rgb = sqrt(premulFogged * hdrControl0.x)",
+      "finalAlpha": "sqrt(alphaEncoded)",
+      "pipelineStateCar01Lit": {
+        "alphaTest": "gt0",
+        "srcBlendRgb": "one",
+        "dstBlendRgb": "invsrcalpha",
+        "blendOpRgb": "add",
+        "srcBlendAlpha": "invdestalpha",
+        "dstBlendAlpha": "one",
+        "blendOpAlpha": "add",
+        "depthTest": "less_equal",
+        "depthWrite": false,
+        "cullFace": "back"
+      }
+    }
+  ],
+  "backendPolicy": {
+    "t6SemanticsAreAuthoritative": true,
+    "blender": {
+      "exactNodeCandidates": ["material color sampling in Non-Color data mode", "explicit RGB square", "vertex-color multiply", "normal RG decode", "N/T/B reconstruction", "specular/Fresnel scalar-vector arithmetic", "fog arithmetic", "explicit square root", "glass output alpha"],
+      "globalResourceCapabilitiesRequired": ["3D model-lighting lookup or an exact baked equivalent", "reflection cube lookup with explicit LOD or an exact baked equivalent", "T6 fog/SH/grid-light constants or exact baked equivalents"],
+      "renderStateLimitations": ["Blender material nodes do not reproduce arbitrary D3D destination blending exactly; retain T6 pipeline state as authoritative metadata and label any viewport blend mapping as an authoring approximation"],
+      "forbiddenFallbacks": ["invent metallicFactor", "invent roughnessFactor", "map T6 specular XYZW to Principled physical parameters without a separate proof", "recompute tangent when an exact T6 tangent basis is available", "let ordinary sRGB image decoding replace T6's explicit RGB square/sqrt shader operations"]
+    }
+  }
+}
