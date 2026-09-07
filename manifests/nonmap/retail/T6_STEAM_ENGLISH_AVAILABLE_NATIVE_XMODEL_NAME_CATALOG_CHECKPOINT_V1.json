@@ -1,0 +1,47 @@
+{
+  "format": "t6-steam-english-available-native-xmodel-name-catalog-checkpoint-v1",
+  "scope": "Exact native-resolved XModel name/provenance catalog for the source-available Steam English FastFile subset",
+  "evidence": {
+    "workflow": ".github/workflows/t6-steam-english-available-native-xmodel-name-catalog-v1.yml",
+    "runId": 34165691247,
+    "headCommit": "49bd69fe30ad179a14f22db49fbfb2e691101285",
+    "sourceIdentityRunId": 34164196686,
+    "artifact": {
+      "id": 10034070604,
+      "name": "T6_STEAM_ENGLISH_AVAILABLE_NATIVE_XMODEL_NAME_CATALOG_V1",
+      "digest": "sha256:c7c912df8f7062cfc97bf86ad757e09833ffd892e44ddef7caa2edfe1a04f5bc"
+    },
+    "selftest": {
+      "runId": 34164520206,
+      "artifactId": 10033704066,
+      "artifactDigest": "sha256:2b4cdd6314529547161c2fa454c25a1e547225aa829f03e047ef12a27f479f15"
+    }
+  },
+  "catalog": {
+    "sourceAvailableZones": 215,
+    "reportedZones": 215,
+    "closedZones": 215,
+    "xmodelOccurrences": 22255,
+    "sourceConsumingOccurrences": 21693,
+    "zeroSourceOccurrences": 562,
+    "exactNativeNames": 14473,
+    "namesRepeatedAcrossZones": 3009,
+    "missingReports": []
+  },
+  "gates": {
+    "allAvailablePathsHaveReports": true,
+    "allAvailableZoneReportsClosed": true,
+    "allXModelOccurrencesHaveClosedNativeNames": true,
+    "occurrenceCountMatchesExpected": true,
+    "nameCatalogSelftestGreen": true,
+    "englishRetailXModelPopulationComplete": false
+  },
+  "proofBoundary": [
+    "Every name-catalog occurrence is inherited from a closed per-zone native XModel identity report from authoritative run 34164196686.",
+    "Names are grouped only by exact case-sensitive native XModel name strings. No fuzzy normalization, prefix matching, adjacency, visual similarity, or semantic-name inference is used.",
+    "The 14473 count is the number of distinct native name strings represented by the 22255 source-available occurrences, not a proof that same-name payloads in different zones are byte-identical.",
+    "The 3009 names repeated across zones are retained as repeated-name provenance. Cross-zone payload byte identity remains a separate proof problem.",
+    "The 82 source-unavailable English-retail FastFiles remain outside this catalog and continue to block whole-English-retail XModel completeness.",
+    "This catalog itself makes no character, weapon, vehicle, prop, map, animation, material, texture, TechniqueSet, shader, or export-fidelity classification claim."
+  ]
+}
