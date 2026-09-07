@@ -1,0 +1,109 @@
+name: T6 cross-map unlit DXBC v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_unlit_crossmap_dxbc_v1.yml'
+      - 'tools/t6_retail_special_family_dxbc_extract_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_retail_special_shader_payload_census_v1.py'
+      - 'tools/t6_retail_world_formats_45_proof_v1.py'
+      - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander and install shader validators
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev vkd3d-compiler spirv-tools >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lcrypto -lz
+          mkdir -p /tmp/raw /tmp/corpus/mp /tmp/proof/programs /tmp/proof/spirv
+          sha256sum /tmp/t6_fastfile_expand > /tmp/proof/expander_sha256.txt
+          vkd3d-compiler --version > /tmp/proof/vkd3d_version.txt
+          spirv-val --version > /tmp/proof/spirv_tools_version.txt
+
+      - name: Download and exactly expand five retained retail maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A EXPECT=(
+            [mp_nuketown_2020]='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+            [mp_raid]='d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8'
+            [mp_hijacked]='8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b'
+            [zm_prison]='e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487'
+            [zm_tomb]='4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219'
+          )
+          : > /tmp/proof/raw_fastfile_sha256.txt
+          : > /tmp/proof/expanded_sha256.txt
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            raw="/tmp/raw/${zone}.ff"
+            curl -fL --retry 4 -o "$raw" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            sha256sum "$raw" | tee -a /tmp/proof/raw_fastfile_sha256.txt
+            if [[ "$zone" == mp_* ]]; then out="/tmp/corpus/mp/${zone}.expanded.bin"; else out="/tmp/corpus/${zone}.expanded.bin"; fi
+            /tmp/t6_fastfile_expand "$raw" "$out" "$zone" 2> "/tmp/proof/${zone}_expand.log"
+            got=$(sha256sum "$out" | awk '{print $1}')
+            echo "$got  $out" | tee -a /tmp/proof/expanded_sha256.txt
+            test "$got" = "${EXPECT[$zone]}"
+          done
+
+      - name: Extract exact directly retained unlit shader programs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_retail_special_family_dxbc_extract_v1.py \
+            --root /tmp/corpus \
+            --family unlit \
+            --program-dir /tmp/proof/programs \
+            --out /tmp/proof/T6_RETAIL_UNLIT_DIRECT_DXBC_V1.json \
+            2>&1 | tee /tmp/proof/unlit_extract.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/proof/T6_RETAIL_UNLIT_DIRECT_DXBC_V1.json').read_text())
+          s=d['summary']
+          assert s['family']=='unlit'
+          assert s['techniqueSetCount']==17, s
+          assert s['occurrenceCount']>0 and s['uniqueDirectPixelShaderCount']>0
+          assert s['structuralFailureCount']==0
+          assert len(list(Path('/tmp/proof/programs').glob('*.cso')))==s['uniqueDirectPixelShaderCount']+s['uniqueDirectVertexShaderCount']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+
+      - name: Translate and validate every directly retained unlit DXBC program
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/proof/spirv_sha256.txt
+          count=0
+          for cso in /tmp/proof/programs/*.cso; do
+            stem=$(basename "$cso" .cso)
+            spv="/tmp/proof/spirv/${stem}.spv"
+            asm="/tmp/proof/spirv/${stem}.spvasm"
+            vkd3d-compiler -x dxbc-tpf -b spirv-binary -o "$spv" "$cso"
+            spirv-val "$spv"
+            spirv-dis --raw-id "$spv" -o "$asm"
+            sha256sum "$spv" "$asm" >> /tmp/proof/spirv_sha256.txt
+            count=$((count+1))
+          done
+          echo "$count" > /tmp/proof/translated_program_count.txt
+          test "$count" -gt 0
+
+      - name: Upload exact cross-map unlit shader corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_UNLIT_DIRECT_DXBC_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
