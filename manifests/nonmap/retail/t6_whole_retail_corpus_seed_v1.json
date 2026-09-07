@@ -1,0 +1,126 @@
+{
+  "format": "t6-retail-corpus-declaration-v1",
+  "name": "retained-18-xfile-xanim-seed",
+  "purpose": "Bootstrap whole-retail population accounting from the 18 exact retained XFiles already count-closed by the retail XAnim census. This declaration is intentionally not promoted to a complete BO2 retail corpus.",
+  "source": {
+    "r2Base": "https://r2.houseofkublai.com/bo2/zone/all",
+    "pathConvention": "{zone}.ff",
+    "provenance": [
+      "Existing repository workflows retrieve exact retail FastFiles from the same R2 zone/all path convention.",
+      "Expected XAnim counts and expanded hashes are retained regression facts from T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V4/V3.",
+      "No R2 bucket listing or authoritative retail zone catalog has yet been source-closed, so this manifest cannot establish corpus completeness."
+    ]
+  },
+  "corpusClaim": {
+    "complete": false,
+    "scope": "known retained exact MP/Zombies/shared/UI/code-post seed corpus",
+    "blocker": "No authoritative complete BO2 retail FastFile/zone catalog has yet been proven against the supplied R2/file corpus."
+  },
+  "zones": [
+    {
+      "zone": "common_zm",
+      "expectedExpandedSha256": "28ff1b05ca1565f6c90acd473262e0d566fbc22fc2005c6def09fed9555b7527",
+      "expectedXAnimCount": 819
+    },
+    {
+      "zone": "patch_zm",
+      "expectedExpandedSha256": "3a5df2757981c0ae5d7963f41f6b621349b2604efd6360f3e7bb0fe145a6c499",
+      "expectedXAnimCount": 51
+    },
+    {
+      "zone": "zm_prison",
+      "expectedExpandedSha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487",
+      "expectedXAnimCount": 1434
+    },
+    {
+      "zone": "zm_tomb",
+      "expectedExpandedSha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219",
+      "expectedXAnimCount": 1735
+    },
+    {
+      "zone": "common_mp",
+      "expectedRawSha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+      "expectedExpandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+      "expectedXAnimCount": 4233
+    },
+    {
+      "zone": "patch_mp",
+      "expectedRawSha256": "459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e",
+      "expectedExpandedSha256": "1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9",
+      "expectedXAnimCount": 10
+    },
+    {
+      "zone": "mp_nuketown_2020",
+      "expectedExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+      "expectedXAnimCount": 9
+    },
+    {
+      "zone": "mp_hijacked",
+      "expectedExpandedSha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b",
+      "expectedXAnimCount": 5
+    },
+    {
+      "zone": "mp_raid",
+      "expectedExpandedSha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8",
+      "expectedXAnimCount": 2
+    },
+    {
+      "zone": "code_post_gfx_mp",
+      "expectedRawSha256": "b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3",
+      "expectedExpandedSha256": "a80936d857642cefa5d68c59a539408c3f10c5169ce0af0b6ecae94ffa79c0ab",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "code_post_gfx_zm",
+      "expectedRawSha256": "dc44f775074e010e37f3fbdf60fc21af1de2582634432cd6057d6eecd0099942",
+      "expectedExpandedSha256": "c30851590fbc84328785953f92836046fcd622d5cfd0e81738984232994de9dc",
+      "expectedXAnimCount": 2
+    },
+    {
+      "zone": "common_patch_mp",
+      "expectedRawSha256": "95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9",
+      "expectedExpandedSha256": "486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c",
+      "expectedXAnimCount": 2905
+    },
+    {
+      "zone": "en_code_post_gfx_mp",
+      "expectedRawSha256": "7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940",
+      "expectedExpandedSha256": "e9e1c4223b5685dd3dc1d47b972ec41a8005cd1d60c4102d5cf8aa9404a306cb",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "en_code_post_gfx_zm",
+      "expectedRawSha256": "beff044576bf052af3e5682fea13207d07df1009fe2137eaf9bab3db74201c71",
+      "expectedExpandedSha256": "9788386fdf779181448c0f857d0fd6c7cf737e4c1d9c1f7f2cbcdf30df709263",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "patch_ui_mp",
+      "expectedRawSha256": "e4d8c49db84307057bcd4e5003546d88f41306af734e04629fa7e84e9eaf3b15",
+      "expectedExpandedSha256": "4b71d2ca8c62f661fb5386b177ed2816be8540295765d14e2c5873a03d467fd8",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "patch_ui_zm",
+      "expectedRawSha256": "afae792355a5a8e54c273645c418712223e37a945daaa3136f27c03131b780dd",
+      "expectedExpandedSha256": "7fac3cb492373d5ed074581dd482bbdfb26563849a02365d5e8e4a6233d15a5f",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "ui_mp",
+      "expectedRawSha256": "1b014f0c1bcb4cad93298f1137df89af1d823417dbd5f233865d633b1a7ad5d8",
+      "expectedExpandedSha256": "2502b33b8fff182d1f5811f24d27e5af5610491995d756ab54d70a7740719337",
+      "expectedXAnimCount": 0
+    },
+    {
+      "zone": "ui_zm",
+      "expectedRawSha256": "74c273336b22e1df9f23159b32bff3ea835e5939418326570c63ef9d3c47b8fc",
+      "expectedExpandedSha256": "ce461e8c7066085d95081f0e3fa408d54e48aa75cd368c4b61a9e7f92bf14d83",
+      "expectedXAnimCount": 0
+    }
+  ],
+  "expectedSeedTotals": {
+    "zones": 18,
+    "xanimparts": 11205
+  }
+}

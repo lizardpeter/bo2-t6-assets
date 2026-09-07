@@ -1,0 +1,141 @@
+name: T6 whole-retail asset census audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-whole-retail-asset-census.yml'
+      - 'tools/t6_whole_retail_asset_census_v1.py'
+      - 'tools/t6_raw_xasset_inventory.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v1.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v2.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v3.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate wrapper and fail-closed empty-root behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_whole_retail_asset_census_v1.py \
+            tools/t6_raw_xasset_inventory.py \
+            tools/t6_xanim_retail_delta_branch_census_v1.py \
+            tools/t6_xanim_retail_delta_branch_census_v2.py \
+            tools/t6_xanim_retail_delta_branch_census_v3.py
+          mkdir -p /tmp/census/smoke-empty
+          PYTHONPATH=tools python3 tools/t6_whole_retail_asset_census_v1.py \
+            --corpus-manifest manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json \
+            --expanded-root /tmp/census/smoke-empty \
+            --out /tmp/census/EMPTY_ROOT_FAIL_CLOSED.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/census/EMPTY_ROOT_FAIL_CLOSED.json'))
+          assert p['inventory']['zonesDeclared']==18
+          assert len(p['inventory']['zonesMissing'])==18
+          assert not any(g['value'] for g in p['gates'].values())
+          PY
+
+      - name: Download and expand every declared seed FastFile available on retail R2
+        shell: bash
+        run: |
+          set -u
+          mkdir -p /tmp/census/raw /tmp/census/expanded
+          python3 - <<'PY' > /tmp/census/zones.tsv
+          import json
+          m=json.load(open('manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json'))
+          for z in m['zones']:
+              print(z['zone']+'\t'+str(z.get('expectedRawSha256') or ''))
+          PY
+          : > /tmp/census/DOWNLOAD_STATUS.tsv
+          while IFS=$'\t' read -r zone expected_raw; do
+            url="https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            raw="/tmp/census/raw/${zone}.ff"
+            expanded="/tmp/census/expanded/${zone}.expanded"
+            if curl -fL --retry 4 --retry-delay 2 -o "$raw" "$url"; then
+              got=$(sha256sum "$raw" | awk '{print $1}')
+              if [ -n "$expected_raw" ] && [ "$got" != "$expected_raw" ]; then
+                printf '%s\t%s\t%s\t%s\n' "$zone" raw_sha_mismatch "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+                rm -f "$raw"
+                continue
+              fi
+              if python3 tools/bo2_t6_fastfile.py decrypt "$raw" --output "$expanded"; then
+                printf '%s\t%s\t%s\t%s\n' "$zone" expanded "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+              else
+                printf '%s\t%s\t%s\t%s\n' "$zone" decrypt_failed "$got" "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+                rm -f "$expanded"
+              fi
+            else
+              printf '%s\t%s\t-\t%s\n' "$zone" download_failed "$expected_raw" >> /tmp/census/DOWNLOAD_STATUS.tsv
+              rm -f "$raw" "$expanded"
+            fi
+          done < /tmp/census/zones.tsv
+          cat /tmp/census/DOWNLOAD_STATUS.tsv
+
+      - name: Build manifest-driven census
+        id: census
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_whole_retail_asset_census_v1.py \
+            --corpus-manifest manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json \
+            --raw-root /tmp/census/raw \
+            --expanded-root /tmp/census/expanded \
+            --out /tmp/census/T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1.json
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/census/T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1.json'))
+          print(json.dumps({
+            'inventory':p['inventory'],
+            'totals':p['totalsForSuccessfullyParsedDeclaredZones'],
+            'declaredCorpusChecks':p['declaredCorpusChecks'],
+            'gates':p['gates'],
+          },indent=2,sort_keys=True))
+          PY
+          echo 'ok=1' >> "$GITHUB_OUTPUT"
+
+      - name: Enforce audit integrity without promoting whole-retail closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.census.outputs.ok }}" = 1
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/census/T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1.json'))
+          c=p['declaredCorpusChecks']
+          assert c['parserErrorCount']==0, c['parserErrors']
+          assert p['inventory']['zonesSucceeded'] > 0, 'no declared retail FastFile was successfully materialized'
+          for z in p['zones']:
+              if z['status']=='parsed':
+                  assert z['xanimStructural']['countClosesExactly'] is True, z['zone']
+                  if z['expected']['expandedSha256']:
+                      assert z['expandedSha256MatchesExpected'] is True, z['zone']
+                  if z['expected']['xanimCount'] is not None:
+                      assert z['xanimCountMatchesManifestRegression'] is True, z['zone']
+          # The seed manifest is intentionally incomplete. A green audit must not silently
+          # turn that into a whole-retail claim.
+          assert p['gates']['corpusComplete']['value'] is False
+          assert p['gates']['xanimPopulationComplete']['value'] is False
+          assert p['gates']['xmodelPopulationComplete']['value'] is False
+          assert p['gates']['semanticCoverageComplete']['value'] is False
+          PY
+
+      - name: Upload whole-retail census audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1
+          path: /tmp/census
+          if-no-files-found: error
+          retention-days: 14
