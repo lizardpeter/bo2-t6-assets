@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy
           blender --version
 
       - name: Import exact LOD0 GLB and save native blend
@@ -70,7 +70,6 @@ jobs:
               'No COLOR_0 promotion is used for the T6 packed vertex-color field.\n'
           )
 
-          # Keep source provenance inside the .blend without modifying asset data.
           scene['t6_source_run'] = '34168820186'
           scene['t6_source_artifact'] = '10035056123'
           scene['t6_source_glb'] = src.name
