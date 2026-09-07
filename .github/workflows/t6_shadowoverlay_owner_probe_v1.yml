@@ -1,0 +1,93 @@
+name: T6 shadowCookieOverlay owner probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_shadowoverlay_owner_probe_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/oat_zones
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+
+      - name: Download candidate graphics FastFiles and record exact hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A URLS=(
+            [code_post_gfx]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx.ff'
+            [code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff'
+            [en_code_post_gfx]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx.ff'
+            [en_code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx_mp.ff'
+          )
+          : > /tmp/proof/candidate_fastfile_sha256.txt
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp; do
+            path="/tmp/oat_zones/${zone}.ff"
+            curl -fL --retry 4 -o "$path" "${URLS[$zone]}"
+            sha256sum "$path" | tee -a /tmp/proof/candidate_fastfile_sha256.txt
+            stat -c '%n %s bytes' "$path" | tee -a /tmp/proof/candidate_fastfile_sizes.txt
+          done
+
+      - name: Dump candidate TechniqueSets and require exact technique owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          target='pimp_technique_shadowoverlay_5255c888.tech'
+          : > /tmp/proof/owner_matches.txt
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp; do
+            out="/tmp/${zone}_out"
+            mkdir -p "$out"
+            set +e
+            "$BIN" --no-color --verbose --include-assets techniqueset \
+              --output-folder "$out" "/tmp/oat_zones/${zone}.ff" \
+              > "/tmp/proof/${zone}_dump.log" 2>&1
+            rc=$?
+            set -e
+            echo "$zone rc=$rc" | tee -a /tmp/proof/dump_rc.txt
+            find "$out" -type f | sort > "/tmp/proof/${zone}_files.txt" || true
+            if test -f "$out/techniques/$target"; then
+              sha=$(sha256sum "$out/techniques/$target" | awk '{print $1}')
+              bytes=$(stat -c '%s' "$out/techniques/$target")
+              echo "$zone techniques/$target bytes=$bytes sha256=$sha" | tee -a /tmp/proof/owner_matches.txt
+              cp "$out/techniques/$target" "/tmp/proof/${zone}_${target}"
+            fi
+          done
+          cat /tmp/proof/owner_matches.txt
+          test "$(wc -l < /tmp/proof/owner_matches.txt)" -ge 1
+
+      - name: Upload owner proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_OWNER_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
