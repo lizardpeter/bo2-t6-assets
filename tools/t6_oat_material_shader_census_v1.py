@@ -9,6 +9,8 @@ inference tool.
 For every ordinary dumped Material with a resolved ``techniqueSet`` it:
 - resolves the exact owner root containing ``techsets/<name>.techset``;
 - resolves T6 technique type ``lit`` from the OAT .techset grammar;
+- resolves the dependent .tech in that same OAT dump root when present, falling
+  back to an exactly-one-owner search only if the owner root lacks it;
 - parses every pass of the exact .tech file;
 - records exact emitted VS/PS CSO SHA-256 identities;
 - groups Materials only by exact ordered pass shader identities.
@@ -20,7 +22,6 @@ Nuketown's canonical generated population is already handled by the separate
 from __future__ import annotations
 
 import argparse
-import collections
 import hashlib
 import json
 from pathlib import Path
@@ -110,8 +111,13 @@ def _lit_technique(root_paths: list[Path], techset: str) -> tuple[str, Path, dic
     }
 
 
-def _technique_passes(root_paths: list[Path], technique: str) -> tuple[list[dict], dict]:
-    owner, path = _owner(root_paths, Path("techniques") / f"{technique}.tech", f"Technique {technique}")
+def _technique_passes(root_paths: list[Path], preferred_owner: Path, technique: str) -> tuple[list[dict], dict]:
+    relative = Path("techniques") / f"{technique}.tech"
+    preferred = preferred_owner / relative
+    if preferred.is_file():
+        owner, path = preferred_owner, preferred
+    else:
+        owner, path = _owner(root_paths, relative, f"Technique {technique}")
     raw_passes, errors = oat.split_top_level_passes(path.read_text(encoding="utf-8", errors="strict"))
     if errors:
         raise MaterialShaderCensusError(f"Technique {technique}: split errors {errors[:4]}")
@@ -183,8 +189,8 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
             unresolved.append({"material": name, "reason": "native Material has empty techniqueSet"})
             continue
         if techset not in technique_cache:
-            technique, _, techset_file = _lit_technique(roots, techset)
-            passes, technique_file = _technique_passes(roots, technique)
+            technique, techset_owner, techset_file = _lit_technique(roots, techset)
+            passes, technique_file = _technique_passes(roots, techset_owner, technique)
             technique_cache[techset] = {
                 "technique": technique,
                 "techsetFile": techset_file,
