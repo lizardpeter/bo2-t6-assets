@@ -1,0 +1,194 @@
+name: T6 shadowCookieOverlay startup Material owner v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_shadowoverlay_startup_material_owner_v1.yml'
+      - 'tools/t6_oat_material_shader_census_v1.py'
+      - 'tools/t6_oat_material_shader_census_v3.py'
+      - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  startup-owner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/game/zone/english
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+          sha256sum "$BIN" > /tmp/proof/unlinker_sha256.txt
+
+      - name: Download and verify exact startup plus map/shared FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A URLS=(
+            [code_post_gfx]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx.ff'
+            [code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff'
+            [en_code_post_gfx]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx.ff'
+            [en_code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx_mp.ff'
+            [mp_nuketown_2020]='https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff'
+            [common_mp]='https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff'
+            [common_patch_mp]='https://r2.houseofkublai.com/bo2/zone/all/common_patch_mp.ff'
+            [patch_mp]='https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff'
+          )
+          declare -A SHAS=(
+            [code_post_gfx]='670407ecdbc6aedbfff7eb9961e403780798af6394aec46be1249650e54d9cd3'
+            [code_post_gfx_mp]='b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3'
+            [en_code_post_gfx]='f4b25c8aef7fc59644775ba974051641d74b35a6117e6cb48e471629bc2577a8'
+            [en_code_post_gfx_mp]='7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940'
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+            [common_mp]='93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'
+            [common_patch_mp]='95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9'
+            [patch_mp]='459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e'
+          )
+          : > /tmp/proof/fastfile_sha256.txt
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp mp_nuketown_2020 common_mp common_patch_mp patch_mp; do
+            if [[ "$zone" == en_* ]]; then base=/tmp/game/zone/english; else base=/tmp/game/zone/all; fi
+            file="$base/${zone}.ff"
+            curl -fL --retry 4 -o "$file" "${URLS[$zone]}"
+            echo "${SHAS[$zone]}  $file" | sha256sum -c -
+            sha256sum "$file" | tee -a /tmp/proof/fastfile_sha256.txt
+          done
+
+      - name: Dump startup Materials and complete TechniqueSet dependency universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp; do
+            if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
+            out="/tmp/${zone}_out"
+            mkdir -p "$out"
+            "$BIN" --no-color --verbose --include-assets material --output-folder "$out" "$ff" \
+              2>&1 | tee "/tmp/proof/${zone}_material_dump.log"
+            "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$out" "$ff" \
+              2>&1 | tee "/tmp/proof/${zone}_techset_dump.log"
+          done
+          for zone in mp_nuketown_2020 common_mp common_patch_mp patch_mp; do
+            ff="/tmp/game/zone/all/${zone}.ff"
+            out="/tmp/${zone}_out"
+            mkdir -p "$out"
+            "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$out" "$ff" \
+              2>&1 | tee "/tmp/proof/${zone}_techset_dump.log"
+          done
+          : > /tmp/proof/startup_material_counts.txt
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp; do
+            count=$(find "/tmp/${zone}_out/materials" -type f -name '*.json' 2>/dev/null | wc -l)
+            echo "$zone $count" | tee -a /tmp/proof/startup_material_counts.txt
+            find "/tmp/${zone}_out/materials" -type f -name '*.json' 2>/dev/null | sort > "/tmp/proof/${zone}_material_files.txt" || true
+          done
+          grep -Ri -n -i 'shadowcookie\|shadowoverlay' /tmp/code_post_gfx_out/materials /tmp/code_post_gfx_mp_out/materials /tmp/en_code_post_gfx_out/materials /tmp/en_code_post_gfx_mp_out/materials \
+            > /tmp/proof/startup_shadow_named_material_hits.txt || true
+
+      - name: Census every non-empty startup Material zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof/startup_censuses
+          ROOT_ARGS=(
+            --shader-root /tmp/code_post_gfx_out
+            --shader-root /tmp/code_post_gfx_mp_out
+            --shader-root /tmp/en_code_post_gfx_out
+            --shader-root /tmp/en_code_post_gfx_mp_out
+            --shader-root /tmp/mp_nuketown_2020_out
+            --shader-root /tmp/common_mp_out
+            --shader-root /tmp/common_patch_mp_out
+            --shader-root /tmp/patch_mp_out
+          )
+          : > /tmp/proof/census_roots.txt
+          for zone in code_post_gfx code_post_gfx_mp en_code_post_gfx en_code_post_gfx_mp; do
+            count=$(find "/tmp/${zone}_out/materials" -type f -name '*.json' 2>/dev/null | wc -l)
+            if test "$count" -eq 0; then
+              echo "$zone zero-material-zone" | tee -a /tmp/proof/census_roots.txt
+              continue
+            fi
+            out="/tmp/proof/startup_censuses/${zone}.json"
+            PYTHONPATH=tools python3 tools/t6_oat_material_shader_census_v3.py \
+              --material-root "/tmp/${zone}_out" "${ROOT_ARGS[@]}" --out "$out" \
+              2>&1 | tee "/tmp/proof/${zone}_census.log"
+            python3 - "$zone" "$out" <<'PY'
+          import json,sys
+          zone,path=sys.argv[1:]
+          d=json.load(open(path,encoding='utf-8'))
+          s=d['summary']
+          print(zone, 'materials', s['ordinaryNativeMaterialCount'], 'techsets', s['uniqueTechniqueSetCount'], 'unresolved', s['unresolvedMaterialCount'])
+          PY
+            echo "$zone green" | tee -a /tmp/proof/census_roots.txt
+          done
+
+      - name: Close exact target from any startup Material association
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob,json,pathlib
+          target='pimp_technique_shadowoverlay_5255c888'
+          hits=[]
+          for path in sorted(glob.glob('/tmp/proof/startup_censuses/*.json')):
+              d=json.load(open(path,encoding='utf-8'))
+              if d.get('unresolved') or d.get('summary',{}).get('unresolvedMaterialCount') != 0:
+                  raise SystemExit(f'non-green source census: {path}')
+              rows=[]
+              for m in d.get('materials',[]):
+                  for p in m.get('programs',[]):
+                      if p.get('technique') == target:
+                          rows.append((m.get('material'),m.get('techniqueSet'),p.get('techniqueType')))
+              if rows:
+                  hits.append((path,rows))
+          pathlib.Path('/tmp/proof/target_startup_censuses.txt').write_text(''.join(path+'\n' for path,_ in hits),encoding='utf-8')
+          pathlib.Path('/tmp/proof/target_startup_associations.json').write_text(json.dumps(hits,indent=2)+'\n',encoding='utf-8')
+          if not hits:
+              raise SystemExit('no startup Material -> TechniqueSet -> target Technique association in any green startup census')
+          print(json.dumps(hits,indent=2))
+          PY
+          mkdir -p /tmp/proof/startup_owner_closures
+          while IFS= read -r census; do
+            zone=$(basename "$census" .json)
+            PYTHONPATH=tools python3 tools/t6_oat_exact_technique_owner_closure_v1.py \
+              --census "$census" \
+              --shader-root code_post_gfx=/tmp/code_post_gfx_out \
+              --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out \
+              --shader-root en_code_post_gfx=/tmp/en_code_post_gfx_out \
+              --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out \
+              --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out \
+              --shader-root common_mp=/tmp/common_mp_out \
+              --shader-root common_patch_mp=/tmp/common_patch_mp_out \
+              --shader-root patch_mp=/tmp/patch_mp_out \
+              --target-name pimp_technique_shadowoverlay_5255c888 \
+              --target-bytes 592 \
+              --target-sha256 cc2f2805aef4899b24ed1a181f816bfcdfd18c6ab876a1172cae11f0abd20d71 \
+              --out "/tmp/proof/startup_owner_closures/${zone}.json"
+          done < /tmp/proof/target_startup_censuses.txt
+
+      - name: Upload startup Material owner proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWCOOKIEOVERLAY_STARTUP_MATERIAL_OWNER_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
