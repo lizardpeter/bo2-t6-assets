@@ -51,6 +51,8 @@ def main():
     ap.add_argument('--require-primitives',type=int); ap.add_argument('--require-materials',type=int); ap.add_argument('--require-images',type=int); ap.add_argument('--require-animations',type=int)
     args=ap.parse_args()
     cjs,cbin=load_glb(args.carrier); ajs,abin=load_glb(args.authority)
+    if len(cjs.get('meshes',[]))!=1: raise SystemExit(f'carrier must contain exactly one source mesh, got {len(cjs.get("meshes",[]))}')
+    if len(ajs.get('meshes',[]))!=1: raise SystemExit(f'authority must contain exactly one source mesh, got {len(ajs.get("meshes",[]))}')
     cp=cjs['meshes'][0]['primitives']; apm=ajs['meshes'][0]['primitives']
     if len(cp)!=len(apm): raise SystemExit('primitive count mismatch')
     if args.require_primitives is not None and len(cp)!=args.require_primitives: raise SystemExit('unexpected primitive count')
@@ -74,10 +76,11 @@ def main():
     cjs.setdefault('asset',{})['generator']=(cjs.get('asset',{}).get('generator','')+' | T6 authoritative geometry v3 rebase').strip()
     save_glb(args.output,cjs,cbin)
     ojs,obin=load_glb(args.output)
+    if len(ojs.get('meshes',[]))!=1: raise SystemExit('output source mesh count changed')
     if any('COLOR_0' in p['attributes'] for p in ojs['meshes'][0]['primitives']): raise SystemExit('output COLOR_0 validation failed')
     for i,(o,a) in enumerate(zip(ojs['meshes'][0]['primitives'],apm)):
         if acc_values(ojs,obin,o['indices'])!=acc_values(ajs,abin,a['indices']): raise SystemExit(f'output primitive {i} indices differ from authority')
-    report={'format':'t6-gltf-geometry-rebase-v1','carrier':str(args.carrier),'authority':str(args.authority),'output':str(args.output),'primitiveCount':len(cp),'materials':len(ojs.get('materials',[])),'images':len(ojs.get('images',[])),'animations':len(ojs.get('animations',[])),'color0Present':False,'gates':gates,'outputSha256':hashlib.sha256(Path(args.output).read_bytes()).hexdigest(),'authoritative':True}
+    report={'format':'t6-gltf-geometry-rebase-v1','carrier':str(args.carrier),'authority':str(args.authority),'output':str(args.output),'carrierMeshCount':len(cjs.get('meshes',[])),'authorityMeshCount':len(ajs.get('meshes',[])),'outputMeshCount':len(ojs.get('meshes',[])),'primitiveCount':len(cp),'materials':len(ojs.get('materials',[])),'images':len(ojs.get('images',[])),'animations':len(ojs.get('animations',[])),'color0Present':False,'gates':gates,'outputSha256':hashlib.sha256(Path(args.output).read_bytes()).hexdigest(),'authoritative':True}
     Path(args.report).write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 if __name__=='__main__': main()
