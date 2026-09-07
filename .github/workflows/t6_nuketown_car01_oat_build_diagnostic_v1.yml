@@ -1,0 +1,152 @@
+name: T6 Nuketown Car01 OAT build diagnostic v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_oat_build_diagnostic_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools without losing failure output
+        id: build
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/oat_diag
+          LOG=/tmp/oat_diag/oat_build.log
+          STATUS=/tmp/oat_diag/status.tsv
+          : > "$LOG"
+          : > "$STATUS"
+
+          run_stage() {
+            local name="$1"
+            shift
+            printf '\n===== %s =====\n' "$name" | tee -a "$LOG"
+            set +e
+            "$@" > >(tee -a "$LOG") 2> >(tee -a "$LOG" >&2)
+            local rc=$?
+            set -e
+            printf '%s\t%s\n' "$name" "$rc" | tee -a "$STATUS"
+            return "$rc"
+          }
+
+          FAILED=0
+          run_stage apt_update sudo apt-get update -qq || FAILED=1
+          if [ "$FAILED" = 0 ]; then
+            run_stage apt_install sudo apt-get install -y -qq g++-multilib || FAILED=1
+          fi
+          if [ "$FAILED" = 0 ]; then
+            run_stage clone git clone --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat || FAILED=1
+          fi
+          if [ "$FAILED" = 0 ]; then
+            run_stage checkout git -C /tmp/oat checkout 9dca965366541504b71fa8cfb7ac049cb9b717e1 || FAILED=1
+          fi
+          if [ "$FAILED" = 0 ]; then
+            run_stage submodules git -C /tmp/oat submodule update --init --recursive || FAILED=1
+          fi
+          if [ "$FAILED" = 0 ]; then
+            printf '\n===== toolchain =====\n' | tee -a "$LOG"
+            {
+              uname -a
+              lsb_release -a 2>/dev/null || true
+              gcc --version | head -1 || true
+              g++ --version | head -1 || true
+              make --version | head -1 || true
+              git --version || true
+              git -C /tmp/oat rev-parse HEAD || true
+              git -C /tmp/oat submodule status --recursive || true
+              df -h || true
+              free -h || true
+            } 2>&1 | tee -a "$LOG"
+
+            cd /tmp/oat
+            printf '\n===== generate =====\n' | tee -a "$LOG"
+            set +e
+            PREMAKE_NO_PROMPT=1 ./generate.sh > >(tee -a "$LOG") 2> >(tee -a "$LOG" >&2)
+            GEN_RC=$?
+            set -e
+            printf 'generate\t%s\n' "$GEN_RC" | tee -a "$STATUS"
+            if [ "$GEN_RC" != 0 ]; then FAILED=1; fi
+          fi
+
+          if [ "$FAILED" = 0 ]; then
+            cd /tmp/oat
+            printf '\n===== make_debug =====\n' | tee -a "$LOG"
+            set +e
+            ./scripts/make-debug.sh > >(tee -a "$LOG") 2> >(tee -a "$LOG" >&2)
+            MAKE_RC=$?
+            set -e
+            printf 'make_debug\t%s\n' "$MAKE_RC" | tee -a "$STATUS"
+            if [ "$MAKE_RC" != 0 ]; then FAILED=1; fi
+          fi
+
+          BIN=''
+          if [ -d /tmp/oat/build/bin ]; then
+            find /tmp/oat/build/bin -type f \( -iname 'unlinker' -o -iname '*unlinker*' \) -print | sort | tee /tmp/oat_diag/binaries.txt
+            BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1 || true)
+          else
+            : > /tmp/oat_diag/binaries.txt
+          fi
+          if [ "$FAILED" = 0 ] && [ -z "$BIN" ]; then
+            printf 'binary_discovery\t1\n' | tee -a "$STATUS"
+            echo 'No Unlinker binary found after successful make.' | tee -a "$LOG"
+            FAILED=1
+          elif [ -n "$BIN" ]; then
+            printf 'binary_discovery\t0\n' | tee -a "$STATUS"
+            printf '%s\n' "$BIN" > /tmp/oat_diag/unlinker_path.txt
+            set +e
+            "$BIN" --no-color --help > /tmp/oat_diag/unlinker_help.txt 2>&1
+            HELP_RC=$?
+            set -e
+            printf 'unlinker_help\t%s\n' "$HELP_RC" | tee -a "$STATUS"
+            if [ "$HELP_RC" != 0 ]; then FAILED=1; fi
+          fi
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[]
+          p=Path('/tmp/oat_diag/status.tsv')
+          if p.exists():
+              for line in p.read_text().splitlines():
+                  if not line.strip(): continue
+                  name,rc=line.split('\t',1)
+                  rows.append({'stage':name,'returnCode':int(rc)})
+          out={
+              'format':'t6-car01-oat-build-diagnostic-v1',
+              'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'stages':rows,
+              'firstFailure':next((r for r in rows if r['returnCode'] != 0),None),
+          }
+          Path('/tmp/oat_diag/manifest.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2))
+          PY
+
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          # Deliberately return success so the diagnostic artifact is guaranteed
+          # to upload. A later step enforces the build result.
+          exit 0
+
+      - name: Upload exact OAT build diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_OAT_BUILD_DIAGNOSTIC_V1
+          path: /tmp/oat_diag
+          if-no-files-found: error
+
+      - name: Enforce build result after artifact capture
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.build.outputs.failed }}" = 0
