@@ -1,0 +1,86 @@
+{
+  "format": "t6-whole-retail-asset-census-checkpoint-v2",
+  "supersedesForSeedMaterialization": "manifests/nonmap/retail/t6_whole_retail_asset_census_checkpoint_v1.json",
+  "producer": "tools/t6_whole_retail_asset_census_v1.py",
+  "workflow": {
+    "path": ".github/workflows/t6-whole-retail-asset-census.yml",
+    "runId": 34151458209,
+    "jobId": 101834449254,
+    "headCommit": "00f154550af84ccb859173b14b1cc0c06d94d5bf",
+    "conclusion": "success"
+  },
+  "artifact": {
+    "id": 10029499984,
+    "name": "T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1",
+    "bytes": 11378,
+    "digest": "sha256:4b384adcf774b6fa2d3578f07860a646da261e27cd0f008a9acc85ae63230571"
+  },
+  "declaredSeedCorpus": {
+    "manifest": "manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json",
+    "zonesDeclared": 18,
+    "zonesMaterialized": 18,
+    "zonesFailedParsing": 0,
+    "zonesMissing": [],
+    "undeclaredExpandedZonesObserved": [],
+    "localizedAcquisition": {
+      "rule": "en_* FastFiles are acquired from the R2 zone/english path; nonlocalized seed FastFiles remain under zone/all.",
+      "recovered": [
+        {
+          "zone": "en_code_post_gfx_mp",
+          "rawBytes": 209728,
+          "rawSha256": "7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940",
+          "expandedBytes": 781855,
+          "expandedSha256": "e9e1c4223b5685dd3dc1d47b972ec41a8005cd1d60c4102d5cf8aa9404a306cb"
+        },
+        {
+          "zone": "en_code_post_gfx_zm",
+          "rawBytes": 170496,
+          "rawSha256": "beff044576bf052af3e5682fea13207d07df1009fe2137eaf9bab3db74201c71",
+          "expandedBytes": 612690,
+          "expandedSha256": "9788386fdf779181448c0f857d0fd6c7cf737e4c1d9c1f7f2cbcdf30df709263"
+        }
+      ]
+    }
+  },
+  "exactSeedTotals": {
+    "topLevelXAssets": 46405,
+    "xanimpartsFromTopLevelXAssetLists": 11205,
+    "xanimpartsStructurallyIdentified": 11205,
+    "xanimpartsStructuralCountClosesExactly": true,
+    "xmodelsFromTopLevelXAssetLists": 3997
+  },
+  "declaredCorpusChecks": {
+    "allDeclaredZonesPresent": true,
+    "allDeclaredZonesRawXAssetParsed": true,
+    "allDeclaredZonesXAnimCountClosed": true,
+    "noUndeclaredExpandedZones": true,
+    "parserErrorCount": 0
+  },
+  "wholeRetailGates": {
+    "corpusComplete": false,
+    "zoneInventoryComplete": false,
+    "xanimPopulationComplete": false,
+    "xmodelPopulationComplete": false,
+    "semanticCoverageComplete": false
+  },
+  "gateReasons": {
+    "corpusComplete": "All 18 declared seed zones are now exact and materialized, but no authoritative complete BO2 retail FastFile catalog has yet proven that these 18 zones exhaust the game.",
+    "zoneInventoryComplete": "The seed inventory is exact, but whole-retail inventory closure requires a proven-complete corpus declaration.",
+    "xanimPopulationComplete": "The entire declared seed closes at 11,205/11,205 XAnimParts, but whole-game XAnim population closure still depends on whole-retail corpus completeness.",
+    "xmodelPopulationComplete": "The declared seed contains exactly 3,997 top-level XMODEL XAsset entries. They are not yet all source-order structurally walked and identity-closed.",
+    "semanticCoverageComplete": "Animation semantics, XModel relationships/aliases, character classification, materials, TechniqueSets, and shader semantics remain independent proof layers."
+  },
+  "regressionBoundaries": [
+    "The independent 24,855 common_mp + patch_mp XAnimParts regression boundary remains unchanged and is not redefined by this checkpoint.",
+    "tools/stage18d_xanim_full_inventory.py remains unchanged; its 4,233 common_mp top-level XAnimParts result is a separate scoped proof.",
+    "The green SEAL6 q10/q17 native TechniqueSet common_mp closure remains untouched.",
+    "18/18 seed materialization is not evidence that the seed is the complete BO2 retail corpus.",
+    "3,997 is an exact seed XMODEL XAsset count, not a character count and not yet structural XModel population closure."
+  ],
+  "nextBlockers": [
+    "Source-close an authoritative full BO2 PC retail FastFile/zone catalog and reconcile it against the supplied corpus.",
+    "Build a source-order top-level XAsset replay that can locate every XMODEL fixed record without byte-scan ownership assumptions.",
+    "Run the existing t6_xmodel_serialized_walker.py on every exact XMODEL source start and close count/identity against each zone's type-5 XAsset entries.",
+    "Only then classify character-related XModels from exact retail relationships/source evidence."
+  ]
+}
