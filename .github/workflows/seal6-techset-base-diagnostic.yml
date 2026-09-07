@@ -13,6 +13,7 @@ on:
       - "tools/t6_early_techset_source_order_walk_v1.py"
       - "tools/t6_early_techset_source_order_walk_v2.py"
       - "tools/t6_early_techset_source_order_probe_v1.py"
+      - "tools/t6_seal6_q20_nested_proof_v1.py"
       - "tools/t6_xmodel_serialized_walker.py"
       - "tools/t6_asset_types_v1.py"
       - "tools/bo2_t6_fastfile.py"
@@ -62,6 +63,11 @@ jobs:
           PYTHONPATH=tools python tools/t6_early_techset_source_order_walk_v2.py \
             /tmp/faction.expanded --end-asset 20 --targets 10,17,20 \
             --out /tmp/source_order_q0_q20.json
+      - name: Persist exact q20 nested TechniqueSet proof
+        run: |
+          PYTHONPATH=tools python tools/t6_seal6_q20_nested_proof_v1.py \
+            /tmp/source_order_q0_q20.json \
+            --out /tmp/seal6_q20_nested_proof.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -71,5 +77,6 @@ jobs:
             /tmp/techset_census.json
             /tmp/source_order_prefix_probe.json
             /tmp/source_order_q0_q20.json
+            /tmp/seal6_q20_nested_proof.json
           if-no-files-found: warn
           retention-days: 14
