@@ -1,0 +1,134 @@
+name: T6 Steam English available population census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-steam-english-available-population-census-v1.yml'
+      - 'tools/t6_steam_english_population_manifest_v1.py'
+      - 'tools/t6_retail_zone_population_audit_v1.py'
+      - 'tools/t6_steam_english_population_census_aggregate_v1.py'
+      - 'tools/t6_raw_xasset_inventory.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v3.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+      - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
+      - 'manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-shards:
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build authoritative population-input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/results
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - name: Select this shard's source-available paths
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/shard.tsv
+          import json,os
+          p=json.load(open('/tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json'))
+          shard=int(os.environ['SHARD'])
+          rows=[z for z in p['zones'] if z['sourceAvailable']]
+          for i,z in enumerate(rows):
+            if i % 16 != shard: continue
+            safe=z['path'].replace('/','__')+'.population.json'
+            print(z['path'],z['flatR2Url'],safe,sep='\t')
+          PY
+          echo "shard=${SHARD} paths=$(wc -l < /tmp/shard.tsv)"
+          cat /tmp/shard.tsv
+
+      - name: Expand and structurally census every path in shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r path url safe; do
+            test -n "$path"
+            echo "=== ${path} ==="
+            rm -f /tmp/current.ff /tmp/current.expanded /tmp/current_audit.json
+            curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 \
+              -o /tmp/current.ff "$url"
+            python3 tools/bo2_t6_fastfile.py decrypt /tmp/current.ff \
+              -o /tmp/current.expanded --audit /tmp/current_audit.json
+            PYTHONPATH=tools python3 tools/t6_retail_zone_population_audit_v1.py \
+              /tmp/current.expanded --zone "$path" \
+              --out "/tmp/results/${safe}" --require-xanim-closed
+            rm -f /tmp/current.ff /tmp/current.expanded /tmp/current_audit.json
+          done < /tmp/shard.tsv
+
+      - name: Upload shard census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ENGLISH_POPULATION_SHARD_${{ matrix.shard }}
+          path: /tmp/results/*.population.json
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    needs: audit-shards
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rebuild authoritative population-input manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/all-results
+          python3 tools/t6_steam_english_population_manifest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --full-catalog manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json \
+            --availability manifests/nonmap/retail/t6_steam_full_zone_source_availability_checkpoint_v1.json \
+            --out /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_STEAM_ENGLISH_POPULATION_SHARD_*
+          path: /tmp/all-results
+          merge-multiple: true
+
+      - name: Aggregate fail-closed 297-path census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_steam_english_population_census_aggregate_v1.py \
+            --population-manifest /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json \
+            --results-root /tmp/all-results \
+            --out /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_POPULATION_CENSUS_V1.json \
+            --strict-available
+
+      - name: Upload aggregate census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_STEAM_ENGLISH_AVAILABLE_POPULATION_CENSUS_V1
+          path: |
+            /tmp/proof/T6_STEAM_ENGLISH_POPULATION_INPUT_MANIFEST_V1.json
+            /tmp/proof/T6_STEAM_ENGLISH_AVAILABLE_POPULATION_CENSUS_V1.json
+          if-no-files-found: warn
+          retention-days: 14
