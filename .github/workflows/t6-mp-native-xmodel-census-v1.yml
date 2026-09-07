@@ -1,0 +1,229 @@
+name: T6 MP native XModel census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-mp-native-xmodel-census-v1.yml'
+      - 'tools/t6_oat_expanded_xasset_trace_patch_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+      - 'tools/bo2_t6_fastfile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools with expanded-position trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_expanded_xasset_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_EXPANDED_XASSET_TRACE.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+
+      - name: Fetch, hash, and expand exact MP control FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          fetch_one() {
+            local name="$1" compressed_sha="$2" expanded_sha="$3"
+            curl -fL --retry 6 --retry-delay 1 -o "/tmp/game/zone/all/${name}.ff" \
+              "https://r2.houseofkublai.com/bo2/zone/all/${name}.ff"
+            echo "${compressed_sha}  /tmp/game/zone/all/${name}.ff" | sha256sum -c -
+            python3 tools/bo2_t6_fastfile.py decrypt "/tmp/game/zone/all/${name}.ff" \
+              -o "/tmp/${name}.expanded" --audit "/tmp/proof/${name}_fastfile_audit.json"
+            echo "${expanded_sha}  /tmp/${name}.expanded" | sha256sum -c -
+          }
+          fetch_one common_mp \
+            93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77 \
+            fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce
+          fetch_one common_patch_mp \
+            95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9 \
+            486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c
+          fetch_one patch_mp \
+            459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e \
+            1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9
+
+      - name: Run native loader for each MP control zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for name in common_mp common_patch_mp patch_mp; do
+            mkdir -p "/tmp/out/${name}"
+            "$BIN" --no-color --verbose --include-assets xmodel --output-folder "/tmp/out/${name}" \
+              "/tmp/game/zone/all/${name}.ff" 2>&1 | tee "/tmp/proof/${name}_oat_trace.log"
+            grep '^T6_EXPANDED_XASSET ' "/tmp/proof/${name}_oat_trace.log" > "/tmp/proof/${name}_expanded_xasset_trace.txt"
+            test -s "/tmp/proof/${name}_expanded_xasset_trace.txt"
+          done
+
+      - name: Cross-check every source-consuming XModel against walker v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,re
+          from pathlib import Path
+          from t6_material_techset_top_level_walk_v1 import parse_front
+          from t6_xmodel_serialized_walker_v2 import XModelWalker
+
+          specs={
+            'common_mp':{
+              'compressedSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'expandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+              'expandedBytes':206493911,'expectedTopLevelXAssets':6082,'expectedXModels':481,
+            },
+            'common_patch_mp':{
+              'compressedSha256':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+              'expandedSha256':'486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c',
+              'expandedBytes':3119037,'expectedTopLevelXAssets':3533,'expectedXModels':269,
+            },
+            'patch_mp':{
+              'compressedSha256':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+              'expandedSha256':'1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9',
+              'expandedBytes':14713756,'expectedTopLevelXAssets':1764,'expectedXModels':46,
+            },
+          }
+          pat=re.compile(r'^T6_EXPANDED_XASSET index=(\d+) type=(\d+) beforeLocal=(\d+) afterLocal=(\d+) before=(\d+) after=(\d+)$')
+          zone_rows=[]
+          total_expected=total_source=total_alias=total_match=total_fail=0
+          for name,spec in specs.items():
+            d=Path(f'/tmp/{name}.expanded').read_bytes()
+            assert len(d)==spec['expandedBytes'],(name,len(d),spec['expandedBytes'])
+            assert hashlib.sha256(d).hexdigest()==spec['expandedSha256'],name
+            blocks,assets,body=parse_front(d)
+            assert len(assets)==spec['expectedTopLevelXAssets'],(name,len(assets),spec['expectedTopLevelXAssets'])
+            assert sum(a['type']==5 for a in assets)==spec['expectedXModels'],name
+            trace=[]
+            for line in Path(f'/tmp/proof/{name}_expanded_xasset_trace.txt').read_text().splitlines():
+              m=pat.fullmatch(line.strip())
+              if not m: raise SystemExit(f'{name}: bad trace line {line!r}')
+              i,t,bl,al,b,a=map(int,m.groups())
+              trace.append({'xassetIndex':i,'type':t,'beforeLocal':bl,'afterLocal':al,'sourceStart':b,'sourceEnd':a})
+            assert len(trace)==len(assets),(name,len(trace),len(assets))
+            assert [r['xassetIndex'] for r in trace]==list(range(len(assets))),name
+            for r,a in zip(trace,assets): assert r['type']==a['type'],(name,r,a)
+
+            xrows=[];matches=failures=aliases=source=0
+            for r,a in zip(trace,assets):
+              if r['type']!=5: continue
+              rec={**r,'headerRaw':f"0x{a['headerRaw']:08X}",'nativeSerializedBytes':r['sourceEnd']-r['sourceStart']}
+              if r['sourceEnd']==r['sourceStart']:
+                aliases+=1
+                rec['sourceKind']='zero-source-reference'
+                rec['walkerAttempted']=False
+              else:
+                source+=1
+                rec['sourceKind']='native-source-consuming'
+                rec['walkerAttempted']=True
+                try:
+                  w=XModelWalker(d,r['sourceStart']).walk_xmodel()
+                  rec['walkerBlockers']=w['blockers']
+                  rec['walkerSourceEnd']=int(w['assetSerializedEnd'])
+                  rec['walkerEndpointMatchesNative']=not w['blockers'] and int(w['assetSerializedEnd'])==r['sourceEnd']
+                  rec['walkerName']=w['xmodel'].get('name')
+                  rec['numBones']=w['xmodel'].get('numBones')
+                  rec['numSurfs']=w['xmodel'].get('numSurfs')
+                except Exception as exc:
+                  rec['walkerException']=repr(exc)
+                  rec['walkerEndpointMatchesNative']=False
+                if rec.get('walkerEndpointMatchesNative'): matches+=1
+                else: failures+=1
+              xrows.append(rec)
+            row={
+              'zone':name,
+              **spec,
+              'observedTopLevelXAssets':len(assets),
+              'observedXModels':len(xrows),
+              'nativeSourceConsumingXModels':source,
+              'zeroSourceXModelReferences':aliases,
+              'walkerEndpointMatchesNative':matches,
+              'walkerEndpointMismatchesOrFailures':failures,
+              'xmodels':xrows,
+              'gates':{
+                'rawExpectedCountsMatch':len(assets)==spec['expectedTopLevelXAssets'] and len(xrows)==spec['expectedXModels'],
+                'allTopLevelXAssetsNativeTraced':len(trace)==len(assets),
+                'allSourceConsumingXModelsWalkerClosed':failures==0,
+                'zeroSourceXModelReferencesResolvedToIdentity':False if aliases else True,
+                'wholeZoneXModelPopulationClosed':failures==0 and aliases==0,
+              }
+            }
+            zone_rows.append(row)
+            total_expected+=len(xrows);total_source+=source;total_alias+=aliases;total_match+=matches;total_fail+=failures
+
+          out={
+            'format':'t6-mp-native-xmodel-census-v1',
+            'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'xmodelWalker':'t6-xmodel-serialized-walk-v2',
+            'coordinateInstrumentationValidation':{
+              'referenceZone':'mp_nuketown_2020',
+              'independentCanary':'q3 125632..499456',
+              'validatedNativeQ4Boundary':'499456..525881',
+              'note':'The same serialized-byte counter patch is applied unchanged to all control zones.'
+            },
+            'zones':zone_rows,
+            'totals':{
+              'zones':len(zone_rows),
+              'expectedXModels':total_expected,
+              'nativeSourceConsumingXModels':total_source,
+              'zeroSourceXModelReferences':total_alias,
+              'walkerEndpointMatchesNative':total_match,
+              'walkerEndpointMismatchesOrFailures':total_fail,
+            },
+            'gates':{
+              'allRawExpectedCountsMatch':all(z['gates']['rawExpectedCountsMatch'] for z in zone_rows),
+              'allTopLevelXAssetsNativeTraced':all(z['gates']['allTopLevelXAssetsNativeTraced'] for z in zone_rows),
+              'allSourceConsumingXModelsWalkerClosed':all(z['gates']['allSourceConsumingXModelsWalkerClosed'] for z in zone_rows),
+              'allZeroSourceXModelReferencesResolvedToIdentity':all(z['gates']['zeroSourceXModelReferencesResolvedToIdentity'] for z in zone_rows),
+              'allThreeZoneXModelPopulationsClosed':all(z['gates']['wholeZoneXModelPopulationClosed'] for z in zone_rows),
+            },
+            'proofBoundary':[
+              'Expected XAsset and XMODEL counts are independently retained raw-XAsset-list facts, not inferred from native trace output.',
+              'Native source-consuming XMODEL endpoints are cross-checked with XModelWalker v2 without fitted offsets.',
+              'Zero-source top-level XMODEL references are retained as explicit identity-resolution blockers.',
+              'This workflow does not alter, reinterpret, or execute the historical 24,855 XAnimParts canary.'
+            ]
+          }
+          Path('/tmp/proof/T6_MP_NATIVE_XMODEL_CENSUS_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'totals':out['totals'],'gates':out['gates'],'zones':[{k:z[k] for k in ['zone','observedXModels','nativeSourceConsumingXModels','zeroSourceXModelReferences','walkerEndpointMatchesNative','walkerEndpointMismatchesOrFailures']} for z in zone_rows]},indent=2,sort_keys=True))
+          if not out['gates']['allRawExpectedCountsMatch'] or not out['gates']['allTopLevelXAssetsNativeTraced']:
+            raise SystemExit('raw/native top-level population accounting drift')
+          PY
+
+      - name: Upload MP native XModel census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_NATIVE_XMODEL_CENSUS_V1
+          path: |
+            /tmp/proof/T6_MP_NATIVE_XMODEL_CENSUS_V1.json
+            /tmp/proof/OAT_9DCA_EXPANDED_XASSET_TRACE.patch
+            /tmp/proof/*_expanded_xasset_trace.txt
+            /tmp/proof/*_fastfile_audit.json
+            /tmp/proof/*_oat_trace.log
+            /tmp/proof/oat_build.log
+          if-no-files-found: warn
+          retention-days: 14
