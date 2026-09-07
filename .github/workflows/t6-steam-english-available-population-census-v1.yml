@@ -11,6 +11,7 @@ on:
       - 'tools/t6_steam_english_population_census_aggregate_v1.py'
       - 'tools/t6_raw_xasset_inventory.py'
       - 'tools/t6_xanim_retail_delta_branch_census_v3.py'
+      - 'tools/bo2_t6_fastfile_v2.py'
       - 'tools/bo2_t6_fastfile.py'
       - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
       - 'manifests/nonmap/retail/t6_steam_english_full_zone_catalog_v2.json'
@@ -71,7 +72,7 @@ jobs:
             rm -f /tmp/current.ff /tmp/current.expanded /tmp/current_audit.json
             curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 \
               -o /tmp/current.ff "$url"
-            python3 tools/bo2_t6_fastfile.py decrypt /tmp/current.ff \
+            python3 tools/bo2_t6_fastfile_v2.py decrypt /tmp/current.ff \
               -o /tmp/current.expanded --audit /tmp/current_audit.json
             PYTHONPATH=tools python3 tools/t6_retail_zone_population_audit_v1.py \
               /tmp/current.expanded --zone "$path" \
