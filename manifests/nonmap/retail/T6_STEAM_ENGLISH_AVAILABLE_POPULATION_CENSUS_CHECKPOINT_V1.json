@@ -1,0 +1,47 @@
+{
+  "format": "t6-steam-english-available-population-census-checkpoint-v1",
+  "scope": "Steam English retail FastFile catalog, source-available subset",
+  "producerWorkflow": ".github/workflows/t6-steam-english-available-population-census-v1.yml",
+  "workflowRun": 34161422955,
+  "workflowHeadSha": "1fe845a5956b56b341b8947ff5d73af472a83f36",
+  "artifact": {
+    "id": 10032730808,
+    "name": "T6_STEAM_ENGLISH_AVAILABLE_POPULATION_CENSUS_V1",
+    "digest": "sha256:bc7a6e026a28819cd5b3f5d379f1bb82e95dfdd2ce4ca421f2b0f151b5a3f1bb"
+  },
+  "catalog": {
+    "declaredUniqueFastFilePaths": 297,
+    "sourceAvailablePaths": 215,
+    "sourceUnavailablePaths": 82,
+    "sourceAvailableFraction": 0.7239057239057239,
+    "overlappingDepotPathsStillRequiringByteIdentityClosure": 6
+  },
+  "availableSourcePopulation": {
+    "auditedPaths": 215,
+    "rawXAssetInventoryClosedPaths": 215,
+    "xanimPopulationClosedPaths": 215,
+    "topLevelXAssetsAcrossZones": 120385,
+    "topLevelXAnimPartsAcrossZones": 24114,
+    "topLevelXModelsAcrossZones": 22255
+  },
+  "gates": {
+    "allSourceAvailablePathsAudited": true,
+    "allSourceAvailableXAnimPopulationsClosed": true,
+    "allSourceAvailableXModelSourceRecordsClosed": false,
+    "allSourceAvailableXModelIdentitiesClosed": false,
+    "characterClassificationComplete": false,
+    "englishRetailXAnimPopulationComplete": false,
+    "englishRetailXModelPopulationComplete": false,
+    "populationInputIdentityComplete": false,
+    "semanticCoverageComplete": false,
+    "wholeRetailAllLanguagesPopulationComplete": false
+  },
+  "proofBoundary": [
+    "Every one of the 215 currently retrievable paths in the retained 297-path Steam English FastFile catalog was independently expanded and its raw top-level XAsset list structurally parsed.",
+    "For all 215 retrievable paths, the structural XAnimParts census closes exactly against the type-4 count in that zone's raw top-level XAsset list.",
+    "The 24114 XAnimParts and 22255 XModels are top-level per-zone population counts, not globally deduplicated unique asset identities; assets may be repeated or referenced across zones.",
+    "The 82 unavailable declared paths remain explicit blockers. No claim of complete English-retail population is made until their source bytes are available and audited.",
+    "XModel identity/source closure, global character classification, animation semantic coverage, material/texture/TechniqueSet/shader closure, and export-format fidelity are separate gates and remain unpromoted here.",
+    "This checkpoint does not redefine or replace the independent Stage18d 24855-XAnimParts scoped canary."
+  ]
+}
