@@ -8,6 +8,8 @@ on:
       - 'tools/test_t6_dxbc_signature_v1.py'
       - 'tools/t6_xmodel_blender_static_bindpose_export_v3.py'
       - 'tools/test_t6_xmodel_blender_static_bindpose_export_v3.py'
+      - 'tools/t6_blender_shader_plan_v1.py'
+      - 'manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json'
       - '.github/workflows/t6_blender_shader_core_v1.yml'
 
 permissions:
@@ -25,9 +27,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m py_compile tools/t6_blender_shader_plan_v1.py
           PYTHONPATH=tools python3 -m unittest -v \
             tools/test_t6_dxbc_signature_v1.py \
             tools/test_t6_xmodel_blender_static_bindpose_export_v3.py
+          python3 -m json.tool manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json >/dev/null
 
       - name: Download exact Car01 retail shader and IR artifacts
         shell: bash
@@ -35,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/exact /tmp/ir /tmp/proof
+          mkdir -p /tmp/exact /tmp/ir /tmp/proof /tmp/plans
           curl -fL --retry 4 \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -97,8 +101,49 @@ jobs:
           print(json.dumps(proof, indent=2, sort_keys=True))
           PY
 
+      - name: Lower all five exact Car01 lit IRs to Blender plans
+        shell: bash
+        run: |
+          set -euo pipefail
+          for src in /tmp/ir/*_lit.json; do
+            stem=$(basename "$src" .json)
+            PYTHONPATH=tools python3 tools/t6_blender_shader_plan_v1.py \
+              "$src" \
+              --semantics manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json \
+              --out "/tmp/plans/${stem}.blender_plan.json" >/dev/null
+          done
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          rows=[json.loads(p.read_text()) for p in sorted(Path('/tmp/plans').glob('*.json'))]
+          assert len(rows)==5, len(rows)
+          families=Counter(r['family'] for r in rows)
+          assert families == {
+              'lprobe-lit-normal-spec-color-v1': 3,
+              'lprobe-lit-glass-spec-color-v1': 2,
+          }, families
+          assert all(r['blenderLowering']['materialLocal']=='exact-node' for r in rows)
+          assert all(r['completeRetailPixelOutputInBlender'] is False for r in rows)
+          opaque=[r for r in rows if r['family']=='lprobe-lit-normal-spec-color-v1']
+          assert all(any(v['transport']=='_T6_XMODEL_TANGENT' for v in r['vertexRequirements']) for r in opaque)
+          assert all(any(v['transport']=='_T6_TANGENT_HANDEDNESS' for v in r['vertexRequirements']) for r in opaque)
+          glass=[r for r in rows if r['family']=='lprobe-lit-glass-spec-color-v1']
+          assert all(r['exactMaterialLocalAlpha']['mode']=='expression' for r in glass)
+          bundle={
+              'format':'t6-car01-blender-shader-plan-bundle-v1',
+              'familyCounts':dict(families),
+              'plans':rows,
+          }
+          Path('/tmp/proof/T6_CAR01_BLENDER_SHADER_PLAN_BUNDLE_V1.json').write_text(
+              json.dumps(bundle,indent=2,sort_keys=True)+'\n'
+          )
+          print(json.dumps(bundle,indent=2,sort_keys=True))
+          PY
+          cp /tmp/plans/*.json /tmp/proof/
+
       - uses: actions/upload-artifact@v4
         with:
-          name: T6_CAR01_REAL_DXBC_VERTEX_ROUTING_PROOF_V1
+          name: T6_CAR01_BLENDER_SHADER_CORE_V1
           path: /tmp/proof
           if-no-files-found: error
