@@ -1,0 +1,92 @@
+name: T6 patch_mp XModel 1421 name-pointer proof v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-patch-mp-xmodel-1421-name-pointer-v1.yml'
+      - 'tools/bo2_t6_fastfile_v2.py'
+      - 'tools/bo2_t6_fastfile.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker.py'
+      - 'tools/t6_clipmap_serialized_walker_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact patch_mp and prove XAsset 1421 name-pointer class
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          curl -fL --retry 6 --retry-delay 1 -o /tmp/patch_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/patch_mp.ff' | sha256sum -c -
+          python3 tools/bo2_t6_fastfile_v2.py decrypt /tmp/patch_mp.ff \
+            -o /tmp/patch_mp.expanded --audit /tmp/proof/patch_mp_fastfile_v2_audit.json
+          echo '1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9  /tmp/patch_mp.expanded' | sha256sum -c -
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from t6_clipmap_serialized_walker import ptr_kind
+          from t6_xmodel_serialized_walker_v2 import XModelWalker
+
+          expanded=Path('/tmp/patch_mp.expanded').read_bytes()
+          start=8415722
+          native_end=8417423
+          raw=int.from_bytes(expanded[start:start+4],'little')
+          kind=ptr_kind(raw)
+          walked=XModelWalker(expanded,start).walk_xmodel()
+          out={
+            'format':'t6-patch-mp-xmodel-1421-name-pointer-proof-v1',
+            'zone':'patch_mp',
+            'xassetIndex':1421,
+            'expandedBytes':len(expanded),
+            'expandedSha256':hashlib.sha256(expanded).hexdigest(),
+            'sourceStart':start,
+            'nativeSourceEndFromRetainedV1Trace':native_end,
+            'nativeSerializedBytesFromRetainedV1Trace':native_end-start,
+            'rawNamePointer':f'0x{raw:08X}',
+            'namePointer':kind,
+            'walkerName':walked['xmodel'].get('name'),
+            'walkerSourceEnd':int(walked['assetSerializedEnd']),
+            'walkerBlockers':walked['blockers'],
+            'gates':{
+              'rawNamePointerIsPacked':kind.get('kind')=='packed',
+              'walkerConsumesNoInlineName':walked['xmodel'].get('name') is None,
+              'walkerEndpointMatchesRetainedNativeEndpoint':not walked['blockers'] and int(walked['assetSerializedEnd'])==native_end,
+            },
+            'retainedNativeIdentityEvidence':{
+              'workflowRun':34160939955,
+              'artifactId':10032808095,
+              'nativeResolvedName':'void',
+              'resolvedOwnerIndex':1421,
+              'resolvedSeenEarlier':False,
+            },
+            'proofBoundary':[
+              'The raw name pointer is read directly from byte 0 of XAsset 1421 XModel fixed record at the exact native source start retained by the independent v1 OAT trace.',
+              'Pointer classification uses the generic T6 packed-pointer decoder; no asset-name special case is used.',
+              'The structural XModel walker independently must end at the retained native source endpoint with zero blockers.',
+              'The native resolved name void comes from the retained pinned-OAT v1 identity artifact and is not inferred from these source bytes.'
+            ]
+          }
+          Path('/tmp/proof/T6_PATCH_MP_XMODEL_1421_NAME_POINTER_PROOF_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          if not all(out['gates'].values()):
+            raise SystemExit('patch_mp XModel 1421 packed-name proof did not close')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_PATCH_MP_XMODEL_1421_NAME_POINTER_PROOF_V1
+          path: |
+            /tmp/proof/T6_PATCH_MP_XMODEL_1421_NAME_POINTER_PROOF_V1.json
+            /tmp/proof/patch_mp_fastfile_v2_audit.json
+          if-no-files-found: error
+          retention-days: 14
