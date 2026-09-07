@@ -9,12 +9,12 @@ on:
       - "tools/t6_asset_types_v1.py"
       - "tools/t6_retail_asset_index_v1.py"
       - "tools/t6_material_techset_top_level_walk_v1.py"
-      - "tools/t6_exact_material_graph_to_index_v1.py"
-      - "tools/t6_seal6_material_technique_binding_proof_v1.py"
-      - "tools/t6_seal6_material_technique_binding_proof_v2.py"
+      - "tools/t6_material_dependency_graph_v1.py"
+      - "tools/t6_material_dependency_graph_to_index_v1.py"
       - "tools/bo2_t6_fastfile.py"
       - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
       - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
+      - "manifests/nonmap/retail/seal6_common_packed_image_name_proof_v1.json"
   workflow_dispatch:
 
 permissions:
@@ -23,158 +23,176 @@ permissions:
 jobs:
   index:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Compile universal Material index path
+      - name: Compile universal dependency path
         run: |
           python -m py_compile \
             tools/t6_asset_types_v1.py \
             tools/t6_retail_asset_index_v1.py \
             tools/t6_material_techset_top_level_walk_v1.py \
-            tools/t6_exact_material_graph_to_index_v1.py
+            tools/t6_material_dependency_graph_v1.py \
+            tools/t6_material_dependency_graph_to_index_v1.py
 
-      - name: Fetch and expand exact retail faction FastFile
+      - name: Fetch and expand exact retail dependency zones
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/seal6_universal
-          curl --fail --location --silent --show-error \
-            --retry 6 --retry-delay 2 --retry-all-errors --connect-timeout 30 \
-            'https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff' \
-            -o /tmp/seal6_universal/faction_seals_mp.ff
-          python tools/bo2_t6_fastfile.py decrypt \
-            /tmp/seal6_universal/faction_seals_mp.ff \
-            --output /tmp/seal6_universal/faction_seals_mp.ff.expanded
+          for zone in faction_seals_mp common_mp; do
+            curl --fail --location --silent --show-error \
+              --retry 6 --retry-delay 2 --retry-all-errors --connect-timeout 30 \
+              "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff" \
+              -o "/tmp/seal6_universal/${zone}.ff"
+            python tools/bo2_t6_fastfile.py decrypt \
+              "/tmp/seal6_universal/${zone}.ff" \
+              --output "/tmp/seal6_universal/${zone}.ff.expanded"
+          done
 
-      - name: Diagnose 104 vs 112 byte Material layouts from exact names
+      - name: Verify exact retail identities
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, struct
+          import hashlib, json
           from pathlib import Path
-
-          data = Path('/tmp/seal6_universal/faction_seals_mp.ff.expanded').read_bytes()
-          proof = json.load(open('manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json', encoding='utf-8'))
-          names = []
-          for x in proof.get('surfaceMaterialSequence', []):
-              n = x[1:] if x.startswith(',') else x
-              if n not in names:
-                  names.append(n)
-          full = json.load(open('manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json', encoding='utf-8'))
-          for x in (full.get('bodyMaterials') or {}).get('directInline', []):
-              n = str(x.get('name') or '')
-              n = n[1:] if n.startswith(',') else n
-              if n and n not in names:
-                  names.append(n)
-
-          def ptrs(start, off):
-              if start < 0 or start + off + 20 > len(data): return None
-              return [f'0x{x:08X}' for x in struct.unpack_from('<5I', data, start + off)]
-
-          rows=[]
-          for name in names:
-              variants=[name]
-              if not name.startswith(','): variants.append(','+name)
-              hits=[]
-              for variant in variants:
-                  needle=variant.encode('ascii')+b'\0'
-                  pos=0
-                  while True:
-                      at=data.find(needle,pos)
-                      if at<0: break
-                      for fixed in (104,112):
-                          st=at-fixed
-                          if st>=0:
-                              hits.append({
-                                  'serializedName':variant,
-                                  'nameOffset':at,
-                                  'fixedBytes':fixed,
-                                  'candidateStart':st,
-                                  'namePtr':f'0x{struct.unpack_from("<I",data,st)[0]:08X}',
-                                  'counts76':list(data[st+76:st+82]),
-                                  'counts84':list(data[st+84:st+90]),
-                                  'ptrs84':ptrs(st,84),
-                                  'ptrs92':ptrs(st,92),
-                                  'headHex':data[st:st+112].hex(),
-                              })
-                      pos=at+1
-              rows.append({'material':name,'candidates':hits})
-          print(json.dumps(rows,indent=2))
+          expected={
+            'faction_seals_mp':(6245916,'21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30'),
+            'common_mp':(206493911,'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'),
+          }
+          for zone,(size,digest) in expected.items():
+              p=Path(f'/tmp/seal6_universal/{zone}.ff.expanded')
+              data=p.read_bytes(); actual=hashlib.sha256(data).hexdigest()
+              assert (len(data),actual)==(size,digest),(zone,len(data),actual)
+          print(json.dumps({z:{'bytes':s,'sha256':h} for z,(s,h) in expected.items()},indent=2))
           PY
 
-      - name: Rebuild independent exact Material to TechniqueSet proof
+      - name: Classify faction Material records as definitions or imports
         shell: bash
         run: |
           set -euo pipefail
-          python tools/t6_seal6_material_technique_binding_proof_v2.py \
+          PYTHONPATH=tools python tools/t6_material_dependency_graph_v1.py \
             /tmp/seal6_universal/faction_seals_mp.ff.expanded \
             manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json \
-            manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json \
-            --out /tmp/seal6_universal/bindings.json
-
-      - name: Replay exact definitions into persistent universal index
-        shell: bash
-        run: |
-          set -euo pipefail
-          python tools/t6_exact_material_graph_to_index_v1.py \
-            /tmp/seal6_universal/faction_seals_mp.ff.expanded \
-            /tmp/seal6_universal/bindings.json \
+            --direct-proof manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json \
             --zone faction_seals_mp \
-            --out-index /tmp/seal6_universal/index.json \
-            --out-proof /tmp/seal6_universal/index_proof.json
+            --out /tmp/seal6_universal/faction_material_graph.json
 
-      - name: Assert 13 Material definitions resolve from the cache
+      - name: Assert exact local/import split and seed persistent index
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python - <<'PY'
           import json
+          p='/tmp/seal6_universal/faction_material_graph.json'
+          d=json.load(open(p,encoding='utf-8'))
+          s=d['summary']
+          assert s['targetMaterials']==13,s
+          assert s['localDefinitions']==10,s
+          assert s['importStubs']==3,s
+          assert s['allTargetMaterialRecordsExact'] is True
+          assert s['allImportStubsStrictZeroBody'] is True
+          imports={x['material'] for x in d['materials'] if x['classification']=='import_stub'}
+          assert imports=={
+              'mc/mtl_c_gen_insidemouth',
+              'mc/mtl_gen_eye_cornea',
+              'mc/mtl_c_gen_mp_datapad',
+          },imports
+          print(json.dumps({'summary':s,'imports':sorted(imports)},indent=2,sort_keys=True))
+          PY
+          PYTHONPATH=tools python tools/t6_material_dependency_graph_to_index_v1.py \
+            /tmp/seal6_universal/faction_material_graph.json \
+            --out-index /tmp/seal6_universal/index.json \
+            --out-proof /tmp/seal6_universal/faction_index_ingest.json
+
+      - name: Locate imported full definitions in exact common_mp bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python - <<'PY'
+          import json, struct
           from pathlib import Path
-          from t6_retail_asset_index_v1 import RetailAssetIndex
+          from t6_asset_types_v1 import ASSET_TYPES, MATERIAL
+          from t6_material_techset_top_level_walk_v1 import Cursor, parse_front
 
-          p = json.load(open('/tmp/seal6_universal/index_proof.json', encoding='utf-8'))
-          assert p['format'] == 't6-exact-material-graph-index-proof-v1'
-          assert p['materialDefinitions'] == 13
-          assert p['uniqueMaterialDefinitions'] == 13
-          assert p['techniqueSetDefinitions'] >= 1
-          assert p['allMaterialDefinitionsReplayed'] is True
-          assert p['allTechniqueSetDefinitionsReplayed'] is True
-          assert p['definitionStartsDerivedFromBindingProofNotHandleOwners'] is True
+          data=Path('/tmp/seal6_universal/common_mp.ff.expanded').read_bytes()
+          blocks,assets,body=parse_front(data)
+          targets=['mc/mtl_c_gen_insidemouth','mc/mtl_gen_eye_cornea','mc/mtl_c_gen_mp_datapad']
 
-          idx = RetailAssetIndex.load(Path('/tmp/seal6_universal/index.json'))
-          assert idx.as_dict()['summary']['zoneCount'] == 1
-          for name in p['resolvedMaterials']:
-              d = idx.resolve('material', name, ['faction_seals_mp'])
-              assert d.zone == 'faction_seals_mp'
-              assert d.serialized_bytes > 112
-              assert len(d.sha256) == 64
-          assert len(p['resolvedMaterials']) == 13
-          print(json.dumps({
-              'materials': len(p['resolvedMaterials']),
-              'techniqueSets': p['techniqueSetDefinitions'],
-              'indexSummary': idx.as_dict()['summary'],
-          }, indent=2, sort_keys=True))
+          def canon(x): return x[1:] if x.startswith(',') else x
+          def node_name(node):
+              x=node.get('name')
+              return x.get('value') if isinstance(x,dict) else x
+
+          results=[]
+          for target in targets:
+              candidates=[]
+              for spelling in (target,','+target):
+                  needle=spelling.encode('ascii')+b'\0'; pos=0
+                  while True:
+                      at=data.find(needle,pos)
+                      if at<0: break
+                      st=at-112
+                      if st>=body and struct.unpack_from('<I',data,st)[0] in (0xFFFFFFFF,0xFFFFFFFE):
+                          try:
+                              c=Cursor(data,st,blocks); node=c.material(); got=node_name(node)
+                              if got and canon(got)==target:
+                                  candidates.append({
+                                      'start':st,'end':c.p,'serializedName':got,
+                                      'textureCount':node['textureCount'],
+                                      'constantCount':node['constantCount'],
+                                      'stateBitsCount':node['stateBitsCount'],
+                                      'techniqueSetPointer':node['techniqueSetPointer'],
+                                  })
+                          except Exception:
+                              pass
+                      pos=at+1
+              unique={(x['start'],x['end']):x for x in candidates}
+              results.append({'material':target,'candidates':list(unique.values())})
+
+          type_window=[]
+          for i in range(5898,5930):
+              typ=assets[i]['type']; raw=assets[i]['headerRaw']
+              type_window.append({'xassetIndex':i,'typeId':typ,'type':ASSET_TYPES[typ],'headerRaw':f'0x{raw:08X}'})
+
+          # Retained source-order proof already pins the inside-mouth top-level Material anchor.
+          retained=json.load(open('manifests/nonmap/retail/seal6_common_packed_image_name_proof_v1.json',encoding='utf-8'))
+          anchor=next(g['anchor'] for g in retained['groups'] if g['name']=='inside_mouth_dependencies')
+          inside=next(x for x in results if x['material']=='mc/mtl_c_gen_insidemouth')
+          assert anchor['assetIndex']==5918 and anchor['xassetTypeIndex']==MATERIAL
+          assert anchor['rawStart']==80579573
+          assert any(x['start']==anchor['rawStart'] for x in inside['candidates']),inside
+
+          # Every import must have exactly one valid full Material candidate in common_mp.
+          for r in results:
+              assert len(r['candidates'])==1,r
+              c=r['candidates'][0]
+              assert c['textureCount']>0,r
+              assert c['techniqueSetPointer']['kind'] in ('packed','following','insert'),r
+          out={'format':'t6-seal6-common-import-material-candidates-v1','assetBodyStart':body,'typeWindow':type_window,'materials':results}
+          Path('/tmp/seal6_universal/common_material_candidates.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
           PY
 
-      - name: Verify cached zone fingerprint
+      - name: Verify faction cache fingerprint
         run: |
-          python tools/t6_retail_asset_index_v1.py verify \
+          PYTHONPATH=tools python tools/t6_retail_asset_index_v1.py verify \
             /tmp/seal6_universal/index.json \
             --expanded faction_seals_mp=/tmp/seal6_universal/faction_seals_mp.ff.expanded
 
-      - name: Upload universal cache proof
+      - name: Upload dependency proof
         uses: actions/upload-artifact@v4
         with:
-          name: SEAL6_UNIVERSAL_MATERIAL_INDEX
+          name: SEAL6_UNIVERSAL_MATERIAL_DEPENDENCY_PROOF
           path: |
+            /tmp/seal6_universal/faction_material_graph.json
+            /tmp/seal6_universal/faction_index_ingest.json
             /tmp/seal6_universal/index.json
-            /tmp/seal6_universal/index_proof.json
-            /tmp/seal6_universal/bindings.json
+            /tmp/seal6_universal/common_material_candidates.json
           if-no-files-found: error
           retention-days: 14
