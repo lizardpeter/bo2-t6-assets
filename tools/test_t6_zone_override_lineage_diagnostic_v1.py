@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import json
 import tempfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-SPEC = importlib.util.spec_from_file_location(
-    "diag", HERE / "t6_zone_override_lineage_diagnostic_v1.py"
-)
-assert SPEC and SPEC.loader
-M = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(M)
+import t6_zone_override_lineage_diagnostic_v1 as M
 
 
 def expect_error(fn, text: str) -> None:
