@@ -1,0 +1,81 @@
+{
+  "format": "t6-mp-native-xmodel-identity-closure-checkpoint-v2",
+  "scope": "Three-zone MP native XModel identity control population",
+  "evidence": {
+    "workflow": ".github/workflows/t6-mp-native-xmodel-identity-closure-v2.yml",
+    "runId": 34163318544,
+    "jobId": 101869394296,
+    "headCommit": "f6590bbfcdec3ec91fb8acdc4388a34474e14bcd",
+    "artifact": {
+      "id": 10033566926,
+      "name": "T6_MP_NATIVE_XMODEL_IDENTITY_CLOSURE_V2",
+      "digest": "sha256:c67782e24885ad4c5522a428384546fa2347d759cff610d6bd2882bba45e9355"
+    },
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1"
+  },
+  "totals": {
+    "xmodels": 796,
+    "sourceConsuming": 570,
+    "sourceConsumingEndpointClosed": 570,
+    "sourceConsumingIdentityClosed": 570,
+    "sourceConsumingInlineNameClosed": 569,
+    "sourceConsumingPackedNameClosed": 1,
+    "zeroSource": 226,
+    "zeroSourceNativeIdentityClosed": 226,
+    "failures": 0
+  },
+  "zones": [
+    {
+      "zone": "common_mp",
+      "xmodels": 481,
+      "sourceConsuming": 369,
+      "sourceConsumingIdentityClosed": 369,
+      "zeroSource": 112,
+      "zeroSourceNativeIdentityClosed": 112,
+      "failures": 0
+    },
+    {
+      "zone": "common_patch_mp",
+      "xmodels": 269,
+      "sourceConsuming": 155,
+      "sourceConsumingIdentityClosed": 155,
+      "zeroSource": 114,
+      "zeroSourceNativeIdentityClosed": 114,
+      "failures": 0
+    },
+    {
+      "zone": "patch_mp",
+      "xmodels": 46,
+      "sourceConsuming": 46,
+      "sourceConsumingInlineNameClosed": 45,
+      "sourceConsumingPackedNameClosed": 1,
+      "zeroSource": 0,
+      "failures": 0
+    }
+  ],
+  "packedNameControl": {
+    "zone": "patch_mp",
+    "xassetIndex": 1421,
+    "nativeResolvedName": "void",
+    "rawNamePointer": "0xA0793AF6",
+    "pointerKind": "packed",
+    "block": 5,
+    "blockName": "VIRTUAL",
+    "offset": 7944949
+  },
+  "gates": {
+    "allExpectedXModelsAccounted": true,
+    "allSourceConsumingEndpointsClosed": true,
+    "allSourceConsumingXModelsIdentityClosed": true,
+    "allZeroSourceXModelReferencesResolvedToIdentity": true,
+    "allThreeZoneXModelPopulationsClosed": true
+  },
+  "proofBoundary": [
+    "Every source-consuming XModel requires an independent structural-walker endpoint equal to the exact pinned native source endpoint with zero walker blockers.",
+    "Inline XModel name pointers require exact equality between the source-walker XString and pinned native resolved XModel name.",
+    "Packed XModel name pointers consume no source XString bytes and are promoted only when the raw fixed-record name pointer is structurally classified as packed and the pinned native loader resolves the real XModel object to a non-null name.",
+    "All 226 zero-source top-level XModel references close only through the pinned native loader's resolved object identity; no source-byte name scan, adjacency inference, surface similarity, or visual matching is used.",
+    "Resolved process addresses are diagnostic only and are not persisted as cross-run identity.",
+    "This proves the three-zone MP control population, not the whole 215-zone available corpus or complete English retail population."
+  ]
+}
