@@ -1,0 +1,118 @@
+name: T6 native XModel name catalog selftest v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-native-xmodel-name-catalog-selftest-v1.yml'
+      - 'tools/t6_native_xmodel_name_catalog_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build synthetic closed reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/reports /tmp/proof /tmp/bad
+          cat > /tmp/manifest.json <<'JSON'
+          {
+            "format": "t6-steam-english-population-input-manifest-v1",
+            "zones": [
+              {"path": "zone/all/a.ff", "sourceAvailable": true},
+              {"path": "zone/all/b.ff", "sourceAvailable": true},
+              {"path": "zone/all/missing.ff", "sourceAvailable": false}
+            ]
+          }
+          JSON
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          def report(zone, rows):
+              return {
+                  'format':'t6-native-xmodel-zone-identity-closure-v2',
+                  'zone':zone,
+                  'gates':{
+                      'rawXModelCountMatchesExpected':True,
+                      'allSourceConsumingEndpointsClosed':True,
+                      'allSourceConsumingXModelsIdentityClosed':True,
+                      'allZeroSourceXModelReferencesResolvedToIdentity':True,
+                      'wholeZoneXModelPopulationClosed':True,
+                  },
+                  'xmodels':rows,
+              }
+          Path('/tmp/reports/a.xmodel-identity.json').write_text(json.dumps(report('zone/all/a.ff',[
+              {'xassetIndex':1,'identityClosed':True,'nativeResolvedName':'model_shared','sourceKind':'native-source-consuming','headerRaw':'0xFFFFFFFF','sourceStart':100,'sourceEnd':200,'nativeSerializedBytes':100,'resolvedOwnerIndex':1,'resolvedSeenEarlier':False,'nameIdentityMethod':'inline serialized XString + exact native-name equality'}
+          ])))
+          Path('/tmp/reports/b.xmodel-identity.json').write_text(json.dumps(report('zone/all/b.ff',[
+              {'xassetIndex':2,'identityClosed':True,'nativeResolvedName':'model_shared','sourceKind':'zero-source-reference','headerRaw':'0x12345678','sourceStart':300,'sourceEnd':300,'nativeSerializedBytes':0,'resolvedOwnerIndex':0,'resolvedSeenEarlier':True,'identityMethod':'pinned native OAT resolved top-level XAsset object name'},
+              {'xassetIndex':3,'identityClosed':True,'nativeResolvedName':'model_unique','sourceKind':'native-source-consuming','headerRaw':'0xFFFFFFFF','sourceStart':300,'sourceEnd':450,'nativeSerializedBytes':150,'resolvedOwnerIndex':3,'resolvedSeenEarlier':False,'nameIdentityMethod':'packed XString pointer + pinned native loader resolved XModel object name'}
+          ])))
+          PY
+
+      - name: Positive exact-name/provenance catalog closes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_native_xmodel_name_catalog_v1.py \
+            --population-manifest /tmp/manifest.json \
+            --results-root /tmp/reports \
+            --expect-available-zones 2 \
+            --expect-occurrences 3 \
+            --out /tmp/proof/positive.json \
+            --require-closed
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/positive.json'))
+          assert p['catalog']['xmodelOccurrences']==3
+          assert p['catalog']['exactNativeNames']==2
+          names={x['nativeName']:x for x in p['names']}
+          assert names['model_shared']['occurrences']==2
+          assert names['model_shared']['zoneCount']==2
+          assert names['model_shared']['crossZoneRepeatedName'] is True
+          assert names['model_unique']['occurrences']==1
+          assert all(p['gates'].values())
+          PY
+
+      - name: Unclosed occurrence fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/reports/*.json /tmp/bad/
+          python3 - <<'PY'
+          import json
+          p='/tmp/bad/a.xmodel-identity.json'
+          o=json.load(open(p))
+          o['xmodels'][0]['identityClosed']=False
+          open(p,'w').write(json.dumps(o))
+          PY
+          if python3 tools/t6_native_xmodel_name_catalog_v1.py \
+            --population-manifest /tmp/manifest.json \
+            --results-root /tmp/bad \
+            --expect-available-zones 2 \
+            --expect-occurrences 3 \
+            --out /tmp/proof/unclosed.json \
+            --require-closed; then
+            echo 'ERROR: unclosed occurrence was accepted' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/unclosed.json'))
+          assert p['gates']['allXModelOccurrencesHaveClosedNativeNames'] is False
+          assert p['gates']['occurrenceCountMatchesExpected'] is False
+          assert p['failures']
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NATIVE_XMODEL_NAME_CATALOG_SELFTEST_V1
+          path: /tmp/proof/*.json
+          if-no-files-found: error
+          retention-days: 14
