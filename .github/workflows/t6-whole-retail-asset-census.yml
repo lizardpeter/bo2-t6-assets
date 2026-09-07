@@ -123,19 +123,21 @@ jobs:
                       assert z['expandedSha256MatchesExpected'] is True, z['zone']
                   if z['expected']['xanimCount'] is not None:
                       assert z['xanimCountMatchesManifestRegression'] is True, z['zone']
-          # The seed manifest is intentionally incomplete. A green audit must not silently
-          # turn that into a whole-retail claim.
           assert p['gates']['corpusComplete']['value'] is False
           assert p['gates']['xanimPopulationComplete']['value'] is False
           assert p['gates']['xmodelPopulationComplete']['value'] is False
           assert p['gates']['semanticCoverageComplete']['value'] is False
           PY
 
-      - name: Upload whole-retail census audit evidence
+      - name: Upload compact whole-retail census audit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1
-          path: /tmp/census
+          path: |
+            /tmp/census/T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1.json
+            /tmp/census/EMPTY_ROOT_FAIL_CLOSED.json
+            /tmp/census/DOWNLOAD_STATUS.tsv
+            /tmp/census/zones.tsv
           if-no-files-found: error
           retention-days: 14
