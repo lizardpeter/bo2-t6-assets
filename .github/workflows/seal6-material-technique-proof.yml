@@ -1,0 +1,52 @@
+name: SEAL6 material TechniqueSet proof
+
+on:
+  push:
+    branches:
+      - reversal/nonmap-assets
+    paths:
+      - ".github/workflows/seal6-material-technique-proof.yml"
+      - "tools/t6_seal6_material_technique_binding_proof_v1.py"
+      - "tools/bo2_t6_fastfile.py"
+      - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch and expand exact retail faction FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/seal6_technique
+          curl --fail --location --silent --show-error \
+            --retry 6 --retry-delay 2 --retry-all-errors --connect-timeout 30 \
+            'https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff' \
+            -o /tmp/seal6_technique/faction_seals_mp.ff
+          python tools/bo2_t6_fastfile.py decrypt \
+            /tmp/seal6_technique/faction_seals_mp.ff \
+            --output /tmp/seal6_technique/faction_seals_mp.ff.expanded
+      - name: Prove Material to TechniqueSet bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/t6_seal6_material_technique_binding_proof_v1.py \
+            /tmp/seal6_technique/faction_seals_mp.ff.expanded \
+            manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json \
+            --out /tmp/seal6_technique/seal6_material_technique_binding_proof_v1.json
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEAL6_MATERIAL_TECHNIQUE_PROOF
+          path: /tmp/seal6_technique/seal6_material_technique_binding_proof_v1.json
+          if-no-files-found: error
+          retention-days: 14
