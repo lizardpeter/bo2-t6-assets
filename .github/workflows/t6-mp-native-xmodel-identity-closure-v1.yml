@@ -1,0 +1,236 @@
+name: T6 MP native XModel identity closure v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-mp-native-xmodel-identity-closure-v1.yml'
+      - 'tools/t6_oat_expanded_xasset_trace_patch_v1.py'
+      - 'tools/t6_oat_resolved_xasset_identity_trace_patch_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_material_techset_top_level_walk_v1.py'
+      - 'tools/bo2_t6_fastfile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  close-identities:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools with source and resolved-identity traces
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_expanded_xasset_trace_patch_v1.py /tmp/oat
+          python3 tools/t6_oat_resolved_xasset_identity_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/OAT_9DCA_XMODEL_IDENTITY_TRACE.patch
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          realpath "$BIN" > /tmp/unlinker_path
+
+      - name: Fetch, hash, and expand exact MP control FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          fetch_one() {
+            local name="$1" compressed_sha="$2" expanded_sha="$3"
+            curl -fL --retry 6 --retry-delay 1 -o "/tmp/game/zone/all/${name}.ff" \
+              "https://r2.houseofkublai.com/bo2/zone/all/${name}.ff"
+            echo "${compressed_sha}  /tmp/game/zone/all/${name}.ff" | sha256sum -c -
+            python3 tools/bo2_t6_fastfile.py decrypt "/tmp/game/zone/all/${name}.ff" \
+              -o "/tmp/${name}.expanded" --audit "/tmp/proof/${name}_fastfile_audit.json"
+            echo "${expanded_sha}  /tmp/${name}.expanded" | sha256sum -c -
+          }
+          fetch_one common_mp \
+            93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77 \
+            fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce
+          fetch_one common_patch_mp \
+            95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9 \
+            486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c
+          fetch_one patch_mp \
+            459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e \
+            1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9
+
+      - name: Run native loader and capture source plus resolved identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for name in common_mp common_patch_mp patch_mp; do
+            mkdir -p "/tmp/out/${name}"
+            "$BIN" --no-color --verbose --include-assets xmodel --output-folder "/tmp/out/${name}" \
+              "/tmp/game/zone/all/${name}.ff" 2>&1 | tee "/tmp/proof/${name}_oat_identity_trace.log"
+            grep '^T6_EXPANDED_XASSET ' "/tmp/proof/${name}_oat_identity_trace.log" > "/tmp/proof/${name}_expanded_xasset_trace.txt"
+            grep '^T6_RESOLVED_XASSET ' "/tmp/proof/${name}_oat_identity_trace.log" > "/tmp/proof/${name}_resolved_xasset_trace.txt"
+            test -s "/tmp/proof/${name}_expanded_xasset_trace.txt"
+            test -s "/tmp/proof/${name}_resolved_xasset_trace.txt"
+          done
+
+      - name: Close every MP control XModel by native endpoint or native resolved identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,re
+          from pathlib import Path
+          from t6_material_techset_top_level_walk_v1 import parse_front
+          from t6_xmodel_serialized_walker_v2 import XModelWalker
+
+          specs={
+            'common_mp':{
+              'compressedSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'expandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+              'expandedBytes':206493911,'expectedTopLevelXAssets':6082,'expectedXModels':481,
+            },
+            'common_patch_mp':{
+              'compressedSha256':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+              'expandedSha256':'486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c',
+              'expandedBytes':3119037,'expectedTopLevelXAssets':3533,'expectedXModels':269,
+            },
+            'patch_mp':{
+              'compressedSha256':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+              'expandedSha256':'1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9',
+              'expandedBytes':14713756,'expectedTopLevelXAssets':1764,'expectedXModels':46,
+            },
+          }
+          source_pat=re.compile(r'^T6_EXPANDED_XASSET index=(\d+) type=(\d+) beforeLocal=(\d+) afterLocal=(\d+) before=(\d+) after=(\d+)$')
+          ident_pat=re.compile(r'^T6_RESOLVED_XASSET index=(\d+) type=(\d+) rawHeader=0x([0-9a-fA-F]+) resolved=0x([0-9a-fA-F]+) resolvedOwnerIndex=(\d+) resolvedSeenEarlier=(\d+)(?: xmodelName=(.*))?$')
+
+          zones=[]
+          totals={'expectedXModels':0,'sourceConsuming':0,'zeroSource':0,'walkerClosed':0,'zeroSourceNativeIdentityClosed':0,'failures':0}
+          for name,spec in specs.items():
+            d=Path(f'/tmp/{name}.expanded').read_bytes()
+            assert len(d)==spec['expandedBytes']
+            assert hashlib.sha256(d).hexdigest()==spec['expandedSha256']
+            blocks,assets,body=parse_front(d)
+            assert len(assets)==spec['expectedTopLevelXAssets']
+            assert sum(a['type']==5 for a in assets)==spec['expectedXModels']
+
+            source=[]
+            for line in Path(f'/tmp/proof/{name}_expanded_xasset_trace.txt').read_text().splitlines():
+              m=source_pat.fullmatch(line.strip())
+              if not m: raise SystemExit(f'{name}: bad source trace line {line!r}')
+              i,t,bl,al,b,a=map(int,m.groups())
+              source.append({'xassetIndex':i,'type':t,'sourceStart':b,'sourceEnd':a})
+            identities=[]
+            for line in Path(f'/tmp/proof/{name}_resolved_xasset_trace.txt').read_text().splitlines():
+              m=ident_pat.fullmatch(line.strip())
+              if not m: raise SystemExit(f'{name}: bad identity trace line {line!r}')
+              i,t,raw,resolved,owner,seen,xname=m.groups()
+              identities.append({
+                'xassetIndex':int(i),'type':int(t),'rawHeader':int(raw,16),'resolvedPointerDiagnostic':f'0x{int(resolved,16):X}',
+                'resolvedOwnerIndex':int(owner),'resolvedSeenEarlier':bool(int(seen)),'xmodelName':xname,
+              })
+            assert len(source)==len(assets)==len(identities),(name,len(source),len(assets),len(identities))
+
+            rows=[];source_count=zero_count=walker_ok=identity_ok=fail=0
+            for a,s,ident in zip(assets,source,identities):
+              assert s['xassetIndex']==ident['xassetIndex']==a['xassetIndex']
+              assert s['type']==ident['type']==a['type']
+              assert ident['rawHeader']==a['headerRaw'],(name,a,ident)
+              if a['type']!=5: continue
+              rec={
+                'xassetIndex':a['xassetIndex'],'headerRaw':f"0x{a['headerRaw']:08X}",
+                'sourceStart':s['sourceStart'],'sourceEnd':s['sourceEnd'],
+                'nativeSerializedBytes':s['sourceEnd']-s['sourceStart'],
+                'nativeResolvedName':ident['xmodelName'],
+                'resolvedOwnerIndex':ident['resolvedOwnerIndex'],
+                'resolvedSeenEarlier':ident['resolvedSeenEarlier'],
+              }
+              if s['sourceEnd']!=s['sourceStart']:
+                source_count+=1;rec['sourceKind']='native-source-consuming'
+                try:
+                  w=XModelWalker(d,s['sourceStart']).walk_xmodel()
+                  rec['walkerName']=w['xmodel'].get('name')
+                  rec['walkerSourceEnd']=int(w['assetSerializedEnd'])
+                  rec['walkerBlockers']=w['blockers']
+                  rec['walkerEndpointMatchesNative']=not w['blockers'] and int(w['assetSerializedEnd'])==s['sourceEnd']
+                  rec['nativeNameMatchesWalker']=ident['xmodelName']==rec['walkerName']
+                except Exception as exc:
+                  rec['walkerException']=repr(exc);rec['walkerEndpointMatchesNative']=False;rec['nativeNameMatchesWalker']=False
+                rec['identityClosed']=rec['walkerEndpointMatchesNative'] and rec['nativeNameMatchesWalker'] and bool(ident['xmodelName'])
+                if rec['identityClosed']: walker_ok+=1
+                else: fail+=1
+              else:
+                zero_count+=1;rec['sourceKind']='zero-source-reference'
+                rec['identityClosed']=bool(ident['xmodelName']) and ident['xmodelName']!='<null>' and ident['resolvedPointerDiagnostic']!='0x0'
+                rec['identityMethod']='pinned native OAT resolved top-level XAsset object name'
+                if rec['identityClosed']: identity_ok+=1
+                else: fail+=1
+              rows.append(rec)
+
+            z={
+              'zone':name,**spec,'observedXModels':len(rows),
+              'nativeSourceConsumingXModels':source_count,
+              'zeroSourceXModelReferences':zero_count,
+              'walkerEndpointAndNameClosed':walker_ok,
+              'zeroSourceNativeIdentityClosed':identity_ok,
+              'failures':fail,'xmodels':rows,
+              'gates':{
+                'rawExpectedCountsMatch':len(rows)==spec['expectedXModels'],
+                'allSourceConsumingXModelsClosed':walker_ok==source_count,
+                'allZeroSourceXModelReferencesResolvedToIdentity':identity_ok==zero_count,
+                'wholeZoneXModelPopulationClosed':fail==0 and len(rows)==spec['expectedXModels'],
+              }
+            }
+            zones.append(z)
+            totals['expectedXModels']+=len(rows);totals['sourceConsuming']+=source_count;totals['zeroSource']+=zero_count
+            totals['walkerClosed']+=walker_ok;totals['zeroSourceNativeIdentityClosed']+=identity_ok;totals['failures']+=fail
+
+          out={
+            'format':'t6-mp-native-xmodel-identity-closure-v1',
+            'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'xmodelWalker':'t6-xmodel-serialized-walk-v2',
+            'zones':zones,'totals':totals,
+            'gates':{
+              'allExpectedXModelsAccounted':totals['expectedXModels']==796,
+              'allSourceConsumingXModelsClosed':totals['walkerClosed']==totals['sourceConsuming'],
+              'allZeroSourceXModelReferencesResolvedToIdentity':totals['zeroSourceNativeIdentityClosed']==totals['zeroSource'],
+              'allThreeZoneXModelPopulationsClosed':totals['failures']==0 and totals['expectedXModels']==796,
+            },
+            'proofBoundary':[
+              'Source-consuming XModels require both exact native endpoint equality and exact native-name equality with the independent structural walker.',
+              'Zero-source XModels are promoted only when the pinned native loader resolves the real top-level XAsset to a non-null XModel object with a non-null object name.',
+              'Resolved process addresses are diagnostic only and are not persisted as cross-run identities.',
+              'No source-byte name scan, adjacency inference, surface similarity, or visual matching is used to resolve zero-source rows.',
+              'This is a three-zone MP control population closure, not whole-retail XModel completeness.'
+            ]
+          }
+          Path('/tmp/proof/T6_MP_NATIVE_XMODEL_IDENTITY_CLOSURE_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'totals':totals,'gates':out['gates'],'zones':[{k:z[k] for k in ['zone','observedXModels','nativeSourceConsumingXModels','zeroSourceXModelReferences','walkerEndpointAndNameClosed','zeroSourceNativeIdentityClosed','failures']} for z in zones]},indent=2,sort_keys=True))
+          if not all(out['gates'].values()): raise SystemExit('MP XModel identity closure did not fully close')
+          PY
+
+      - name: Upload MP native identity closure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_NATIVE_XMODEL_IDENTITY_CLOSURE_V1
+          path: |
+            /tmp/proof/T6_MP_NATIVE_XMODEL_IDENTITY_CLOSURE_V1.json
+            /tmp/proof/OAT_9DCA_XMODEL_IDENTITY_TRACE.patch
+            /tmp/proof/*_expanded_xasset_trace.txt
+            /tmp/proof/*_resolved_xasset_trace.txt
+            /tmp/proof/*_fastfile_audit.json
+            /tmp/proof/*_oat_identity_trace.log
+            /tmp/proof/oat_build.log
+          if-no-files-found: warn
+          retention-days: 14
