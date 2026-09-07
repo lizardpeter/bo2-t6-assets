@@ -78,7 +78,6 @@ def parse_directory_location(url: str, total: int, user_agent: str) -> dict:
         comment_len,
     ) = struct.unpack_from("<4H2LH", tail, rel + 4)
     if rel + 22 + comment_len != len(tail):
-        # The tail can begin before the EOCD, but EOCD+comment must end at EOF.
         if eocd_abs + 22 + comment_len != total:
             raise RuntimeError("EOCD comment length does not land at EOF")
     if disk != 0 or cd_disk != 0:
@@ -99,23 +98,33 @@ def parse_directory_location(url: str, total: int, user_agent: str) -> dict:
             "centralSize": cd_size32,
             "centralOffset": cd_offset32,
             "eocdOffset": eocd_abs,
+            "metadataReadFromTail": True,
         }
 
     locator_off = eocd_abs - 20
-    if locator_off < 0:
-        raise RuntimeError("ZIP64 locator would precede archive")
-    locator, _ = request(url, start=locator_off, end=locator_off + 19, user_agent=user_agent)
-    if locator[:4] != ZIP64_LOCATOR_SIG:
-        raise RuntimeError("ZIP64 locator signature missing")
+    if locator_off < tail_start:
+        raise RuntimeError("ZIP64 locator is outside validated EOCD tail")
+    locator_rel = locator_off - tail_start
+    locator = tail[locator_rel : locator_rel + 20]
+    if len(locator) != 20 or locator[:4] != ZIP64_LOCATOR_SIG:
+        raise RuntimeError("ZIP64 locator signature missing from validated tail")
     zip64_disk, zip64_eocd_off, total_disks = struct.unpack_from("<LQL", locator, 4)
     if zip64_disk != 0 or total_disks != 1:
         raise RuntimeError("multi-disk ZIP64 is unsupported")
-    head, _ = request(url, start=zip64_eocd_off, end=zip64_eocd_off + 55, user_agent=user_agent)
+
+    zip64_rel = zip64_eocd_off - tail_start
+    if zip64_rel < 0 or zip64_rel + 56 > len(tail):
+        raise RuntimeError(
+            "ZIP64 EOCD is outside validated tail; refusing a tiny arbitrary-range fallback"
+        )
+    head = tail[zip64_rel : zip64_rel + 56]
     if head[:4] != ZIP64_EOCD_SIG:
-        raise RuntimeError("ZIP64 EOCD signature missing")
+        raise RuntimeError("ZIP64 EOCD signature missing from validated tail")
     record_size = struct.unpack_from("<Q", head, 4)[0]
     if record_size < 44:
         raise RuntimeError(f"invalid ZIP64 EOCD record size {record_size}")
+    if zip64_rel + 12 + record_size > len(tail):
+        raise RuntimeError("ZIP64 EOCD record extends outside validated tail")
     (
         _version_made,
         _version_needed,
@@ -136,6 +145,7 @@ def parse_directory_location(url: str, total: int, user_agent: str) -> dict:
         "eocdOffset": eocd_abs,
         "zip64EocdOffset": zip64_eocd_off,
         "zip64RecordSize": record_size,
+        "metadataReadFromTail": True,
     }
 
 
@@ -280,6 +290,7 @@ def main() -> int:
             "requires206BeforeBodyRead": True,
             "maxCentralReadBytes": MAX_CENTRAL_BYTES,
             "archivePayloadDownloaded": False,
+            "zip64MetadataReadFromValidatedTail": bool(loc.get("metadataReadFromTail")),
         },
     }
     a.out_meta.parent.mkdir(parents=True, exist_ok=True)
