@@ -1,0 +1,102 @@
+name: T6 Nuketown Car01 OAT TechniqueSet dump v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_oat_techset_dump_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned OpenAssetTools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"
+          echo "$BIN" > /tmp/unlinker_path
+          "$BIN" --no-color --help | tee /tmp/unlinker_help.txt
+      - name: Dump exact retail TechniqueSets and passes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/out /tmp/proof
+          curl -fL --retry 4 -o /tmp/game/zone/all/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets technique_set --output-folder /tmp/out /tmp/game/zone/all/mp_nuketown_2020.ff | tee /tmp/oat_dump.log
+          find /tmp/out -type f | sort > /tmp/all_dumped_files.txt
+          echo '=== target techsets ==='
+          targets=(
+            mc_lit_sm_decal_outdoor
+            mc_lit_sm_b0c0n0s0_zfe
+            mc_lit_sm_b0c0n0s0_decal_zfe
+            mc_lit_sm_t0c0n0s0_zfe
+            mc_lit_sm_r0c0n0s0
+            mc_lit_sm_r0c0n0s0_zfe
+          )
+          for n in "${targets[@]}"; do
+            f=$(find /tmp/out -type f -path "*/techsets/$n.techset" | head -1)
+            test -n "$f" || { echo "MISSING $n"; exit 1; }
+            echo "### $n :: $f"
+            cat "$f"
+            cp "$f" "/tmp/proof/$n.techset"
+          done
+          # Preserve all technique definitions and shader binaries.  They are
+          # source-derived dependencies of the target TechniqueSets and are small
+          # enough to retain as one CI artifact for exact pass/shader inspection.
+          if [ -d /tmp/out/techniques ]; then cp -a /tmp/out/techniques /tmp/proof/; fi
+          if [ -d /tmp/out/shaders ]; then cp -a /tmp/out/shaders /tmp/proof/; fi
+          find /tmp/proof -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/SHA256SUMS.txt
+          echo '=== referenced target technique files ==='
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          root=Path('/tmp/out')
+          targets=['mc_lit_sm_decal_outdoor','mc_lit_sm_b0c0n0s0_zfe','mc_lit_sm_b0c0n0s0_decal_zfe','mc_lit_sm_t0c0n0s0_zfe','mc_lit_sm_r0c0n0s0','mc_lit_sm_r0c0n0s0_zfe']
+          rows=[]
+          for n in targets:
+              fs=list(root.rglob(f'{n}.techset'))
+              if len(fs)!=1: raise SystemExit((n,fs))
+              text=fs[0].read_text(errors='replace')
+              techs=[]
+              for line in text.splitlines():
+                  s=line.strip()
+                  if s and not s.startswith('"') and s.endswith(';'):
+                      techs.append(s[:-1])
+              deps=[]
+              for t in sorted(set(techs)):
+                  matches=list(root.rglob(f'{t}.tech'))
+                  deps.append({'name':t,'files':[str(p.relative_to(root)) for p in matches],
+                               'text':[p.read_text(errors='replace') for p in matches]})
+                  print(f'## {n} -> {t}')
+                  for p in matches:
+                      print(p.read_text(errors='replace'))
+              rows.append({'techset':n,'techsetFile':str(fs[0].relative_to(root)),'techsetText':text,'techniques':deps})
+          out={'format':'t6-nuketown-car01-oat-techset-dump-v1','openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1','fastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0','targets':rows}
+          Path('/tmp/proof/T6_NUKETOWN_CAR01_OAT_TECHSET_DUMP_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_OAT_TECHSET_DUMP_V1
+          path: |
+            /tmp/proof
+            /tmp/oat_dump.log
+            /tmp/unlinker_help.txt
+            /tmp/all_dumped_files.txt
+          if-no-files-found: error
