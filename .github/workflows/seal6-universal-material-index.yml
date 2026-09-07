@@ -11,10 +11,13 @@ on:
       - "tools/t6_material_techset_top_level_walk_v1.py"
       - "tools/t6_material_dependency_graph_v1.py"
       - "tools/t6_material_dependency_graph_to_index_v1.py"
+      - "tools/t6_material_source_order_proof_v1.py"
+      - "tools/t6_material_source_order_proof_to_index_v1.py"
       - "tools/bo2_t6_fastfile.py"
       - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
       - "manifests/nonmap/retail/faction_seals_mp_seal6_smg_full_player_v1.json"
       - "manifests/nonmap/retail/seal6_common_packed_image_name_proof_v1.json"
+      - "manifests/nonmap/retail/seal6_common_import_material_source_order_spec_v1.json"
   workflow_dispatch:
 
 permissions:
@@ -37,7 +40,9 @@ jobs:
             tools/t6_retail_asset_index_v1.py \
             tools/t6_material_techset_top_level_walk_v1.py \
             tools/t6_material_dependency_graph_v1.py \
-            tools/t6_material_dependency_graph_to_index_v1.py
+            tools/t6_material_dependency_graph_to_index_v1.py \
+            tools/t6_material_source_order_proof_v1.py \
+            tools/t6_material_source_order_proof_to_index_v1.py
 
       - name: Fetch and expand exact retail dependency zones
         shell: bash
@@ -66,8 +71,8 @@ jobs:
             'common_mp':(206493911,'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'),
           }
           for zone,(size,digest) in expected.items():
-              p=Path(f'/tmp/seal6_universal/{zone}.ff.expanded')
-              data=p.read_bytes(); actual=hashlib.sha256(data).hexdigest()
+              data=Path(f'/tmp/seal6_universal/{zone}.ff.expanded').read_bytes()
+              actual=hashlib.sha256(data).hexdigest()
               assert (len(data),actual)==(size,digest),(zone,len(data),actual)
           print(json.dumps({z:{'bytes':s,'sha256':h} for z,(s,h) in expected.items()},indent=2))
           PY
@@ -83,14 +88,13 @@ jobs:
             --zone faction_seals_mp \
             --out /tmp/seal6_universal/faction_material_graph.json
 
-      - name: Assert exact local/import split and seed persistent index
+      - name: Assert exact local/import split and seed faction index
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python - <<'PY'
           import json
-          p='/tmp/seal6_universal/faction_material_graph.json'
-          d=json.load(open(p,encoding='utf-8'))
+          d=json.load(open('/tmp/seal6_universal/faction_material_graph.json',encoding='utf-8'))
           s=d['summary']
           assert s['targetMaterials']==13,s
           assert s['localDefinitions']==10,s
@@ -107,83 +111,78 @@ jobs:
           PY
           PYTHONPATH=tools python tools/t6_material_dependency_graph_to_index_v1.py \
             /tmp/seal6_universal/faction_material_graph.json \
-            --out-index /tmp/seal6_universal/index.json \
+            --out-index /tmp/seal6_universal/index.faction.json \
             --out-proof /tmp/seal6_universal/faction_index_ingest.json
 
-      - name: Locate imported full definitions in exact common_mp bytes
+      - name: Prove common_mp import definitions by exact top-level source order
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python tools/t6_material_source_order_proof_v1.py \
+            /tmp/seal6_universal/common_mp.ff.expanded \
+            manifests/nonmap/retail/seal6_common_packed_image_name_proof_v1.json \
+            manifests/nonmap/retail/seal6_common_import_material_source_order_spec_v1.json \
+            --out /tmp/seal6_universal/common_material_source_order_proof.json
+          PYTHONPATH=tools python - <<'PY'
+          import json
+          d=json.load(open('/tmp/seal6_universal/common_material_source_order_proof.json',encoding='utf-8'))
+          assert d['summary']['materialDefinitions']==3,d['summary']
+          assert d['summary']['allSourceOrderPathsExact'] is True
+          by={x['material']:x['definition'] for x in d['materials']}
+          assert by['mc/mtl_gen_eye_cornea']['xassetIndex']==5907
+          assert by['mc/mtl_gen_eye_cornea']['start']==80259822
+          assert by['mc/mtl_c_gen_insidemouth']['xassetIndex']==5918
+          assert by['mc/mtl_c_gen_insidemouth']['start']==80579573
+          assert by['mc/mtl_c_gen_mp_datapad']['xassetIndex']==5925
+          assert by['mc/mtl_c_gen_mp_datapad']['start']==80884450
+          print(json.dumps(by,indent=2,sort_keys=True))
+          PY
+
+      - name: Add common definitions to persistent index
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python tools/t6_material_source_order_proof_to_index_v1.py \
+            /tmp/seal6_universal/common_material_source_order_proof.json \
+            --index /tmp/seal6_universal/index.faction.json \
+            --out-index /tmp/seal6_universal/index.json \
+            --out-proof /tmp/seal6_universal/common_index_ingest.json
+
+      - name: Resolve all 13 SEAL6 Materials through dependency order
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python - <<'PY'
-          import json, struct
+          import json
           from pathlib import Path
-          from t6_asset_types_v1 import ASSET_TYPES, MATERIAL
-          from t6_material_techset_top_level_walk_v1 import Cursor, parse_front
+          from t6_retail_asset_index_v1 import RetailAssetIndex
 
-          data=Path('/tmp/seal6_universal/common_mp.ff.expanded').read_bytes()
-          blocks,assets,body=parse_front(data)
-          targets=['mc/mtl_c_gen_insidemouth','mc/mtl_gen_eye_cornea','mc/mtl_c_gen_mp_datapad']
-
-          def canon(x): return x[1:] if x.startswith(',') else x
-          def node_name(node):
-              x=node.get('name')
-              return x.get('value') if isinstance(x,dict) else x
-
-          results=[]
-          for target in targets:
-              candidates=[]
-              for spelling in (target,','+target):
-                  needle=spelling.encode('ascii')+b'\0'; pos=0
-                  while True:
-                      at=data.find(needle,pos)
-                      if at<0: break
-                      st=at-112
-                      if st>=body and struct.unpack_from('<I',data,st)[0] in (0xFFFFFFFF,0xFFFFFFFE):
-                          try:
-                              c=Cursor(data,st,blocks); node=c.material(); got=node_name(node)
-                              if got and canon(got)==target:
-                                  candidates.append({
-                                      'start':st,'end':c.p,'serializedName':got,
-                                      'textureCount':node['textureCount'],
-                                      'constantCount':node['constantCount'],
-                                      'stateBitsCount':node['stateBitsCount'],
-                                      'techniqueSetPointer':node['techniqueSetPointer'],
-                                  })
-                          except Exception:
-                              pass
-                      pos=at+1
-              unique={(x['start'],x['end']):x for x in candidates}
-              results.append({'material':target,'candidates':list(unique.values())})
-
-          type_window=[]
-          for i in range(5898,5930):
-              typ=assets[i]['type']; raw=assets[i]['headerRaw']
-              type_window.append({'xassetIndex':i,'typeId':typ,'type':ASSET_TYPES[typ],'headerRaw':f'0x{raw:08X}'})
-
-          # Retained source-order proof already pins the inside-mouth top-level Material anchor.
-          retained=json.load(open('manifests/nonmap/retail/seal6_common_packed_image_name_proof_v1.json',encoding='utf-8'))
-          anchor=next(g['anchor'] for g in retained['groups'] if g['name']=='inside_mouth_dependencies')
-          inside=next(x for x in results if x['material']=='mc/mtl_c_gen_insidemouth')
-          assert anchor['assetIndex']==5918 and anchor['xassetTypeIndex']==MATERIAL
-          assert anchor['rawStart']==80579573
-          assert any(x['start']==anchor['rawStart'] for x in inside['candidates']),inside
-
-          # Every import must have exactly one valid full Material candidate in common_mp.
-          for r in results:
-              assert len(r['candidates'])==1,r
-              c=r['candidates'][0]
-              assert c['textureCount']>0,r
-              assert c['techniqueSetPointer']['kind'] in ('packed','following','insert'),r
-          out={'format':'t6-seal6-common-import-material-candidates-v1','assetBodyStart':body,'typeWindow':type_window,'materials':results}
-          Path('/tmp/seal6_universal/common_material_candidates.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
-          print(json.dumps(out,indent=2,sort_keys=True))
+          graph=json.load(open('/tmp/seal6_universal/faction_material_graph.json',encoding='utf-8'))
+          idx=RetailAssetIndex.load(Path('/tmp/seal6_universal/index.json'))
+          order=['faction_seals_mp','common_mp']
+          imports={x['material'] for x in graph['materials'] if x['classification']=='import_stub'}
+          resolved=[]
+          for row in graph['materials']:
+              name=row['material']; d=idx.resolve('material',name,order)
+              expected='common_mp' if name in imports else 'faction_seals_mp'
+              assert d.zone==expected,(name,d.zone,expected)
+              assert d.serialized_bytes>112,(name,d.serialized_bytes)
+              resolved.append({'material':name,'zone':d.zone,'start':d.start,'bytes':d.serialized_bytes,'sha256':d.sha256})
+          assert len(resolved)==13
+          summary=idx.as_dict()['summary']
+          assert summary['zoneCount']==2,summary
+          assert summary['definitionCount']==13,summary
+          assert summary['referenceCount']==3,summary
+          Path('/tmp/seal6_universal/all13_resolution.json').write_text(json.dumps({'order':order,'resolved':resolved,'indexSummary':summary},indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'resolved':len(resolved),'indexSummary':summary},indent=2,sort_keys=True))
           PY
 
-      - name: Verify faction cache fingerprint
+      - name: Verify both cached zone fingerprints
         run: |
           PYTHONPATH=tools python tools/t6_retail_asset_index_v1.py verify \
             /tmp/seal6_universal/index.json \
-            --expanded faction_seals_mp=/tmp/seal6_universal/faction_seals_mp.ff.expanded
+            --expanded faction_seals_mp=/tmp/seal6_universal/faction_seals_mp.ff.expanded \
+            --expanded common_mp=/tmp/seal6_universal/common_mp.ff.expanded
 
       - name: Upload dependency proof
         uses: actions/upload-artifact@v4
@@ -192,7 +191,9 @@ jobs:
           path: |
             /tmp/seal6_universal/faction_material_graph.json
             /tmp/seal6_universal/faction_index_ingest.json
+            /tmp/seal6_universal/common_material_source_order_proof.json
+            /tmp/seal6_universal/common_index_ingest.json
             /tmp/seal6_universal/index.json
-            /tmp/seal6_universal/common_material_candidates.json
+            /tmp/seal6_universal/all13_resolution.json
           if-no-files-found: error
           retention-days: 14
