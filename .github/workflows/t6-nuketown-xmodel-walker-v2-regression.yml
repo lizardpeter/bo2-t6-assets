@@ -1,0 +1,69 @@
+name: T6 Nuketown XModel walker v2 regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-nuketown-xmodel-walker-v2-regression.yml'
+      - 'tools/t6_xmodel_serialized_walker_v2.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/bo2_t6_fastfile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  q4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/proof
+          curl -fL --retry 6 --retry-delay 1 -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          python3 tools/bo2_t6_fastfile.py decrypt /tmp/game/zone/all/mp_nuketown_2020.ff \
+            -o /tmp/mp_nuketown_2020.expanded --audit /tmp/proof/fastfile_audit.json
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+      - name: Require q4 walker to meet independently native-traced q5 boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_xmodel_serialized_walker_v2.py \
+            /tmp/mp_nuketown_2020.expanded \
+            --asset-start 499456 \
+            --expect-end 525881 \
+            --out /tmp/proof/T6_NUKETOWN_Q4_XMODEL_WALK_V2.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/proof/T6_NUKETOWN_Q4_XMODEL_WALK_V2.json')
+          d=json.loads(p.read_text())
+          assert d['assetFixedStart']==499456
+          assert d['assetSerializedEnd']==525881
+          assert d['expectedEndMatches'] is True
+          assert not d['blockers'],d['blockers']
+          imgs=d.get('details',{}).get('inlineGfxImages',[])
+          sizes=[x.get('resourceSize') for x in imgs if x.get('resourceSize') is not None]
+          print(json.dumps({
+            'name':d['xmodel']['name'],
+            'start':d['assetFixedStart'],
+            'end':d['assetSerializedEnd'],
+            'bytes':d['assetSerializedBytes'],
+            'inlineGfxImageResourceSizes':sizes,
+            'blockers':d['blockers']
+          },indent=2))
+          PY
+      - name: Upload q4 walker proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_Q4_XMODEL_WALK_V2
+          path: |
+            /tmp/proof/T6_NUKETOWN_Q4_XMODEL_WALK_V2.json
+            /tmp/proof/fastfile_audit.json
+          retention-days: 14
