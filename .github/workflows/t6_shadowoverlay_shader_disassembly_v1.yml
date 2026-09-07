@@ -1,4 +1,4 @@
-name: T6 shadowoverlay shader disassembly v1
+name: T6 shadowoverlay shader disassembly v2
 
 on:
   workflow_dispatch:
@@ -21,6 +21,7 @@ jobs:
       VS_REL: shadowoverlay_zm_dependency_bundle/files/code_post_gfx_zm/shader_bin/vs_pimp_shader_hdr_933ab43.hlsl.cso
       PS_SHA: 2ef171c239a7c98542a961252362761828747bd288ee21e3fde542d48aa5de0e
       VS_SHA: 630a2f147e43f6bca732a73cbeea52ca5d4a65c48324ee784b84c67d7ef23909
+      DXBC_SPIRV_COMMIT: dcd27e1dfdb579e978fda948be5ff67be7b7c8b7
     steps:
       - uses: actions/checkout@v4
 
@@ -50,29 +51,33 @@ jobs:
           vertex_shader_sha256=$VS_SHA
           EOF
 
-      - name: Install and pin DXBC disassembler
+      - name: Build and pin DXBC disassembler
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq vkd3d-compiler >/dev/null
-          command -v vkd3d-compiler
-          vkd3d-compiler --version | tee /tmp/proof/vkd3d_compiler_version.txt
-          sha256sum "$(command -v vkd3d-compiler)" | tee /tmp/proof/vkd3d_compiler_sha256.txt
-          dpkg-query -W -f='${Package} ${Version}\n' vkd3d-compiler | tee /tmp/proof/vkd3d_compiler_package.txt
-          vkd3d-compiler -x dxbc-tpf --print-target-types | tee /tmp/proof/vkd3d_target_types.txt
-          grep -q 'd3d-asm' /tmp/proof/vkd3d_target_types.txt
+          sudo apt-get install -y -qq meson ninja-build g++ >/dev/null
+          git clone -q https://github.com/doitsujin/dxbc-spirv.git /tmp/dxbc-spirv
+          git -C /tmp/dxbc-spirv checkout -q "$DXBC_SPIRV_COMMIT"
+          test "$(git -C /tmp/dxbc-spirv rev-parse HEAD)" = "$DXBC_SPIRV_COMMIT"
+          meson setup /tmp/dxbc-spirv/builddir /tmp/dxbc-spirv -Denable_tools=true --buildtype=release
+          ninja -C /tmp/dxbc-spirv/builddir
+          TOOL=$(find /tmp/dxbc-spirv/builddir -type f -name dxbc_disasm -perm -111 | head -1)
+          test -n "$TOOL"
+          realpath "$TOOL" > /tmp/dxbc_disasm_path
+          printf 'repository=https://github.com/doitsujin/dxbc-spirv.git\ncommit=%s\n' "$DXBC_SPIRV_COMMIT" \
+            > /tmp/proof/dxbc_disassembler_source.txt
+          sha256sum "$TOOL" | tee /tmp/proof/dxbc_disassembler_sha256.txt
+          "$TOOL" --help > /tmp/proof/dxbc_disassembler_help.txt 2>&1 || true
 
       - name: Disassemble exact shadowoverlay shaders
         shell: bash
         run: |
           set -euo pipefail
-          TOOL=$(command -v vkd3d-compiler)
-          "$TOOL" -x dxbc-tpf -b d3d-asm --formatting=-colour,+header,+signatures,+offsets \
-            -o /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm "/tmp/source/$PS_REL" \
+          TOOL=$(cat /tmp/dxbc_disasm_path)
+          "$TOOL" "/tmp/source/$PS_REL" > /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm \
             2> /tmp/proof/pimp_shader_trivial_3981dec1.ps.stderr.txt
-          "$TOOL" -x dxbc-tpf -b d3d-asm --formatting=-colour,+header,+signatures,+offsets \
-            -o /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm "/tmp/source/$VS_REL" \
+          "$TOOL" "/tmp/source/$VS_REL" > /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm \
             2> /tmp/proof/pimp_shader_hdr_933ab43.vs.stderr.txt
           test -s /tmp/proof/pimp_shader_trivial_3981dec1.ps.d3dasm
           test -s /tmp/proof/pimp_shader_hdr_933ab43.vs.d3dasm
@@ -112,13 +117,17 @@ jobs:
                   'sourceArtifact':'T6_SHADOWOVERLAY_ZM_STARTUP_MATERIAL_V1',
                   'sourceArtifactDigest':'sha256:3746d02226be11978f2e4c915541bf1cbc73f4476cf102f2284a502fe5b9412f'
               },
+              'disassembler':{
+                  'repository':'https://github.com/doitsujin/dxbc-spirv.git',
+                  'commit':'dcd27e1dfdb579e978fda948be5ff67be7b7c8b7'
+              },
               'declarations':declarations,
               'executableLines':executable,
               'summary':{
                   'declarationCount':len(declarations),
                   'executableLineCount':len(executable),
-                  'sampleInstructionCount':sum(1 for x in executable if re.search(r'\bsample(?:_[a-z]+)?\b',x)),
-                  'storeOrOutputCount':sum(1 for x in executable if re.search(r'\b(?:mov|store_[a-z]+)\b',x)),
+                  'sampleInstructionCount':sum(1 for x in executable if re.search(r'\bsample(?:_[a-z]+)?\b',x,re.I)),
+                  'storeOrOutputCount':sum(1 for x in executable if re.search(r'\b(?:mov|store_[a-z]+)\b',x,re.I)),
               },
               'proofBoundary':'Exact disassembly of the SHA-pinned native shadowoverlay pixel shader. This proves shader declarations/instructions only. The Technique independently binds its material sampler argument to sampler.feedbackSampler. This stage does not identify the engine object behind feedbackSampler, renderer-global Material storage, pass scheduling, render-target lifetime, or high-level visual semantics unless those follow directly from the disassembled instructions.'
           }
@@ -129,7 +138,7 @@ jobs:
       - name: Upload exact disassembly evidence
         uses: actions/upload-artifact@v4
         with:
-          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V1
+          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
