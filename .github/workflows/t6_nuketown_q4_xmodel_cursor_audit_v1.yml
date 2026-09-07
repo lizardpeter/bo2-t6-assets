@@ -1,0 +1,68 @@
+name: T6 Nuketown q4 XModel cursor audit v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_q4_xmodel_cursor_audit_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Audit q4 full retail structure and immediate tail
+        shell: bash
+        run: |
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,struct,hashlib
+          from pathlib import Path
+          from t6_xmodel_serialized_walker import XModelWalker
+          from t6_material_techset_top_level_walk_v1 import Cursor
+          import t6_retail_world_formats_45_proof_v1 as h
+
+          d=Path('/tmp/map.expanded').read_bytes(); blocks,assets=h.front(d)
+          q3=Cursor(d,125632,blocks).techset(); assert q3['end']==499456
+          w=XModelWalker(d,499456).walk_xmodel(); assert not w['blockers'],w['blockers']
+          x=w['xmodel']
+          print('Q4_IDENTITY',x.get('name'),'END',w['assetSerializedEnd'],'BYTES',w['assetSerializedBytes'])
+          print('Q4_XMODEL',json.dumps(x,indent=2,sort_keys=True))
+          print('Q4_DETAILS',json.dumps(w.get('details',{}),indent=2,sort_keys=True))
+          print('Q4_SECTIONS')
+          for s in w['sections']:
+            print(s['start'],s['end'],s['end']-s['start'],s['name'],json.dumps(s.get('meta',{}),sort_keys=True))
+          e=int(w['assetSerializedEnd'])
+          print('TAIL_HEX_0_1024',d[e:e+1024].hex())
+          print('TAIL_ASCII',repr(d[e:e+65536].decode('latin1','replace')))
+          # Find strong TechniqueSet fixed-record candidates up to the next known
+          # following-name TechniqueSet. Require native fmt/pad, all 36 pointers
+          # valid against declared zone block sizes, and >=1 non-null technique.
+          def okptr(v):
+            if v in (0,0xffffffff,0xfffffffe):return True
+            try:k,b,o=h.dec(v,blocks);return k=='packed'
+            except Exception:return False
+          cand=[]
+          for p in range(e,580597-152+1):
+            if d[p+4]>8 or d[p+5:p+8]!=b'\0\0\0':continue
+            namep=struct.unpack_from('<I',d,p)[0]
+            if not okptr(namep):continue
+            refs=struct.unpack_from('<36I',d,p+8)
+            if not all(okptr(v) for v in refs):continue
+            nn=[v for v in refs if v]
+            if not nn:continue
+            cand.append({'p':p,'nameRaw':f'0x{namep:08X}','fmt':d[p+4],'nonnull':len(nn),'follow':sum(v==0xffffffff for v in refs),'insert':sum(v==0xfffffffe for v in refs),'packed':sum(v not in (0,0xffffffff,0xfffffffe) for v in refs)})
+          print('STRONG_CANDIDATE_COUNT',len(cand))
+          print('STRONG_FIRST_200',json.dumps(cand[:200],indent=2))
+          PY
