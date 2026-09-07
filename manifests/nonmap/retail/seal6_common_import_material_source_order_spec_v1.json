@@ -1,0 +1,35 @@
+{
+  "format": "t6-material-source-order-spec-v1",
+  "zone": "common_mp",
+  "source": {
+    "expandedBytes": 206493911,
+    "expandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+  },
+  "targets": [
+    {
+      "material": "mc/mtl_gen_eye_cornea",
+      "anchorGroup": "eye_cornea_dependencies",
+      "assetSequence": [
+        {"xassetIndex": 5905, "type": "TECHNIQUE_SET", "expectedNameFromAnchor": true},
+        {"xassetIndex": 5906, "type": "TECHNIQUE_SET"},
+        {"xassetIndex": 5907, "type": "MATERIAL", "expectedName": "mc/mtl_gen_eye_cornea"}
+      ]
+    },
+    {
+      "material": "mc/mtl_c_gen_insidemouth",
+      "anchorGroup": "inside_mouth_dependencies",
+      "assetSequence": [
+        {"xassetIndex": 5918, "type": "MATERIAL", "expectedName": "mc/mtl_c_gen_insidemouth", "expectedNameFromAnchor": true}
+      ]
+    },
+    {
+      "material": "mc/mtl_c_gen_mp_datapad",
+      "anchorGroup": "datapad_dependencies",
+      "assetSequence": [
+        {"xassetIndex": 5924, "type": "TECHNIQUE_SET", "expectedNameFromAnchor": true},
+        {"xassetIndex": 5925, "type": "MATERIAL", "expectedName": "mc/mtl_c_gen_mp_datapad"}
+      ]
+    }
+  ],
+  "proofBoundary": "The spec names only which already-retained exact source-order anchor to start from and which immediately consecutive top-level XAsset types must be replayed. Raw starts after the anchor are not supplied; they must be derived by exact serialized cursor replay."
+}
