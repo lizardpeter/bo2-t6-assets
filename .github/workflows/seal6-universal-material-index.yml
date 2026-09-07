@@ -13,6 +13,7 @@ on:
       - "tools/t6_material_dependency_graph_to_index_v1.py"
       - "tools/t6_material_source_order_proof_v1.py"
       - "tools/t6_material_source_order_proof_to_index_v1.py"
+      - "tools/t6_xasset_virtual_layout_v1.py"
       - "tools/t6_material_techset_resolve_v1.py"
       - "tools/bo2_t6_fastfile.py"
       - "manifests/nonmap/retail/seal6_smg_material_handle_alias_proof_v1.json"
@@ -44,6 +45,7 @@ jobs:
             tools/t6_material_dependency_graph_to_index_v1.py \
             tools/t6_material_source_order_proof_v1.py \
             tools/t6_material_source_order_proof_to_index_v1.py \
+            tools/t6_xasset_virtual_layout_v1.py \
             tools/t6_material_techset_resolve_v1.py
 
       - name: Fetch and expand exact retail dependency zones
@@ -183,7 +185,13 @@ jobs:
           f=json.load(open('/tmp/seal6_universal/faction_techsets.json'));c=json.load(open('/tmp/seal6_universal/common_techsets.json'))
           assert f['summary']['materials']==10 and f['summary']['allBindingsExact'] is True,f['summary']
           assert c['summary']['materials']==3 and c['summary']['allBindingsExact'] is True,c['summary']
-          print(json.dumps({'faction':f['summary'],'common':c['summary']},indent=2,sort_keys=True))
+          assert f['summary']['xassetBaseDerivedFromLoaderOrder'] is True
+          assert c['summary']['xassetBaseDerivedFromLoaderOrder'] is True
+          assert f['xassetPointerFieldVirtualBase']==2356,f['xassetPointerFieldVirtualBase']
+          assert f['xassetVirtualLayout']['fixedXAssetListBytes']==24
+          assert f['xassetVirtualLayout']['fixedXAssetListConsumesVirtualBytes'] is False
+          assert 2380 in f['pointerIntersectionCandidateBases']
+          print(json.dumps({'faction':f['summary'],'common':c['summary'],'factionBase':f['xassetPointerFieldVirtualBase'],'commonBase':c['xassetPointerFieldVirtualBase']},indent=2,sort_keys=True))
           PY
 
       - name: Verify both cached zone fingerprints
