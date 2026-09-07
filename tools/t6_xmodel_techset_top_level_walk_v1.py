@@ -36,17 +36,22 @@ def walk(d:bytes,start_asset:int,end_asset:int,source_start:int)->dict:
         if a['headerRaw'] not in (FOLLOW,INSERT):
             raise ValueError(f'XAsset {q} top-level header is not inline: 0x{a["headerRaw"]:08X}')
         before=c.p
-        if a['type']==XMODEL:
-            w=XModelWalker(d,before).walk_xmodel()
-            if w['blockers']:raise ValueError(f'XAsset {q} XModel blockers: {w["blockers"]}')
-            end=int(w['assetSerializedEnd'])
-            if end<=before:raise ValueError(f'XAsset {q} XModel did not advance')
-            c.p=end
-            r={'kind':'XMODEL','xmodelName':w['xmodel'].get('name'),'numBones':w['xmodel'].get('numBones'),'numSurfs':w['xmodel'].get('numSurfs')}
-        elif a['type']==TECHSET:
-            t=c.techset();r={'kind':'TECHNIQUE_SET','name':t['name'],'worldVertFormat':t['worldVertFormat'],'techniqueRefs':t['techniqueRefs']}
-        else:
-            raise ValueError(f'unsupported top-level XAsset type {a["type"]} at {q}')
+        try:
+            if a['type']==XMODEL:
+                w=XModelWalker(d,before).walk_xmodel()
+                if w['blockers']:raise ValueError(f'XModel blockers: {w["blockers"]}')
+                end=int(w['assetSerializedEnd'])
+                if end<=before:raise ValueError('XModel did not advance')
+                c.p=end
+                r={'kind':'XMODEL','xmodelName':w['xmodel'].get('name'),'numBones':w['xmodel'].get('numBones'),'numSurfs':w['xmodel'].get('numSurfs')}
+            elif a['type']==TECHSET:
+                t=c.techset();r={'kind':'TECHNIQUE_SET','name':t['name'],'worldVertFormat':t['worldVertFormat'],'techniqueRefs':t['techniqueRefs']}
+            else:
+                raise ValueError(f'unsupported top-level XAsset type {a["type"]}')
+        except Exception as exc:
+            raise ValueError(
+                f'XAsset {q} type={a["type"]} sourceStart={before}: {exc}'
+            ) from exc
         r.update({'xassetIndex':q,'xassetType':a['type'],'sourceStart':before,'sourceEnd':c.p});rows.append(r)
     return {'format':'t6-xmodel-techset-top-level-walk-v1','startAssetIndex':start_asset,'endAssetIndex':end_asset,'sourceStart':source_start,'sourceEnd':c.p,'rows':rows,'directInlineShaders':[x for x in c.inlineShaders if x.get('program') and x['program'].get('direct')]}
 
