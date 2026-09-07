@@ -1,0 +1,112 @@
+name: T6 depot 202974 authorized ingest selftest v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [reversal/nonmap-assets]
+    paths:
+      - '.github/workflows/t6-depot-202974-authorized-ingest-selftest-v1.yml'
+      - 'tools/t6_depot_202974_authorized_ingest_v1.py'
+      - 'manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build synthetic exact 84-path depot and trusted controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/trusted /tmp/proof
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cat=json.load(open('manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json'))
+          depots=[d for d in cat['depots'] if int(d['depotId'])==202974]
+          assert len(depots)==1
+          ff=depots[0]['ff']
+          assert len(ff)==84 and len(set(ff))==84
+          for i,p in enumerate(ff):
+              data=(f'synthetic-depot-202974-row-{i:03d}:{p}\n').encode()
+              dest=Path('/tmp/source')/p
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              dest.write_bytes(data)
+          for p in ['zone/all/code_post_gfx.ff','zone/all/code_pre_gfx.ff']:
+              src=Path('/tmp/source')/p
+              dst=Path('/tmp/trusted')/p
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              dst.write_bytes(src.read_bytes())
+          PY
+
+      - name: Positive control closes all ingest gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_depot_202974_authorized_ingest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --source-root /tmp/source \
+            --trusted-control-root /tmp/trusted \
+            --out /tmp/proof/positive.json \
+            --require-complete --require-controls-match
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/positive.json'))
+          assert p['observedFastFiles']==84
+          assert p['missingFastFiles']==[]
+          assert all(p['gates'].values())
+          PY
+
+      - name: Corrupted trusted-control comparison fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'corrupt\n' >> /tmp/trusted/zone/all/code_post_gfx.ff
+          if python3 tools/t6_depot_202974_authorized_ingest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --source-root /tmp/source \
+            --trusted-control-root /tmp/trusted \
+            --out /tmp/proof/corrupt-control.json \
+            --require-complete --require-controls-match; then
+            echo 'ERROR: corrupted control was accepted' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/corrupt-control.json'))
+          rows={r['path']:r for r in p['controls']}
+          assert rows['zone/all/code_post_gfx.ff']['exactByteIdentity'] is False
+          assert p['gates']['bothRetainedControlsExactByteIdentity'] is False
+          PY
+
+      - name: Missing depot FastFile fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm /tmp/source/zone/all/afghanistan.ff
+          if python3 tools/t6_depot_202974_authorized_ingest_v1.py \
+            --base-catalog manifests/nonmap/retail/t6_steam_english_base_zone_catalog_v1.json \
+            --source-root /tmp/source \
+            --out /tmp/proof/missing-file.json \
+            --require-complete; then
+            echo 'ERROR: incomplete depot was accepted' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/missing-file.json'))
+          assert p['observedFastFiles']==83
+          assert p['missingFastFiles']==['zone/all/afghanistan.ff']
+          assert p['gates']['all84AuthorizedSourceFastFilesPresent'] is False
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_DEPOT_202974_AUTHORIZED_INGEST_SELFTEST_V1
+          path: /tmp/proof/*.json
+          if-no-files-found: error
+          retention-days: 14
