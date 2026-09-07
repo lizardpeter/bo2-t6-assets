@@ -2,16 +2,24 @@
 """Minimal ZIP/ZIP64 central-directory reader and range extractor over HTTP.
 
 Designed for large public T6 archive mirrors where downloading the entire ZIP is
-unnecessary.  The reader uses HTTP Range requests, supports classic and ZIP64
+unnecessary. The reader uses HTTP Range requests, supports classic and ZIP64
 EOCD records plus ZIP64 per-entry size/offset extras, and can extract stored or
 raw-DEFLATE entries.
 
-This is transport/container code only.  It does not infer game asset ownership.
+Transport is fail-closed. Some CDNs intermittently ignore Range and answer 200
+with the whole object. Such a response is never consumed as range data: its
+Content-Length may be used only to establish object size, then the requested
+range is retried. Successful partial reads must be HTTP 206 with an exact
+Content-Range matching the requested byte interval.
+
+This is transport/container code only. It does not infer game asset ownership.
 """
 from __future__ import annotations
 
 import binascii
 import struct
+import time
+import urllib.error
 import urllib.request
 import zlib
 
@@ -21,38 +29,183 @@ class RemoteZipError(RuntimeError):
 
 
 class RemoteZip:
-    def __init__(self, url: str, user_agent: str = "bo2-t6-assets-remote-zip/1", timeout: int = 90):
+    def __init__(
+        self,
+        url: str,
+        user_agent: str = "bo2-t6-assets-remote-zip/1",
+        timeout: int = 90,
+        retries: int = 5,
+    ):
         self.url = url
         self.user_agent = user_agent
         self.timeout = timeout
+        self.retries = max(1, int(retries))
         self.total_bytes = None
         self.etag = None
         self._central = None
         self._metadata = None
 
+    @staticmethod
+    def _header(headers: dict, name: str):
+        return headers.get(name) or headers.get(name.lower())
+
+    def _remember_identity(self, headers: dict) -> None:
+        etag = self._header(headers, "ETag")
+        if etag:
+            if self.etag is not None and etag != self.etag:
+                raise RemoteZipError(f"remote object ETag changed: {self.etag!r} -> {etag!r}")
+            self.etag = etag
+
+    @staticmethod
+    def _parse_content_range(value: str) -> tuple[int, int, int]:
+        # Exact form required here: bytes START-END/TOTAL. Unsatisfied ranges are
+        # not accepted because every caller asks for an in-bounds interval.
+        try:
+            unit, rest = value.strip().split(None, 1)
+            span, total_s = rest.split("/", 1)
+            start_s, end_s = span.split("-", 1)
+            start = int(start_s)
+            end = int(end_s)
+            total = int(total_s)
+        except Exception as exc:
+            raise RemoteZipError(f"malformed Content-Range {value!r}") from exc
+        if unit.lower() != "bytes" or start < 0 or end < start or total <= end:
+            raise RemoteZipError(f"invalid Content-Range {value!r}")
+        return start, end, total
+
+    def _size_from_headers(self, headers: dict) -> int | None:
+        cr = self._header(headers, "Content-Range")
+        if cr and "/" in cr:
+            try:
+                _a, _b, total = self._parse_content_range(cr)
+            except RemoteZipError:
+                total = None
+            if total is not None:
+                return total
+        cl = self._header(headers, "Content-Length")
+        if cl:
+            try:
+                n = int(cl)
+            except ValueError:
+                return None
+            if n >= 0:
+                return n
+        return None
+
+    def _head_size(self) -> int | None:
+        req = urllib.request.Request(
+            self.url,
+            method="HEAD",
+            headers={
+                "User-Agent": self.user_agent,
+                "Accept-Encoding": "identity",
+                "Cache-Control": "no-cache",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                headers = dict(r.headers)
+                self._remember_identity(headers)
+                n = self._size_from_headers(headers)
+                if n is not None and n > 0:
+                    return n
+        except (urllib.error.URLError, TimeoutError, OSError, RemoteZipError):
+            return None
+        return None
+
     def range(self, start: int, end: int) -> tuple[bytes, dict, int]:
         if start < 0 or end < start:
             raise RemoteZipError(f"invalid range {start}-{end}")
-        req = urllib.request.Request(
-            self.url,
-            headers={"Range": f"bytes={start}-{end}", "User-Agent": self.user_agent},
+        expected = end - start + 1
+        last_error: Exception | None = None
+
+        for attempt in range(self.retries):
+            headers_out = {
+                "Range": f"bytes={start}-{end}",
+                "User-Agent": self.user_agent,
+                "Accept-Encoding": "identity",
+                "Cache-Control": "no-cache",
+            }
+            if self.etag:
+                headers_out["If-Range"] = self.etag
+            req = urllib.request.Request(self.url, headers=headers_out)
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    headers = dict(r.headers)
+                    status = int(r.status)
+                    self._remember_identity(headers)
+
+                    if status == 206:
+                        cr = self._header(headers, "Content-Range")
+                        if not cr:
+                            raise RemoteZipError("HTTP 206 response lacks Content-Range")
+                        got_start, got_end, total = self._parse_content_range(cr)
+                        if (got_start, got_end) != (start, end):
+                            raise RemoteZipError(
+                                f"range response mismatch {(got_start, got_end)} != {(start, end)}"
+                            )
+                        if self.total_bytes is not None and total != self.total_bytes:
+                            raise RemoteZipError(
+                                f"remote object size changed: {self.total_bytes} -> {total}"
+                            )
+                        self.total_bytes = total
+                        data = r.read(expected + 1)
+                        if len(data) != expected:
+                            raise RemoteZipError(
+                                f"range short/long read {len(data)} != {expected} for {start}-{end}"
+                            )
+                        return data, headers, status
+
+                    if status == 200:
+                        # The CDN ignored Range. Do not read the full object. We
+                        # may retain its declared whole-object size, then retry.
+                        n = self._size_from_headers(headers)
+                        if n is not None and n > 0:
+                            if self.total_bytes is not None and n != self.total_bytes:
+                                raise RemoteZipError(
+                                    f"remote object size changed: {self.total_bytes} -> {n}"
+                                )
+                            self.total_bytes = n
+                        # A 200 response is acceptable only when the requested
+                        # interval is exactly the complete object.
+                        if self.total_bytes == expected and start == 0 and end == expected - 1:
+                            data = r.read(expected + 1)
+                            if len(data) != expected:
+                                raise RemoteZipError(
+                                    f"whole-object read {len(data)} != {expected}"
+                                )
+                            return data, headers, status
+                        last_error = RemoteZipError(
+                            f"server ignored Range {start}-{end}; status=200"
+                        )
+                    else:
+                        last_error = RemoteZipError(
+                            f"unexpected HTTP status {status} for range {start}-{end}"
+                        )
+            except (urllib.error.URLError, TimeoutError, OSError, RemoteZipError) as exc:
+                last_error = exc
+
+            if attempt + 1 < self.retries:
+                time.sleep(min(1.0, 0.15 * (attempt + 1)))
+
+        raise RemoteZipError(
+            f"range {start}-{end} failed after {self.retries} attempts: {last_error}"
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            data = r.read()
-            headers = dict(r.headers)
-            status = r.status
-        return data, headers, status
 
     def _ensure_size(self) -> int:
         if self.total_bytes is not None:
             return self.total_bytes
+        head_size = self._head_size()
+        if head_size is not None:
+            self.total_bytes = head_size
+            return head_size
         _b, hdr, status = self.range(0, 0)
-        cr = hdr.get("Content-Range") or hdr.get("content-range")
-        if not cr or "/" not in cr:
-            raise RemoteZipError(f"server did not return Content-Range; status={status}")
-        self.total_bytes = int(cr.rsplit("/", 1)[1])
-        self.etag = hdr.get("ETag") or hdr.get("etag")
-        return self.total_bytes
+        cr = self._header(hdr, "Content-Range")
+        if not cr:
+            raise RemoteZipError(f"size probe returned no Content-Range; status={status}")
+        _start, _end, total = self._parse_content_range(cr)
+        self.total_bytes = total
+        return total
 
     def central_directory(self) -> tuple[list[dict], dict]:
         if self._central is not None:
@@ -169,17 +322,25 @@ class RemoteZip:
                     raise RemoteZipError(f"{name}: saturated central field without ZIP64 extra")
                 z = 0
                 if need_usize:
-                    if z + 8 > len(zip64_extra): raise RemoteZipError(f"{name}: ZIP64 usize missing")
-                    usize = struct.unpack_from("<Q", zip64_extra, z)[0]; z += 8
+                    if z + 8 > len(zip64_extra):
+                        raise RemoteZipError(f"{name}: ZIP64 usize missing")
+                    usize = struct.unpack_from("<Q", zip64_extra, z)[0]
+                    z += 8
                 if need_csize:
-                    if z + 8 > len(zip64_extra): raise RemoteZipError(f"{name}: ZIP64 csize missing")
-                    csize = struct.unpack_from("<Q", zip64_extra, z)[0]; z += 8
+                    if z + 8 > len(zip64_extra):
+                        raise RemoteZipError(f"{name}: ZIP64 csize missing")
+                    csize = struct.unpack_from("<Q", zip64_extra, z)[0]
+                    z += 8
                 if need_lhoff:
-                    if z + 8 > len(zip64_extra): raise RemoteZipError(f"{name}: ZIP64 local offset missing")
-                    lhoff = struct.unpack_from("<Q", zip64_extra, z)[0]; z += 8
+                    if z + 8 > len(zip64_extra):
+                        raise RemoteZipError(f"{name}: ZIP64 local offset missing")
+                    lhoff = struct.unpack_from("<Q", zip64_extra, z)[0]
+                    z += 8
                 if need_disk:
-                    if z + 4 > len(zip64_extra): raise RemoteZipError(f"{name}: ZIP64 disk missing")
-                    disk_start = struct.unpack_from("<I", zip64_extra, z)[0]; z += 4
+                    if z + 4 > len(zip64_extra):
+                        raise RemoteZipError(f"{name}: ZIP64 disk missing")
+                    disk_start = struct.unpack_from("<I", zip64_extra, z)[0]
+                    z += 4
             if disk_start != 0:
                 raise RemoteZipError(f"{name}: nonzero disk start unsupported")
 
@@ -250,5 +411,7 @@ class RemoteZip:
         if verify_crc:
             crc = binascii.crc32(raw) & 0xFFFFFFFF
             if crc != int(entry["crc32"]):
-                raise RemoteZipError(f"{entry['name']}: CRC32 mismatch {crc:08x} != {int(entry['crc32']):08x}")
+                raise RemoteZipError(
+                    f"{entry['name']}: CRC32 mismatch {crc:08x} != {int(entry['crc32']):08x}"
+                )
         return raw
