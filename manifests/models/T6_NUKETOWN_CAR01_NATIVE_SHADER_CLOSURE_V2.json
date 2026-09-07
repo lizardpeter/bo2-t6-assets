@@ -1,0 +1,183 @@
+{
+  "format": "t6-nuketown-car01-native-shader-closure-v2",
+  "supersedes": "manifests/models/T6_NUKETOWN_CAR01_NATIVE_SHADER_CLOSURE_V1.json",
+  "correction": "V1 described glass stateBits[0] as a material-level primary blend. T6 Material state is technique-indexed through stateBitsEntry. For the normal lit technique (technique type index 4), both Car01 glass materials use stateBitsEntry[4] = 1, not stateBits[0].",
+  "proofBoundary": "Native pinned OpenAssetTools T6 Material JSON plus exact TechniqueSet/technique/shader dumps. Pipeline state is selected by the exact T6 technique-type index through Material.stateBitsEntry; no material-global blend inference.",
+  "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+  "techniqueTypeIndex": {
+    "depth prepass": 0,
+    "build shadowmap depth": 1,
+    "unlit": 2,
+    "emissive": 3,
+    "lit": 4,
+    "lit sun": 5,
+    "lit sun shadow": 6,
+    "lit spot": 7,
+    "lit spot shadow": 8,
+    "lit spot square": 9,
+    "lit spot square shadow": 10,
+    "lit spot round": 11,
+    "lit spot round shadow": 12,
+    "lit omni": 13,
+    "lit omni shadow": 14,
+    "lit dlight glight": 15,
+    "lit sun dlight glight": 16,
+    "lit sun shadow dlight glight": 17,
+    "lit spot dlight glight": 18,
+    "lit spot shadow dlight glight": 19,
+    "lit spot square dlight glight": 20,
+    "lit spot square shadow dlight glight": 21,
+    "lit spot round dlight glight": 22,
+    "lit spot round shadow dlight glight": 23,
+    "lit omni dlight glight": 24,
+    "lit omni shadow dlight glight": 25,
+    "light spot": 26,
+    "light omni": 27,
+    "fakelight normal": 28,
+    "fakelight view": 29,
+    "sunlight preview": 30,
+    "case texture": 31,
+    "solid wireframe": 32,
+    "shaded wireframe": 33,
+    "debug bumpmap": 34,
+    "debug performance": 35
+  },
+  "sources": {
+    "map": {
+      "fastFile": "mp_nuketown_2020.ff",
+      "sha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+      "workflowRun": 34132417627,
+      "artifactId": 10022923599,
+      "artifactDigest": "sha256:10a73e83c5c66f98ce45639ca40a0749e65f3702f111ea66a4ecedb078cea44e"
+    },
+    "shared": {
+      "fastFile": "common_mp.ff",
+      "sha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+      "workflowRun": 34133502541,
+      "artifactId": 10023377934,
+      "artifactDigest": "sha256:efa1b0d8e04fe7b922d9356247c563235d51f9532a47ef2a463cccc8a839c530"
+    }
+  },
+  "passes": {
+    "opaqueNormalLit": {
+      "techniqueType": "lit",
+      "techniqueTypeIndex": 4,
+      "techniqueSet": "mc_lit_sm_r0c0n0s0_zqq1fze7",
+      "technique": "pimp_technique_lprobe_651eb933",
+      "vertexShader": {
+        "name": "pimp_shader_lprobe_347155f7.hlsl",
+        "dxbcSha256": "c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319"
+      },
+      "pixelShader": {
+        "name": "pimp_shader_lprobe_4bceb0cc.hlsl",
+        "dxbcSha256": "5c88d806b6235333a637f54e03dca4fa4bec3a6ef27eada702a272dac50cef0a"
+      },
+      "stateBitsIndex": 2,
+      "pipelineState": {
+        "alphaTest": "disabled",
+        "blendOpAlpha": "disabled",
+        "blendOpRgb": "disabled",
+        "colorWriteAlpha": true,
+        "colorWriteRgb": true,
+        "cullFace": "back",
+        "depthTest": "less_equal",
+        "depthWrite": true,
+        "dstBlendAlpha": "zero",
+        "dstBlendRgb": "zero",
+        "polygonOffset": "offset0",
+        "polymodeLine": false,
+        "srcBlendAlpha": "one",
+        "srcBlendRgb": "one"
+      }
+    },
+    "glassNormalLit": {
+      "techniqueType": "lit",
+      "techniqueTypeIndex": 4,
+      "techniqueSet": "mc_lit_sm_b0c0s0_2q396f5e",
+      "technique": "pimp_technique_lprobe_de89e86a",
+      "vertexShader": {
+        "name": "pimp_shader_lprobe_eb01efa5.hlsl",
+        "dxbcSha256": "0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5"
+      },
+      "pixelShader": {
+        "name": "pimp_shader_lprobe_5b74bfe9.hlsl",
+        "dxbcSha256": "40a214de6613cc5b1a73cb72150e0357c917d9c6db5d5491338b0e0ece38c80c"
+      },
+      "stateBitsIndex": 1,
+      "pipelineState": {
+        "alphaTest": "gt0",
+        "blendOpAlpha": "add",
+        "blendOpRgb": "add",
+        "colorWriteAlpha": true,
+        "colorWriteRgb": true,
+        "cullFace": "back",
+        "depthTest": "less_equal",
+        "depthWrite": false,
+        "dstBlendAlpha": "one",
+        "dstBlendRgb": "invsrcalpha",
+        "polygonOffset": "offset0",
+        "polymodeLine": false,
+        "srcBlendAlpha": "invdestalpha",
+        "srcBlendRgb": "one"
+      },
+      "rgbEquation": "source.rgb * 1 + destination.rgb * (1 - source.a)",
+      "alphaEquation": "source.a * (1 - destination.a) + destination.a * 1"
+    },
+    "glassUnlit": {
+      "techniqueType": "unlit",
+      "techniqueTypeIndex": 2,
+      "stateBitsIndex": 0,
+      "pipelineState": {
+        "alphaTest": "gt0",
+        "blendOpAlpha": "add",
+        "blendOpRgb": "add",
+        "colorWriteAlpha": true,
+        "colorWriteRgb": true,
+        "cullFace": "back",
+        "depthTest": "less_equal",
+        "depthWrite": false,
+        "dstBlendAlpha": "one",
+        "dstBlendRgb": "invsrcalpha",
+        "polygonOffset": "offset0",
+        "polymodeLine": false,
+        "srcBlendAlpha": "invdestalpha",
+        "srcBlendRgb": "srcalpha"
+      },
+      "rgbEquation": "source.rgb * source.a + destination.rgb * (1 - source.a)",
+      "alphaEquation": "source.a * (1 - destination.a) + destination.a * 1"
+    }
+  },
+  "materials": {
+    "mc/mtl_nt_2020_car_01_glass_out": {
+      "nativeMaterialJsonSha256": "f0969b6dbd41eb03310c1736db35da655c468179144c721fc2294daaa2d2e7ce",
+      "cameraRegion": "litTrans",
+      "stateBitsEntryLit": 1,
+      "normalLitPass": "glassNormalLit"
+    },
+    "mc/mtl_nt_2020_car_01_glass_in": {
+      "nativeMaterialJsonSha256": "f54d699530fc46fd845a047a0b2da4f8c2a8b5b397ce81eec23421547e867592",
+      "cameraRegion": "litTrans",
+      "stateBitsEntryLit": 1,
+      "normalLitPass": "glassNormalLit"
+    },
+    "mc/mtl_nt_2020_car_01_exterior": {
+      "nativeMaterialJsonSha256": "16856b416e3a75bd8ec4806298d3bf587b8db9de929f5a4f22ee32ff67599952",
+      "cameraRegion": "litOpaque",
+      "stateBitsEntryLit": 2,
+      "normalLitPass": "opaqueNormalLit"
+    },
+    "mc/mtl_nt_2020_car_01_interior": {
+      "nativeMaterialJsonSha256": "9456632dbb9cb9e5d96371fd073d48cb5b8898a775f2ec8f3c4dfdd502196ffa",
+      "cameraRegion": "litOpaque",
+      "stateBitsEntryLit": 2,
+      "normalLitPass": "opaqueNormalLit"
+    },
+    "mc/mtl_nt_2020_car_01_tire": {
+      "nativeMaterialJsonSha256": "5adc5e19f7761f538ac58b171381e4d23d5968eb8fe488191fd701524481873e",
+      "cameraRegion": "litOpaque",
+      "stateBitsEntryLit": 2,
+      "normalLitPass": "opaqueNormalLit"
+    }
+  },
+  "portablePreviewWarning": "Generic glTF metallicFactor/roughnessFactor values remain preview-only. Retail fidelity is defined by technique-indexed native state plus exact shader/resource semantics."
+}
