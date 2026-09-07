@@ -1,0 +1,42 @@
+name: T6 Nuketown car01 TechniqueSet index context v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_techset_index_context_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/map.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          gcc -O2 tools/t6_fastfile_expand_pc_v1.c -o /tmp/expand -lz -lcrypto
+          /tmp/expand /tmp/map.ff /tmp/map.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/map.expanded' | sha256sum -c -
+      - name: Print XAsset context
+        shell: bash
+        run: |
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import t6_retail_world_formats_45_proof_v1 as h
+          d=Path('/tmp/map.expanded').read_bytes();blocks,assets=h.front(d)
+          q7=[q for q,(t,p) in enumerate(assets) if t==7]
+          targets=[14,60,488]
+          print('TYPE7_INDICES',json.dumps(q7))
+          for q in targets:
+            print('TARGET',q,'rank_all_type7',q7.index(q),'context',[(i,assets[i][0],f'0x{assets[i][1]:08X}') for i in range(max(0,q-8),min(len(assets),q+9))])
+          scans=h.scan_tech(d,blocks,63150420)
+          print('FOLLOWING_NAME_SCANS',len(scans))
+          for i,r in enumerate(scans):print('SCAN',i,r['start'],r['fmt'],r['name'])
+          PY
