@@ -1,0 +1,104 @@
+name: T6 Blender shader core v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_dxbc_signature_v1.py'
+      - 'tools/test_t6_dxbc_signature_v1.py'
+      - 'tools/t6_xmodel_blender_static_bindpose_export_v3.py'
+      - 'tools/test_t6_xmodel_blender_static_bindpose_export_v3.py'
+      - '.github/workflows/t6_blender_shader_core_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run reusable shader and XModel transport tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 -m unittest -v \
+            tools/test_t6_dxbc_signature_v1.py \
+            tools/test_t6_xmodel_blender_static_bindpose_export_v3.py
+
+      - name: Download exact Car01 retail shader and IR artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/exact /tmp/ir /tmp/proof
+          curl -fL --retry 4 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o /tmp/exact.zip \
+            https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/10024117840/zip
+          curl -fL --retry 4 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o /tmp/ir.zip \
+            https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/10024449233/zip
+          unzip -q /tmp/exact.zip -d /tmp/exact
+          unzip -q /tmp/ir.zip -d /tmp/ir
+          echo 'c435f796400eaef72e6849437620e16bc09187e242d6b58fcd9482f3eea53319  /tmp/exact/shaders/opaque_lit_vs.dxbc' | sha256sum -c -
+          echo '0966aa5a569b0ba7056f89553b8673490f178f42270f33879036424af8f152f5  /tmp/exact/shaders/glass_lit_vs.dxbc' | sha256sum -c -
+
+      - name: Prove real retail VS signature to T6 stream routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          from t6_dxbc_signature_v1 import parse_dxbc_signatures, bind_vertex_routes
+
+          cases = [
+              ('opaque', Path('/tmp/exact/shaders/opaque_lit_vs.dxbc'), Path('/tmp/ir/exterior_lit.json'),
+               ['POSITION0','COLOR0','TEXCOORD0','NORMAL0','TEXCOORD2'],
+               ['position','color','texcoord[0]','normal','tangent']),
+              ('glass', Path('/tmp/exact/shaders/glass_lit_vs.dxbc'), Path('/tmp/ir/glass_out_lit.json'),
+               ['POSITION0','COLOR0','TEXCOORD0','NORMAL0'],
+               ['position','color','texcoord[0]','normal']),
+          ]
+          proof = {
+              'format': 't6-car01-real-dxbc-vertex-routing-proof-v1',
+              'proofBoundary': 'Direct SHA-verified retail DXBC ISGN joined one-to-one to exact OAT .tech vertexRouting from previously validated T6 shader IR.',
+              'cases': [],
+          }
+          for name, shader_path, ir_path, expect_semantics, expect_sources in cases:
+              dxbc = shader_path.read_bytes()
+              ir = json.loads(ir_path.read_text())
+              routes = ir['passes'][0]['vertexRoutes']
+              parsed = parse_dxbc_signatures(dxbc)
+              bound = bind_vertex_routes(parsed['inputs'], routes)
+              semantics = [r['semanticKey'] for r in bound]
+              sources = [r['t6Source'] for r in bound]
+              assert semantics == expect_semantics, (name, semantics)
+              assert sources == expect_sources, (name, sources)
+              proof['cases'].append({
+                  'name': name,
+                  'dxbcSha256': hashlib.sha256(dxbc).hexdigest(),
+                  'techniqueSet': ir['techniqueSet'],
+                  'technique': ir['technique'],
+                  'inputs': bound,
+              })
+          out = Path('/tmp/proof/T6_CAR01_REAL_DXBC_VERTEX_ROUTING_PROOF_V1.json')
+          out.write_text(json.dumps(proof, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(proof, indent=2, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CAR01_REAL_DXBC_VERTEX_ROUTING_PROOF_V1
+          path: /tmp/proof
+          if-no-files-found: error
