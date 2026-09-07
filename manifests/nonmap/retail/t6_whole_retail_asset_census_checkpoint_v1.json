@@ -1,0 +1,72 @@
+{
+  "format": "t6-whole-retail-asset-census-checkpoint-v1",
+  "producer": "tools/t6_whole_retail_asset_census_v1.py",
+  "workflow": {
+    "path": ".github/workflows/t6-whole-retail-asset-census.yml",
+    "runId": 34151109849,
+    "jobId": 101833411623,
+    "headCommit": "c7f0d7adfa6366ef3f9be5ecc3f22d344ea66291",
+    "conclusion": "success"
+  },
+  "artifact": {
+    "id": 10029382021,
+    "name": "T6_WHOLE_RETAIL_ASSET_CENSUS_AUDIT_V1",
+    "bytes": 10624,
+    "digest": "sha256:1a42b8c964e18ad5177fb78b95cea3e4a30e5ce9dd6ea1a6be3c6ce3cd0359f3"
+  },
+  "declaredSeedCorpus": {
+    "manifest": "manifests/nonmap/retail/t6_whole_retail_corpus_seed_v1.json",
+    "zonesDeclared": 18,
+    "zonesMaterialized": 16,
+    "zonesFailedParsing": 0,
+    "zonesMissingFromCurrentR2Path": [
+      "en_code_post_gfx_mp",
+      "en_code_post_gfx_zm"
+    ],
+    "missingR2Observation": "Both exact https://r2.houseofkublai.com/bo2/zone/all/{zone}.ff requests returned HTTP 404 in the green workflow run. They remain declared because removing them would weaken retained-corpus accounting.",
+    "undeclaredExpandedZonesObserved": []
+  },
+  "exactTotalsForMaterializedDeclaredZones": {
+    "topLevelXAssets": 26284,
+    "xanimpartsFromTopLevelXAssetLists": 11205,
+    "xanimpartsStructurallyIdentified": 11205,
+    "xanimpartsStructuralCountClosesExactly": true,
+    "xmodelsFromTopLevelXAssetLists": 3997
+  },
+  "newlyPinnedRawSha256": {
+    "common_zm": "b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e",
+    "patch_zm": "f5a27345a61de5fabd735f45f05b127e95ad9a488619bd7fbc96ac14c5ab4d47",
+    "zm_prison": "ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1",
+    "zm_tomb": "663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5",
+    "mp_nuketown_2020": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+    "mp_hijacked": "2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037",
+    "mp_raid": "bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888"
+  },
+  "gates": {
+    "corpusComplete": false,
+    "zoneInventoryComplete": false,
+    "xanimPopulationComplete": false,
+    "xmodelPopulationComplete": false,
+    "semanticCoverageComplete": false
+  },
+  "gateReasons": {
+    "corpusComplete": "The retained 18-XFile seed is not an authoritative complete BO2 retail FastFile catalog, and two declared localized code-post XFiles are not currently materialized from the tested R2 path.",
+    "zoneInventoryComplete": "Requires a proven-complete corpus and successful top-level XAsset parsing for every declared retail zone.",
+    "xanimPopulationComplete": "The 11,205 retained-seed XAnimParts close structurally, but whole-game population completeness requires a proven-complete retail corpus.",
+    "xmodelPopulationComplete": "3,997 is an exact top-level XMODEL count across the 16 materialized seed zones only. A generic whole-zone structural XModel walker/identity census is not yet wired into the whole-retail wrapper.",
+    "semanticCoverageComplete": "Animation semantics, XModel relationships, aliases, character classification, materials, TechniqueSets, and shader semantics remain independent proof layers."
+  },
+  "regressionBoundaries": [
+    "The independent 24,855 common_mp + patch_mp XAnimParts regression boundary is unchanged and is not redefined by this checkpoint.",
+    "tools/stage18d_xanim_full_inventory.py remains unchanged; its exact common_mp top-level XAnimParts closure is 4,233 and is a separate scoped proof.",
+    "The green SEAL6 q10/q17 native TechniqueSet common_mp closure is unchanged and is not part of this census promotion.",
+    "The 18-zone seed is retained evidence only, not a claim that these are all BO2 retail FastFiles.",
+    "The 3,997 XMODEL count is not a character count and does not imply structural XModel identity closure."
+  ],
+  "nextBlockers": [
+    "Source-close an authoritative complete BO2 PC retail FastFile/zone catalog and reconcile it against the supplied corpus.",
+    "Recover or source-close the exact retained en_code_post_gfx_mp and en_code_post_gfx_zm files or their authoritative acquisition path.",
+    "Wire a generic structural XModel inventory into the manifest-driven whole-retail wrapper and close every top-level XMODEL entry against each zone's raw XAsset list.",
+    "Only after XModel population closure, classify character-related models from retail relationships/source evidence rather than name heuristics."
+  ]
+}

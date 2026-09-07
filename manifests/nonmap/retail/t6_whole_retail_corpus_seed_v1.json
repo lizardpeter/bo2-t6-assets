@@ -8,6 +8,7 @@
     "provenance": [
       "Existing repository workflows retrieve exact retail FastFiles from the same R2 zone/all path convention.",
       "Expected XAnim counts and expanded hashes are retained regression facts from T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V4/V3.",
+      "Raw SHA-256 values for the materialized seed zones are now pinned from green workflow run 34151109849.",
       "No R2 bucket listing or authoritative retail zone catalog has yet been source-closed, so this manifest cannot establish corpus completeness."
     ]
   },
@@ -19,21 +20,25 @@
   "zones": [
     {
       "zone": "common_zm",
+      "expectedRawSha256": "b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e",
       "expectedExpandedSha256": "28ff1b05ca1565f6c90acd473262e0d566fbc22fc2005c6def09fed9555b7527",
       "expectedXAnimCount": 819
     },
     {
       "zone": "patch_zm",
+      "expectedRawSha256": "f5a27345a61de5fabd735f45f05b127e95ad9a488619bd7fbc96ac14c5ab4d47",
       "expectedExpandedSha256": "3a5df2757981c0ae5d7963f41f6b621349b2604efd6360f3e7bb0fe145a6c499",
       "expectedXAnimCount": 51
     },
     {
       "zone": "zm_prison",
+      "expectedRawSha256": "ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1",
       "expectedExpandedSha256": "e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487",
       "expectedXAnimCount": 1434
     },
     {
       "zone": "zm_tomb",
+      "expectedRawSha256": "663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5",
       "expectedExpandedSha256": "4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219",
       "expectedXAnimCount": 1735
     },
@@ -51,16 +56,19 @@
     },
     {
       "zone": "mp_nuketown_2020",
+      "expectedRawSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
       "expectedExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
       "expectedXAnimCount": 9
     },
     {
       "zone": "mp_hijacked",
+      "expectedRawSha256": "2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037",
       "expectedExpandedSha256": "8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b",
       "expectedXAnimCount": 5
     },
     {
       "zone": "mp_raid",
+      "expectedRawSha256": "bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888",
       "expectedExpandedSha256": "d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8",
       "expectedXAnimCount": 2
     },
