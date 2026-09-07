@@ -1,0 +1,100 @@
+name: T6 Nuketown Car01 SPIR-V reflection v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_car01_spirv_cross_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  reflect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SPIRV-Cross
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq spirv-cross jq >/dev/null
+          spirv-cross --version 2>&1 | tee /tmp/spirv_cross_version.txt
+
+      - name: Download exact previously-validated shader artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/input /tmp/proof
+          curl -fL --retry 4 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o /tmp/input/exact_shader.zip \
+            https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/10024117840/zip
+          unzip -q /tmp/input/exact_shader.zip -d /tmp/input/exact_shader
+
+          echo '6f83020c1425cf5e7a10ec81c18e01c3fa996da86aa3353397be2f8235b6eb22  /tmp/input/exact_shader/shaders/opaque_lit_ps.spv' | sha256sum -c -
+          echo '559acb7eccf8a3b156e585325bdcf28d4b8808afd5aa9cbe4157705a6ea0753a  /tmp/input/exact_shader/shaders/opaque_lit_vs.spv' | sha256sum -c -
+          echo 'b1f08a1083ab6afa558408817f7cf99c24a68dcd1b30e542d0b6f8013da72d7b  /tmp/input/exact_shader/shaders/glass_lit_ps.spv' | sha256sum -c -
+          echo '105887acfa4dd90ff6856407ab3250bc428b8c02ca24d7cc3ca52031ceed2eae  /tmp/input/exact_shader/shaders/glass_lit_vs.spv' | sha256sum -c -
+          cp /tmp/input/exact_shader/T6_NUKETOWN_CAR01_EXACT_SHADER_SPIRV_V1.json /tmp/proof/
+          cp /tmp/spirv_cross_version.txt /tmp/proof/
+
+      - name: Reflect resources and emit readable GLSL
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof/reflection /tmp/proof/glsl
+          for stem in opaque_lit_ps opaque_lit_vs glass_lit_ps glass_lit_vs; do
+            spv="/tmp/input/exact_shader/shaders/${stem}.spv"
+            spirv-cross "$spv" --reflect > "/tmp/proof/reflection/${stem}.json"
+            spirv-cross "$spv" --version 450 --vulkan-semantics > "/tmp/proof/glsl/${stem}.glsl"
+          done
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/proof')
+          rows=[]
+          for stem in ('opaque_lit_ps','opaque_lit_vs','glass_lit_ps','glass_lit_vs'):
+              r=root/'reflection'/f'{stem}.json'
+              g=root/'glsl'/f'{stem}.glsl'
+              j=json.loads(r.read_text())
+              def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+              rows.append({
+                  'stem':stem,
+                  'reflectionSha256':sha(r),
+                  'glslSha256':sha(g),
+                  'entryPoints':j.get('entryPoints',[]),
+                  'inputs':j.get('inputs',[]),
+                  'outputs':j.get('outputs',[]),
+                  'ubos':j.get('ubos',[]),
+                  'separateImages':j.get('separate_images',[]),
+                  'separateSamplers':j.get('separate_samplers',[]),
+                  'sampledImages':j.get('textures',[]),
+              })
+          out={
+              'format':'t6-nuketown-car01-spirv-reflection-v1',
+              'sourceArtifactId':10024117840,
+              'sourceArtifactDigest':'sha256:e8a4688c50866abe5ca82dacdfc3958dd6c1887fd7ec45145e7dc29bfab03334',
+              'proofBoundary':'SPIRV-Cross reflection and GLSL pretty-printing of the four SHA-verified, spirv-val-validated retail shader translations; no semantic rewriting.',
+              'shaders':rows,
+          }
+          (root/'T6_NUKETOWN_CAR01_SPIRV_REFLECTION_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+
+          find /tmp/proof -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR01_SPIRV_REFLECTION_V1
+          path: /tmp/proof
+          if-no-files-found: error
