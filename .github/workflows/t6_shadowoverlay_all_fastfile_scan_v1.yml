@@ -1,0 +1,242 @@
+name: T6 shadowoverlay all-FastFile scan v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_shadowoverlay_all_fastfile_scan_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan-shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand
+
+      - name: Scan shard of every retail FastFile
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          SHARD: ${{ matrix.shard }}
+          SHARD_COUNT: '8'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess,sys
+          from t6_remote_zip_range_v1 import RemoteZip
+
+          url=os.environ['ZIP_URL']
+          shard=int(os.environ['SHARD'])
+          shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(url,f'bo2-t6-assets-all-ff-shadowoverlay/{shard}')
+          entries,meta=rz.central_directory()
+          ff=[e for e in entries if e['name'].lower().endswith('.ff')]
+          ff.sort(key=lambda e:e['name'].lower())
+          selected=[(i,e) for i,e in enumerate(ff) if i % shard_count == shard]
+
+          needles={
+              'exactTargetTechnique':b'pimp_technique_shadowoverlay_5255c888\x00',
+              'targetTechniqueStem':b'pimp_technique_shadowoverlay_',
+              'shadowCookieOverlay':b'shadowcookieoverlay\x00',
+              'shadowOverlayMaterialName':b'shadowoverlay\x00',
+              'knownStartupTechniqueSet':b'trivial_shadowoverlay_14e2e827\x00',
+          }
+          rows=[]
+          for ordinal,(global_index,e) in enumerate(selected):
+              name=e['name']
+              fname=name.rsplit('/',1)[-1]
+              zone=fname[:-3]
+              row={
+                  'globalIndex':global_index,
+                  'shardIndex':ordinal,
+                  'zipPath':name,
+                  'file':fname,
+                  'zoneName':zone,
+                  'zipCrc32':f"{e['crc32']:08x}",
+                  'zipUncompressedBytes':e['uncompressedSize'],
+              }
+              raw=None
+              ff_path=pathlib.Path('/tmp/work')/f'{global_index:03d}.ff'
+              expanded=pathlib.Path('/tmp/work')/f'{global_index:03d}.expanded.bin'
+              log=pathlib.Path('/tmp/proof')/f'expand_{global_index:03d}.log'
+              try:
+                  raw=rz.extract(e,verify_crc=True)
+                  row['fastFileBytes']=len(raw)
+                  row['fastFileSha256']=hashlib.sha256(raw).hexdigest()
+                  ff_path.write_bytes(raw)
+                  raw=None
+                  with log.open('wb') as lf:
+                      proc=subprocess.run(['/tmp/t6_expand',str(ff_path),str(expanded),zone],stdout=lf,stderr=subprocess.STDOUT)
+                  row['expandRc']=proc.returncode
+                  if proc.returncode!=0 or not expanded.is_file():
+                      row['status']='expand_failed'
+                      row['hits']={}
+                  else:
+                      data=expanded.read_bytes()
+                      row['status']='green'
+                      row['expandedBytes']=len(data)
+                      row['expandedSha256']=hashlib.sha256(data).hexdigest()
+                      hits={}
+                      for label,needle in needles.items():
+                          offsets=[]; start=0
+                          while True:
+                              at=data.find(needle,start)
+                              if at<0: break
+                              offsets.append(at); start=at+1
+                          hits[label]={'count':len(offsets),'offsets':offsets[:128]}
+                      row['hits']=hits
+              except Exception as exc:
+                  row['status']='exception'
+                  row['error']=repr(exc)
+                  row.setdefault('hits',{})
+              finally:
+                  try: ff_path.unlink()
+                  except FileNotFoundError: pass
+                  try: expanded.unlink()
+                  except FileNotFoundError: pass
+              rows.append(row)
+              print(global_index,row['status'],name,row.get('fastFileSha256','-'),row.get('hits',{}).get('exactTargetTechnique',{}).get('count',0),flush=True)
+
+          target=[r for r in rows if r.get('hits',{}).get('exactTargetTechnique',{}).get('count',0)]
+          stem=[r for r in rows if r.get('hits',{}).get('targetTechniqueStem',{}).get('count',0)]
+          cookie=[r for r in rows if r.get('hits',{}).get('shadowCookieOverlay',{}).get('count',0)]
+          shadow=[r for r in rows if r.get('hits',{}).get('shadowOverlayMaterialName',{}).get('count',0)]
+          result={
+              'format':'t6-shadowoverlay-all-fastfile-scan-shard-v1',
+              'shard':shard,
+              'shardCount':shard_count,
+              'remoteZip':meta,
+              'allFastFileCount':len(ff),
+              'rows':rows,
+              'summary':{
+                  'selectedCount':len(rows),
+                  'greenExpansionCount':sum(r['status']=='green' for r in rows),
+                  'failedExpansionCount':sum(r['status']!='green' for r in rows),
+                  'exactTargetTechniqueZoneCount':len(target),
+                  'targetTechniqueStemZoneCount':len(stem),
+                  'shadowCookieOverlayNameZoneCount':len(cookie),
+                  'shadowOverlayNameZoneCount':len(shadow),
+                  'exactTargetZones':[r['zipPath'] for r in target],
+                  'targetStemZones':[r['zipPath'] for r in stem],
+                  'shadowCookieOverlayZones':[r['zipPath'] for r in cookie],
+                  'shadowOverlayZones':[r['zipPath'] for r in shadow],
+              },
+              'proofBoundary':'Exact expanded-XFile byte/name census for this deterministic shard of the public retail FastFile archive. Every successful input is CRC-verified and SHA-256 pinned. Exact-name presence is physical-source evidence but not asset ownership. Negative claims are valid only for green-expanded rows until all shards are combined.'
+          }
+          out=pathlib.Path('/tmp/proof')/f'T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_SHARD_{shard}_V1.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          if result['summary']['failedExpansionCount']:
+              bad=[r['zipPath'] for r in rows if r['status']!='green']
+              raise SystemExit(f'non-green FastFile rows: {bad}')
+          PY
+
+      - name: Upload shard proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: scan-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Require complete 215-FastFile coverage and combine exact results
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_SHARD_*_V1.json'))
+          if len(files)!=8:
+              raise SystemExit(f'expected 8 shard JSON files, got {len(files)}')
+          docs=[json.load(open(p)) for p in files]
+          rows=[]
+          for d in docs:
+              if d.get('format')!='t6-shadowoverlay-all-fastfile-scan-shard-v1':
+                  raise SystemExit('unexpected shard format')
+              rows.extend(d['rows'])
+          rows.sort(key=lambda r:r['globalIndex'])
+          expected=docs[0]['allFastFileCount']
+          if expected!=215:
+              raise SystemExit(f'archive FastFile population changed: {expected} != 215')
+          if len(rows)!=expected:
+              raise SystemExit(f'coverage mismatch {len(rows)} != {expected}')
+          if [r['globalIndex'] for r in rows] != list(range(expected)):
+              raise SystemExit('global FastFile indices are not exact 0..214 coverage')
+          bad=[r for r in rows if r['status']!='green']
+          if bad:
+              raise SystemExit(f'{len(bad)} non-green rows: {[r["zipPath"] for r in bad[:20]]}')
+
+          def matching(label):
+              return [r for r in rows if r.get('hits',{}).get(label,{}).get('count',0)]
+          target=matching('exactTargetTechnique')
+          stem=matching('targetTechniqueStem')
+          cookie=matching('shadowCookieOverlay')
+          shadow=matching('shadowOverlayMaterialName')
+          known=matching('knownStartupTechniqueSet')
+          result={
+              'format':'t6-shadowoverlay-all-fastfile-scan-v1',
+              'remoteZip':docs[0]['remoteZip'],
+              'rows':rows,
+              'summary':{
+                  'fastFileCount':expected,
+                  'greenExpansionCount':len(rows),
+                  'failedExpansionCount':0,
+                  'exactTargetTechniqueZoneCount':len(target),
+                  'targetTechniqueStemZoneCount':len(stem),
+                  'shadowCookieOverlayNameZoneCount':len(cookie),
+                  'shadowOverlayNameZoneCount':len(shadow),
+                  'knownStartupTechniqueSetZoneCount':len(known),
+                  'exactTargetZones':[r['zipPath'] for r in target],
+                  'targetStemZones':[r['zipPath'] for r in stem],
+                  'shadowCookieOverlayZones':[r['zipPath'] for r in cookie],
+                  'shadowOverlayZones':[r['zipPath'] for r in shadow],
+                  'knownStartupTechniqueSetZones':[r['zipPath'] for r in known],
+              },
+              'shardManifestSha256':[
+                  {'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()}
+                  for p in files
+              ],
+              'proofBoundary':'Complete exact-name census over every one of the 215 FastFiles present in the referenced public full-game ZIP. Every FastFile passed ZIP CRC verification, was SHA-256 pinned, and was successfully decrypted/inflated by the source-closed T6 PC expander before searching. A zero exact-target count proves absence of that exact null-terminated target name from this specific 215-FastFile archive universe; it does not prove absence from executables, non-FastFile containers, other retail builds, dynamically/generated data, or assets whose serialized representation does not carry the plain target string. Positive string hits still require native asset/pointer proof before ownership promotion.'
+          }
+          out=pathlib.Path('/tmp/proof/T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload complete FastFile census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHADOWOVERLAY_ALL_FASTFILE_SCAN_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
