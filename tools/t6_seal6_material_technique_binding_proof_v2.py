@@ -12,6 +12,11 @@ that retained byte slice against the exact expanded retail FastFile, supplements
 only the missing direct-inline owner starts in a transient copy of the ledger,
 and delegates the actual Material::techniqueSet pointer proof to v1.
 
+This revision also replaces v1's stale 104-byte Material fixed-record view with
+the source-closed T6 PC32 112-byte layout used by the generic top-level walker on
+main: counts at +84..+86 and the five child pointers at +92.  The compatibility
+patch is local to this proof process; it does not weaken any pointer validation.
+
 No Material start, TechniqueSet identity, texture role, or shader behavior is
 chosen from naming, surface order, adjacency, or appearance.
 """
@@ -21,10 +26,16 @@ import argparse
 import copy
 import hashlib
 import json
+import struct
 import tempfile
 from pathlib import Path
 
 import t6_seal6_material_technique_binding_proof_v1 as v1
+
+
+MATERIAL_FIXED_BYTES = 112
+MATERIAL_COUNTS_OFFSET = 84
+MATERIAL_CHILD_POINTERS_OFFSET = 92
 
 
 class ProofError(RuntimeError):
@@ -52,11 +63,75 @@ def parse_start(row: dict) -> int:
     raise ProofError(f"direct-inline row lacks serialized start: {row.get('name')!r}")
 
 
+def material_fixed_112(data: bytes, start: int, blocks: tuple[int, ...], expected_name: str) -> dict:
+    """Read only source-closed fields required for Material -> TechniqueSet proof."""
+    if start < 0 or start + MATERIAL_FIXED_BYTES > len(data):
+        raise v1.ProofError(f"Material fixed record out of range at {start}")
+    fixed = data[start:start + MATERIAL_FIXED_BYTES]
+    name_ptr = struct.unpack_from("<I", fixed, 0)[0]
+    if name_ptr not in (v1.FOLLOW, v1.INSERT):
+        raise v1.ProofError(
+            f"{expected_name}: Material name is not inline at raw {start}: 0x{name_ptr:08x}"
+        )
+    texture_count = fixed[MATERIAL_COUNTS_OFFSET]
+    constant_count = fixed[MATERIAL_COUNTS_OFFSET + 1]
+    state_count = fixed[MATERIAL_COUNTS_OFFSET + 2]
+    if not (0 < texture_count <= 64 and constant_count <= 64 and 0 < state_count <= 64):
+        raise v1.ProofError(
+            f"{expected_name}: invalid Material cardinalities {texture_count}/{constant_count}/{state_count}"
+        )
+    technique_raw, texture_ptr, constant_ptr, state_ptr, thermal_ptr = struct.unpack_from(
+        "<IIIII", fixed, MATERIAL_CHILD_POINTERS_OFFSET
+    )
+    technique = v1.decode_pointer(technique_raw, blocks)
+    if technique.get("kind") != "packed" or technique.get("blockIndex") != 5:
+        raise v1.ProofError(
+            f"{expected_name}: TechniqueSet pointer is not packed VIRTUAL: 0x{technique_raw:08x}"
+        )
+    # Child allocation modes are decoded, but only the TechniqueSet pointer is
+    # used to establish identity. Thermal Material may legitimately be non-null.
+    texture_dec = v1.decode_pointer(texture_ptr, blocks)
+    constant_dec = v1.decode_pointer(constant_ptr, blocks)
+    state_dec = v1.decode_pointer(state_ptr, blocks)
+    thermal_dec = v1.decode_pointer(thermal_ptr, blocks)
+    if texture_count and texture_dec.get("kind") not in ("follow", "insert"):
+        raise v1.ProofError(f"{expected_name}: non-inline texture table with textureCount={texture_count}")
+    if constant_count and constant_dec.get("kind") not in ("follow", "insert"):
+        raise v1.ProofError(f"{expected_name}: non-inline constant table with constantCount={constant_count}")
+    if state_count and state_dec.get("kind") not in ("follow", "insert"):
+        raise v1.ProofError(f"{expected_name}: non-inline state table with stateBitsCount={state_count}")
+    serialized_name, _ = v1.cstr(data, start + MATERIAL_FIXED_BYTES)
+    if canonical(serialized_name) != canonical(expected_name):
+        raise v1.ProofError(
+            f"Material identity mismatch at {start}: {serialized_name!r} != {expected_name!r}"
+        )
+    return {
+        "start": start,
+        "serializedName": serialized_name,
+        "textureCount": texture_count,
+        "constantCount": constant_count,
+        "stateBitsCount": state_count,
+        "techniqueSetPointerRaw": f"0x{technique_raw:08x}",
+        "techniqueSetPointer": technique,
+        "textureTablePointer": texture_dec,
+        "constantTablePointer": constant_dec,
+        "stateTablePointer": state_dec,
+        "thermalMaterialPointer": thermal_dec,
+        "fixedBytes": MATERIAL_FIXED_BYTES,
+        "fixedSha256": sha256_bytes(fixed),
+    }
+
+
 def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
     data = expanded.read_bytes()
     digest = sha256_bytes(data)
     if len(data) != v1.EXPECTED_EXPANDED_BYTES or digest != v1.EXPECTED_EXPANDED_SHA256:
         raise ProofError(f"faction_seals_mp expanded identity mismatch: {len(data)} / {digest}")
+
+    # v1's pointer/XAsset/TechniqueSet proof is still useful; only its old Material
+    # field offsets were stale. Patch that reader with the generic source-closed
+    # T6 PC32 layout for this process before any Material is admitted.
+    v1.material_fixed = material_fixed_112
 
     ledger = json.loads(owner_ledger.read_text(encoding="utf-8-sig"))
     if ledger.get("format") != "t6-seal6-smg-material-handle-proof-v1":
@@ -99,6 +174,7 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
     if not missing:
         raise ProofError("v2 expected at least one direct-inline owner omission; base ledger already closes all materials")
 
+    blocks, _assets = v1.parse_front(data)
     supplements: list[dict] = []
     derived = copy.deepcopy(ledger)
     target_model = str((ledger.get("summary") or {}).get("targetModel") or "")
@@ -116,11 +192,7 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
             raise ProofError(
                 f"{name}: retained serialized slice hash mismatch at 0x{start:x}: {actual_sha} != {expected_sha}"
             )
-        # Re-read the fixed Material/name from current bytes before allowing v1 to
-        # use this start. This independently rejects a stale but hash-colliding
-        # manifest/name pairing and validates the TechniqueSet pointer structure.
-        blocks, _assets = v1.parse_front(data)
-        fixed = v1.material_fixed(data, start, blocks, name)
+        fixed = material_fixed_112(data, start, blocks, name)
 
         supplement = {
             "material": name,
@@ -129,7 +201,9 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
             "serializedBytes": size,
             "serializedSha256": expected_sha,
             "firstSurfaceIndex": row.get("firstSurfaceIndex"),
+            "fixedBytes": MATERIAL_FIXED_BYTES,
             "fixedSha256": fixed["fixedSha256"],
+            "techniqueSetPointerRaw": fixed["techniqueSetPointerRaw"],
             "evidence": "exact retained direct-inline Material serialized interval + byte-for-byte SHA-256 verification against current retail expanded stream",
         }
         supplements.append(supplement)
@@ -142,7 +216,12 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
             "ownerMaterialRawStart": start,
         })
 
-    if len({canonical(str(r.get("materialName") or "")) for r in derived["uniqueHandleOwners"] if r.get("ownerMaterialRawStart") is not None}) != v1.EXPECTED_MATERIALS:
+    starts = {
+        canonical(str(r.get("materialName") or ""))
+        for r in derived["uniqueHandleOwners"]
+        if r.get("ownerMaterialRawStart") is not None
+    }
+    if len(starts) != v1.EXPECTED_MATERIALS:
         raise ProofError("supplemented ledger does not close exactly 13 unique Material starts")
 
     with tempfile.TemporaryDirectory(prefix="seal6-technique-v2-") as td:
@@ -169,6 +248,12 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
         "directInlineProofSha256": sha256_file(full_player_proof),
         "transientSupplementedOwnerLedgerSha256": derived_sha,
     }
+    out["materialLayout"] = {
+        "fixedBytes": MATERIAL_FIXED_BYTES,
+        "countsOffset": MATERIAL_COUNTS_OFFSET,
+        "childPointersOffset": MATERIAL_CHILD_POINTERS_OFFSET,
+        "authority": "source-closed generic T6 PC32 Material walker",
+    }
     out["directInlineOwnerSupplements"] = supplements
     out.setdefault("summary", {})["directInlineOwnerSupplements"] = len(supplements)
     out["summary"]["all13MaterialStartsExact"] = len(out.get("bindings", [])) == v1.EXPECTED_MATERIALS
@@ -176,10 +261,11 @@ def build(expanded: Path, owner_ledger: Path, full_player_proof: Path) -> dict:
     out["proofBoundary"] = (
         "All Material raw starts are retail-source-derived. Packed/reused starts come from the exact XModel Material-handle owner ledger; "
         "any missing direct-inline start must come from the retained full-player direct-inline serialized interval and its entire byte slice "
-        "must SHA-256 match the current exact expanded faction_seals_mp stream. TechniqueSet identity is then derived only from the serialized "
-        "Material::techniqueSet packed VIRTUAL pointer, exact type-7 XAsset pointer-field lattice and matching inline MaterialTechniqueSet. "
-        "Names are used only to join two already-exact proof records for the same Material identity, never to search for a raw start or choose "
-        "a TechniqueSet. Pass arguments and shader arithmetic remain a separate decoding stage."
+        "must SHA-256 match the current exact expanded faction_seals_mp stream. The 112-byte Material field layout is the source-closed T6 "
+        "PC32 layout used by the generic top-level walker. TechniqueSet identity is then derived only from the serialized Material::techniqueSet "
+        "packed VIRTUAL pointer, exact type-7 XAsset pointer-field lattice and matching inline MaterialTechniqueSet. Names are used only to join "
+        "two already-exact proof records for the same Material identity, never to search for a raw start or choose a TechniqueSet. Pass arguments "
+        "and shader arithmetic remain a separate decoding stage."
     )
     return out
 
