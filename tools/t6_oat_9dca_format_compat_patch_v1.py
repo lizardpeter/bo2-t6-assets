@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Apply the minimal GCC compatibility patch needed by pinned OAT 9dca965.
 
-The pinned OpenAssetTools revision uses std::format in three menu writers but
-those translation units do not include <format>. GCC 13 therefore fails while
-building ObjWriting. This helper adds only the missing standard-library include
-and refuses to touch any other source text. It does not alter T6 loader,
-material, TechniqueSet, shader, or FastFile semantics.
+The pinned OpenAssetTools revision uses std::format in four legacy menu writers
+without including <format>. GCC 13 therefore fails while building ObjWriting.
+This helper adds only the missing standard-library include and refuses to touch
+any other source text. It does not alter T6 loader, material, TechniqueSet,
+shader, or FastFile semantics.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ TARGETS = (
     "src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp",
     "src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp",
     "src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp",
+    "src/ObjWriting/Game/T4/Menu/MenuWriterT4.cpp",
 )
 
 NEEDLE = "#include <cmath>\n"
@@ -56,7 +57,7 @@ def main() -> int:
         print(f"{status}: {rel}")
 
     # Fail closed if upstream unexpectedly already contains the patch in only a
-    # subset of the three files. The pinned revision is expected to need all 3.
+    # subset of the four files. The pinned revision is expected to need all 4.
     kinds = {status for _, status in statuses}
     if len(kinds) != 1:
         raise SystemExit(f"mixed patch state: {statuses!r}")
