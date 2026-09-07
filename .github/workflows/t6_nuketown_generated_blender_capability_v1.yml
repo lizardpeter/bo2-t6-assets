@@ -1,4 +1,4 @@
-name: T6 Nuketown generated Blender capability v1
+name: T6 Nuketown generated Blender capability v2
 
 on:
   workflow_dispatch:
@@ -6,6 +6,10 @@ on:
     paths:
       - 'tools/t6_blender_symbolic_dag_capability_v1.py'
       - 'tools/t6_nuketown_generated_shader_recipe_recover_v1.py'
+      - 'tools/t6_nuketown_generated_shader_recipe_recover_v2.py'
+      - 'tools/t6_nuketown_generated_shader_recipe_recover_v3.py'
+      - 'tools/t6_retail_special_material_family_census_v1.py'
+      - 'tools/t6_retail_world_material_constants_v1.py'
       - 'tools/t6_generated_slot4_final_output_symbolic_v3.py'
       - 'tools/t6_blender_symbolic_dag_nodes_v2.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
@@ -68,10 +72,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONPATH=tools python3 tools/t6_nuketown_generated_shader_recipe_recover_v1.py \
+          PYTHONPATH=tools python3 tools/t6_nuketown_generated_shader_recipe_recover_v3.py \
             --expanded-world /tmp/mp_nuketown_2020.expanded \
             --oat-root /tmp/oat_out \
-            --out /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V3.json \
             2>&1 | tee /tmp/proof/recipe_recovery.log
 
       - name: Rebuild exact final-output DAGs and Blender capability census
@@ -79,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 tools/t6_generated_slot4_final_output_symbolic_v3.py \
-            --recipes /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V1.json \
+            --recipes /tmp/proof/T6_NUKETOWN_GENERATED_SHADER_RECIPES_V3.json \
             --oat-root /tmp/oat_out \
             --strict-nuketown \
             --out /tmp/proof/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_SYMBOLIC_V3.json \
@@ -107,7 +111,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: T6_NUKETOWN_GENERATED_BLENDER_CAPABILITY_V1
+          name: T6_NUKETOWN_GENERATED_BLENDER_CAPABILITY_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
