@@ -1,4 +1,4 @@
-name: T6 shadowoverlay shader disassembly v2
+name: T6 shadowoverlay shader disassembly v3
 
 on:
   workflow_dispatch:
@@ -60,6 +60,12 @@ jobs:
           git clone -q https://github.com/doitsujin/dxbc-spirv.git /tmp/dxbc-spirv
           git -C /tmp/dxbc-spirv checkout -q "$DXBC_SPIRV_COMMIT"
           test "$(git -C /tmp/dxbc-spirv rev-parse HEAD)" = "$DXBC_SPIRV_COMMIT"
+          git -C /tmp/dxbc-spirv submodule update -q --init --recursive
+          git -C /tmp/dxbc-spirv submodule status --recursive | tee /tmp/proof/dxbc_disassembler_submodules.txt
+          if grep -E '^[+-]' /tmp/proof/dxbc_disassembler_submodules.txt; then
+            echo 'submodule state is not pinned to the selected commit' >&2
+            exit 1
+          fi
           meson setup /tmp/dxbc-spirv/builddir /tmp/dxbc-spirv -Denable_tools=true --buildtype=release
           ninja -C /tmp/dxbc-spirv/builddir
           TOOL=$(find /tmp/dxbc-spirv/builddir -type f -name dxbc_disasm -perm -111 | head -1)
@@ -138,7 +144,7 @@ jobs:
       - name: Upload exact disassembly evidence
         uses: actions/upload-artifact@v4
         with:
-          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V2
+          name: T6_SHADOWOVERLAY_SHADER_DISASSEMBLY_V3
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
