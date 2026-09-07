@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from t6_asset_types_v1 import IMAGE, MATERIAL, TECHNIQUE_SET, XANIMPARTS, XMODEL
 from t6_retail_asset_index_v1 import (
     AmbiguousAssetError,
     AssetDefinition,
@@ -33,6 +34,9 @@ def definition(asset_type: str, name: str, zone: str, body: bytes, start: int = 
 
 
 class RetailAssetIndexTests(unittest.TestCase):
+    def test_canonical_t6_asset_ids(self):
+        self.assertEqual((XANIMPARTS, XMODEL, MATERIAL, TECHNIQUE_SET, IMAGE), (4, 5, 6, 7, 8))
+
     def test_handle_reference_does_not_become_definition(self):
         idx = RetailAssetIndex()
         zone = b"faction-zone"
@@ -57,9 +61,7 @@ class RetailAssetIndexTests(unittest.TestCase):
             idx.add_definition(definition("material", "mc/shared", zone, b"same-body"))
         self.assertEqual(idx.resolve("material", "mc/shared").zone, "common_mp")
         self.assertEqual(
-            idx.resolve(
-                "material", "mc/shared", ["patch_mp", "common_mp"]
-            ).zone,
+            idx.resolve("material", "mc/shared", ["patch_mp", "common_mp"]).zone,
             "patch_mp",
         )
 
@@ -71,10 +73,7 @@ class RetailAssetIndexTests(unittest.TestCase):
         idx.add_definition(definition("material", "mc/foo", "faction", b"B"))
         with self.assertRaises(AmbiguousAssetError):
             idx.resolve("material", "mc/foo")
-        self.assertEqual(
-            idx.resolve("material", "mc/foo", ["faction", "common_mp"]).zone,
-            "faction",
-        )
+        self.assertEqual(idx.resolve("material", "mc/foo", ["faction", "common_mp"]).zone, "faction")
 
     def test_dependency_closure_excludes_outside_definition(self):
         idx = RetailAssetIndex()
@@ -101,7 +100,7 @@ class RetailAssetIndexTests(unittest.TestCase):
             "rows": [
                 {
                     "xassetIndex": 7,
-                    "xassetType": 5,
+                    "xassetType": MATERIAL,
                     "sourceStart": 100,
                     "sourceEnd": 120,
                     "name": {"value": "mc/material"},
@@ -113,7 +112,7 @@ class RetailAssetIndexTests(unittest.TestCase):
                 },
                 {
                     "xassetIndex": 8,
-                    "xassetType": 7,
+                    "xassetType": TECHNIQUE_SET,
                     "sourceStart": 160,
                     "sourceEnd": 176,
                     "name": {"value": "mc/techset"},
@@ -130,9 +129,21 @@ class RetailAssetIndexTests(unittest.TestCase):
         self.assertEqual(mat.end, 120)
         self.assertEqual(mat.sha256, hashlib.sha256(b"M" * 20).hexdigest())
         self.assertEqual(mat.metadata["textureCount"], 2)
-        self.assertEqual(
-            idx.resolve("material_technique_set", "mc/techset").start, 160
-        )
+        self.assertEqual(idx.resolve("material_technique_set", "mc/techset").start, 160)
+
+    def test_walk_adapter_rejects_xmodel_type_as_material(self):
+        expanded = b"x" * 64
+        report = {
+            "format": "t6-material-techset-top-level-walk-v1",
+            "expandedSha256": hashlib.sha256(expanded).hexdigest(),
+            "rows": [{
+                "xassetIndex": 1, "xassetType": XMODEL,
+                "sourceStart": 1, "sourceEnd": 2,
+                "name": {"value": "must_not_be_material"},
+            }],
+        }
+        with self.assertRaises(Exception):
+            RetailAssetIndex().ingest_material_techset_walk("fixture", report, expanded)
 
     def test_walk_adapter_rejects_wrong_zone_bytes(self):
         report = {
@@ -141,9 +152,7 @@ class RetailAssetIndexTests(unittest.TestCase):
             "rows": [],
         }
         with self.assertRaises(StaleIndexError):
-            RetailAssetIndex().ingest_material_techset_walk(
-                "common_mp", report, b"different"
-            )
+            RetailAssetIndex().ingest_material_techset_walk("common_mp", report, b"different")
 
     def test_json_roundtrip_preserves_reference_and_definition_provenance(self):
         idx = RetailAssetIndex()
