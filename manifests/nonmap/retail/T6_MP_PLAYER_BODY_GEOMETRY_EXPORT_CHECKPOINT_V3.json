@@ -1,0 +1,52 @@
+{
+  "format": "t6-mp-player-body-geometry-export-checkpoint-v3",
+  "scope": "All 30 independently proven base-MP player bodies exported as geometry plus exact 102-bone skin/skeleton at all four serialized LODs",
+  "evidence": {
+    "workflow": ".github/workflows/t6-mp-player-body-geometry-export-v3.yml",
+    "runId": 34168676623,
+    "jobId": 101884679898,
+    "headCommit": "9e4abf0463d9331a394289043a47becfdf62bda4",
+    "nativeIdentitySourceRunId": 34164196686,
+    "artifact": {
+      "id": 10035012037,
+      "name": "T6_MP_PLAYER_BODY_GEOMETRY_EXPORT_V3",
+      "bytes": 41380891,
+      "digest": "sha256:0768bdc110f63c1f6e89dd3ad090eccf8bc3d2b0d2778e217aabb8aee6db21bb"
+    }
+  },
+  "totals": {
+    "bodies": 30,
+    "lodsPerBody": 4,
+    "glbs": 120,
+    "glbsReparsed": 120,
+    "skinsWith102Joints": 120,
+    "color0Attributes": 0,
+    "portableMaterialClaims": 0,
+    "failures": 0
+  },
+  "gates": {
+    "expectedBodyCount": true,
+    "allBodiesClosed": true,
+    "exactFourLodsEach": true,
+    "all102BonesOneRoot": true,
+    "zeroColor0": true,
+    "zeroPortableMaterialClaims": true,
+    "zeroFailures": true,
+    "all120GlbsReparsed": true,
+    "seal6SmgDeterministicRepeat": true
+  },
+  "seal6SmgDeterministicHashes": {
+    "lod0": "57f6b822695d2245210103fc6a9078cc6bf14f9329617ab2b05640031c0db3b3",
+    "lod1": "24e9e7ced3c929ffd5823cfda2285093c72a179000e06bdfb2e95cba0cc9f8a5",
+    "lod2": "ca751bc5a93be14f819fd9e5dda1ad3b3a2974efba58a2efa1ca0a503f4da2bb",
+    "lod3": "de60a1c567ae16df1b23d6fd383b5e46ef50ba442666b72ebd97cb0161a1f412"
+  },
+  "proofBoundary": [
+    "Body membership, fixed source starts, source hashes, aggregate geometry counts, and skeleton counts remain inherited only from the retained direct-retail 30-body corpus and already-closed native XModel identity census.",
+    "Every LOD is decoded from the exact retail faction FastFile payload and exported with exact normalized topology, UV0, normals, JOINTS_0, WEIGHTS_0, hierarchy, and inverse bind matrices.",
+    "T6-to-glTF triangle winding is applied by exact per-triangle [i0,i1,i2] -> [i0,i2,i1] transformation. Vertex-normal statistics are an independent corruption sanity check, not the authority for engine front-face convention.",
+    "The T6 packed color field is deliberately not promoted to glTF COLOR_0 and its historical accessor/buffer bytes are physically removed from the authoritative GLBs.",
+    "These GLBs make no portable Material, TechniqueSet, shader, image, texture, or animation fidelity claim. Those layers remain independently gated.",
+    "The four SEAL6 SMG GLBs reproduced byte-for-byte on a second independent export pass in the same pinned retail environment."
+  ]
+}
