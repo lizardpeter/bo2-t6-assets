@@ -9,9 +9,9 @@ replays the target's packed pointers exactly, including XSurface nested
 allocations.  Geometry is then decoded from that proven physical owner while
 the target keeps its own XAsset identity.
 
-No model-name similarity, adjacency, surface order across unrelated models, or
-map-specific logical/source offset is used as ownership evidence.  Materials
-remain outside this layer.
+Inline XModels do not require any map/StringTable prefix parser.  StringTable
+mapping is requested lazily only when a packed name actually needs it.
+Materials remain outside this layer.
 """
 from __future__ import annotations
 
@@ -61,6 +61,19 @@ def _fixed_geometry_signature(data: bytes, start: int) -> dict:
     }
 
 
+def _logical_map_if_needed(data: bytes, current: dict[int, str] | None) -> dict[int, str]:
+    if current is not None:
+        return current
+    try:
+        table = parse_top_level_xasset_table(data)
+        return walk_map_prefix_stringtable(data, table)['logicalToText']
+    except Exception as exc:
+        raise MeshError(
+            'packed-name/reusable mesh path requires a proven StringTable logical map; '
+            f'available prefix parser did not apply: {exc!r}'
+        ) from exc
+
+
 def normalize_mesh(
     data: bytes,
     asset_start: int,
@@ -70,12 +83,10 @@ def normalize_mesh(
     logical_to_text: dict[int, str] | None = None,
 ) -> dict:
     """Normalize one XModel, resolving packed reusable geometry only by replay."""
-    if logical_to_text is None:
-        table = parse_top_level_xasset_table(data)
-        logical_to_text = walk_map_prefix_stringtable(data, table)['logicalToText']
-
     direct_error = None
     try:
+        # The v2 decoder needs logical_to_text only for a packed XModel name.
+        # Passing None keeps ordinary inline physical XModels zone-agnostic.
         out = Normalizer(data, asset_start, logical_to_text=logical_to_text).normalize()
         if identity_name is not None and out['identity']['name'] != identity_name:
             raise MeshError(
@@ -104,6 +115,7 @@ def normalize_mesh(
             'requires xasset_index for unique owner replay'
         )
 
+    logical_to_text = _logical_map_if_needed(data, logical_to_text)
     proof = resolve_reusable_owner(data, asset_start, xasset_index)
     if not proof.get('allMatch') or proof.get('surfaceComparisonCount', 0) <= 0:
         raise MeshError('reusable-owner proof did not close all surface pointer comparisons')
@@ -168,14 +180,11 @@ def main() -> None:
     ap.add_argument('--out', type=Path, required=True)
     a = ap.parse_args()
     data = a.expanded.read_bytes()
-    table = parse_top_level_xasset_table(data)
-    logical_to_text = walk_map_prefix_stringtable(data, table)['logicalToText']
     d = normalize_mesh(
         data,
         a.asset_start,
         xasset_index=a.xasset_index,
         identity_name=a.name,
-        logical_to_text=logical_to_text,
     )
     d['expandedSha256'] = hashlib.sha256(data).hexdigest()
     text = json.dumps(d, indent=2, sort_keys=True) + '\n'
