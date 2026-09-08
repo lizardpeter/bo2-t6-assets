@@ -135,7 +135,9 @@ def main() -> int:
             assert mat.get("t6_global_runtime_lighting_inputs_bound") is False
             assert mat.get("t6_complete_retail_pixel_output") is False
             assert nodes.get("T6_EXACT_ORDINARY_LIT_LOCAL_MATH") is not None
-            assert nodes.get("T6_UNRESOLVED_RETAIL_GLOBALS") is not None
+            unresolved_globals = nodes.get("T6_UNRESOLVED_RETAIL_GLOBALS")
+            assert unresolved_globals is not None
+            assert "RETAIL GLOBALS REQUIRED" in unresolved_globals.label
 
             sources = [n for n in nodes if n.bl_idname == "ShaderNodeTexImage" and n.name.startswith("T6_SLOT_")]
             constants = [n for n in nodes if n.name.startswith("T6_CONST_")]
@@ -198,7 +200,9 @@ def main() -> int:
                 assert nodes.get("T6_EXACT_CORNEA_LOBE1_UPPER") is not None
                 assert nodes.get("T6_EXACT_CORNEA_LOBE2_LOWER") is not None
                 assert nodes.get("T6_EXACT_CORNEA_LOBE2_UPPER") is not None
-                assert "highlights/globals unresolved" in preview.label
+                assert "CORNEA AUTHORING SUBSTITUTE" in preview.label
+                assert mat.get("t6_global_runtime_lighting_inputs_bound") is False
+                assert mat.get("t6_complete_retail_pixel_output") is False
 
             proof_rows.append({
                 "material": name,
