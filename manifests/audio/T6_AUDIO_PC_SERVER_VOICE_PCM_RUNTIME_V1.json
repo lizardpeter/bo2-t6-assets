@@ -1,0 +1,61 @@
+{
+  "format": "t6-audio-pc-server-voice-pcm-runtime-v1",
+  "date": "2026-09-08",
+  "status": "authoritative_for_exact_sha_pinned_pc_dedicated_server",
+  "sourceIdentity": {
+    "exeBytes": 13711872,
+    "exeSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "mapBytes": 9213148,
+    "mapSha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+  },
+  "proof": {
+    "workflowRun": 34256138470,
+    "artifactId": 10067925188,
+    "artifactName": "T6_AUDIO_PC_SERVER_VOICE_PCM_RUNTIME_V1",
+    "artifactDigest": "sha256:80d0c632c801fe101187314e90954359565cc3a6928e52f957fb117f213f450f",
+    "resultJsonSha256": "5a86460fa54bdbe8a6f388ca060be73f8101f9373490dd4899ba426e2b2f4ac8",
+    "verifier": "tools/t6_pc_server_sound_voice_pcm_runtime_proof_v1.py"
+  },
+  "decoderHandoff": {
+    "physicalFormatOffset": "SndAssetBankEntry+0x13",
+    "acceptedPcFormats": [0, 8],
+    "format0": "PCMS16",
+    "format8": "FLAC",
+    "format0DecoderPoolBase": "0x00DE3054",
+    "format8DecoderPoolBase": "0x00DE3E64",
+    "genericDecoderAllocateVa": "0x008B9A10",
+    "wrapperDecoderAllocateVa": "0x008B9B20"
+  },
+  "streamSource": {
+    "sourceInitStreamVa": "0x008B9D10",
+    "acceptedEntryByte11Values": [1, 2],
+    "streamAllocateVa": "0x008B9E20",
+    "sourceStreamPointerOffset": "0x18",
+    "entryByte12CopiedAsBooleanToSourceOffset": "0x24",
+    "allocationFailureSetsOffsetsTrue": ["0x20", "0x28", "0x2C"],
+    "allocationSuccessClearsOffsets": ["0x20", "0x28", "0x2C"]
+  },
+  "voiceRuntime": {
+    "voicePoolBase": "0x00E57100",
+    "voiceBytes": 384,
+    "voiceCount": 128,
+    "voicePoolSpanBytes": 38400,
+    "voiceNewParamBase": "0x00E60900",
+    "voiceParamBase": "0x00E60B00",
+    "voiceStartVa": "0x008BA620",
+    "voiceStartBytes": 159,
+    "voiceStartSha256": "6d65d5ddfe6b86078c815997c5063e14d92c8d2416be002ec434fe0d7f723053",
+    "startedInvariant": "voice.state == 2 && voiceParam[voiceIndex] != null",
+    "fields": {
+      "state": "0x00",
+      "done": "0x04",
+      "hasData": "0x08",
+      "positionI64": "0x10"
+    },
+    "outputForceWakeupVa": "0x008BA8B0",
+    "outputWakeupEventAddress": "0x01087A88",
+    "outputWakeupCall": "Sys_SetEvent",
+    "allocationWakeupRetryCount": 4
+  },
+  "proofBoundary": "This closes the exact dedicated-server SndAssetBankEntry format -> decoder allocation -> stream-source initialization -> high-level voice allocation/start/state handoff. It does not claim retail t6mp.exe address equivalence, actual retail mixer DSP/resampling/pan-law behavior, or that the dedicated-server configuration enables audio output during normal headless operation."
+}
