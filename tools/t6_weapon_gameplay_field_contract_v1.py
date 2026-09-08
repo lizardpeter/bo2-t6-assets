@@ -2,18 +2,19 @@
 """Build a fail-closed T6 WeaponFullDef gameplay-field contract.
 
 Authority is the exact pinned OpenAssetTools T6 ``weapon_fields`` table supplied
-as input.  This adapter does not read retail values yet; it freezes the source
-field names, owning struct members and parse-field types that the retail parser
-must later match.
+as input. This adapter does not read retail values yet; it freezes source row
+order, authored field names, owning struct members and parse-field types that the
+retail parser must later match.
 
 Important boundaries:
-- ``CSPFT_MILLISECONDS`` is an internal millisecond integer field.  The pinned
+- Source-authored duplicate keys are preserved as separate rows. They are not
+  deduplicated merely because their field name string is repeated.
+- ``CSPFT_MILLISECONDS`` is an internal millisecond integer field. The pinned
   InfoString writer divides that integer by 1000 when emitting authored seconds.
-- RPM is therefore permitted only as the derived expression
-  ``60000 / fireTimeMilliseconds`` after a retail ``iFireTime`` value is closed.
-- Damage is a six-point native curve.  The adapter preserves all six damage and
-  range fields; it never collapses them to only max/min.
-- Plain ``CSPFT_FLOAT`` range values stay in native T6 units.  No inch/meter
+- RPM is permitted only as ``60000 / fireTimeMilliseconds`` after an exact retail
+  ``iFireTime`` value is closed.
+- Damage is a six-point native curve. All six damage and range fields survive.
+- Plain ``CSPFT_FLOAT`` range values stay in native T6 units. No inch/meter
   conversion is asserted here.
 """
 from __future__ import annotations
@@ -22,7 +23,7 @@ import argparse
 import hashlib
 import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -35,9 +36,6 @@ ROW_RE = re.compile(
     r'\{\s*"(?P<name>[^"]+)"\s*,\s*offsetof\(WeaponFullDef,\s*(?P<member>.+?)\)\s*,\s*(?P<type>[A-Z0-9_]+)\s*\},?'
 )
 
-# These are the minimum fields that must remain source-exact before any package
-# can claim gameplay/stat closure.  All parsed fields are emitted, not just this
-# canary set.
 REQUIRED: dict[str, tuple[str, str]] = {
     "fireTime": ("weapDef.iFireTime", "CSPFT_MILLISECONDS"),
     "burstFireDelay": ("weapDef.iBurstDelayTime", "CSPFT_MILLISECONDS"),
@@ -70,17 +68,23 @@ def git_blob_sha1(data: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
 
 
-def parse_fields(text: str) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for line in text.splitlines():
+def parse_fields(text: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    occurrence = Counter()
+    for line_number, line in enumerate(text.splitlines(), start=1):
         match = ROW_RE.search(line)
         if not match:
             continue
-        row = {k: match.group(k).strip() for k in ("name", "member", "type")}
-        if row["name"] in seen:
-            raise ValueError(f"duplicate weapon field name {row['name']!r}")
-        seen.add(row["name"])
+        name = match.group("name").strip()
+        row = {
+            "rowIndex": len(rows),
+            "sourceLine": line_number,
+            "name": name,
+            "nameOccurrence": occurrence[name],
+            "member": match.group("member").strip(),
+            "type": match.group("type").strip(),
+        }
+        occurrence[name] += 1
         rows.append(row)
     if not rows:
         raise ValueError("no WeaponFullDef weapon_fields rows parsed")
@@ -112,16 +116,18 @@ def build(data: bytes, *, require_pinned_blob: bool = True) -> dict[str, Any]:
     blob = git_blob_sha1(data)
     if require_pinned_blob and blob != OAT_WEAPON_FIELDS_BLOB_SHA1:
         raise ValueError(f"WeaponFields.h git blob SHA-1 {blob} != pinned {OAT_WEAPON_FIELDS_BLOB_SHA1}")
-    text = data.decode("utf-8")
-    rows = parse_fields(text)
-    by_name = {row["name"]: row for row in rows}
+    rows = parse_fields(data.decode("utf-8"))
+
+    by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_name[row["name"]].append(row)
     for name, (member, field_type) in REQUIRED.items():
-        row = by_name.get(name)
-        if row is None:
-            raise ValueError(f"required gameplay field {name!r} missing")
-        if (row["member"], row["type"]) != (member, field_type):
+        candidates = by_name.get(name, [])
+        exact = [r for r in candidates if (r["member"], r["type"]) == (member, field_type)]
+        if len(exact) != 1 or len(candidates) != 1:
             raise ValueError(
-                f"{name}: source mapping {(row['member'], row['type'])!r} != expected {(member, field_type)!r}"
+                f"{name}: required canary is not uniquely source-exact; candidates="
+                f"{[(r['member'], r['type'], r['rowIndex']) for r in candidates]!r}"
             )
 
     emitted = []
@@ -132,6 +138,15 @@ def build(data: bytes, *, require_pinned_blob: bool = True) -> dict[str, Any]:
         categories[cat] += 1
         types[row["type"]] += 1
         emitted.append({**row, "category": cat})
+
+    duplicate_names = {
+        name: [
+            {"rowIndex": r["rowIndex"], "member": r["member"], "type": r["type"]}
+            for r in copies
+        ]
+        for name, copies in sorted(by_name.items())
+        if len(copies) > 1
+    }
 
     damage_curve = [
         {"point": i, "damageField": d, "rangeField": r}
@@ -153,7 +168,12 @@ def build(data: bytes, *, require_pinned_blob: bool = True) -> dict[str, Any]:
             "sha256": hashlib.sha256(data).hexdigest(),
         },
         "summary": {
-            "fieldCount": len(emitted),
+            "fieldRowCount": len(emitted),
+            "uniqueAuthoredFieldNames": len(by_name),
+            "duplicateAuthoredFieldNameCount": len(duplicate_names),
+            "duplicateAuthoredFieldRowExcess": sum(len(v) - 1 for v in by_name.values()),
+            "sourceRowOrderPreserved": True,
+            "sourceDuplicateRowsPreserved": True,
             "requiredGameplayCanaries": len(REQUIRED),
             "allRequiredGameplayCanariesExact": True,
             "categoryCounts": dict(sorted(categories.items())),
@@ -162,6 +182,7 @@ def build(data: bytes, *, require_pinned_blob: bool = True) -> dict[str, Any]:
             "damageCurvePoints": 6,
             "nativeDamageRangeUnitConversionAsserted": False,
         },
+        "duplicateAuthoredFieldNames": duplicate_names,
         "derivedRules": {
             "rateOfFireRpm": {
                 "sourceField": "fireTime",
@@ -174,9 +195,8 @@ def build(data: bytes, *, require_pinned_blob: bool = True) -> dict[str, Any]:
         "damageCurve": damage_curve,
         "fields": emitted,
         "proofBoundary": (
-            "This contract closes field identity and source parse type only. It does not yet assert any retail weapon value. "
-            "CSPFT_MILLISECONDS is permitted as internal milliseconds because the pinned writer reads an unsigned integer and divides by 1000. "
-            "Plain FLOAT damage ranges remain native T6 values with no world-unit conversion. Every weapon package must later bind these fields to exact retail WeaponDef/WeaponVariantDef bytes or an independently equivalent native dump."
+            "This contract closes field identity, source order and parse type only. It does not yet assert any retail weapon value. "
+            "Duplicate authored keys are preserved exactly and are not silently deduplicated. CSPFT_MILLISECONDS is permitted as internal milliseconds because the pinned writer reads an unsigned integer and divides by 1000. Plain FLOAT damage ranges remain native T6 values with no world-unit conversion. Every weapon package must later bind these rows to exact retail WeaponDef/WeaponVariantDef bytes or an independently equivalent native dump."
         ),
     }
 
