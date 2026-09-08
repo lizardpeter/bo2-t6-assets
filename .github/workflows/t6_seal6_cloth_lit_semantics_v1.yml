@@ -1,0 +1,92 @@
+name: T6 SEAL6 cloth lit semantics v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - '.github/workflows/t6_seal6_cloth_lit_semantics_v1.yml'
+      - 'tools/t6_seal6_cloth_lit_semantics_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  semantics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact cloth shader IR
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_CLOTH_LIT_SHADER_IR_V1_RESUMED
+          run-id: 34186064296
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/ir
+
+      - name: Download green twelve-material native census
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1
+          run-id: 34185771413
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/census
+
+      - name: Normalize exact cloth equations fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_seal6_cloth_lit_semantics_v1.py
+          PYTHONPATH=tools python3 tools/t6_seal6_cloth_lit_semantics_v1.py \
+            --ir /tmp/ir/T6_SEAL6_CLOTH_LIT_SHADER_IR_V1.json \
+            --ir-root /tmp/ir \
+            --census /tmp/census/T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1.json \
+            --out /tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json'))
+          assert d['format']=='t6-retail-seal6-cloth-lit-semantics-v1'
+          s=d['summary']
+          assert s=={
+            'materials':7,
+            'nativeTextureSlots':21,
+            'nativeMaterialConstants':0,
+            'uniqueVertexPrograms':1,
+            'uniquePixelPrograms':1,
+            'exactMaterialArgumentAbiClosed':True,
+            'exactOrdinaryLitEquationsClosed':True,
+            'literalUnitControlsClosed':True,
+            'completeRetailPixelOutputInBlender':False,
+          }
+          f=d['family']
+          assert f['vertexDxbcSha256']=='b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe'
+          assert f['pixelDxbcSha256']=='14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19'
+          assert f['materialArguments']==['SpecularAndGloss','Normal_Map','Diffuse_Map']
+          assert f['materialConstants']==[]
+          assert f['unitMaterialControls']=={
+            'Specular_Amount':1.0,
+            'Reflection_Amount':1.0,
+            'Diffuse_Normal_Height_Facing':1.0,
+            'status':'literal-executable-units-not-missing-defaults',
+          }
+          assert f['normal']['Ndiff']=='Nlighting' and f['normal']['Nspec']=='Nlighting'
+          assert f['pipelineState']['techniqueTypeIndex']==4 and f['pipelineState']['stateBitsIndex']==2
+          assert all(m['textureCount']==3 and m['constants']==[] for m in d['materials'])
+          assert d['runtimeAbi']['completeRetailPixelOutputInBlender'] is False
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json | tee /tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1
+          path: |
+            /tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json
+            /tmp/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.sha256
+          if-no-files-found: error
