@@ -2,12 +2,13 @@
 """Project native OAT dependency conflicts through T6 zone-priority lineage.
 
 This tool exists to quantify the leverage of the still-unproven retail duplicate
-XAsset priority rule.  It consumes the exact conflict census, maps physical OAT
+XAsset priority rule. It consumes the exact conflict census, maps physical OAT
 roots to explicit zone flags supplied by the caller, and reports what the
 retained lineage priority table would predict.
 
-It can never authorize a winner.  Unique maximum priority is reported only as a
-lineage prediction; ties, unmapped roots, and unknown flags remain unresolved.
+It can never authorize a winner. Unique maximum priority is reported only as a
+lineage prediction; ties, unmapped roots, and missing-parent owner-universe gaps
+remain unresolved.
 """
 from __future__ import annotations
 
@@ -52,44 +53,54 @@ def build(conflict_doc: dict, root_flags: dict[str, int]) -> dict:
     unique_predictions = 0
     unresolved_ties = 0
     unmapped = 0
+    owner_universe_gaps = 0
 
     for conflict in conflict_doc.get("conflicts", []):
-        owners = [str(Path(root).resolve()) for root in conflict.get("parentOwners", [])]
-        if not owners:
-            raise ProjectionError(f"conflict {conflict.get('conflictKey')} has no parent owners")
+        raw_owners = conflict.get("parentOwners", [])
+        if not isinstance(raw_owners, list):
+            raise ProjectionError(f"conflict {conflict.get('conflictKey')} parentOwners must be a list")
+        owners = [str(Path(root).resolve()) for root in raw_owners]
         owner_rows = []
         missing_roots = []
-        for owner in owners:
-            if owner not in normalized_flags:
-                missing_roots.append(owner)
-                continue
-            flag = normalized_flags[owner]
-            masked = flag & lineage.ZONE_FLAG_MASK
-            if masked not in lineage.ZONE_PRIORITY:
-                raise ProjectionError(
-                    f"root {owner}: unknown lineage zone flag 0x{masked:08x}"
-                )
-            owner_rows.append({
-                "root": owner,
-                "zoneFlag": f"0x{flag:08x}",
-                "maskedFlag": f"0x{masked:08x}",
-                "lineagePriority": lineage.ZONE_PRIORITY[masked],
-            })
-
         predicted = None
-        state = "unmapped-root"
-        if missing_roots:
-            unmapped += 1
+
+        # A missing parent TechniqueSet is not a duplicate-owner precedence
+        # question at all. Keep the owner-universe gap explicit and do not try
+        # to manufacture an owner from zone-priority lineage.
+        if not owners:
+            state = "no-parent-owner-in-supplied-universe"
+            owner_universe_gaps += 1
         else:
-            max_priority = max(row["lineagePriority"] for row in owner_rows)
-            winners = [row["root"] for row in owner_rows if row["lineagePriority"] == max_priority]
-            if len(winners) == 1:
-                predicted = winners[0]
-                state = "unique-lineage-priority-maximum"
-                unique_predictions += 1
+            for owner in owners:
+                if owner not in normalized_flags:
+                    missing_roots.append(owner)
+                    continue
+                flag = normalized_flags[owner]
+                masked = flag & lineage.ZONE_FLAG_MASK
+                if masked not in lineage.ZONE_PRIORITY:
+                    raise ProjectionError(
+                        f"root {owner}: unknown lineage zone flag 0x{masked:08x}"
+                    )
+                owner_rows.append({
+                    "root": owner,
+                    "zoneFlag": f"0x{flag:08x}",
+                    "maskedFlag": f"0x{masked:08x}",
+                    "lineagePriority": lineage.ZONE_PRIORITY[masked],
+                })
+
+            state = "unmapped-root"
+            if missing_roots:
+                unmapped += 1
             else:
-                state = "lineage-priority-tie-load-order-required"
-                unresolved_ties += 1
+                max_priority = max(row["lineagePriority"] for row in owner_rows)
+                winners = [row["root"] for row in owner_rows if row["lineagePriority"] == max_priority]
+                if len(winners) == 1:
+                    predicted = winners[0]
+                    state = "unique-lineage-priority-maximum"
+                    unique_predictions += 1
+                else:
+                    state = "lineage-priority-tie-load-order-required"
+                    unresolved_ties += 1
 
         projections.append({
             "conflictKey": conflict.get("conflictKey"),
@@ -118,11 +129,14 @@ def build(conflict_doc: dict, root_flags: dict[str, int]) -> dict:
             "uniqueLineagePredictionCount": unique_predictions,
             "lineagePriorityTieCount": unresolved_ties,
             "unmappedConflictCount": unmapped,
+            "ownerUniverseGapConflictCount": owner_universe_gaps,
             "authoritativeWinnerCount": 0,
         },
         "projections": projections,
         "proofBoundary": (
-            "NON-AUTHORITATIVE projection. Parent-owned conflicts come from exact pinned-OAT provenance, but zone flags and DB_GetZonePriority/DB_OverrideAsset behavior used here remain lineage until independently closed against the exact retail executable/runtime. A unique lineage priority maximum is a falsifiable prediction only. No projection may be fed into the authoritative native Material census as a winner."
+            "NON-AUTHORITATIVE projection. Parent-owned conflicts come from exact pinned-OAT provenance, but zone flags and DB_GetZonePriority/DB_OverrideAsset behavior used here remain lineage until independently closed against the exact retail executable/runtime. "
+            "A unique lineage priority maximum is a falsifiable prediction only. Missing-parent TechniqueSet conflicts are owner-universe gaps, not precedence candidates, and remain unresolved. "
+            "No projection may be fed into the authoritative native Material census as a winner."
         ),
     }
 
