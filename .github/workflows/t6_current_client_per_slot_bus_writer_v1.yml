@@ -1,0 +1,118 @@
+name: T6 current client per-slot mix bus writer v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_per_slot_bus_writer_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace bus reset loop and 0x897620 slot writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,collections
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM,X86_REG_ESP,X86_REG_EBP
+
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json';UA='bo2-t6-assets-per-slot-bus-writer/1'
+          SLOT=0x00897620
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          imports={}
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports:imports[i.address]={'dll':dll,'name':i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          def trace_function(start,scan_end):
+            o=vaoff(start);allr=[]
+            for ins in md.disasm(raw[o:o+(scan_end-start)],start):
+              if ins.address>=scan_end:break
+              allr.append({'va':ins.address,'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+            end=None;basis=None
+            for i,r in enumerate(allr):
+              if not r['mnemonic'].startswith('ret'):continue
+              j=i+1;pads=0
+              while j<len(allr) and allr[j]['mnemonic']=='int3':pads+=1;j+=1
+              if pads>=3:
+                end=r['va']+len(bytes.fromhex(r['bytes']));basis=f'ret_plus_{pads}_int3';break
+            if end is None:end=scan_end;basis='scan_limit'
+            rr=[r for r in allr if r['va']<end]
+            return end,basis,rr
+
+          loop_start,loop_end=0x00404E40,0x00404EA0
+          loop_rows=[]
+          for ins in md.disasm(raw[vaoff(loop_start):vaoff(loop_start)+(loop_end-loop_start)],loop_start):
+            if ins.address>=loop_end:break
+            loop_rows.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+
+          end,basis,rows=trace_function(SLOT,0x00899000)
+          calls=[];writes=[];argrefs=[];imms=collections.Counter();absrefs=collections.defaultdict(list)
+          for r in rows:
+            va=r['va'];ins=next(md.disasm(raw[vaoff(va):vaoff(va)+15],va))
+            for oi,op in enumerate(ins.operands):
+              if op.type==X86_OP_IMM:
+                v=op.imm&0xffffffff;imms[v]+=1
+                if v>=base:absrefs[f'0x{v:08X}'].append(f'0x{va:08X}')
+              elif op.type==X86_OP_MEM:
+                if op.mem.base in (X86_REG_ESP,X86_REG_EBP) and op.mem.disp>0:argrefs.append({'va':f'0x{va:08X}','operandIndex':oi,'mnemonic':ins.mnemonic,'opStr':ins.op_str,'base':ins.reg_name(op.mem.base),'disp':op.mem.disp})
+                if op.mem.base==0 and op.mem.index==0 and (op.mem.disp&0xffffffff)>=base:absrefs[f'0x{op.mem.disp&0xffffffff:08X}'].append(f'0x{va:08X}')
+            if ins.mnemonic=='call':
+              c={'va':f'0x{va:08X}','opStr':ins.op_str}
+              if ins.operands and ins.operands[0].type==X86_OP_IMM:c['target']=f'0x{ins.operands[0].imm&0xffffffff:08X}'
+              b=ins.bytes
+              if len(b)==6 and b[:2]==b'\xff\x15':
+                iat=struct.unpack('<I',b[2:])[0];c['iatVa']=f'0x{iat:08X}';c['import']=imports.get(iat)
+              calls.append(c)
+            if ins.operands and ins.operands[0].type==X86_OP_MEM and ins.mnemonic not in ('cmp','test','comiss','ucomiss','lea','movzx','movsx','prefetcht0','prefetchnta'):
+              m=ins.operands[0].mem;writes.append({'va':f'0x{va:08X}','mnemonic':ins.mnemonic,'opStr':ins.op_str,'baseReg':ins.reg_name(m.base) if m.base else None,'indexReg':ins.reg_name(m.index) if m.index else None,'scale':m.scale,'disp':m.disp,'size':ins.operands[0].size})
+          # xrefs to slot function
+          mds=Cs(CS_ARCH_X86,CS_MODE_32);mds.detail=True;mds.skipdata=True;xrefs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in mds.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id and ins.mnemonic in ('call','jmp') and ins.operands and ins.operands[0].type==X86_OP_IMM and (ins.operands[0].imm&0xffffffff)==SLOT:
+                xrefs.append({'va':f'0x{ins.address:08X}','mnemonic':ins.mnemonic,'bytes':ins.bytes.hex()})
+          strings=[]
+          for vs,xs in absrefs.items():
+            va=int(vs,16)
+            try:so=vaoff(va)
+            except:continue
+            chunk=raw[so:so+512];z=chunk.find(b'\0');z=len(chunk) if z<0 else z;b=chunk[:z]
+            if len(b)>=4 and all(32<=c<127 for c in b):strings.append({'va':vs,'text':b.decode('ascii','replace'),'xrefs':xs})
+          interesting={k:v for k,v in imms.items() if k in {1,2,4,6,8,16,32,64,68,100,128,256,0x100,0x180,0x200,0x400,0x600,0x1800,0x4000,48000,0xbb80} or (0<k<=2048 and v>=2)}
+          result={'format':'t6-current-client-per-slot-bus-writer-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'busResetAndSlotLoop':{'startVa':'0x00404E40','endExclusiveVa':'0x00404EA0','sha256':hashlib.sha256(raw[vaoff(loop_start):vaoff(loop_start)+(loop_end-loop_start)]).hexdigest(),'knownCallContractFrom0x426050':{'slotCount':100,'slotStateBase':'0x00DE6180','slotPointerTable':'0x00DEFB80','mixBusBase':'0x01007900','slotScratchBase':'0x00DEFD80','remainingArgs':['0x01016AE4','0x01016AE8','0x0101FFC8']},'disasm':loop_rows},'slotWriter':{'entryVa':f'0x{SLOT:08X}','endCandidateVa':f'0x{end:08X}','endBasis':basis,'bytes':end-SLOT,'sha256':hashlib.sha256(raw[vaoff(SLOT):vaoff(SLOT)+(end-SLOT)]).hexdigest(),'knownCallerArgs':['slotStateBase + index*0x180','0x01007900 bus base','slotScratchBase + index*0x4000'],'directXrefs':xrefs,'calls':calls,'stackArgumentReferences':argrefs,'memoryWrites':writes,'interestingImmediateCounts':{f'0x{k:08X}':v for k,v in sorted(interesting.items())},'absoluteReferences':dict(absrefs),'directStrings':strings,'disasm':[{**r,'va':f"0x{r['va']:08X}"} for r in rows]},'proofBoundary':'Exact current-client machine evidence only. 0x404E40 bus ownership is established by its exact 0xD800 clear and per-non-null-slot call. 0x897620 is therefore a per-slot bus writer structurally; no source-level name, semantic voice class, resampler algorithm, or retail equivalence is inferred until its body proves those details.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_PER_SLOT_BUS_WRITER_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('LOOP_SHA',result['busResetAndSlotLoop']['sha256'])
+          for r in loop_rows:print('LOOP',r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          s=result['slotWriter'];print('SLOT_FUNCTION',s['entryVa'],s['endCandidateVa'],s['endBasis'],s['bytes'],s['sha256'])
+          print('XREFS',json.dumps(xrefs,indent=2));print('INTERESTING',json.dumps(s['interestingImmediateCounts'],indent=2,sort_keys=True));print('CALLS',json.dumps(calls,indent=2,sort_keys=True));print('STRINGS',json.dumps(strings,indent=2,sort_keys=True));print('ARGREFS',json.dumps(argrefs[:180],indent=2,sort_keys=True));print('WRITES_HEAD',json.dumps(writes[:240],indent=2,sort_keys=True))
+          for r in rows:print(f"SLOT 0x{r['va']:08X} {r['bytes']} {r['mnemonic']} {r['opStr']}")
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_PER_SLOT_BUS_WRITER_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_PER_SLOT_BUS_WRITER_V1.json
+          if-no-files-found: error
+          compression-level: 9
