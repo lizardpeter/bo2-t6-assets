@@ -146,7 +146,7 @@ def prove(exe: bytes, map_text: str) -> dict:
         require(b[-4:] == bytes.fromhex("000be600"), f"voiceParam publication target changed at 0x{store_va:08X}")
 
     # Started == state 2 && voiceParam[index] != null.
-    require(at(0x008BA6C3, 9) == bytes.fromhex("8b45088338027529"), "SD_VoiceStarted state check changed")
+    require(at(0x008BA6C3, 8) == bytes.fromhex("8b45088338027529"), "SD_VoiceStarted state check changed")
     require(at(0x008BA6E3, 8) == bytes.fromhex("833c85000be60000"), "SD_VoiceStarted voiceParam check changed")
     require(at(0x008BA6ED, 7) == bytes.fromhex("b8010000005dc3"), "SD_VoiceStarted true return changed")
 
