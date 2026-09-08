@@ -1,4 +1,4 @@
-name: T6 SEAL6 full-retail shader attribute carrier v1
+name: T6 SEAL6 full-retail shader attribute carrier v2
 
 on:
   workflow_dispatch:
@@ -7,9 +7,7 @@ on:
       - reversal/seal6-material-closure
     paths:
       - 'tools/t6_gltf_augment_xmodel_shader_attributes_v1.py'
-      - 'tools/t6_xmodel_blender_static_bindpose_export_v1.py'
-      - 'tools/t6_xmodel_blender_static_bindpose_export_v2.py'
-      - 'tools/t6_xmodel_blender_static_bindpose_export_v3.py'
+      - 'tools/t6_gltf_augment_xmodel_shader_attributes_v2.py'
       - 'tools/t6_xmodel_mesh_normalize_v1.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - '.github/workflows/t6_seal6_shader_attribute_carrier_v1.yml'
@@ -34,7 +32,7 @@ jobs:
           repository: lizardpeter/bo2-t6-assets
           path: /tmp/carrier
 
-      - name: Regenerate exact shader-attribute authority from faction FastFile
+      - name: Regenerate exact normalized retail mesh authority
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +61,7 @@ jobs:
             /tmp/source/faction_seals_mp.expanded \
             --asset-start 0x45CCF1 \
             --out /tmp/source/c_usa_mp_seal6_smg_fb.mesh.v1.json
+          echo 'a8c71af373f955f26cbc92f210345712f42c5727e69c9893a614d428303dd9ba  /tmp/source/c_usa_mp_seal6_smg_fb.mesh.v1.json' | sha256sum -c -
           python3 - <<'PY'
           import json
           p='/tmp/source/c_usa_mp_seal6_smg_fb.mesh.v1.json'
@@ -73,34 +72,32 @@ jobs:
           assert len(d['surfaces'])==42
           lod=next(x for x in d['xmodel']['lods'] if int(x['index'])==0)
           rows=d['surfaces'][int(lod['surfIndex']):int(lod['surfIndex'])+int(lod['numSurfs'])]
-          assert len(rows)==14
+          assert [int(x['index']) for x in rows]==list(range(14))
           assert sum(int(x['vertCount']) for x in rows)==13490
           assert sum(int(x['triCount']) for x in rows)==14968
           assert all(all(k in v for k in ('colorRGBA','normal','tangentXYZ','binormalSign','texcoord0')) for s in rows for v in s['vertices'])
-          print('mesh-authority-ok',len(rows),sum(x['vertCount'] for x in rows),sum(x['triCount'] for x in rows))
+          assert all(len(s['joints0'])==int(s['vertCount']) and len(s['weights0'])==int(s['vertCount']) for s in rows)
+          print('normalized-mesh-authority-ok',len(rows),sum(x['vertCount'] for x in rows),sum(x['triCount'] for x in rows))
           PY
 
-          python3 tools/t6_xmodel_blender_static_bindpose_export_v3.py \
-            /tmp/source/c_usa_mp_seal6_smg_fb.mesh.v1.json \
-            /tmp/source/T6_SEAL6_LOD0_SHADER_ATTRIBUTE_AUTHORITY_V3.glb \
-            --lod 0
-          test -s /tmp/source/T6_SEAL6_LOD0_SHADER_ATTRIBUTE_AUTHORITY_V3.glb
-          sha256sum /tmp/source/T6_SEAL6_LOD0_SHADER_ATTRIBUTE_AUTHORITY_V3.glb | tee /tmp/proof/shader_authority_sha256.txt
-
-      - name: Augment full-retail carrier with exact shader attributes
+      - name: Augment full-retail carrier with exact raw-basis shader attributes
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/t6_gltf_augment_xmodel_shader_attributes_v1.py
-          python3 tools/t6_gltf_augment_xmodel_shader_attributes_v1.py \
+          python3 -m py_compile \
+            tools/t6_gltf_augment_xmodel_shader_attributes_v1.py \
+            tools/t6_gltf_augment_xmodel_shader_attributes_v2.py
+          PYTHONPATH=tools python3 tools/t6_gltf_augment_xmodel_shader_attributes_v2.py \
             --carrier /tmp/carrier/T6_SEAL6_SMG_LOD0_FULL_RETAIL_GEOMETRY_V3_REBASED.glb \
-            --authority /tmp/source/T6_SEAL6_LOD0_SHADER_ATTRIBUTE_AUTHORITY_V3.glb \
-            --output /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.glb \
-            --report /tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_CARRIER_V1.json \
+            --mesh /tmp/source/c_usa_mp_seal6_smg_fb.mesh.v1.json \
+            --output /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb \
+            --report /tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_CARRIER_V2.json \
+            --lod 0 \
             --require-primitives 14
           python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_CARRIER_V1.json'))
+          d=json.load(open('/tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_CARRIER_V2.json'))
+          assert d['format']=='t6-gltf-augment-xmodel-shader-attributes-v2'
           assert d['primitiveCount']==14
           assert d['vertices']==13490
           assert d['materials']==12
@@ -109,7 +106,9 @@ jobs:
           assert d['color0Present'] is False
           assert d['standardTangentPresent'] is False
           assert d['allBaseVertexOrdersProven'] is True
+          assert d['vertexOrderProofAttributes']==['POSITION','NORMAL','TEXCOORD_0','JOINTS_0','WEIGHTS_0']
           assert d['allCustomShaderAttributesExact'] is True
+          assert d['customAttributeBasis']=='raw T6 local carrier basis'
           assert d['customAttributesPerPrimitive']==[
               '_T6_COLOR_RGBA','_T6_XMODEL_NORMAL','_T6_XMODEL_TANGENT','_T6_TANGENT_HANDEDNESS'
           ]
@@ -125,7 +124,7 @@ jobs:
           cat >/tmp/import_shader_carrier.py <<'PY'
           import bpy,json
           from pathlib import Path
-          src=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.glb')
+          src=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb')
           bpy.ops.wm.read_factory_settings(use_empty=True)
           bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
           assert len(bpy.data.armatures)==1, len(bpy.data.armatures)
@@ -135,8 +134,6 @@ jobs:
           main=[o for o in meshes if o.name=='c_usa_mp_seal6_smg_fb_mesh']
           assert len(main)==1, [o.name for o in meshes]
           main=main[0]
-          # Blender may create an import helper mesh; remove only non-source helpers,
-          # exactly as the already-proven native-blend v2 workflow does.
           for o in list(meshes):
               if o is main: continue
               data=o.data; bpy.data.objects.remove(o,do_unlink=True)
@@ -152,7 +149,8 @@ jobs:
           if 'COLOR_0' in attrs or 'COLOR_0' in color_attrs:
               raise RuntimeError('forbidden standard COLOR_0 reappeared in Blender')
           scene=bpy.context.scene
-          scene['t6_shader_attribute_carrier']='t6-gltf-augment-xmodel-shader-attributes-v1'
+          scene['t6_shader_attribute_carrier']='t6-gltf-augment-xmodel-shader-attributes-v2'
+          scene['t6_shader_custom_attribute_basis']='raw T6 local carrier basis; explicit shader-node axis conversion required'
           scene['t6_color0_removed']=True
           scene['t6_exact_shader_custom_attributes']=True
           scene['t6_source_vertices']=13490
@@ -160,35 +158,36 @@ jobs:
           scene['t6_source_joints']=102
           scene['t6_source_animations']=6
           notice=bpy.data.texts.new('T6_SHADER_ATTRIBUTE_NOTICE.txt')
-          notice.write('Exact T6 shader-only vertex data is carried in custom _T6_* attributes. Standard glTF COLOR_0 remains absent. Do not derive tangent from UVs for retail T6 shader reconstruction.\n')
-          out=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.blend')
+          notice.write('Exact T6 shader-only vertex data is carried in custom _T6_* attributes in the raw T6 local carrier basis. Standard glTF COLOR_0/TANGENT remain absent. Shader reconstruction must apply the explicit custom-attribute axis conversion before OBJECT->WORLD and must not derive tangent from UVs.\n')
+          out=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.blend')
           bpy.ops.file.pack_all()
           bpy.ops.wm.save_as_mainfile(filepath=str(out),compress=False)
           report={
-              'format':'t6-seal6-shader-attribute-blender-import-v1',
+              'format':'t6-seal6-shader-attribute-blender-import-v2',
               'blenderVersion':bpy.app.version_string,
               'vertices':len(main.data.vertices),'triangles':len(main.data.polygons),
               'armatures':len(bpy.data.armatures),'actions':len(bpy.data.actions),'materials':len(bpy.data.materials),
               'attributes':attrs,'colorAttributes':color_attrs,
               'requiredCustomAttributesPresent':True,'color0Present':False,
+              'customAttributeBasis':'raw T6 local carrier basis',
           }
-          Path('/tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_BLENDER_IMPORT_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          Path('/tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_BLENDER_IMPORT_V2.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           print(json.dumps(report,indent=2,sort_keys=True))
           PY
           blender --background --python /tmp/import_shader_carrier.py 2>&1 | tee /tmp/proof/blender_import.log
-          test -s /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.blend
-          test -s /tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_BLENDER_IMPORT_V1.json
-          sha256sum /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.glb \
-                    /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.blend \
+          test -s /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.blend
+          test -s /tmp/proof/T6_SEAL6_SHADER_ATTRIBUTE_BLENDER_IMPORT_V2.json
+          sha256sum /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb \
+                    /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.blend \
                     | tee /tmp/proof/OUTPUT_SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: T6_SEAL6_FULL_RETAIL_SHADER_ATTRIBUTE_CARRIER_V1
+          name: T6_SEAL6_FULL_RETAIL_SHADER_ATTRIBUTE_CARRIER_V2
           path: |
-            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.glb
-            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V1.blend
+            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb
+            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.blend
             /tmp/proof
           if-no-files-found: error
           compression-level: 0
