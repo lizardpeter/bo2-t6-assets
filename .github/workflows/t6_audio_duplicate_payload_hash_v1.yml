@@ -1,0 +1,168 @@
+name: T6 duplicate physical audio payload hash v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_audio_duplicate_payload_hash_v1.py'
+      - 'tools/test_t6_audio_duplicate_payload_hash_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_audio_duplicate_payload_hash_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test exact payload span hashing and fail-closed aggregate
+        run: PYTHONPATH=tools python3 tools/test_t6_audio_duplicate_payload_hash_v1.py
+
+  payload-shard:
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact retained physical manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/physical /tmp/proof
+          gh run download 34177204458 --repo "$GITHUB_REPOSITORY" --name T6_AUDIO_PHYSICAL_ID_MANIFEST_V1 --dir /tmp/physical
+          test -f /tmp/physical/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json
+          echo 'd2a7f4f64db7f2dcd346b6d9e1b28eb72efa0e7e7ae98ef35b00e3ad582e7357  /tmp/physical/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json' | sha256sum -c -
+
+      - name: CRC-verify banks and hash exact duplicate payload spans
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_audio_duplicate_payload_hash_v1 import duplicate_ids,hash_bank_payloads
+
+          physical=json.load(open('/tmp/physical/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json',encoding='utf-8'))
+          dups=duplicate_ids(physical)
+          relevant=sorted({e['bankPath'] for e in physical['entries'] if e['identifierHex'] in dups})
+          if len(dups)!=670:
+              raise SystemExit(f'duplicated ID population changed: {len(dups)} != 670')
+          if len(relevant)!=79:
+              raise SystemExit(f'duplicate-bearing bank population changed: {len(relevant)} != 79')
+          shard=int(os.environ['SHARD']); n=int(os.environ['SHARD_COUNT'])
+          selected=[p for i,p in enumerate(relevant) if i % n == shard]
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-audio-dup-payload/{shard}',timeout=180,retries=7)
+          entries,meta=rz.central_directory()
+          by_name={e['name']:e for e in entries}
+          rows=[]; banks=[]
+          for bank_path in selected:
+              z=by_name.get(bank_path)
+              if z is None:
+                  raise SystemExit(f'archive missing bank {bank_path}')
+              raw=rz.extract(z,verify_crc=True)
+              obs=hash_bank_payloads(physical,bank_path,raw)
+              rows.extend(obs['rows'])
+              banks.append({
+                  'bankPath':bank_path,
+                  'zipCrc32':f"{int(z['crc32']):08x}",
+                  'zipMethod':int(z['method']),
+                  'zipCompressedBytes':int(z['compressedSize']),
+                  'bankSha256':obs['bankSha256'],
+                  'duplicateOccurrenceCount':len(obs['rows']),
+              })
+              print(bank_path,len(obs['rows']),obs['bankSha256'],flush=True)
+          out={
+              'format':'t6-audio-duplicate-payload-hash-shard-v1',
+              'shard':shard,
+              'shardCount':n,
+              'allDuplicatedIdentifierCount':670,
+              'allDuplicateBearingBankCount':79,
+              'remoteZip':meta,
+              'banks':banks,
+              'rows':rows,
+              'summary':{
+                  'selectedBankCount':len(banks),
+                  'duplicateIdentifierOccurrenceCount':len(rows),
+                  'compressedBytesTransferred':sum(b['zipCompressedBytes'] for b in banks),
+              },
+              'proofBoundary':'Exact SHA-256 hashing of table-declared physical payload spans for this deterministic shard of duplicate-bearing T6 SABS/SABL banks. Every ZIP member is CRC verified and every extracted full bank must match the retained bank SHA before any payload span is trusted.'
+          }
+          path=pathlib.Path(f'/tmp/proof/T6_AUDIO_DUPLICATE_PAYLOAD_HASH_SHARD_{shard}_V1.json')
+          path.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload payload hash shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_DUPLICATE_PAYLOAD_HASH_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof/T6_AUDIO_DUPLICATE_PAYLOAD_HASH_SHARD_${{ matrix.shard }}_V1.json
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: payload-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_AUDIO_DUPLICATE_PAYLOAD_HASH_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Download exact retained physical manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/physical /tmp/proof
+          gh run download 34177204458 --repo "$GITHUB_REPOSITORY" --name T6_AUDIO_PHYSICAL_ID_MANIFEST_V1 --dir /tmp/physical
+          echo 'd2a7f4f64db7f2dcd346b6d9e1b28eb72efa0e7e7ae98ef35b00e3ad582e7357  /tmp/physical/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json' | sha256sum -c -
+
+      - name: Require exact duplicate occurrence coverage and compare payload SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find /tmp/shards -type f -name 'T6_AUDIO_DUPLICATE_PAYLOAD_HASH_SHARD_*_V1.json' | sort)
+          test "${#files[@]}" -eq 8
+          args=()
+          for p in "${files[@]}"; do args+=(--observation "$p"); done
+          PYTHONPATH=tools python3 tools/t6_audio_duplicate_payload_hash_v1.py aggregate \
+            --physical /tmp/physical/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json \
+            "${args[@]}" \
+            --out /tmp/proof/T6_AUDIO_DUPLICATE_PAYLOAD_CLOSURE_V1.json
+          sha256sum /tmp/proof/T6_AUDIO_DUPLICATE_PAYLOAD_CLOSURE_V1.json | tee /tmp/proof/closure_json_sha256.txt
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_AUDIO_DUPLICATE_PAYLOAD_CLOSURE_V1.json',encoding='utf-8'))
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          if d['divergentIdentifiers']:
+              print('DIVERGENT IDS')
+              for r in d['divergentIdentifiers']:
+                  print(r['identifierHex'],r['occurrenceCount'],r['payloadSha256Values'])
+          PY
+
+      - name: Upload complete duplicate payload closure
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_DUPLICATE_PAYLOAD_CLOSURE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
