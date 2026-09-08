@@ -1,0 +1,54 @@
+{
+  "format": "t6-pc-server-sndalias-played-state-helpers-v1",
+  "authority": "exact PC dedicated-server build only",
+  "server": {
+    "exeSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "pdbSha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc",
+    "evidenceRepository": "lizardpeter/bo2-pc-server-decompile",
+    "evidenceCommit": "504c0d8516c50195342c8a064b2f2571b109659d"
+  },
+  "helpers": [
+    {
+      "name": "SND_AliasGetNeverPlayedTwice",
+      "va": "0x008AA7B0",
+      "codeBytes": 54,
+      "codeSha256": "1e85569ece79e660c5b211583dccb5d095ccfced12406d64a8af184cb785e421",
+      "source": "c:\\t6\\code\\src\\sound\\snd_alias_db.h:629-632",
+      "exactOperation": "return (alias->flags1 & 0x00000001) != 0",
+      "flags1BitRead": 0
+    },
+    {
+      "name": "SND_AliasSetNeverPlayedTwice",
+      "va": "0x008AA7F0",
+      "codeBytes": 63,
+      "codeSha256": "440337a8fc1e24993b44f3ef02307c25f66d847a2350b449c1d2fa12a7b23fee",
+      "source": "c:\\t6\\code\\src\\sound\\snd_alias_db.h:635-638",
+      "exactOperation": "alias->flags1 bit 1 is replaced with the boolean argument; all other bits are preserved",
+      "flags1BitWritten": 1,
+      "note": "The exact PDB/source function name is preserved even though the helper writes bit 1 while GetNeverPlayedTwice reads bit 0. No attempt is made here to rename the function or infer why the source uses this name."
+    },
+    {
+      "name": "SND_AliasHasPlayed",
+      "va": "0x008AA830",
+      "codeBytes": 56,
+      "codeSha256": "60d2842aadf3936d98aa52623ea3f51204cf788154240f16a1aadc70fe99b6f5",
+      "source": "c:\\t6\\code\\src\\sound\\snd_alias_db.h:641-644",
+      "exactOperation": "return ((alias->flags1 >> 1) & 1) != 0",
+      "flags1BitRead": 1
+    }
+  ],
+  "closedFacts": {
+    "neverPlayedTwicePolicyBit": 0,
+    "mutableHasPlayedBit": 1,
+    "policyAndPlayedStateAreDistinct": true,
+    "setterWritesSameBitReadByHasPlayed": true
+  },
+  "notYetEstablished": [
+    "which playback/selection routine calls SND_AliasGetNeverPlayedTwice",
+    "which playback/selection routine calls SND_AliasHasPlayed",
+    "when SND_AliasSetNeverPlayedTwice is called with true or false",
+    "whether the runtime rejects, rerolls, advances, or otherwise handles an alias for which both policy and played-state bits are set",
+    "retail t6mp.exe equivalence"
+  ],
+  "proofBoundary": "The PDB gives exact function identities/prototypes/source lines and the evidence corpus gives exact per-function machine-code hashes plus Ghidra listings. This closes only these three helper operations for the SHA-pinned PC dedicated server. It does not establish the higher-level chooser or retail-client playback semantics."
+}
