@@ -11,6 +11,7 @@ on:
       - 'tools/test_t6_mp7_r2_xanim_notetrack_v1.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'manifests/stage18d/raw_xasset_parser_proof.json'
       - 'manifests/stage18d/xanim_full_inventory_proof.json'
       - 'manifests/stage18d/xanim_delta_proof.json'
 
@@ -28,7 +29,7 @@ jobs:
         shell: bash
         run: python3 tools/test_t6_mp7_r2_xanim_notetrack_v1.py
 
-      - name: Verify retained Stage18d stream identity
+      - name: Verify retained Stage18d stream identity and front counts
         shell: bash
         run: |
           set -euo pipefail
@@ -36,8 +37,16 @@ jobs:
           import json
           from pathlib import Path
           expected='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
+          raw=json.loads(Path('manifests/stage18d/raw_xasset_parser_proof.json').read_text())
           full=json.loads(Path('manifests/stage18d/xanim_full_inventory_proof.json').read_text())
           delta=json.loads(Path('manifests/stage18d/xanim_delta_proof.json').read_text())
+          common=raw['expanded_streams']['common_mp']
+          assert raw['source_fastfiles']['common_mp.ff']=='93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'
+          assert common['bytes']==206493911
+          assert common['sha256']==expected
+          assert common['script_strings']==1189
+          assert common['asset_count']==6082
+          assert common['asset_type_counts']['XANIMPARTS']==4233
           assert full['expanded_stream_sha256']==expected
           assert delta['expanded_stream_sha256']==expected
           assert full['xasset_xanim_count']==4233
@@ -163,7 +172,8 @@ jobs:
           assert d['format']=='t6-mp7-r2-xanim-notetrack-v1'
           assert d['source']['expandedCommonMp']['bytes']==206493911
           assert d['source']['expandedCommonMp']['sha256']=='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
-          assert d['front']['scriptStringCount']==54040
+          assert d['front']['scriptStringCount']==1189
+          assert d['front']['assetCount']==6082
           assert d['front']['xanimAssetCount']==4233
           assert d['fullInventory']['structuralRecordCount']==4233
           assert d['fullInventory']['overlapCount']==0
