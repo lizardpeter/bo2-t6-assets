@@ -1,0 +1,80 @@
+name: T6 Nuketown IWI27 mip layout probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_iwi27_mip_layout_probe_v1.py'
+      - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
+      - 'tools/t6_ipak_http_range_v2.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+      - '.github/workflows/t6_nuketown_iwi27_mip_layout_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LZO runtime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Materialize exact 81 of 81 pointer-proven Nuketown IWI payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/staged/payloads /tmp/proof
+          PYTHONPATH=tools python3 tools/t6_nuketown_shared_ipak_stage_v1.py \
+            --census manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64 \
+            --out-dir /tmp/staged/payloads \
+            --manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.load(open('/tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json',encoding='utf-8'))
+          s=d['summary']
+          assert s['aliasCount']==81 and s['resolvedAliasCount']==81 and s['unresolvedAliasCount']==0 and s['uniquePayloadCount']==81,s
+          assert len(list(Path('/tmp/staged/payloads').glob('*.iwi')))==81
+          print('GREEN EXACT 81 OF 81 IWI SOURCE GATE')
+          PY
+
+      - name: Classify serialized IWI27 mip boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_iwi27_mip_layout_probe_v1.py
+          python3 tools/t6_iwi27_mip_layout_probe_v1.py \
+            --root /tmp/staged/payloads \
+            --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1.json \
+            2>&1 | tee /tmp/proof/probe.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1.json'
+          d=json.load(open(p,encoding='utf-8')); s=d['summary']
+          assert s['fileCount']==81,s
+          print('MIP_LAYOUT_SUMMARY',json.dumps(s,sort_keys=True))
+          for r in d['rows'][:8]:
+              print('SAMPLE',r['file'],r['format'],r['width'],r['height'],r['sizeWords'],r['boundaryDeltas'],r['expectedMipBytesLargestToSmallest'])
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1
+          path: |
+            /tmp/proof
+            /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json
+          if-no-files-found: error
+          compression-level: 0
