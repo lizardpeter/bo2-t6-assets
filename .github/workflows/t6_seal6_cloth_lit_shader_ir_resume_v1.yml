@@ -1,0 +1,109 @@
+name: T6 SEAL6 cloth shader IR resume v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - '.github/workflows/t6_seal6_cloth_lit_shader_ir_resume_v1.yml'
+      - 'tools/t6_dxbc_rdef_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  translate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download already byte-closed cloth DXBC artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_CLOTH_LIT_SHADER_IR_V1
+          run-id: 34185963352
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/proof
+
+      - name: Translate and reflect exact cloth shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s /tmp/proof/shaders/cloth_lit_vs.dxbc
+          test -s /tmp/proof/shaders/cloth_lit_ps.dxbc
+          echo 'b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe  /tmp/proof/shaders/cloth_lit_vs.dxbc' | sha256sum -c -
+          echo '14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19  /tmp/proof/shaders/cloth_lit_ps.dxbc' | sha256sum -c -
+          mkdir -p /tmp/proof/reflection /tmp/proof/glsl /tmp/proof/rdef
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vkd3d-compiler spirv-tools spirv-cross >/dev/null
+          vkd3d-compiler --version | tee /tmp/proof/vkd3d_version.txt
+          spirv-val --version | tee /tmp/proof/spirv_tools_version.txt
+          dpkg-query -W -f='${Package} ${Version}\n' spirv-cross | tee /tmp/proof/spirv_cross_version.txt
+
+          for stem in cloth_lit_vs cloth_lit_ps; do
+            vkd3d-compiler -x dxbc-tpf -b spirv-binary \
+              -o "/tmp/proof/shaders/${stem}.spv" "/tmp/proof/shaders/${stem}.dxbc"
+            spirv-val "/tmp/proof/shaders/${stem}.spv"
+            spirv-dis --raw-id "/tmp/proof/shaders/${stem}.spv" -o "/tmp/proof/shaders/${stem}.spvasm"
+            spirv-cross "/tmp/proof/shaders/${stem}.spv" --reflect > "/tmp/proof/reflection/${stem}.json"
+            spirv-cross "/tmp/proof/shaders/${stem}.spv" --version 450 --vulkan-semantics > "/tmp/proof/glsl/${stem}.glsl"
+            PYTHONPATH=tools python3 tools/t6_dxbc_rdef_v1.py \
+              "/tmp/proof/shaders/${stem}.dxbc" \
+              --spirv-reflection "/tmp/proof/reflection/${stem}.json" \
+              --glsl "/tmp/proof/glsl/${stem}.glsl" \
+              --out "/tmp/proof/rdef/${stem}.json" >/dev/null
+          done
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/proof')
+          ident=json.load(open(root/'T6_SEAL6_CLOTH_LIT_BINARY_IDENTITY_V1.json'))
+          rows=[]
+          for stem in ('cloth_lit_vs','cloth_lit_ps'):
+              r=json.load(open(root/'rdef'/f'{stem}.json'))
+              ref=json.load(open(root/'reflection'/f'{stem}.json'))
+              glsl=root/'glsl'/f'{stem}.glsl'
+              spv=root/'shaders'/f'{stem}.spv'
+              dxbc=root/'shaders'/f'{stem}.dxbc'
+              rows.append({
+                'stem':stem,
+                'dxbcSha256':hashlib.sha256(dxbc.read_bytes()).hexdigest(),
+                'spvSha256':hashlib.sha256(spv.read_bytes()).hexdigest(),
+                'glslSha256':hashlib.sha256(glsl.read_bytes()).hexdigest(),
+                'rdefSha256':hashlib.sha256((root/'rdef'/f'{stem}.json').read_bytes()).hexdigest(),
+                'resources':r['resources'],
+                'constantBuffers':r['constantBuffers'],
+                'usedConstants':r.get('translatedSpirv',{}).get('usedConstants',[]),
+                'entryPoints':ref.get('entryPoints',[]),
+              })
+          vs=next(x for x in rows if x['stem']=='cloth_lit_vs')
+          ps=next(x for x in rows if x['stem']=='cloth_lit_ps')
+          assert vs['dxbcSha256']=='b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe'
+          assert ps['dxbcSha256']=='14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19'
+          out={
+            'format':'t6-seal6-cloth-lit-shader-ir-v1',
+            'sourceIdentity':ident,
+            'shaders':rows,
+            'proofBoundary':'Exact byte-closed cloth ordinary-lit DXBC from run 34185963352 translated by vkd3d-compiler, validated by spirv-val, reflected/pretty-printed by SPIRV-Cross, and joined to original RDEF register/constant identity. No equation normalization or Blender lowering is claimed here.'
+          }
+          (root/'T6_SEAL6_CLOTH_LIT_SHADER_IR_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({
+            'vs':vs['dxbcSha256'],'ps':ps['dxbcSha256'],
+            'vsUsedConstants':len(vs['usedConstants']),'psUsedConstants':len(ps['usedConstants']),
+            'vsResources':[x['name'] for x in vs['resources']],
+            'psResources':[x['name'] for x in ps['resources']],
+          },indent=2,sort_keys=True))
+          PY
+          find /tmp/proof -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_CLOTH_LIT_SHADER_IR_V1_RESUMED
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
