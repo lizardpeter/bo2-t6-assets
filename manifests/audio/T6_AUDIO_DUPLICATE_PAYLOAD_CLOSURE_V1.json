@@ -1,0 +1,31 @@
+{
+  "format": "t6-audio-duplicate-payload-closure-v1-summary",
+  "source": {
+    "workflowRun": 34181586963,
+    "artifactId": 10039115375,
+    "artifactName": "T6_AUDIO_DUPLICATE_PAYLOAD_CLOSURE_V1",
+    "artifactDigest": "sha256:a7c31bc4bb970df381c924edf012a96ecf4006fd9dc8ef97563fe40ebb01418f",
+    "fullResultJsonSha256": "7da24e871aac905d680bad1c2deca7aa9d3d254eda9dd91d49d1ec6559130a7d",
+    "physicalManifestRun": 34177204458,
+    "physicalManifestArtifact": "T6_AUDIO_PHYSICAL_ID_MANIFEST_V1",
+    "physicalManifestArtifactDigest": "sha256:da4e9a19922b283d111a23af7064c5e3d7afc40a4d1e063c8dddebb1050a6caa"
+  },
+  "summary": {
+    "physicalEntryCount": 25446,
+    "uniquePhysicalIdentifierCount": 24642,
+    "duplicatedIdentifierCount": 670,
+    "duplicatedIdentifierOccurrenceCount": 1474,
+    "duplicateExtraOccurrenceCount": 804,
+    "maxIdentifierMultiplicity": 7,
+    "payloadByteEqualDuplicatedIdentifierCount": 670,
+    "payloadByteDivergentDuplicatedIdentifierCount": 0,
+    "payloadByteDivergentOccurrenceCount": 0
+  },
+  "result": "All 670 duplicated physical sound identifiers are byte-identical across every table-declared payload occurrence. The result is based on SHA-256 of the exact payload byte spans after ZIP CRC verification and full source-bank SHA verification, not on the stored 128-bit bank checksum field alone.",
+  "reproduction": {
+    "tool": "tools/t6_audio_duplicate_payload_closure_v1.py",
+    "workflow": ".github/workflows/t6_audio_duplicate_payload_closure_v1.yml",
+    "coverageRequirement": "Exact set equality over all 1474 duplicated physical occurrences from the retained 25446-entry physical manifest."
+  },
+  "proofBoundary": "Authoritative for byte equality of duplicate physical payload spans in the exact 116-bank archive universe represented by T6_AUDIO_PHYSICAL_ID_MANIFEST_V1. It does not establish runtime bank precedence, alias selection behavior, playback semantics, or equivalence outside this archive. The complete per-identifier occurrence and payload-SHA table is retained in workflow artifact 10039115375 and reproducible by the committed tool/workflow."
+}
