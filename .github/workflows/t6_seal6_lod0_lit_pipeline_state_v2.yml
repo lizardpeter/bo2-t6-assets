@@ -1,0 +1,81 @@
+name: T6 SEAL6 LOD0 lit pipeline state v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_seal6_lod0_lit_pipeline_state_v2.py'
+      - '.github/workflows/t6_seal6_lod0_lit_pipeline_state_v2.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact all-12 shader plan
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2
+          run-id: 34188633935
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/shader
+      - name: Download exact native census
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1
+          run-id: 34185771413
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/census
+      - name: Build exact 12-Material technique-indexed state plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          shader=$(find /tmp/shader -type f -name 'T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2.json' -print -quit)
+          census=$(find /tmp/census -type f -name 'T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1.json' -print -quit)
+          test -s "$shader" && test -s "$census"
+          echo 'af037e48e8297698639ad514597aba0e991266bc096b5b01afe722d26c93fcaf  '"$census" | sha256sum -c -
+          mkdir -p /tmp/out
+          python3 -m py_compile tools/t6_seal6_lod0_lit_pipeline_state_v2.py
+          PYTHONPATH=tools python3 tools/t6_seal6_lod0_lit_pipeline_state_v2.py \
+            --shader-plan "$shader" --native-census "$census" \
+            --out /tmp/out/T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2.json | tee /tmp/out/build.log
+      - name: Assert all-12 state closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/out/T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2.json'))
+          assert d['format']=='t6-seal6-lod0-ordinary-lit-pipeline-state-v2'
+          assert d['summary']=={
+            'targetMaterials':12,'techniqueType':'lit','techniqueTypeIndex':4,
+            'pipelineStatesClosed':12,'uniqueSelectedStatePayloads':2,
+            'litOpaqueMaterials':11,'litTransMaterials':1,
+            'allSelectedStatesInvariantAcrossPhysicalCopies':True,
+            'headPipelineStateIndependentOfUnresolvedWholeMaterialOwner':True,
+            'completeRetailPixelOutputInBlender':False,
+          }
+          assert len(d['materials'])==12
+          eye=[r for r in d['materials'] if r['cameraRegion']=='litTrans']
+          assert len(eye)==1 and eye[0]['material']=='mc/mtl_gen_eye_cornea'
+          opaque=[r for r in d['materials'] if r['cameraRegion']=='litOpaque']
+          assert len(opaque)==11 and all(r['stateBitsEntryValue']==2 for r in opaque)
+          assert eye[0]['stateBitsEntryValue']==0
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/out/T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2.json | tee /tmp/out/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2
+          path: /tmp/out
+          if-no-files-found: error
+          compression-level: 0
