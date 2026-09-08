@@ -1,0 +1,97 @@
+{
+  "format": "t6-pc-server-sound-dry-wet-gain-v1",
+  "authority": "exact PC dedicated-server build only",
+  "server": {
+    "exeSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "pdbSha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc",
+    "evidenceRepository": "lizardpeter/bo2-pc-server-decompile",
+    "evidenceCommit": "504c0d8516c50195342c8a064b2f2571b109659d"
+  },
+  "sourceLayout": {
+    "sndAliasBytes": 96,
+    "sndAliasOcclusionLevelOffset": "0x59",
+    "sndAliasOcclusionLevelType": "uint8",
+    "layoutEvidence": "bo2-t6-assets tools/t6_sndalias_expanded_census_v1.py plus pinned OAT T6 SndAlias layout",
+    "sndVoiceAliasPointerOffset": "0x68",
+    "sndVoiceDryBaseOffset": "0xD0",
+    "sndVoiceWetBaseOffset": "0xD4",
+    "sndVoiceMixOffset": "0x11C",
+    "note": "The three numeric SndVoice offsets are promoted exactly as machine-code offsets. No higher-level member name is assigned to +0xD0/+0xD4/+0x11C until that member naming is independently recovered from the PDB member table."
+  },
+  "constants": {
+    "one": {"floatBits": "0x3F800000", "value": 1.0},
+    "half": {"floatBits": "0x3F000000", "value": 0.5},
+    "quarter": {"floatBits": "0x3E800000", "value": 0.25},
+    "oneOver255": {"floatBits": "0x3B808081", "value": 0.003921568859368563},
+    "drySilenceFloor": {"floatBits": "0x37803E84", "value": 0.000015287900168914348}
+  },
+  "functions": [
+    {
+      "name": "SND_GetDryLevel",
+      "va": "0x008AE2A0",
+      "codeBytes": 600,
+      "codeSha256": "e84dccb89fdc8fbb82b78612ec25402fd224ae7557338ffcd5da6195ed95828a",
+      "prototype": "float __cdecl SND_GetDryLevel(const SndVoice *, float)",
+      "source": "c:\\t6\\code\\src\\sound\\snd.cpp:2947-2978",
+      "abiObserved": "optimized machine code carries the SndVoice pointer in ESI and the float attenuation argument at [EBP+8]",
+      "equation": {
+        "o": "float(alias->occlusionLevel)",
+        "occlusionFactor": "dryOcc = clamp(1.25 - o * (1/255) * 0.5, 0, 1)",
+        "m": "float at SndVoice + 0x11C",
+        "base": "dryBase = float_at(voice+0xD0) * attenuationArgument",
+        "mix": "mixed = (((1-m) * dryOcc) + m) * dryBase",
+        "effect": "effected = g_snd.effect->drylevel * mixed",
+        "scale": "scaled = Dvar_GetFloat(snd_dry_scale) * effected",
+        "silenceFloor": "if scaled < 0x37803E84f then scaled = 0",
+        "result": "clamp(scaled, 0, 1)"
+      },
+      "nanAssertions": [
+        "dryBase",
+        "mixed",
+        "effected",
+        "scaled",
+        "post-floor scaled"
+      ]
+    },
+    {
+      "name": "SND_GetWetLevel",
+      "va": "0x008AE500",
+      "codeBytes": 512,
+      "codeSha256": "76699d15071e4d342e1a8c8d77bbd7b583851732b99b1277706029c4abc89db8",
+      "prototype": "float __cdecl SND_GetWetLevel(const SndVoice *, float)",
+      "source": "c:\\t6\\code\\src\\sound\\snd.cpp:2982-3005",
+      "abiObserved": "optimized machine code carries the SndVoice pointer in ESI and the float attenuation argument at [EBP+8]",
+      "equation": {
+        "o": "float(alias->occlusionLevel)",
+        "occlusionFactor": "wetOcc = clamp(0.75 + o * (1/255) * 0.5, 0, 1)",
+        "m": "float at SndVoice + 0x11C",
+        "base": "wetBase = float_at(voice+0xD4) * attenuationArgument",
+        "mix": "mixed = ((1-m) + m * wetOcc) * wetBase",
+        "effect": "effected = g_snd.effect->wetlevel * mixed",
+        "scale": "scaled = Dvar_GetFloat(snd_wet_scale) * effected",
+        "result": "clamp(scaled, 0, 1)"
+      },
+      "nanAssertions": [
+        "wetBase",
+        "mixed",
+        "effected",
+        "scaled"
+      ]
+    }
+  ],
+  "closedFacts": {
+    "occlusionLevelDirectlyShapesDryAndWetGain": true,
+    "dryAndWetUseDistinctVoiceBaseFields": true,
+    "dryAndWetUseDistinctEffectLevels": true,
+    "dryAndWetUseDistinctDvarScales": true,
+    "bothReturnsAreClampedZeroToOne": true,
+    "dryHasAdditionalSilenceFloor": true
+  },
+  "notYetEstablished": [
+    "the PDB member names corresponding to SndVoice +0xD0, +0xD4, and +0x11C",
+    "which higher-level update routine supplies the attenuationArgument",
+    "how the dry/wet values feed the final hardware voice or speaker matrix",
+    "retail t6mp.exe equivalence"
+  ],
+  "proofBoundary": "The equations are taken from exact PDB-identified, machine-code-hashed PC dedicated-server routines and checked against their exact Ghidra disassembly. The alias +0x59 field identity is independently closed as T6 SndAlias.occlusionLevel by the 96-byte structural parser and pinned OAT layout. SndVoice member offsets are preserved numerically where names are not yet source-closed."
+}
