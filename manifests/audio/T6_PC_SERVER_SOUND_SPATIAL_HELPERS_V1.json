@@ -1,0 +1,72 @@
+{
+  "format": "t6-pc-server-sound-spatial-helpers-v1",
+  "authority": "exact PC dedicated-server build only",
+  "server": {
+    "exeSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "pdbSha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc",
+    "evidenceRepository": "lizardpeter/bo2-pc-server-decompile",
+    "evidenceCommit": "504c0d8516c50195342c8a064b2f2571b109659d"
+  },
+  "helpers": [
+    {
+      "name": "SND_AliasGetDryCurve",
+      "va": "0x008AA6D0",
+      "codeBytes": 57,
+      "codeSha256": "5d9765c58a2dc975873f1fc1253be20c41b8f0bcd9a882f652d4bfd95a378988",
+      "source": "c:\\t6\\code\\src\\sound\\snd_alias_db.h:528-531",
+      "exactOperation": "(alias->flags1 >> 2) & 0x3F",
+      "field": "flags1",
+      "bitRange": [2, 7],
+      "widthBits": 6
+    },
+    {
+      "name": "SND_AliasGetIgnoreMaxDist",
+      "va": "0x008AA710",
+      "codeBytes": 57,
+      "codeSha256": "7c8647fdb7f6d54a00ee16e2e298a1eeee366431f71017538dd36b14d6508c72",
+      "source": "c:\\t6\\code\\src\\sound\\snd_alias_db.h:552-555",
+      "exactOperation": "((alias->flags0 >> 10) & 1) != 0",
+      "field": "flags0",
+      "bit": 10
+    },
+    {
+      "name": "SND_GetOmni",
+      "va": "0x008AEC00",
+      "codeBytes": 271,
+      "codeSha256": "2e509f4807cffc99bd8fe3118a2389e5f806b84ff44732a70f82ef444a903e5a",
+      "source": "c:\\t6\\code\\src\\sound\\snd.cpp:3480-3519",
+      "inputs": [
+        "voice->alias->envelopPercentage",
+        "voice->alias->envelopMin",
+        "voice->alias->envelopMax",
+        "voice->baseDistance"
+      ],
+      "constants": {
+        "percentageScaleFloatBits": "0x37800080",
+        "percentageScale": 0.000015259021893143654,
+        "negativePercentageScaleFloatBits": "0xB7800080",
+        "distanceScale": 2.0
+      },
+      "equation": {
+        "p": "float(envelopPercentage) * 0x37800080f",
+        "nearValue": "max(p, 0)",
+        "farValue": "max(-p, 0)",
+        "nearDistance": "float(envelopMin) * 2.0",
+        "farDistance": "float(envelopMax) * 2.0",
+        "piecewise": [
+          "if baseDistance <= nearDistance: return nearValue",
+          "otherwise, if farDistance != nearDistance and t=(baseDistance-nearDistance)/(farDistance-nearDistance) < 1.0: return t*farValue + (1.0-t)*nearValue",
+          "otherwise: return farValue"
+        ]
+      },
+      "assertion": "voice->baseDistance must not be NaN"
+    }
+  ],
+  "closedFacts": {
+    "dryCurveIsSixBitFlags1Field": true,
+    "ignoreMaxDistIsFlags0Bit10": true,
+    "omniIsDistanceInterpolatedFromSignedEnvelopePercentage": true,
+    "omniEnvelopeDistancesAreStoredValueTimesTwo": true
+  },
+  "proofBoundary": "These are exact PC dedicated-server helper semantics from PDB-identified, machine-code-hashed routines and Ghidra listings. The equations do not establish how the retail client supplies baseDistance, how the resulting omni value is mixed into the final speaker matrix, or retail t6mp.exe equivalence."
+}
