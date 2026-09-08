@@ -1,0 +1,125 @@
+name: T6 SEAL6 LOD0 Blender role plan v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_seal6_lod0_blender_role_plan_v2.py'
+      - '.github/workflows/t6_seal6_lod0_blender_role_plan_v2.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact 12-Material native census
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1
+          run-id: 34185771413
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/census
+
+      - name: Download exact full-retail material and texture package
+        uses: actions/download-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          run-id: 34171431655
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/fullretail
+
+      - name: Pin inputs and build exact all-LOD0 role plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/input /tmp/out
+          census=$(find /tmp/census -type f -name 'T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1.json' -print -quit)
+          test -n "$census" && test -s "$census"
+          echo 'af037e48e8297698639ad514597aba0e991266bc096b5b01afe722d26c93fcaf  '"$census" | sha256sum -c -
+
+          nested=$(find /tmp/fullretail -type f -name 'SEAL6_FULL_RETAIL_BLENDER.zip' -print -quit)
+          test -n "$nested" && test -s "$nested"
+          unzip -q "$nested" -d /tmp/input/fullretail
+          binding=/tmp/input/fullretail/lod0/material_binding_plan.json
+          materialized=/tmp/input/fullretail/textures/manifest.json
+          test -s "$binding" && test -s "$materialized"
+          echo '0df9d9234b472f4d98ae633e45c3b91a69ef1f10008d48e51854b7e5c7c279ff  '"$binding" | sha256sum -c -
+          echo '35a328c72cc5ff7f29455e60f76e91a809e2b5264eb249e752b7d12bc2f07670  '"$materialized" | sha256sum -c -
+
+          python3 -m py_compile tools/t6_seal6_lod0_blender_role_plan_v2.py
+          PYTHONPATH=tools python3 tools/t6_seal6_lod0_blender_role_plan_v2.py \
+            --native-census "$census" \
+            --binding-plan "$binding" \
+            --materialized-manifest "$materialized" \
+            --out /tmp/out/T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2.json \
+            | tee /tmp/out/build.log
+
+      - name: Assert exact 12-Material closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          p='/tmp/out/T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-seal6-lod0-blender-role-plan-v2'
+          s=d['summary']
+          assert s=={
+              'lod':0,
+              'surfaces':14,
+              'targetMaterials':12,
+              'nativeTextureSlots':41,
+              'streamedNativeTextureSlots':40,
+              'sharedBuiltInAliasSlots':1,
+              'uniqueStreamedRetailImages':39,
+              'uniqueNativeImagesIncludingSharedAlias':40,
+              'clothMaterials':7,
+              'allNativeTextureSlotsRepresented':True,
+              'allStreamedPayloadsExactKeyAndCrcValidated':True,
+              'sharedRadiantAliasPreservedWithoutFabrication':True,
+              'completeRetailPixelOutput':False,
+          }, s
+          assert d['inputs']=={
+              'nativeCensusSha256':'af037e48e8297698639ad514597aba0e991266bc096b5b01afe722d26c93fcaf',
+              'bindingPlanSha256':'0df9d9234b472f4d98ae633e45c3b91a69ef1f10008d48e51854b7e5c7c279ff',
+              'materializedManifestSha256':'35a328c72cc5ff7f29455e60f76e91a809e2b5264eb249e752b7d12bc2f07670',
+          }
+          rows=d['materials']
+          assert len(rows)==12
+          cloth=[r for r in rows if r['shaderFamilyClass']=='cloth']
+          assert len(cloth)==7 and all(r['nativeSlotCount']==3 for r in cloth)
+          aliases=[]
+          fabricated=[]
+          for r in rows:
+              for slot in r['nativeSlots']:
+                  res=slot['resource']
+                  if res['kind']=='exact-shared-built-in-alias':
+                      aliases.append((r['material'],slot['slotIndex'],slot['image'],res))
+                  if res.get('fabricatedPng') is True:
+                      fabricated.append((r['material'],slot['slotIndex']))
+          assert not fabricated
+          assert len(aliases)==1
+          material,index,image,res=aliases[0]
+          assert material=='mc/mtl_gen_eye_cornea' and index==2 and image=='sw_radiant_default'
+          assert res['identityEvidence']=='exact-shared-radiant-alias-proof'
+          assert res['streamedPayloadRequired'] is False and res['fabricatedPng'] is False
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/out/T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2.json | tee /tmp/out/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2
+          path: /tmp/out
+          if-no-files-found: error
+          compression-level: 0
