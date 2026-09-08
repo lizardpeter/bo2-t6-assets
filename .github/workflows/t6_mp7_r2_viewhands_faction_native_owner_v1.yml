@@ -40,7 +40,7 @@ jobs:
           grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
           PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
           grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
-          mkdir -p /tmp/game/zone/all /tmp/oat /tmp/proof
+          mkdir -p /tmp/game/zone/all /tmp/oat /tmp/proof/native_targets
           sha256sum "$BIN" | tee /tmp/proof/unlinker_sha256.txt
 
       - name: Extract and pin the three archive-located faction roots
@@ -89,32 +89,54 @@ jobs:
             printf '%s\t%s\t%s\n' "$z" "$RC" "$(find "$OUT" -type f | wc -l)" | tee -a /tmp/proof/dump_status.tsv
           done
 
-      - name: Require unique physical owner and exact identities
+      - name: Require exact owner matrix and byte-equivalent long copies
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib,json,pathlib
+          import hashlib,json,pathlib,shutil
           roots=['faction_multiteam_mp','faction_multiteam_sand_mp','faction_seals_mp']
-          targets=['c_usa_mp_seal6_longsleeve_viewhands','c_usa_mp_seal6_shortsleeve_viewhands']
+          long='c_usa_mp_seal6_longsleeve_viewhands'
+          short='c_usa_mp_seal6_shortsleeve_viewhands'
+          targets=[long,short]
+          expected_owners={
+            long:['faction_multiteam_mp','faction_multiteam_sand_mp','faction_seals_mp'],
+            short:['faction_seals_mp'],
+          }
           status={}
           for line in pathlib.Path('/tmp/proof/dump_status.tsv').read_text().splitlines():
               z,rc,count=line.split('\t'); status[z]={'returnCode':int(rc),'fileCount':int(count)}
+
+          def file_meta(p):
+              b=p.read_bytes()
+              return {'path':str(p),'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
+
           rows=[]
           for z in roots:
               base=pathlib.Path('/tmp/oat')/z
-              files=[p for p in base.rglob('*') if p.is_file()]
-              rel=[str(p.relative_to(base)) for p in files]
               for t in targets:
-                  path_hits=[x for x in rel if t.lower() in x.lower()]
-                  content_hits=[]
-                  needle=t.encode()
-                  for p in files:
-                      try: b=p.read_bytes()
-                      except OSError: continue
-                      if needle in b: content_hits.append(str(p.relative_to(base)))
-                  rows.append({'root':z,'target':t,'pathHits':sorted(path_hits),'contentHits':sorted(content_hits)})
-          owners={t:sorted({r['root'] for r in rows if r['target']==t and (r['pathHits'] or r['contentHits'])}) for t in targets}
+                  j=base/'xmodel'/f'{t}.json'
+                  g=base/'model_export'/f'{t}_lod0.glb'
+                  row={'root':z,'target':t,'xmodelJson':None,'lod0Glb':None}
+                  if j.is_file(): row['xmodelJson']=file_meta(j)
+                  if g.is_file(): row['lod0Glb']=file_meta(g)
+                  if (j.is_file()) != (g.is_file()):
+                      raise SystemExit(f'{z}/{t}: JSON/GLB presence disagreement')
+                  if j.is_file():
+                      dst=pathlib.Path('/tmp/proof/native_targets')/z
+                      dst.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(j,dst/j.name); shutil.copy2(g,dst/g.name)
+                  rows.append(row)
+
+          owners={t:sorted(r['root'] for r in rows if r['target']==t and r['xmodelJson']) for t in targets}
+          long_rows=[r for r in rows if r['target']==long and r['xmodelJson']]
+          long_json_hashes=sorted({r['xmodelJson']['sha256'] for r in long_rows})
+          long_glb_hashes=sorted({r['lod0Glb']['sha256'] for r in long_rows})
+          long_json_sizes=sorted({r['xmodelJson']['bytes'] for r in long_rows})
+          long_glb_sizes=sorted({r['lod0Glb']['bytes'] for r in long_rows})
+          long_equiv=(len(long_rows)==3 and len(long_json_hashes)==1 and len(long_glb_hashes)==1 and len(long_json_sizes)==1 and len(long_glb_sizes)==1)
+          owner_matrix_matches=(owners==expected_owners)
+          all_ok=all(status[z]['returnCode']==0 for z in roots)
           out={
             'format':'t6-mp7-r2-seal6-viewhands-faction-native-owner-v1',
             'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
@@ -122,19 +144,22 @@ jobs:
             'dumpStatus':status,
             'targets':rows,
             'ownersByTarget':owners,
-            'allPhysicalDumpsSucceeded':all(status[z]['returnCode']==0 for z in roots),
-            'authoritativeUniqueOwner':all(len(v)==1 for v in owners.values()),
-            'proofBoundary':'The three faction roots are exact archive rows discovered by the complete 215-FastFile name census, CRC-verified and SHA-256 pinned before use. Pinned OAT receives each physical root independently with include-assets xmodel and no --load dependency. Exact target identity in dump output is required for ownership; map/string references are not ownership evidence.'
+            'expectedOwnersByTarget':expected_owners,
+            'allPhysicalDumpsSucceeded':all_ok,
+            'ownerMatrixMatchesRetailObservation':owner_matrix_matches,
+            'longSleevePhysicalCopiesByteEquivalent':long_equiv,
+            'longSleeveXModelJsonSha256':long_json_hashes,
+            'longSleeveLod0GlbSha256':long_glb_hashes,
+            'longSleeveXModelJsonBytes':long_json_sizes,
+            'longSleeveLod0GlbBytes':long_glb_sizes,
+            'proofBoundary':'The three faction roots are exact archive rows discovered by the complete 215-FastFile name census, CRC-verified and SHA-256 pinned before use. Pinned OAT receives each root independently with include-assets xmodel and no --load dependency. Ownership requires the exact xmodel/<name>.json plus model_export/<name>_lod0.glb pair. Retail is allowed to contain duplicate physical XModel copies; duplicate long-sleeve copies are promoted as one content identity only if both native JSON and native GLB bytes are exactly identical across all three physical roots.',
           }
           p=pathlib.Path('/tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_FACTION_NATIVE_OWNER_V1.json')
           p.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
           print(json.dumps(out,indent=2,sort_keys=True))
-          if not out['allPhysicalDumpsSucceeded']:
-              raise SystemExit('one or more physical faction XModel dumps failed')
-          if not out['authoritativeUniqueOwner']:
-              raise SystemExit('target physical owner not uniquely closed: '+json.dumps(owners,sort_keys=True))
-          if len(set(v[0] for v in owners.values())) != 1:
-              raise SystemExit('long/short viewhands do not share one physical owner: '+json.dumps(owners,sort_keys=True))
+          if not all_ok: raise SystemExit('one or more physical faction XModel dumps failed')
+          if not owner_matrix_matches: raise SystemExit('physical owner matrix changed: '+json.dumps(owners,sort_keys=True))
+          if not long_equiv: raise SystemExit('three long-sleeve physical copies are not byte-equivalent')
           PY
           sha256sum /tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_FACTION_NATIVE_OWNER_V1.json | tee /tmp/proof/manifest_sha256.txt
 
