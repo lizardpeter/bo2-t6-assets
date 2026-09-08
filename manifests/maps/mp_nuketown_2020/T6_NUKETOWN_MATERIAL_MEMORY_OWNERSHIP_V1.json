@@ -1,0 +1,83 @@
+{
+  "format": "t6-nuketown-material-memory-ownership-proof-record-v1",
+  "map": "mp_nuketown_2020",
+  "status": "authoritative-retail-loader-derived",
+  "source": {
+    "retailFastFile": {
+      "file": "mp_nuketown_2020.ff",
+      "bytes": 38472064,
+      "sha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0"
+    },
+    "expandedFastFile": {
+      "bytes": 154653476,
+      "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+    },
+    "openAssetTools": {
+      "repository": "Laupetin/OpenAssetTools",
+      "commit": "9dca965366541504b71fa8cfb7ac049cb9b717e1"
+    }
+  },
+  "implementation": {
+    "tool": "tools/t6_nuketown_material_memory_ownership_v1.py",
+    "toolCommit": "93182a58e102e468de4584e96164890d2185f40d",
+    "workflow": ".github/workflows/t6_nuketown_material_memory_ownership_v1.yml",
+    "workflowCommit": "d45ed66998c0a50f1f3676fbeec472efe95eade2"
+  },
+  "execution": {
+    "runId": 34278198130,
+    "jobId": 102236314916,
+    "conclusion": "success",
+    "artifact": {
+      "id": 10076551249,
+      "name": "T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1",
+      "zipBytes": 107216,
+      "zipSha256": "340d24ceb20f5a6b14d97898438e1af9bd14d11d3b9f48b973cb231d6c17799b"
+    },
+    "proofJson": {
+      "file": "T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json",
+      "bytes": 106404,
+      "sha256": "6b5786897436f9c291e38aacab75ba73baef64bcc86e60d542982754e956be7a"
+    }
+  },
+  "materialMemory": {
+    "count": 327,
+    "recordBytes": 8,
+    "physicalStart": 84463050,
+    "physicalEndExclusive": 84465666,
+    "physicalBytes": 2616,
+    "firstMaterialChildStart": 84465666,
+    "fixedArrayEndsAtFirstMaterialChild": true,
+    "allMaterialChildrenFollowOwned": true,
+    "virtualBlock": 5,
+    "virtualStartOffset": 71642512,
+    "virtualEndOffsetExclusive": 71645128,
+    "surfaceAliasCount": 327,
+    "surfaceAliasStride": 8
+  },
+  "downstreamBinding": {
+    "strictMaterialCount": 327,
+    "vertexGroupCount": 340,
+    "groupFormatCounts": {
+      "0": 220,
+      "1": 95,
+      "2": 7,
+      "3": 17,
+      "6": 1
+    },
+    "mixedFormatGroupCount": 0,
+    "unresolvedSurfaceMaterialCount": 0
+  },
+  "supersedes": [
+    {
+      "scope": "GfxSurface material ownership only",
+      "interpretation": "GfxSurface material pointers are top-level MATERIAL XAsset-array slots",
+      "reason": "live retail v1 negative control rejected XAsset-array alignment for 0xa4452d91"
+    },
+    {
+      "scope": "MaterialMemory physical ownership only",
+      "interpretation": "select a nearby 327-record MaterialMemory array by local FOLLOW signature scanning",
+      "reason": "live v2 produced two overlapping local candidates; the physical span is instead derived from pinned generated-loader serialization order"
+    }
+  ],
+  "proofBoundary": "The physical MaterialMemory span is derived from pinned OpenAssetTools generated-loader ordering and the independently strict first-Material child boundary, not selected from a byte-pattern candidate scan. GfxSurface aliases independently form the exact packed VIRTUAL block-5 8-byte-stride slot population. Material identity follows the 327 FOLLOW-owned children in slot order and preserves exact Material -> TechniqueSet -> worldVertFormat binding. This proof does not claim full shader or final rendered-scene parity."
+}
