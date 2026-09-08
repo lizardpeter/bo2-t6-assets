@@ -12,6 +12,10 @@ on:
       - 'tools/test_t6_oat_material_shader_census_v4.py'
       - 'tools/t6_oat_parent_dependency_conflict_census_v1.py'
       - 'tools/test_t6_oat_parent_dependency_conflict_census_v1.py'
+      - 'tools/t6_oat_conflict_lineage_projection_v1.py'
+      - 'tools/test_t6_oat_conflict_lineage_projection_v1.py'
+      - 'tools/t6_oat_exact_technique_absence_v1.py'
+      - 'tools/test_t6_oat_exact_technique_absence_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
       - 'tools/t6_oat_techset_binding_manifest_v1.py'
@@ -28,12 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test parent-owned all-TechniqueSet census logic
+      - name: Test provenance, conflict, absence, and projection logic
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
           PYTHONPATH=tools python3 tools/test_t6_oat_parent_dependency_conflict_census_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_absence_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_conflict_lineage_projection_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -172,6 +178,43 @@ jobs:
           fi
           echo 'All required native OAT dumps succeeded.' | tee /tmp/proof/native_dump_gate.txt
 
+      - name: Prove exact target absence inside successful native Technique roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          get_rc() {
+            local label="$1"
+            local value
+            value=$(awk -v k="$label" '$1==k {sub(/^rc=/,"",$2); print $2}' /tmp/proof/native_dump_return_codes.txt)
+            test -n "$value"
+            printf '%s' "$value"
+          }
+          MAP_RC=$(get_rc map_techset_dump)
+          COMMON_RC=$(get_rc common_techset_dump)
+          COMMON_PATCH_RC=$(get_rc common_patch_techset_dump)
+          PATCH_RC=$(get_rc patch_techset_dump)
+          {
+            echo "mp_nuketown_2020 rc=$MAP_RC"
+            echo "common_mp rc=$COMMON_RC"
+            echo "common_patch_mp rc=$COMMON_PATCH_RC"
+            echo "patch_mp rc=$PATCH_RC"
+          } | tee /tmp/proof/technique_root_dump_return_codes.txt
+
+          PYTHONPATH=tools python3 tools/t6_oat_exact_technique_absence_v1.py \
+            --root mp_nuketown_2020=/tmp/map_out \
+            --root common_mp=/tmp/common_out \
+            --root common_patch_mp=/tmp/common_patch_out \
+            --root patch_mp=/tmp/patch_out \
+            --dump-rc mp_nuketown_2020="$MAP_RC" \
+            --dump-rc common_mp="$COMMON_RC" \
+            --dump-rc common_patch_mp="$COMMON_PATCH_RC" \
+            --dump-rc patch_mp="$PATCH_RC" \
+            --target-name pimp_technique_shadowoverlay_5255c888 \
+            --target-bytes 592 \
+            --target-sha256 cc2f2805aef4899b24ed1a181f816bfcdfd18c6ab876a1172cae11f0abd20d71 \
+            --out /tmp/proof/T6_SHADOWCOOKIEOVERLAY_EXACT_TECHNIQUE_ABSENCE_MAP_SHARED_V1.json \
+            2>&1 | tee /tmp/proof/exact_technique_absence.log
+
       - name: Record every unresolved parent-owned dependency conflict
         shell: bash
         run: |
@@ -184,6 +227,26 @@ jobs:
             --shader-root /tmp/patch_out \
             --out /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V1.json \
             2>&1 | tee /tmp/proof/parent_dependency_conflicts.log
+
+      - name: Project conflicts through quarantined zone-priority lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_oat_conflict_lineage_projection_v1.py \
+            --conflicts /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V1.json \
+            --root-zone /tmp/map_out=0x00008000 \
+            --root-zone /tmp/patch_out=0x00000008 \
+            --out /tmp/proof/T6_NUKETOWN_CONFLICT_LINEAGE_PROJECTION_V1.json \
+            2>&1 | tee /tmp/proof/conflict_lineage_projection.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_CONFLICT_LINEAGE_PROJECTION_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['authoritative'] is False
+          assert d['summary']['authoritativeWinnerCount'] == 0
+          print('NON-AUTHORITATIVE lineage projection only')
+          print(json.dumps(d['summary'], indent=2, sort_keys=True))
+          PY
 
       - name: Census every declared native TechniqueSet program with parent provenance
         shell: bash
