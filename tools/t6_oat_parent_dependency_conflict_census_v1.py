@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Enumerate unresolved parent-owned T6 Technique dependency conflicts.
 
-This is a diagnostic companion to t6_oat_material_shader_census_v4.py.  It uses
-exactly the same parent-TechniqueSet provenance boundary but, instead of aborting
-on the first divergent parent-owned child Technique, records every such conflict
-in a machine-readable manifest.
+This is a diagnostic companion to t6_oat_material_shader_census_v4.py. It uses
+the same parent-TechniqueSet provenance boundary but, instead of aborting on the
+first unresolved parent/dependency relation, records every safely classifiable
+conflict in a machine-readable manifest.
 
-It never chooses a winner.  A conflict is evidence that runtime duplicate-XAsset
-selection remains required, not permission to infer patch/map precedence.
+It never chooses a winner. A conflict is evidence that runtime duplicate-XAsset
+selection or a wider owner universe remains required, not permission to infer
+patch/map precedence.
 """
 from __future__ import annotations
 
@@ -42,6 +43,21 @@ def _owner_child_record(owner: Path, technique: str) -> dict:
     }
 
 
+def _physical_parent_matches(roots: list[Path], techset: str) -> list[tuple[Path, Path]]:
+    relative = Path("techsets") / f"{techset}.techset"
+    return [(root, root / relative) for root in roots if (root / relative).is_file()]
+
+
+def _parent_record(owner: Path, path: Path) -> dict:
+    bindings, errors = v3.v1.oat.parse_techset(path.read_text(encoding="utf-8", errors="strict"))
+    return {
+        "root": str(owner),
+        "file": v3._record_file(path, owner),
+        "bindings": bindings,
+        "parseErrors": errors,
+    }
+
+
 def build(material_root: Path, shader_roots: list[Path]) -> dict:
     roots = [Path(p).resolve() for p in shader_roots]
     if not roots or any(not p.is_dir() for p in roots):
@@ -53,8 +69,10 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
         raise v3.MaterialShaderCensusError("no ordinary native T6 Material rows remain after generated exclusion")
 
     techset_cache: dict[str, dict] = {}
-    conflict_map: dict[str, dict] = {}
-    missing_map: dict[str, dict] = {}
+    child_conflict_map: dict[str, dict] = {}
+    child_missing_map: dict[str, dict] = {}
+    parent_missing_map: dict[str, dict] = {}
+    parent_divergent_map: dict[str, dict] = {}
     checked_relations: set[tuple[str, str]] = set()
     duplicate_rows: list[dict] = []
 
@@ -69,6 +87,52 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
         techset_materials[techset].add(name)
 
     for techset in sorted(techset_materials):
+        matches = _physical_parent_matches(roots, techset)
+        relative = Path("techsets") / f"{techset}.techset"
+
+        if not matches:
+            key = v3._jhash({
+                "kind": "missing-parent-techniqueset-owner",
+                "techniqueSet": techset,
+                "shaderRoots": [str(root) for root in roots],
+            })
+            parent_missing_map[key] = {
+                "conflictKey": key,
+                "kind": "missing-parent-techniqueset-owner",
+                "techniqueSet": techset,
+                "relativeFile": relative.as_posix(),
+                "materials": sorted(techset_materials[techset]),
+                "searchedShaderRoots": [str(root) for root in roots],
+                "parentOwners": [],
+                "ownerTechniqueSets": [],
+                "resolution": "unresolved-no-parent-owner-in-supplied-roots",
+            }
+            continue
+
+        parent_ids = {(path.stat().st_size, v3._sha(path)) for _root, path in matches}
+        if len(parent_ids) > 1:
+            owner_rows = [_parent_record(owner, path) for owner, path in matches]
+            key = v3._jhash({
+                "kind": "divergent-parent-techniqueset-definition",
+                "techniqueSet": techset,
+                "owners": [
+                    (row["root"], row["file"]["bytes"], row["file"]["sha256"])
+                    for row in owner_rows
+                ],
+            })
+            parent_divergent_map[key] = {
+                "conflictKey": key,
+                "kind": "divergent-parent-techniqueset-definition",
+                "techniqueSet": techset,
+                "relativeFile": relative.as_posix(),
+                "materials": sorted(techset_materials[techset]),
+                "parentOwners": [row["root"] for row in owner_rows],
+                "ownerTechniqueSets": owner_rows,
+                "distinctSerializedParentIdentityCount": len(parent_ids),
+                "resolution": "unresolved-no-winner-selected",
+            }
+            continue
+
         if techset not in techset_cache:
             techset_cache[techset] = v4._techset_owners(roots, techset, duplicate_rows)
         ts = techset_cache[techset]
@@ -94,7 +158,7 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
                     "technique": technique,
                     "owners": [row["root"] for row in owner_rows],
                 })
-                missing_map[key] = {
+                child_missing_map[key] = {
                     "conflictKey": key,
                     "kind": "missing-parent-owned-child",
                     "techniqueSet": techset,
@@ -119,7 +183,7 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
                         for row in owner_rows
                     ],
                 })
-                conflict_map[key] = {
+                child_conflict_map[key] = {
                     "conflictKey": key,
                     "kind": "divergent-parent-owned-child",
                     "techniqueSet": techset,
@@ -132,16 +196,22 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
                     "resolution": "unresolved-no-winner-selected",
                 }
 
-    divergent = [conflict_map[k] for k in sorted(conflict_map)]
-    missing = [missing_map[k] for k in sorted(missing_map)]
-    unresolved = divergent + missing
+    divergent_children = [child_conflict_map[k] for k in sorted(child_conflict_map)]
+    missing_children = [child_missing_map[k] for k in sorted(child_missing_map)]
+    missing_parents = [parent_missing_map[k] for k in sorted(parent_missing_map)]
+    divergent_parents = [parent_divergent_map[k] for k in sorted(parent_divergent_map)]
+    unresolved = sorted(
+        missing_parents + divergent_parents + divergent_children + missing_children,
+        key=lambda row: (row["kind"], row["techniqueSet"], row.get("technique", ""), row["conflictKey"]),
+    )
 
     return {
         "format": FORMAT,
         "authoritativeWinnerSelection": False,
         "proofBoundary": (
             "Exact pinned-OAT Material -> physical parent TechniqueSet owner root(s) -> declared Technique binding -> same-root child Technique pass/stage identity. "
-            "This diagnostic records divergent or missing parent-owned children without selecting a winner. It does not use load order, zone names, guessed patch precedence, OpenBO2 lineage priorities, or non-parent same-name Technique files. Runtime duplicate-XAsset selection remains a separate proof gate."
+            "This diagnostic records missing parent TechniqueSets, divergent parent TechniqueSet definitions, divergent parent-owned children, and missing parent-owned children without selecting a winner. "
+            "It does not use load order, zone names, guessed patch precedence, OpenBO2 lineage priorities, or non-parent same-name Technique files. Runtime duplicate-XAsset selection and/or expansion of the supplied owner universe remain separate proof gates."
         ),
         "materialRoot": str(material_root),
         "shaderRoots": [str(p) for p in roots],
@@ -150,8 +220,10 @@ def build(material_root: Path, shader_roots: list[Path]) -> dict:
             "excludedGeneratedMaterialCount": len(excluded_generated),
             "uniqueTechniqueSetCount": len(techset_materials),
             "checkedParentTechniqueRelationCount": len(checked_relations),
-            "divergentParentOwnedChildConflictCount": len(divergent),
-            "missingParentOwnedChildConflictCount": len(missing),
+            "missingParentTechniqueSetOwnerConflictCount": len(missing_parents),
+            "divergentParentTechniqueSetConflictCount": len(divergent_parents),
+            "divergentParentOwnedChildConflictCount": len(divergent_children),
+            "missingParentOwnedChildConflictCount": len(missing_children),
             "unresolvedConflictCount": len(unresolved),
             "winnerSelectedCount": 0,
         },
@@ -177,13 +249,19 @@ def main() -> int:
     for row in result["conflicts"]:
         print(
             f"CONFLICT kind={row['kind']} techset={row['techniqueSet']} "
-            f"technique={row['technique']} materials={len(row['materials'])}"
+            f"technique={row.get('technique', '')} materials={len(row['materials'])}"
         )
-        for owner in row["ownerChildren"]:
+        for owner in row.get("ownerChildren", []):
             print(
-                "  owner=" + owner["root"]
+                "  child_owner=" + owner["root"]
                 + " present=" + str(owner["present"]).lower()
                 + (" identity=" + owner.get("parsedPassStageIdentitySha256", "") if owner["present"] else "")
+            )
+        for owner in row.get("ownerTechniqueSets", []):
+            print(
+                "  parent_owner=" + owner["root"]
+                + " bytes=" + str(owner["file"]["bytes"])
+                + " sha256=" + owner["file"]["sha256"]
             )
     # Diagnostic succeeds when it faithfully records conflicts. Conflict presence
     # is data, not a tool failure; production census remains responsible for fail-closed authority.
