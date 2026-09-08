@@ -14,6 +14,7 @@ on:
       - 'tools/t6_xmodel_skeleton_normalize_v1.py'
       - 'tools/t6_xmodel_serialized_walker.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/weapons/T6_MP7_R2_SEAL6_VIEWHANDS_MESH_CLOSURE_V1.json'
 
 permissions:
   contents: read
@@ -64,6 +65,8 @@ jobs:
           /tmp/t6_expand /tmp/game/zone/all/faction_seals_mp.ff /tmp/expanded/faction_seals_mp.bin faction_seals_mp > /tmp/proof/faction_seals_mp_expand.log 2>&1
           test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
           echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+          test "$(stat -c%s /tmp/expanded/faction_seals_mp.bin)" = '6245916'
+          echo '21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30  /tmp/expanded/faction_seals_mp.bin' | sha256sum -c -
           stat -c '%n %s bytes' /tmp/expanded/*.bin | tee /tmp/proof/expanded_sizes.txt
           sha256sum /tmp/expanded/*.bin | tee /tmp/proof/expanded_sha256.txt
 
@@ -77,6 +80,49 @@ jobs:
             --out /tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_CLOSURE_V1.json \
             | tee /tmp/proof/closure.log
           sha256sum /tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_CLOSURE_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - name: Require retained closure agreement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          fresh=json.load(open('/tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_CLOSURE_V1.json',encoding='utf-8'))
+          retained=json.load(open('manifests/weapons/T6_MP7_R2_SEAL6_VIEWHANDS_MESH_CLOSURE_V1.json',encoding='utf-8'))
+          if fresh['source']['expandedCommonMp'] != retained['source']['expandedCommonMp']:
+              raise SystemExit('expanded common_mp identity drift')
+          if fresh['source']['expandedFactionSealsMp'] != retained['source']['expandedFactionSealsMp']:
+              raise SystemExit('expanded faction_seals_mp identity drift')
+          if fresh['summary']['meshAndLocalRigClosureAuthoritative'] is not True:
+              raise SystemExit('fresh mesh/local-rig closure is not authoritative')
+          if fresh['summary']['finalDObjAssemblySemanticsAuthoritative'] is not False:
+              raise SystemExit('DObj gate was crossed unexpectedly')
+          if fresh['genericCarrier']['skeletonWitness']['canonicalSha256'] != retained['genericCarrier']['skeletonWitnessCanonicalSha256']:
+              raise SystemExit('generic carrier skeleton drift')
+          by={m['name']:m for m in retained['models']}
+          for row in fresh['targets']:
+              old=by.get(row['name'])
+              if old is None: raise SystemExit('unexpected visible model '+row['name'])
+              checks={
+                'assetFixedStart': row['assetFixedStart'],
+                'assetSerializedBytes': row['assetSerializedBytes'],
+                'assetSerializedSha256': row['assetSerializedSha256'],
+                'surfaceCount': row['mesh']['surfaceCount'],
+                'vertexCount': row['mesh']['vertexCount'],
+                'triangleCount': row['mesh']['triangleCount'],
+                'unweightedVertexCount': row['mesh']['unweightedVertexCount'],
+                'normalizedMeshCanonicalSha256': row['mesh']['normalizedCanonicalSha256'],
+              }
+              for k,v in checks.items():
+                  if old[k] != v: raise SystemExit(f'{row["name"]} {k} drift: {v!r} != {old[k]!r}')
+              if row['skeletonWitness']['canonicalSha256'] != retained['visibleRig']['skeletonWitnessCanonicalSha256']:
+                  raise SystemExit(row['name']+' visible skeleton witness drift')
+              if row['bindingTo70BoneCarrier']['visibleOnlyBones'] != retained['visibleRig']['visibleOnlyBonesVersusGenericCarrier']:
+                  raise SystemExit(row['name']+' visible-only bone drift')
+              if row['bindingTo70BoneCarrier']['parentDifferences'] != retained['visibleRig']['retailAuthoredSharedParentDifference']:
+                  raise SystemExit(row['name']+' shared-parent difference drift')
+          print('retained SEAL6 visible-hands mesh/local-rig closure agrees exactly')
+          PY
 
       - name: Upload SEAL6 visible-hands closure
         if: always()
