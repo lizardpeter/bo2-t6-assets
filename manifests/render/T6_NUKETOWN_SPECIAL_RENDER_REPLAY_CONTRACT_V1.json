@@ -1,0 +1,59 @@
+{
+  "boundary": "Compact implementation index only. Full per-shader contract is deterministically regenerated and SHA-checked by CI. Runtime-owned values/textures remain external; portable approximations are not exact T6 rendering.",
+  "format": "t6-nuketown-special-render-replay-contract-seal-v1",
+  "generated": {
+    "contractDigestSha256": "c5fecfdd0a4a1020556533eb46f74c13cc838cc257e00f7f7dd75b8651ea6bcb",
+    "fileSha256": "3d3b1401ebf5027d9288a1e81c18c348f34423d5631622efa9428c3f031def3e",
+    "summary": {
+      "rawnormalPixelShaderCount": 20,
+      "rawnormalProgramCount": 22,
+      "rawnormalRuntimeConstantVariableIdentityCount": 39,
+      "rawnormalRuntimeTextureIdentityCount": 6,
+      "rawnormalStaticMaterialImageCount": 3,
+      "shadowcasterMaterialCount": 2,
+      "specialMaterialCount": 11
+    }
+  },
+  "greenRun": {
+    "artifact": 10074640713,
+    "artifactZipSha256": "72e3d0acd7b7c4c075e6cf9de377c21b6872c02c590ad965949b08f7a3cd3829",
+    "head": "e063cca499dc688d59143c2bb500f6d1e6b8520f",
+    "job": 102219704267,
+    "run": 34273190732
+  },
+  "map": "mp_nuketown_2020",
+  "producer": "tools/t6_nuketown_special_render_replay_contract_v1.py",
+  "rawnormal": {
+    "material": "wpc/glass_clear_wall_opaque_white",
+    "programs": [
+      ["lit","da4278ded596e6128b0134883815985f2fc79f9530b4eddf1b82b5dc0a247953","8b3911f74a0b6b78b6702e5c323560749b9c260b57b54da82786ce017496c98a",2,3,24],
+      ["lit dlight glight","146fbdf742f1dabbb082b4997e9710011fc80fb24fb0119d6856417bbcaea995","1ceb07548d620372bde6750afa5801756e7aa009eacb9ff521c1c9f6b33c29eb",4,24,24],
+      ["lit omni","d2bf734c155be8be5a09025d866fd32a11aa87289f56e69cef818edd72877439","d1807171245ad12f1c6fb9e69be6505375862aa018097ac82adfd8899ac8e8c0",2,6,24],
+      ["lit omni dlight glight","dee1ff4997644066ffdb4b02a85cb1fcc6b517875b87940e41d36fdb2829d403","17a3e43a5041dc268e668b23f9c62fd77540f8379ee6578c6f8a885dd3a7544c",4,27,24],
+      ["lit omni shadow","76fe2413cf36debc6e9969200423b15602ef06c0febbc4c0ecb0f6ae982a2884","887e92075db94cbbaed26757eff2951c1cca456a2c833791b975d74ced6dc271",3,8,28],
+      ["lit omni shadow dlight glight","2814353f9db6feca6fb0f817d7603fd840c599eedb043b981b77eef1f90e1d76","d5842eaeeab65bb7339ff69c9236c7fa858d2d0f3f308840ed1c71d07bf8b4e8",4,29,28],
+      ["lit spot","bd0996f9cdd0e2fa5e4e7434b6fc17ced74a46d23f39c7544276a5d3f42d4753","18df1d0553b8406d7023e236812aa8cbb76500863669a7baf5ad69800fb000f0",3,13,24],
+      ["lit spot dlight glight","0ae7aa1293799df444783912bb22c74d347000da60a932df21ecc83456d5ec73","a7e56590d971d92221a0adada9cd74f8d064685febfdf09cb1e2d8e74fd91f95",5,34,24],
+      ["lit spot round","5cf4378c200101b6516f1ba864f70b78cf1ad87ee2c83fb5d6622b830feb1197","abba23116f871b09a153eaa8f9ab3ad5da426868959181c228d5ee596fd12124",2,9,24],
+      ["lit spot round dlight glight","98c3fb6929664d68398696c721f222a8bd600258b9fdbbdcb3177837e9271373","0bb9a3ccc4476bbba6c594b1306f5a8aebeef8efdbdc8494d35c7fe865c47973",4,30,24],
+      ["lit spot round shadow","f48161e1000471546f730f6f933ba8de82589100051010bada55353e7de55451","7fc2c0bacad651536bf3a1103fc4fbbf2f5898da2397940299976d553a937aa9",3,11,28],
+      ["lit spot round shadow dlight glight","67353167c119c92cf4b252e13822a5df66c4e31293e289a0afc0899d812da33c","b67272eb731e9a969c0f5d3d3afd4ed4f920147431afe4a8473dccff18ea4f51",4,32,28],
+      ["lit spot shadow","20164a880ca83164b212709971e97bf6319da92855b2fca0a8d62b6090234e16","a6f21628fe4b800efb57ebe3dfeed23344d73bc1b82d719c14b5de2a355051cf",4,14,28],
+      ["lit spot shadow dlight glight","7482116d2cfeecdb929b97016be9edc8133c5fa9fe6821e71db578b81e51e497","7524c829684802ce7394edbc1ec1c17dabff53d9917aa8e3e61818accba133de",5,35,28],
+      ["lit spot square","af54264b4f613d4068ae2534cb66a41bd67f841d5557693da58cf14cdea23966","33227250c7241d44789b8b0372fde4694ca483529aadb92495098e7eafd27147",3,11,24],
+      ["lit spot square dlight glight","63809e8e577e4f92774e44711d9b28b4df4a830961cbe4907a5e51a96e0d3019","bf94fcefceb44b9219395c2cc184635c410287b41b16244ff635b07ac77a40c8",5,32,24],
+      ["lit spot square shadow","1ad653c5c4bf38497c77c147aa61c7ac14e16f387677569fdf76aa82273a19e0","c86c8bf299719d7af1dcdbb2ab5ef83b4938d1bfd42e239645566b9b30e7464a",4,12,28],
+      ["lit spot square shadow dlight glight","fd6ad2e1fbe62b28371e5f2ee46e2eb3c14f7cc13b1cd46e77d8580cf6046bd4","f9aef7fb396e2da127a48cf2697ff1b5d1456a6c3011dc00d0f5490b7844e2f1",5,33,28],
+      ["lit sun","da4278ded596e6128b0134883815985f2fc79f9530b4eddf1b82b5dc0a247953","8b3911f74a0b6b78b6702e5c323560749b9c260b57b54da82786ce017496c98a",2,3,24],
+      ["lit sun dlight glight","146fbdf742f1dabbb082b4997e9710011fc80fb24fb0119d6856417bbcaea995","1ceb07548d620372bde6750afa5801756e7aa009eacb9ff521c1c9f6b33c29eb",4,24,24],
+      ["lit sun shadow","ac29ff91d25e014c4f9f31343edab80531c71427158002b080051c1f8fd03c23","3a4b334a1e1ee45b6834d4a5dfba98117656443f4fa3a659fde286fcc851eaca",3,5,28],
+      ["lit sun shadow dlight glight","684165bc0502f31d249709bab7908a8d26fd987f5a482d45064cfdd828c20b9e","412feef2ed76368545fb138a3d86a00553d22d5eb01f3be93692bd4fedb17037",5,26,28]
+    ],
+    "runtimeConstants": [
+      [0,"PerSceneConsts","dlightDiffuse",1088,16],[0,"PerSceneConsts","dlightPosition",1072,16],[0,"PerSceneConsts","dlightShadowLookupMatrix0",352,16],[0,"PerSceneConsts","dlightShadowLookupMatrix1",368,16],[0,"PerSceneConsts","dlightShadowLookupMatrix2",384,16],[0,"PerSceneConsts","dlightShadowLookupMatrix3",400,16],[0,"PerSceneConsts","dlightSpotDir",1200,16],[0,"PerSceneConsts","dlightSpotFactors",1216,16],[0,"PerSceneConsts","dlightSpotMatrix0",1136,16],[0,"PerSceneConsts","dlightSpotMatrix1",1152,16],[0,"PerSceneConsts","dlightSpotMatrix3",1184,16],[0,"PerSceneConsts","dlightSpotShadowmapPixelAdjust",1488,16],[0,"PerSceneConsts","glightBlues",1056,16],[0,"PerSceneConsts","glightFallOffs",1008,16],[0,"PerSceneConsts","glightGreens",1040,16],[0,"PerSceneConsts","glightPosXs",960,16],[0,"PerSceneConsts","glightPosYs",976,16],[0,"PerSceneConsts","glightPosZs",992,16],[0,"PerSceneConsts","glightReds",1024,16],[0,"PerSceneConsts","hdrControl0",320,16],[0,"PerSceneConsts","lightConeControl1",1424,16],[0,"PerSceneConsts","lightDiffuse",1248,16],[0,"PerSceneConsts","lightFallOffA",1312,16],[0,"PerSceneConsts","lightFallOffB",1328,16],[0,"PerSceneConsts","lightPosition",1232,16],[0,"PerSceneConsts","lightSpotAABB",1408,16],[0,"PerSceneConsts","lightSpotCookieSlideControl",1456,16],[0,"PerSceneConsts","lightSpotDir",1264,16],[0,"PerSceneConsts","lightSpotFactors",1280,16],[0,"PerSceneConsts","lightSpotMatrix0",1344,16],[0,"PerSceneConsts","lightSpotMatrix1",1360,16],[0,"PerSceneConsts","lightSpotMatrix2",1376,16],[0,"PerSceneConsts","shadowmapSwitchPartition",1552,16],[0,"PerSceneConsts","spotShadowmapPixelAdjust",1472,16],[0,"PerSceneConsts","sunDiffuse",304,16],[0,"PerSceneConsts","sunPosition",288,16],[0,"PerSceneConsts","sunShadowmapPixelSize",1584,16],[3,"dlights","combined_dlight",176,4],[3,"dlights","combined_glight",180,4]
+    ],
+    "runtimeTextures": [[9,"shadowmapSamplerSun",9,"SunShadowSamplerState"],[10,"shadowmapSamplerSpot",10,"SpotShadowSamplerState"],[11,"dlightAttenuationSampler",11,"dlightAttenuationSampler"],[12,"attenuationSampler",12,"attenuationSampler"],[13,"lightmapSamplerSecondary",13,"lightmapSamplerSecondary"],[15,"reflectionProbeSampler",15,"reflectionProbeSampler"]],
+    "staticConstants": [["0x3ccffe8b","ReflectionAmount","ReflectionAmount",[0.0,0.0,0.0,1.0]],["0xa8cd1103","SpecularAmount","SpecularAmount",[0.0,0.0,0.0,1.0]],["0xb0dc3167","NormalHeightMultiplier","NormalHeightMultiplier",[0.23999999463558197,0.0,0.0,1.0]]],
+    "staticTextures": [["0x11594eb2","SpecularAndGloss2","SpecularAndGloss2","~~-gglass_clear_wall_s-rgb&gl~32bf418c","{\"clampU\":false,\"clampV\":false,\"clampW\":false,\"filter\":\"aniso4x\",\"mipMap\":\"linear\"}"],["0x942cbff0","Normal_Map","Normal_Map","glass_clear_wall_n","{\"clampU\":false,\"clampV\":false,\"clampW\":false,\"filter\":\"aniso4x\",\"mipMap\":\"linear\"}"],["0xa0ab1041","ColorMap","colorMap","~-gglass_clear_wall_opaque_c","{\"clampU\":false,\"clampV\":false,\"clampW\":false,\"filter\":\"aniso4x\",\"mipMap\":\"linear\"}"]]
+  }
+}
