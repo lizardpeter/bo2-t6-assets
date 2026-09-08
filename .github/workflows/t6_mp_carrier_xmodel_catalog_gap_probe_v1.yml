@@ -1,0 +1,59 @@
+name: T6 mp_carrier XModel catalog gap probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp_carrier_xmodel_catalog_gap_probe_v1.yml'
+      - 'tools/t6_mp_carrier_xmodel_catalog_gap_probe_v1.py'
+      - 'tools/t6_clipmap_normalize_v5.py'
+      - 'tools/t6_clipmap_normalize_v6.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile-check diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_mp_carrier_xmodel_catalog_gap_probe_v1.py
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          mkdir -p /tmp/game/zone/all /tmp/proof
+      - name: Download and pin current retail mp_carrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/mp_carrier.ff -o /tmp/game/zone/all/mp_carrier.ff
+          echo 'c65c86acf2ad0bcbbe02b8e5db07e3e073402e35d8e50c73899e12b2e128bab3  /tmp/game/zone/all/mp_carrier.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/game/zone/all/mp_carrier.ff /tmp/mp_carrier.bin mp_carrier > /tmp/proof/expand.log 2>&1
+          test "$(stat -c%s /tmp/mp_carrier.bin)" = '137355457'
+          echo 'd8e288206cc1c056307880e607284ae7508f074a9d88acdf6de43000e9536441  /tmp/mp_carrier.bin' | sha256sum -c -
+      - name: Diagnose exact catalog gap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp_carrier_xmodel_catalog_gap_probe_v1.py /tmp/mp_carrier.bin \
+            --out /tmp/proof/T6_MP_CARRIER_XMODEL_CATALOG_GAP_PROBE_V1.json \
+            | tee /tmp/proof/probe.log
+          sha256sum /tmp/proof/T6_MP_CARRIER_XMODEL_CATALOG_GAP_PROBE_V1.json | tee /tmp/proof/manifest_sha256.txt
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_CARRIER_XMODEL_CATALOG_GAP_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: warn
+          compression-level: 9
