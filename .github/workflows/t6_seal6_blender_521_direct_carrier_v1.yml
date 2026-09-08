@@ -49,7 +49,7 @@ jobs:
           src=Path('/tmp/out/source_shader_carrier_v2.glb')
           bpy.ops.wm.read_factory_settings(use_empty=True)
           bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
-          assert bpy.app.version_string == '5.2.1', bpy.app.version_string
+          assert bpy.app.version_string.startswith('5.2.1'), bpy.app.version_string
           assert len(bpy.data.armatures)==1, len(bpy.data.armatures)
           assert len(bpy.data.actions)==6, len(bpy.data.actions)
           assert len(bpy.data.materials)==12, len(bpy.data.materials)
@@ -89,7 +89,7 @@ jobs:
               raise RuntimeError(f'Blender 5.2.1 native glTF import lost exact custom attributes: {missing}')
           if report['color0Present'] or report['standardTangentPresent']:
               raise RuntimeError('forbidden standard COLOR_0/TANGENT appeared')
-          bpy.context.scene['t6_blender_runtime']='5.2.1'
+          bpy.context.scene['t6_blender_runtime']='5.2.1 LTS'
           bpy.context.scene['t6_shader_attribute_transport']='native Blender 5.2.1 glTF custom attributes'
           bpy.context.scene['t6_complete_retail_pixel_output']=False
           out=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend')
@@ -108,7 +108,7 @@ jobs:
           cat >/tmp/reopen_521.py <<'PY'
           import bpy,json
           from pathlib import Path
-          assert bpy.app.version_string=='5.2.1'
+          assert bpy.app.version_string.startswith('5.2.1'), bpy.app.version_string
           meshes=[o for o in bpy.data.objects if o.type=='MESH']
           main=[o for o in meshes if o.name=='c_usa_mp_seal6_smg_fb_mesh']
           assert len(main)==1
