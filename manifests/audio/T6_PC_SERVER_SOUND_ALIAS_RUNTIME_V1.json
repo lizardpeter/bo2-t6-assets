@@ -1,0 +1,163 @@
+{
+  "format": "t6-pc-server-sound-alias-runtime-v1-summary",
+  "authority": "exact-pc-dedicated-server-build-only",
+  "source": {
+    "exe": {
+      "name": "CoDMPServer_PC.exe",
+      "bytes": 13711872,
+      "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"
+    },
+    "map": {
+      "name": "CoDMPServer_PC.map",
+      "bytes": 9213148,
+      "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+    },
+    "pdb": {
+      "name": "CoDMPServer_PC.pdb",
+      "bytes": 49196032,
+      "sha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc"
+    },
+    "verifier": "tools/t6_pc_server_sound_alias_runtime_proof_v1.py",
+    "verifierCommit": "72d117a56b959b08e3ec105ae25ffd9752efed9a"
+  },
+  "symbols": {
+    "g_snd": "0x07E52F00",
+    "SND_AliasGetNeverPlayedTwice": "0x008AA7B0",
+    "SND_AliasSetNeverPlayedTwice": "0x008AA7F0",
+    "SND_AliasHasPlayed": "0x008AA830",
+    "SND_PickSoundAliasFromList": "0x008ACC50",
+    "SND_PickSoundAlias": "0x008ACE30",
+    "SND_CheckValidSecondary": "0x008ACE80",
+    "SND_FindFreeVoice": "0x008B2570",
+    "SND_PlaySoundAlias": "0x008B2850",
+    "SND_BankAliasLookupCache": "0x008B4ED0",
+    "SND_FindAlias": "0x008B6720",
+    "SND_FindContextIndex": "0x008BC750",
+    "SND_SubtitleNotify": "0x008C2DD0",
+    "SND_HashName": "0x008C5E00",
+    "SD_StartAlias": "0x008B94C0",
+    "RandWithSeed": "0x00760DD0",
+    "random": "0x00760D80",
+    "I_stricmp": "0x0078E2C0"
+  },
+  "exactByteRanges": {
+    "SND_PickSoundAliasFromList": {
+      "start": "0x008ACC50",
+      "endExclusive": "0x008ACE26",
+      "bytes": 470,
+      "sha256": "536aac394901153948e21ca9537ef761ac448c6c18edff71606d72d0c569458c"
+    },
+    "SND_CheckValidSecondary": {
+      "start": "0x008ACE80",
+      "endExclusive": "0x008ACF40",
+      "bytes": 192,
+      "sha256": "10f79f80ccaffffb921c4cd42b91a8608f9f5185e1a52d91b7fe5d2d012f34e5"
+    },
+    "SND_PlaySoundAlias_select_secondary_zero": {
+      "start": "0x008B2979",
+      "endExclusive": "0x008B2A9D",
+      "bytes": 292,
+      "sha256": "fccb01b12942e5f7a80a54cdcdccf0ab6fe5dd97b755c7e56afdb4ca477c134d"
+    },
+    "SND_PlaySoundAlias_probability": {
+      "start": "0x008B2CE4",
+      "endExclusive": "0x008B2D1F",
+      "bytes": 59,
+      "sha256": "95e5426bd177a1655f88935e578419f66fec906419c432260f910f7610c3bea1"
+    },
+    "SND_PlaySoundAlias_start_and_has_played": {
+      "start": "0x008B2F9B",
+      "endExclusive": "0x008B3178",
+      "bytes": 477,
+      "sha256": "ad0dd7ce8d3d91a002b4e78e3943aa3c8e6a4a36087fd4a83be28fd5389f01f4"
+    },
+    "SND_AliasGetNeverPlayedTwice": {
+      "bytes": 54,
+      "sha256": "1e85569ece79e660c5b211583dccb5d095ccfced12406d64a8af184cb785e421"
+    },
+    "SND_AliasSetNeverPlayedTwice": {
+      "bytes": 63,
+      "sha256": "440337a8fc1e24993b44f3ef02307c25f66d847a2350b449c1d2fa12a7b23fee"
+    },
+    "SND_AliasHasPlayed": {
+      "bytes": 56,
+      "sha256": "60d2842aadf3936d98aa52623ea3f51204cf788154240f16a1aadc70fe99b6f5"
+    }
+  },
+  "selector": {
+    "listCountOffset": 12,
+    "listSequenceOffset": 16,
+    "aliasStride": 96,
+    "contextTypeOffset": 36,
+    "contextValueOffset": 40,
+    "maxLocalCandidateCount": 64,
+    "rules": [
+      "null SndAliasList or count==0 returns null",
+      "list count is asserted below 64 and locally capped to 64",
+      "contextType==0 accepts the variant without a context comparison",
+      "entity handle low 12 bits select an entity-context row when below 0x700",
+      "a matching entity-specific context accepts the variant",
+      "contextValue==0 accepts the variant as a wildcard",
+      "otherwise SND_FindContextIndex plus the global context table determines acceptance",
+      "flags0 bit31 on the first accepted candidate selects a RandWithSeed path using a local seed derived from alias-list address plus objectId",
+      "otherwise a nonzero DWORD at g_snd+0x288 selects RandWithSeed on that mutable global word",
+      "otherwise libc rand modulo accepted-candidate count is used",
+      "when more than two candidates are accepted, the libc-rand path retries an immediate repeat of aliasList.sequence, bounded to 100 attempts",
+      "the final accepted-candidate index is written to aliasList.sequence"
+    ],
+    "doesNotEvaluate": [
+      "SndAlias probability",
+      "never-played-twice bit0/has-played bit1"
+    ]
+  },
+  "neverPlayedTwice": {
+    "flags1Bit0": "authoring/runtime enable returned by SND_AliasGetNeverPlayedTwice",
+    "flags1Bit1": "runtime has-played state returned by SND_AliasHasPlayed",
+    "setter": "SND_AliasSetNeverPlayedTwice writes flags1 bit1 to the supplied boolean despite the PDB function name",
+    "gateOrder": "after selection and before Secondary processing, bit0 && bit1 causes SND_PlaySoundAlias failure",
+    "setterTextXrefs": [
+      "0x008B30A3",
+      "0x008B3136",
+      "0x008B315C"
+    ],
+    "setterCallCount": 3,
+    "setterFalseCallsThroughHelper": 0,
+    "successfulDirectStart": "all proven new-direct-start success returns after SD_StartAlias call the setter with true"
+  },
+  "secondary": {
+    "t6Order": "variant is selected first; the selected variant's secondaryName is then processed",
+    "lookup": "secondaryName -> SND_HashName -> SND_BankAliasLookupCache",
+    "missingImmediateTarget": "missing lookup skips Secondary playback and continues primary processing",
+    "validation": [
+      "primary and immediate secondary-list-head flags0 bit0 must agree (looping parity)",
+      "downstream Secondary chains are walked through SND_FindAlias/list heads",
+      "I_stricmp rejects a chain that references the primary alias name",
+      "validation is bounded to ten downstream steps"
+    ],
+    "playback": "a valid Secondary alias list is recursively passed to SND_PlaySoundAlias before the selected primary assetId check",
+    "recursiveResult": "the Secondary playback return value is not returned as the primary playback ID"
+  },
+  "zeroAssetId": {
+    "order": "after optional Secondary recursion",
+    "directSound": "assetId==0 does not start a direct physical sound",
+    "subtitle": "if subtitle is non-null, SND_SubtitleNotify(subtitle,5000) is called",
+    "returnValue": -1,
+    "runtimeHasPlayed": "the zero-direct return occurs before the successful-direct-start flags1 bit1 setter paths"
+  },
+  "probability": {
+    "fieldOffset": 88,
+    "storage": "uint8",
+    "scaleRawHex": "8180803b",
+    "scaleFloat": 0.003921568859368563,
+    "equation": "p = probabilityByte * (1/255)",
+    "gate": "if p>0, random() is called and the selected alias is rejected only when random()>p; when p==0 the random rejection gate is bypassed",
+    "order": "after variant selection, Secondary processing, nonzero direct asset check, and earlier validity gates"
+  },
+  "unresolved": [
+    "retail t6mp.exe equivalence",
+    "SndAlias stop_on_play runtime semantics",
+    "human-readable PDB field name for the exact g_snd+0x288 seed word",
+    "full lower-level voice/driver semantics outside the explicitly bounded paths"
+  ],
+  "proofBoundary": "All promoted behavior is tied to exact MAP symbol identities and exact machine-code slices of the SHA-pinned PC dedicated-server executable. The exact PDB identity is retained as matching symbol provenance. Historical T5 code was used only as a search fingerprint and is not part of the authority chain. No result is promoted to the retail t6mp.exe client."
+}
