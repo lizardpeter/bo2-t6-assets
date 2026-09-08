@@ -1,0 +1,68 @@
+{
+  "authority": "exact SHA-pinned PC dedicated-server build only",
+  "closedFacts": {
+    "decoderDispatch": "format-indexed g_sd.decoderInterfaces[].Create is called with sd_decoder* and physical entry",
+    "physicalFormatSelection": "SndAssetBankEntry+0x13 is the runtime decoder format index",
+    "serverDirectDecoderFormats": "the two-argument SD_DecoderAllocate wrapper accepts only formats 0 and 8",
+    "streamChannelValidation": "stream sources require entry channelCount 1 or 2",
+    "streamFilenameBinding": "runtime filename hash is asserted equal to physical entry id"
+  },
+  "decoderInterface": {
+    "createPointerBase": "0x00DE2538",
+    "createPointerDeltaFromShutdown": 36,
+    "dispatch": "decoder->format indexes the 0x2C-stride Create pointer table; source assertion names g_sd.decoderInterfaces[decoder->format].Create",
+    "physicalFormatOffset": "SndAssetBankEntry+0x13",
+    "recordCount": 11,
+    "shutdownPointerBase": "0x00DE2514",
+    "strideBytes": 44,
+    "wrapperAcceptedFormats": [0, 8],
+    "wrapperPools": {
+      "format0": {"base": "0x00DE3054", "instances": 100},
+      "format8": {"base": "0x00DE3E64", "instances": 100}
+    }
+  },
+  "exactFunctionRanges": {
+    "SD_DecoderAllocate_impl": {"bytes": 272, "endVaExclusive": "0x008B9B20", "sha256": "35ec6c52fb0105ff7f5d3a80e44047a7849b8fc50acab49dd7d7839c1efa6f0c", "startVa": "0x008B9A10"},
+    "SD_DecoderAllocate_wrapper": {"bytes": 80, "endVaExclusive": "0x008B9B70", "sha256": "73b09271cd3713480eb43d4d3b7af23c95e0171b3ca8962da7513fa70553a4f2", "startVa": "0x008B9B20"},
+    "SD_DecoderShutdown": {"bytes": 32, "endVaExclusive": "0x008B9A10", "sha256": "09e6ad9478f56465517ecbcdfe2e356fb68e85acd67c452ab4844806dc6af779", "startVa": "0x008B99F0"},
+    "SD_SourceInitStream": {"bytes": 144, "endVaExclusive": "0x008B9DA0", "sha256": "8a1c3ebfb4d69d2c3b88ed35f7b014bf7e0aa64bef1c2366a7fe1fe6549b2081", "startVa": "0x008B9D10"},
+    "SD_StreamAllocate": {"bytes": 496, "endVaExclusive": "0x008BA010", "sha256": "3732b14d49e8c65495226e32b0d5aa2147a5432bbb6243da1fb840530d1edff0", "startVa": "0x008B9E20"},
+    "SD_StreamBufferPreload": {"bytes": 96, "endVaExclusive": "0x008B9E20", "sha256": "393f1ede1bef4e54cb3bfe9b5dbde3e65494be996679f36dd421dcb3d676f7ea", "startVa": "0x008B9DC0"},
+    "SD_StreamShutdown": {"bytes": 32, "endVaExclusive": "0x008B9DC0", "sha256": "dd5a9abab4fb383a3f6dbb5e57a71f700bcbf72ba934fbd8e21b1bd28090898d", "startVa": "0x008B9DA0"}
+  },
+  "format": "t6-pc-server-sound-decoder-stream-runtime-proof-v1",
+  "notYetEstablished": [
+    "codec names for numeric physical formats 0 and 8",
+    "exact Create/Decode function targets installed in decoder interface records 0 and 8",
+    "codec-specific bitstream-to-PCM decode semantics",
+    "retail t6mp.exe equivalence"
+  ],
+  "proofBoundary": "This closes decoder-interface dispatch and stream object setup for the exact SHA-pinned PC dedicated-server build. Numeric decoder formats 0 and 8 are not assigned codec names here. Codec-specific Create/Decode semantics and retail t6mp.exe equivalence remain open.",
+  "source": {
+    "exe": {"bytes": 13711872, "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"},
+    "generatedBy": "tools/t6_pc_server_sound_decoder_stream_runtime_proof_v1.py",
+    "imageBase": "0x00400000",
+    "map": {"bytes": 9213148, "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"},
+    "greenRun": 34250772038,
+    "greenArtifact": 10065900362,
+    "generatedProofSha256": "a9fe6073fb4c658cb7e2d0789c15f2f92cf7a24b4b8554efe0cf840043ec3cd7"
+  },
+  "streamRuntime": {
+    "filenameIntegrity": "SND_HashName(filename) must equal SndAssetBankEntry.id at +0x00",
+    "initialState": "stream+0x00 = 1; stream+0x04 = filename; stream+0x64 = entry; stream+0x44 and +0x58 are cleared",
+    "poolBase": "0x07F1A420",
+    "poolCount": 20,
+    "poolEndExclusive": "0x07F1AC90",
+    "poolStrideBytes": 108,
+    "preloadRecordCount": 16,
+    "preloadRecordStrideBytes": 20,
+    "preloadTableBase": "0x07F1B108"
+  },
+  "streamSource": {
+    "allocationFailure": "sd_source+0x20,+0x28,+0x2C are set to 1",
+    "allocationSuccess": "sd_source+0x20,+0x28,+0x2C are cleared to 0",
+    "entryByte12ToSourceFlag": "entry+0x12 != 0 is stored at sd_source+0x24 on successful stream allocation",
+    "requiredChannelCounts": [1, 2],
+    "streamPointerOffset": "sd_source+0x18"
+  }
+}
