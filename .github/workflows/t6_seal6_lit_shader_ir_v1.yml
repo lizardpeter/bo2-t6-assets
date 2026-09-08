@@ -1,0 +1,154 @@
+name: T6 SEAL6 exact lit shader IR v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_seal6_lit_shader_abi_manifest_v1.py'
+      - 'tools/t6_dxbc_rdef_v1.py'
+      - '.github/workflows/t6_seal6_lit_shader_ir_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  translate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install exact shader translation tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vkd3d-compiler spirv-tools spirv-cross jq >/dev/null
+          mkdir -p /tmp/input /tmp/proof/abi /tmp/proof/shaders /tmp/proof/reflection /tmp/proof/glsl /tmp/proof/rdef
+          vkd3d-compiler --version | tee /tmp/proof/vkd3d_version.txt
+          spirv-val --version | tee /tmp/proof/spirv_tools_version.txt
+          dpkg-query -W -f='${Package} ${Version}\n' spirv-cross | tee /tmp/proof/spirv_cross_version.txt
+
+      - name: Download SHA-pinned native SEAL6 lit shader artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o /tmp/input/native.zip \
+            https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/10038097215/zip
+          echo '32a07618a0174b1637a2bad1200e4d55f5e835e5806f1ffaa1f5fd71678dd9aa  /tmp/input/native.zip' | sha256sum -c -
+          unzip -q /tmp/input/native.zip -d /tmp/input/native
+          cp /tmp/input/native/T6_SEAL6_LIT_SHADER_BINARY_REPORT_V1.json /tmp/proof/
+
+          test -f /tmp/input/native/seal6_lit_dxbc/b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe.vs.cso
+          test -f /tmp/input/native/seal6_lit_dxbc/db872ac90083aea7bd1cc0c53a3edd6f5c9bab2ece1a6616d86876169bb72cf5.vs.cso
+          test -f /tmp/input/native/seal6_lit_dxbc/dbad6541db6ffa00308d732ab2c07777dca960465ebcc9710823ab68b16c78ec.ps.cso
+          test -f /tmp/input/native/seal6_lit_dxbc/785e8ef0f0936016ce9dd18f67cdcad1c15bdbed58c174e93049df3f46b79b98.ps.cso
+          test -f /tmp/input/native/seal6_lit_dxbc/6d4913fd080a783f1c08e78124884c491725c5e69dfe93846bc27a2a78ada298.ps.cso
+
+          (cd /tmp/input/native/seal6_lit_dxbc && sha256sum -c - <<'SUMS'
+          b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe  b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe.vs.cso
+          db872ac90083aea7bd1cc0c53a3edd6f5c9bab2ece1a6616d86876169bb72cf5  db872ac90083aea7bd1cc0c53a3edd6f5c9bab2ece1a6616d86876169bb72cf5.vs.cso
+          dbad6541db6ffa00308d732ab2c07777dca960465ebcc9710823ab68b16c78ec  dbad6541db6ffa00308d732ab2c07777dca960465ebcc9710823ab68b16c78ec.ps.cso
+          785e8ef0f0936016ce9dd18f67cdcad1c15bdbed58c174e93049df3f46b79b98  785e8ef0f0936016ce9dd18f67cdcad1c15bdbed58c174e93049df3f46b79b98.ps.cso
+          6d4913fd080a783f1c08e78124884c491725c5e69dfe93846bc27a2a78ada298  6d4913fd080a783f1c08e78124884c491725c5e69dfe93846bc27a2a78ada298.ps.cso
+          SUMS
+          )
+
+      - name: Close exact Material argument to DXBC RDEF ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_seal6_lit_shader_abi_manifest_v1.py \
+            --shader-binary-report /tmp/input/native/T6_SEAL6_LIT_SHADER_BINARY_REPORT_V1.json \
+            --shader-dir /tmp/input/native/seal6_lit_dxbc \
+            --out /tmp/proof/T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json \
+            > /tmp/proof/abi_manifest.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json'))
+          assert d['summary']=={
+              'allMaterialArgumentsClosedToRdef': True,
+              'techniqueSetFamilies': 3,
+              'uniquePixelPrograms': 3,
+              'uniquePrograms': 5,
+              'uniqueVertexPrograms': 2,
+          }, d['summary']
+          print(json.dumps(d['summary'], indent=2, sort_keys=True))
+          PY
+
+      - name: Translate all five exact DXBC programs without semantic rewriting
+        shell: bash
+        run: |
+          set -euo pipefail
+          for src in /tmp/input/native/seal6_lit_dxbc/*.cso; do
+            name=$(basename "$src" .cso)
+            cp "$src" "/tmp/proof/shaders/${name}.dxbc"
+            vkd3d-compiler -x dxbc-tpf -b spirv-binary -o "/tmp/proof/shaders/${name}.spv" "$src"
+            spirv-val "/tmp/proof/shaders/${name}.spv"
+            spirv-dis --raw-id "/tmp/proof/shaders/${name}.spv" -o "/tmp/proof/shaders/${name}.spvasm"
+            spirv-cross "/tmp/proof/shaders/${name}.spv" --reflect > "/tmp/proof/reflection/${name}.json"
+            spirv-cross "/tmp/proof/shaders/${name}.spv" --version 450 --vulkan-semantics > "/tmp/proof/glsl/${name}.glsl"
+            PYTHONPATH=tools python3 tools/t6_dxbc_rdef_v1.py "$src" \
+              --spirv-reflection "/tmp/proof/reflection/${name}.json" \
+              --glsl "/tmp/proof/glsl/${name}.glsl" \
+              --out "/tmp/proof/rdef/${name}.json" >/dev/null
+          done
+          test "$(find /tmp/proof/shaders -name '*.spv' | wc -l)" -eq 5
+          test "$(find /tmp/proof/reflection -name '*.json' | wc -l)" -eq 5
+          test "$(find /tmp/proof/glsl -name '*.glsl' | wc -l)" -eq 5
+          test "$(find /tmp/proof/rdef -name '*.json' | wc -l)" -eq 5
+
+      - name: Build exact translated shader census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('/tmp/proof')
+          abi=json.load(open(root/'T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json'))
+          rows=[]
+          for dxbc in sorted((root/'shaders').glob('*.dxbc')):
+              stem=dxbc.stem
+              row={'stem':stem}
+              for ext in ('dxbc','spv','spvasm'):
+                  p=root/'shaders'/f'{stem}.{ext}'
+                  row[ext]={'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+              for group,ext in (('reflection','json'),('glsl','glsl'),('rdef','json')):
+                  p=root/group/f'{stem}.{ext}'
+                  row[group]={'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+              rdef=json.load(open(root/'rdef'/f'{stem}.json'))
+              row['usedConstants']=rdef.get('translatedSpirv',{}).get('usedConstants',[])
+              rows.append(row)
+          out={
+              'format':'t6-seal6-exact-lit-shader-ir-v1',
+              'proofBoundary':'Five exact SHA-pinned OAT-emitted SEAL6 ordinary-lit DXBC programs translated by vkd3d-compiler, validated by spirv-val, reflected/pretty-printed by SPIRV-Cross, then joined to original RDEF registers. No equation normalization or Blender lowering is asserted here.',
+              'sourceArtifact':{
+                  'id':10038097215,
+                  'digest':'sha256:32a07618a0174b1637a2bad1200e4d55f5e835e5806f1ffaa1f5fd71678dd9aa',
+                  'sourceRun':34178602640,
+                  'sourceCommit':'c4c92d12cbcb01ee8780c4b2acaec30d288036f3',
+              },
+              'abiSummary':abi['summary'],
+              'programs':rows,
+          }
+          (root/'T6_SEAL6_EXACT_LIT_SHADER_IR_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'programs':len(rows),'usedConstantRows':sum(len(r['usedConstants']) for r in rows)},indent=2))
+          PY
+          find /tmp/proof -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_SEAL6_EXACT_LIT_SHADER_IR_V1
+          path: /tmp/proof
+          if-no-files-found: error
