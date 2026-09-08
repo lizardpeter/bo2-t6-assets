@@ -25,7 +25,6 @@ import argparse
 import hashlib
 import json
 import shutil
-from collections import defaultdict
 from pathlib import Path
 
 from t6_layered_material_name_v1 import LayeredMaterialError, parse_layered_material_name
@@ -34,7 +33,9 @@ FORMAT = "t6-oat-material-root-union-v1"
 
 
 class UnionError(RuntimeError):
-    pass
+    def __init__(self, message: str, diagnostic: dict | None = None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
 
 
 def sha256(data: bytes) -> str:
@@ -189,6 +190,7 @@ def build(
     }
     doc = {
         "format": FORMAT,
+        "authoritative": not missing and not divergent,
         "summary": summary,
         "requiredSource": required_source,
         "roots": [
@@ -209,8 +211,15 @@ def build(
         if divergent:
             first = divergent[0]
             detail.append(f"divergent={len(divergent)} first={first['identity']!r} owners={first['owners']}")
-        raise UnionError("required Material union failed: " + "; ".join(detail))
+        raise UnionError("required Material union failed: " + "; ".join(detail), diagnostic=doc)
     return doc
+
+
+def write_manifest(path: Path, doc: dict) -> bytes:
+    payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    return payload
 
 
 def main() -> int:
@@ -238,13 +247,22 @@ def main() -> int:
 
     try:
         doc = build(roots, args.out_root, required, required_source)
-    except UnionError:
+    except UnionError as exc:
+        if exc.diagnostic is not None:
+            payload = write_manifest(args.manifest, exc.diagnostic)
+            failure = {
+                "manifest": str(args.manifest),
+                "bytes": len(payload),
+                "sha256": sha256(payload),
+                **exc.diagnostic["summary"],
+                "missing": exc.diagnostic["missing"],
+                "divergent": exc.diagnostic["divergent"],
+            }
+            print("MATERIAL_UNION_FAILURE " + json.dumps(failure, sort_keys=True))
         if args.out_root.exists():
             shutil.rmtree(args.out_root)
         raise
-    payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    args.manifest.parent.mkdir(parents=True, exist_ok=True)
-    args.manifest.write_bytes(payload)
+    payload = write_manifest(args.manifest, doc)
     print(json.dumps({"manifest": str(args.manifest), "bytes": len(payload), "sha256": sha256(payload), **doc["summary"]}, indent=2, sort_keys=True))
     return 0
 
