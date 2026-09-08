@@ -1,0 +1,179 @@
+name: T6 MP native WeaponCamo census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - .github/workflows/t6_mp_weapon_camo_native_census_v1.yml
+      - tools/t6_oat_9dca_gcc_compat_patch_v3.py
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build or verify pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat-unlinker-cache
+          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
+          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
+            test -x "$CACHE_BIN"
+            test -f "$CACHE_META"
+            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
+            grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
+            echo cache_hit=true | tee /tmp/proof/oat_cache.txt
+          else
+            echo cache_hit=false | tee /tmp/proof/oat_cache.txt
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+            test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
+            git -C /tmp/oat submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+            git -C /tmp/oat diff --check
+            cd /tmp/oat
+            PREMAKE_NO_PROMPT=1 ./generate.sh
+            make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            install -m 0755 "$BIN" "$CACHE_BIN"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > "$CACHE_META"
+          fi
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
+
+      - name: Save exact pinned OAT Unlinker cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Download SHA-pinned MP roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          curl -fL --retry 4 "$base/common_mp.ff" -o /tmp/game/zone/all/common_mp.ff
+          curl -fL --retry 4 "$base/common_patch_mp.ff" -o /tmp/game/zone/all/common_patch_mp.ff
+          curl -fL --retry 4 "$base/patch_mp.ff" -o /tmp/game/zone/all/patch_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/*.ff | sort | tee /tmp/proof/fastfile_sha256.txt
+
+      - name: Native OAT WeaponCamo dumps
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for zone in common_mp common_patch_mp patch_mp; do
+            out=/tmp/oat_out/$zone
+            mkdir -p "$out"
+            set +e
+            "$BIN" --no-color --verbose --include-assets weaponCamo --output-folder "$out" "/tmp/game/zone/all/$zone.ff" \
+              2>&1 | tee "/tmp/proof/${zone}_weapon_camo_dump.log"
+            rc=${PIPESTATUS[0]}
+            set -e
+            echo "$zone rc=$rc" | tee -a /tmp/proof/native_dump_return_codes.txt
+            test "$rc" -eq 0
+          done
+
+      - name: Validate exact native camo counts and preserve all physical copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import collections,hashlib,json
+
+          expected={'common_mp':47,'common_patch_mp':48,'patch_mp':1}
+          root=Path('/tmp/oat_out')
+          rows=[]; by_name=collections.defaultdict(list); zone_counts={}
+          for zone,want in expected.items():
+              zroot=root/zone
+              found=[]
+              for p in sorted(x for x in zroot.rglob('*') if x.is_file()):
+                  data=p.read_bytes()
+                  try: d=json.loads(data)
+                  except Exception: continue
+                  if d.get('_type')!='weaponCamo': continue
+                  if d.get('_game')!='t6' or d.get('_version')!=1:
+                      raise SystemExit(f'unexpected WeaponCamo JSON header: {p}')
+                  # OAT's output filename carries the native asset identity. Preserve
+                  # the relative path rather than guessing from inner texture names.
+                  rel=str(p.relative_to(zroot))
+                  name=p.stem
+                  row={
+                      'zone':zone,'path':rel,'assetNameFromOutputStem':name,
+                      'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),
+                      'solidBaseImage':d.get('solidBaseImage'),
+                      'patternBaseImage':d.get('patternBaseImage'),
+                      'camoSetCount':len(d.get('camoSets',[])),
+                      'camoMaterialSetCount':len(d.get('camoMaterials',[])),
+                  }
+                  rows.append(row); found.append(row); by_name[name].append(row)
+              zone_counts[zone]=len(found)
+              if len(found)!=want:
+                  raise SystemExit(f'{zone}: native WeaponCamo count {len(found)} != raw-XAsset canary {want}')
+
+          copies=[]
+          for name,items in sorted(by_name.items()):
+              copies.append({
+                  'assetName':name,
+                  'physicalCopyCount':len(items),
+                  'zones':[x['zone'] for x in items],
+                  'sha256s':[x['sha256'] for x in items],
+                  'byteIdenticalAcrossCopies':len({x['sha256'] for x in items})==1,
+              })
+          doc={
+              'format':'t6-mp-native-weapon-camo-census-v1',
+              'sourceFastFiles':{
+                  'common_mp.ff':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+                  'common_patch_mp.ff':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+                  'patch_mp.ff':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+              },
+              'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'summary':{
+                  'physicalCamoCopyCount':len(rows),
+                  'uniqueOutputStemCount':len(by_name),
+                  'zoneCounts':zone_counts,
+                  'duplicateNameCount':sum(1 for v in by_name.values() if len(v)>1),
+                  'divergentDuplicateNameCount':sum(1 for v in by_name.values() if len({x['sha256'] for x in v})>1),
+              },
+              'physicalCopies':rows,
+              'copyGroups':copies,
+              'proofBoundary':'The three native OAT WeaponCamo populations are count-checked against the independently source-derived raw XAsset census (47/48/1). Every physical copy is retained. Output stem is used only as OAT-emitted asset identity; runtime precedence between duplicate copies is not inferred. This is the MP base/patch canary before the complete 215-FastFile base+DLC census.',
+          }
+          out=Path('/tmp/proof/T6_MP_NATIVE_WEAPON_CAMO_CENSUS_V1.json')
+          out.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_MP_NATIVE_WEAPON_CAMO_CENSUS_V1.json | tee /tmp/proof/census_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_NATIVE_WEAPON_CAMO_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
