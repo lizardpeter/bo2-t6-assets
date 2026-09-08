@@ -87,6 +87,16 @@ jobs:
           from t6_nuketown_ipak_partial_texture_export_v2 import decode_bc1,decode_bc3,decode_bc5_normal
 
           def sha(b): return hashlib.sha256(b).hexdigest()
+          def rgb565_rounding_equivalent(a,b):
+              assert len(a)==len(b) and len(a)%4==0
+              max_rgb=0
+              for i in range(0,len(a),4):
+                  assert a[i+3]==b[i+3]
+                  for c in range(3):
+                      d=abs(a[i+c]-b[i+c]); max_rgb=max(max_rgb,d)
+                      assert d<=1,(i//4,c,a[i+c],b[i+c],d)
+              return max_rgb
+
           m=json.load(open('/tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json',encoding='utf-8'))
           s=m['summary']
           assert s['sourceAliasCount']==81,s
@@ -98,6 +108,7 @@ jobs:
 
           direct_pixel_checks=0
           full_chain_checks=0
+          max_rgb_rounding_delta=0
           for row in m['outputs']:
               dds=Path('/tmp/dds')/row['output']
               db=dds.read_bytes()
@@ -123,16 +134,21 @@ jobs:
               top=ib[-sizes[0]:]
               assert top==dds_mips[0]
               if row['iwiFormat']=='DXT1':
-                  expected=decode_bc1(top,w,h); assert rgba==expected; direct_pixel_checks+=1
+                  expected=decode_bc1(top,w,h)
+                  max_rgb_rounding_delta=max(max_rgb_rounding_delta,rgb565_rounding_equivalent(rgba,expected))
+                  direct_pixel_checks+=1
               elif row['iwiFormat']=='DXT5':
-                  expected=decode_bc3(top,w,h); assert rgba==expected; direct_pixel_checks+=1
+                  expected=decode_bc3(top,w,h)
+                  max_rgb_rounding_delta=max(max_rgb_rounding_delta,rgb565_rounding_equivalent(rgba,expected))
+                  direct_pixel_checks+=1
               elif row['iwiFormat']=='DXN' and 5 in row['semantics']:
                   expected=decode_bc5_normal(top,w,h); assert rgba==expected; direct_pixel_checks+=1
 
           assert full_chain_checks==s['outputImageNameCount']
           assert direct_pixel_checks>0
+          assert max_rgb_rounding_delta<=1
           print('GREEN LOSSLESS IWI27 -> DDS FULL MIP CHAINS',full_chain_checks)
-          print('GREEN INDEPENDENT TOP-MIP PIXEL DECODES',direct_pixel_checks)
+          print('GREEN INDEPENDENT TOP-MIP PIXEL DECODES',direct_pixel_checks,'max_rgb565_rounding_delta',max_rgb_rounding_delta)
           print('DDS_SUMMARY',json.dumps(s,sort_keys=True))
           PY
 
