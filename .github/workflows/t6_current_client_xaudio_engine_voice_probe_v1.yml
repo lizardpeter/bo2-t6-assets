@@ -1,0 +1,95 @@
+name: T6 current client XAudio2 engine voice probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_engine_voice_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace engine global and 128-entry voice loop
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_MEM,X86_OP_IMM
+          UA='bo2-t6-assets-xaudio-engine-voice-probe/1';INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          ENGINE=0x01016AF8; CALLBACK=0x010200D8
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
+          refs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in md.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0:continue
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM:vals.append(op.mem.disp&0xffffffff)
+                elif op.type==X86_OP_IMM:vals.append(op.imm&0xffffffff)
+              kinds=[]
+              if ENGINE in vals:kinds.append('engineGlobal')
+              if CALLBACK in vals:kinds.append('callbackObject')
+              if kinds:refs.append({'va':f'0x{ins.address:08X}','section':s['name'],'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'kinds':kinds})
+          # exact disassembly of the 128-entry function up to its int3/end neighborhood
+          START=0x00914C70;END=0x00915040;o=vaoff(START);rows=[];calls=[]
+          md2=Cs(CS_ARCH_X86,CS_MODE_32);md2.detail=True
+          for ins in md2.disasm(raw[o:o+(END-START)],START):
+            if ins.address>=END:break
+            r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str};rows.append(r)
+            if ins.mnemonic=='call':
+              target=None
+              if ins.operands and ins.operands[0].type==X86_OP_IMM:target=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+              calls.append({'va':r['va'],'target':target,'opStr':ins.op_str})
+          # Pull exact imported function name for any absolute indirect CALL encountered in trace.
+          import_by_iat={}
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports:
+              import_by_iat[i.address]={'dll':dll,'name':i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'}
+          indirect_imports=[]
+          for r in rows:
+            if r['mnemonic']!='call':continue
+            b=bytes.fromhex(r['bytes'])
+            if len(b)==6 and b[:2]==b'\xff\x15':
+              iat=struct.unpack('<I',b[2:])[0]
+              indirect_imports.append({'va':r['va'],'iatVa':f'0x{iat:08X}','import':import_by_iat.get(iat)})
+          result={'format':'t6-current-client-xaudio-engine-voice-probe-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'engineGlobalVa':f'0x{ENGINE:08X}','callbackObjectVa':f'0x{CALLBACK:08X}','engineCallbackRefs':refs,'voiceRuntimeRange':{'startVa':f'0x{START:08X}','endExclusiveVa':f'0x{END:08X}','bytes':END-START,'sha256':hashlib.sha256(raw[o:o+(END-START)]).hexdigest()},'voiceRuntimeDisasm':rows,'voiceRuntimeCalls':calls,'voiceRuntimeIndirectImports':indirect_imports,'proofBoundary':'Exact current-client machine evidence only. Interface method naming requires verified XAudio2 2.7 vtable slot order; no retail address equivalence.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_VOICE_PROBE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('ENGINE_REFS',json.dumps(refs,indent=2,sort_keys=True))
+          print('VOICE_RANGE_SHA',result['voiceRuntimeRange']['sha256'])
+          for r in rows:print(r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('IMPORTS',json.dumps(indirect_imports,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_VOICE_PROBE_V1.json
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_ENGINE_VOICE_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_VOICE_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
