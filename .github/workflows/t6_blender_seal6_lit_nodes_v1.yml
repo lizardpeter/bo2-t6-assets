@@ -6,6 +6,7 @@ on:
     branches:
       - reversal/seal6-material-closure
     paths:
+      - 'tools/t6_install_blender_5_2_1_linux_x64.sh'
       - 'tools/t6_seal6_blender_shader_plan_v1.py'
       - 'tools/test_t6_seal6_blender_shader_plan_v1.py'
       - 'tools/t6_blender_seal6_role_nodes_v1.py'
@@ -44,19 +45,15 @@ jobs:
           print(json.dumps(d['summary'],indent=2,sort_keys=True))
           PY
 
-      - name: Install Blender
+      - name: Install exact Blender 5.2.1 LTS runtime
         shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq blender >/dev/null
-          blender --version | head -3 | tee /tmp/blender_version.txt
+        run: bash tools/t6_install_blender_5_2_1_linux_x64.sh
 
-      - name: Compile exact SEAL6 material-local shader graphs
+      - name: Compile exact SEAL6 material-local shader graphs in Blender 5.2.1
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONPATH=tools blender --background \
+          PYTHONPATH=tools "$BLENDER" --background --factory-startup \
             --python tools/test_t6_blender_seal6_lit_nodes_v1.py \
             2>&1 | tee /tmp/blender_seal6_lit_nodes_v1_test.log
           grep -F 'T6_BLENDER_SEAL6_LIT_NODES_V1_TEST=' /tmp/blender_seal6_lit_nodes_v1_test.log
@@ -90,6 +87,5 @@ jobs:
             /tmp/T6_BLENDER_SEAL6_LIT_NODES_V1_TEST.blend
             /tmp/T6_BLENDER_SEAL6_LIT_NODES_V1_TEST.json
             /tmp/blender_seal6_lit_nodes_v1_test.log
-            /tmp/blender_version.txt
           if-no-files-found: error
           compression-level: 0
