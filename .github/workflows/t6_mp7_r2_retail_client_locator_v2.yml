@@ -1,0 +1,63 @@
+name: T6 MP7 R2 retail client locator v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - 'tools/t6_mp7_r2_retail_client_locator_v2.py'
+      - '.github/workflows/t6_mp7_r2_retail_client_locator_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile-check locator
+        run: python3 -m py_compile tools/t6_mp7_r2_retail_client_locator_v2.py
+
+      - name: Probe historical and current CDN client sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 tools/t6_mp7_r2_retail_client_locator_v2.py \
+            --out /tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V2.json \
+            | tee /tmp/proof/locator.log
+          sha256sum /tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V2.json | tee /tmp/proof/manifest_sha256.txt
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V2.json'
+          d=json.load(open(p,encoding='utf-8'))
+          print('authoritativeExactRetailLocated', d['authoritativeExactRetailLocated'])
+          print('exactRetailMatchCount', d['exactRetailMatchCount'])
+          print('currentTargetMatchCount', d['currentProductionCdn'].get('targetMatchCount'))
+          # A negative exact-retail result is a valid locator outcome.
+          PY
+
+      - name: Remove non-retail current client bytes before artifact upload
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/proof/t6mp.exe.current ]; then
+            ACTUAL="$(sha256sum /tmp/proof/t6mp.exe.current | awk '{print $1}')"
+            if [ "$ACTUAL" != '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1' ]; then
+              rm -f /tmp/proof/t6mp.exe.current
+            fi
+          fi
+
+      - name: Upload locator proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
