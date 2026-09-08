@@ -1,0 +1,100 @@
+{
+  "format": "t6-mp7-r2-viewmodel-binding-closure-v1",
+  "source": {
+    "commonMpFastFileSha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+    "expandedCommonMpBytes": 206493911,
+    "expandedCommonMpSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+  },
+  "animationNamespace": {
+    "fullTargetCount": 21,
+    "trackCountPerFullTarget": 76,
+    "uniqueBoneCount": 76,
+    "distinctBoneSets": 1,
+    "distinctSerializedTrackOrders": 13,
+    "bindingRule": "bind by ScriptString bone identity, never serialized XAnim track position"
+  },
+  "baseViewmodelSet": {
+    "models": [
+      {
+        "role": "viewHandsSkeletonCarrier",
+        "name": "viewmodel_hands_no_model",
+        "numBones": 70,
+        "numRootBones": 1,
+        "numSurfs": 1,
+        "numLods": 1,
+        "matchedAnimationBones": 66,
+        "xmodelSerializedSha256": "a05f82c26840a9071c94a2617e4c2cc28b48e089f2f87a841d88fbfbb486e888"
+      },
+      {
+        "role": "gunModel",
+        "name": "t6_wpn_smg_mp7_view",
+        "numBones": 11,
+        "numRootBones": 1,
+        "numSurfs": 8,
+        "numLods": 1,
+        "matchedAnimationBones": 7,
+        "xmodelSerializedSha256": "700fcb3a16c203163dc7d26d830675bc6ecf4b50a6fb0ae1df0ceff6e074924d"
+      },
+      {
+        "role": "attachViewModel7",
+        "name": "t6_attach_mag_mp7_view",
+        "numBones": 2,
+        "numRootBones": 1,
+        "numSurfs": 3,
+        "numLods": 1,
+        "matchedAnimationBones": 2,
+        "xmodelSerializedSha256": "bc40da8478e6728010dd8cd18dc0dc67c0adeff52061754852458ea02647bfd5"
+      }
+    ],
+    "matchedAnimationBoneCount": 75,
+    "animationBoneCount": 76,
+    "overlappingAnimationBoneOwners": 0,
+    "unmatchedAnimationBones": [
+      {"scriptStringId": 340, "name": "j_mms_flip"}
+    ],
+    "sourceAuthoredWeaponModels": ["t6_wpn_smg_mp7_view", "t6_attach_mag_mp7_view"],
+    "viewHandsCandidateLocator": "complete pinned-OAT current-R2 common_mp XModel census run 34261677938",
+    "viewHandsPromotionAuthority": "raw serialized XModel skeleton + ScriptString identity"
+  },
+  "optionalAttachmentSupport": {
+    "model": "t6_attach_optic_mms_view",
+    "candidateLocator": "complete pinned-OAT current-R2 common_mp XModel census run 34261677938",
+    "candidateLocatorIsAuthority": false,
+    "rawXmodelFixedStart": 18967030,
+    "numBones": 3,
+    "numRootBones": 1,
+    "numSurfs": 5,
+    "numLods": 1,
+    "boneNamesRawRange": [18967303, 18967309],
+    "boneScriptStringIds": [373, 340, 372],
+    "boneNames": ["tag_mms", "j_mms_flip", "tag_hud"],
+    "matchedSharedAnimationBones": [
+      {"scriptStringId": 340, "name": "j_mms_flip"}
+    ],
+    "sharedAnimationNamespaceCoverageWithMms": "76/76",
+    "equippedByBaseMp7Weapon": false,
+    "downstreamWholeXmodelBlocker": {
+      "kind": "inline_external_asset_reference_requires_xasset_dispatch",
+      "field": "XModel.materialHandles[0].Material.techniqueSet",
+      "assetType": "MaterialTechniqueSet",
+      "pointerRawHex": "0xFFFFFFFE"
+    }
+  },
+  "provenance": {
+    "baseBinding": {
+      "workflowRunId": 34261940935,
+      "workflowHeadSha": "93afef25f1ffff696813da31196915113b4d4f3e",
+      "generatedManifestSha256": "7e0237400cc3c7eb9262a694295de806f36ad5482789d5cb71e1dab8d1452519",
+      "artifactId": 10070224301,
+      "artifactDigestSha256": "e3f703762a59b8d7146d5bd0a2f2fa3533880c2b70242b2c191e2005444fbb8b"
+    },
+    "mmsResidual": {
+      "workflowRunId": 34262271628,
+      "workflowHeadSha": "baf41f7ec44f6755154290b188f0d4ac36b6cfce",
+      "generatedManifestSha256": "b5c1e2f7b91bd7d3d49f94ea86e0dedbfc3f7e6822cdcfebbea12fe7ffc67971",
+      "artifactId": 10070359851,
+      "artifactDigestSha256": "eb9c508c1a5eb9d072c31f7ddbfdb765e31cd05924c8567511f920a44a64e8f3"
+    }
+  },
+  "proofBoundary": "The 21 full MP7 XAnims share one exact 76-ScriptString bone set but serialize it in 13 track orders, so binding is by ScriptString identity. Fresh raw current-R2 XModels show that viewmodel_hands_no_model + the source-authored MP7 gun + source-authored MP7 magazine cover 75/76 animation bones without overlapping ownership. The sole residual j_mms_flip is present in the raw pre-material skeleton prefix of t6_attach_optic_mms_view, establishing that the shared XAnim rig contains optional MMS attachment support. This does not claim MMS is equipped by base mp7_mp. The downstream MMS Material/TechniqueSet INSERT remains unresolved for whole-XModel closure and is not crossed here. Visible faction-specific hand mesh selection and exact DObj model assembly/order remain separate export gates."
+}
