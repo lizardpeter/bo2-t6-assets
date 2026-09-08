@@ -74,26 +74,26 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          "$BLENDER" --background --factory-startup \
+          "$BLENDER" --background --factory-startup --python-use-system-env \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v3.py
 
       - name: Run v4 actual Blender vN DAG importer and adapter regression
         shell: bash
         run: |
           set -euxo pipefail
-          "$BLENDER" --background --factory-startup \
+          "$BLENDER" --background --factory-startup --python-use-system-env \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v4.py
 
       - name: Run v7 actual Blender layered-normal importer and adapter regression
         shell: bash
         run: |
           set -euxo pipefail
-          "$BLENDER" --background --factory-startup \
+          "$BLENDER" --background --factory-startup --python-use-system-env \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v7.py
 
       - name: Run v8 actual Blender directional-lightmap state regression
         shell: bash
         run: |
           set -euxo pipefail
-          "$BLENDER" --background --factory-startup \
+          "$BLENDER" --background --factory-startup --python-use-system-env \
             --python tools/test_t6_blender_generated_layer_preview_runtime_v8.py
