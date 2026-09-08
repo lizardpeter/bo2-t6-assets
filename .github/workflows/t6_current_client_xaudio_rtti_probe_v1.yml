@@ -1,0 +1,127 @@
+name: T6 current client XAudio2 RTTI probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_rtti_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover XAudio2 callback vtables and methods
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM
+
+          UA='bo2-t6-assets-current-xaudio-rtti-probe/1'
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(url,timeout=180):
+            req=urllib.request.Request(url,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=timeout) as r: return r.read()
+          info=json.loads(get(INFO,60).decode())
+          rec=[f for f in info['files'] if f['name'].replace('\\','/').lower()=='games/t6mp.exe']
+          if len(rec)!=1: raise RuntimeError(f't6mp entries {len(rec)}')
+          rec=rec[0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower(): raise RuntimeError('SHA1 mismatch')
+          if raw[:2]!=b'MZ': raise RuntimeError('not MZ')
+
+          peoff=struct.unpack_from('<I',raw,0x3c)[0]; coff=peoff+4
+          machine,nsects,_,_,_,optsz,_=struct.unpack_from('<HHIIIHH',raw,coff)
+          opt=coff+20; imagebase=struct.unpack_from('<I',raw,opt+28)[0]
+          sections=[]; st=opt+optsz
+          for i in range(nsects):
+            o=st+i*40
+            name=raw[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+            vs,rva,rs,ro=struct.unpack_from('<IIII',raw,o+8)
+            chars=struct.unpack_from('<I',raw,o+36)[0]
+            sections.append({'name':name,'rva':rva,'va':imagebase+rva,'virtualSize':vs,'rawSize':rs,'rawOffset':ro,'executable':bool(chars&0x20000000)})
+          def off_to_va(off):
+            for s in sections:
+              if s['rawOffset']<=off<s['rawOffset']+s['rawSize']:
+                return s['va']+(off-s['rawOffset'])
+            raise KeyError(off)
+          def va_to_off(va):
+            for s in sections:
+              if s['va']<=va<s['va']+s['rawSize']:
+                return s['rawOffset']+(va-s['va'])
+            raise KeyError(hex(va))
+          def executable_va(va):
+            return any(s['executable'] and s['va']<=va<s['va']+max(s['virtualSize'],s['rawSize']) for s in sections)
+          def find_all(needle):
+            out=[]; p=0
+            while True:
+              p=raw.find(needle,p)
+              if p<0:return out
+              out.append(p);p+=1
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          def disasm(va,n=192):
+            try: off=va_to_off(va)
+            except KeyError:return []
+            rows=[]
+            for ins in md.disasm(raw[off:off+n],va):
+              calls=[]
+              if ins.mnemonic=='call' and ins.operands and ins.operands[0].type==X86_OP_IMM:
+                calls.append(ins.operands[0].imm & 0xffffffff)
+              rows.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'directCalls':[f'0x{x:08X}' for x in calls]})
+              if ins.mnemonic=='ret': break
+            return rows
+
+          target_names=[b'.?AVSD_XAudio2Callbacks@@',b'.?AUIXAudio2VoiceCallback@@',b'.?AUIXAudio2EngineCallback@@']
+          types=[]
+          for name in target_names:
+            noffs=find_all(name+b'\0') or find_all(name)
+            for noff in noffs:
+              td_off=noff-8; td_va=off_to_va(td_off)
+              ptr=struct.pack('<I',td_va)
+              col_refs=[]
+              for hit in find_all(ptr):
+                if hit<12: continue
+                col_off=hit-12
+                try:
+                  sig,offset,cd,ptd,pchd=struct.unpack_from('<IIIII',raw,col_off)
+                  col_va=off_to_va(col_off)
+                except Exception: continue
+                if ptd!=td_va or sig not in (0,1): continue
+                vt_refs=[]
+                for ref in find_all(struct.pack('<I',col_va)):
+                  vt_off=ref+4
+                  entries=[]
+                  for j in range(24):
+                    if vt_off+4*j+4>len(raw): break
+                    fn=struct.unpack_from('<I',raw,vt_off+4*j)[0]
+                    if not executable_va(fn): break
+                    entries.append({'slot':j,'va':f'0x{fn:08X}','disasm':disasm(fn)})
+                  if entries:
+                    vt_refs.append({'locatorPointerFileOffset':ref,'vtableFileOffset':vt_off,'vtableVa':f'0x{off_to_va(vt_off):08X}','entries':entries})
+                if vt_refs:
+                  col_refs.append({'completeObjectLocatorFileOffset':col_off,'completeObjectLocatorVa':f'0x{col_va:08X}','signature':sig,'offset':offset,'cdOffset':cd,'classHierarchyDescriptor':f'0x{pchd:08X}','vtables':vt_refs})
+              types.append({'name':name.decode(),'nameFileOffset':noff,'typeDescriptorFileOffset':td_off,'typeDescriptorVa':f'0x{td_va:08X}','completeObjectLocators':col_refs})
+          result={'format':'t6-current-client-xaudio-rtti-probe-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest(),'imageBase':f'0x{imagebase:08X}'},'types':types,'proofBoundary':'RTTI/vtable recovery is exact for this current Plutonium client object only; it does not establish pinned-retail identity or address equivalence.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_RTTI_PROBE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          summary={}
+          for t in types:
+            summary[t['name']]=[{'col':c['completeObjectLocatorVa'],'vtables':[{'va':v['vtableVa'],'entries':[e['va'] for e in v['entries']]} for v in c['vtables']]} for c in t['completeObjectLocators']]
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_RTTI_PROBE_V1.json
+      - name: Upload RTTI proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_RTTI_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_RTTI_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
