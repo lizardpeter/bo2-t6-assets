@@ -1,0 +1,129 @@
+name: T6 current client XAudio2 COM GUID probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_com_guid_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace XAudio2 CLSID IID and CoCreateInstance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,collections
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_MEM,X86_OP_IMM
+
+          UA='bo2-t6-assets-xaudio-com-guid-probe/1'; INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode()); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('client sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase
+          sections=[]
+          for s in pe.sections:
+            sections.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'rawOffset':s.PointerToRawData,'rawSize':s.SizeOfRawData,'virtualSize':s.Misc_VirtualSize,'exec':bool(s.Characteristics&0x20000000)})
+          def offva(off):
+            for s in sections:
+              if s['rawOffset']<=off<s['rawOffset']+s['rawSize']:return s['va']+(off-s['rawOffset'])
+            return None
+          def findall(needle):
+            out=[];p=0
+            while True:
+              p=raw.find(needle,p)
+              if p<0:return out
+              out.append(p);p+=1
+          # XAudio2 2.7 GUIDs, serialized as Windows GUID memory layout.
+          guids={
+            'CLSID_XAudio2_2_7': bytes.fromhex('8586505a54a2ba4f9b829a24b00306af'),
+            'IID_IXAudio2_2_7': bytes.fromhex('581fcf8be79f83458ac6e2adc465c8bb'),
+          }
+          guid_locs={}
+          for name,b in guids.items():
+            locs=[]
+            for off in findall(b):
+              va=offva(off);locs.append({'fileOffset':off,'va':f'0x{va:08X}' if va is not None else None,'section':next((s['name'] for s in sections if s['rawOffset']<=off<s['rawOffset']+s['rawSize']),None)})
+            guid_locs[name]=locs
+          # imports of CoCreateInstance and CoInitialize variants
+          imports=[]
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports:
+              n=i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'
+              if n.lower() in ('cocreateinstance','coinitialize','coinitializeex','couninitialize'):
+                imports.append({'dll':dll,'name':n,'iatVa':i.address})
+          wanted_iat={x['iatVa']:x for x in imports}
+          wanted_guid={int(x['va'],16):(name,x) for name,locs in guid_locs.items() for x in locs if x['va']}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
+          hits=[]
+          # Full executable scan, preserving only relevant instructions.
+          for sec in sections:
+            if not sec['exec']:continue
+            for ins in md.disasm(raw[sec['rawOffset']:sec['rawOffset']+sec['rawSize']],sec['va']):
+              vals=[]
+              if ins.id!=0:
+                for op in ins.operands:
+                  if op.type==X86_OP_MEM: vals.append(op.mem.disp&0xffffffff)
+                  elif op.type==X86_OP_IMM: vals.append(op.imm&0xffffffff)
+              refs=[]
+              for v in vals:
+                if v in wanted_iat: refs.append({'kind':'iat','target':wanted_iat[v]})
+                if v in wanted_guid:
+                  gn,gl=wanted_guid[v];refs.append({'kind':'guid','name':gn,'target':gl})
+              if refs:hits.append({'instructionVa':f'0x{ins.address:08X}','section':sec['name'],'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'refs':refs})
+          # Raw indirect-call patterns are an independent check for CoCreateInstance.
+          raw_call_patterns=[]
+          for imp in imports:
+            if imp['name'].lower()!='cocreateinstance':continue
+            for op in (b'\xff\x15',b'\xff\x25'):
+              pat=op+struct.pack('<I',imp['iatVa'])
+              for off in findall(pat):
+                raw_call_patterns.append({'opcode':op.hex(),'fileOffset':off,'va':f'0x{offva(off):08X}' if offva(off) is not None else None,'iatVa':f"0x{imp['iatVa']:08X}"})
+          # Exact neighborhoods around each relevant VA, aligned by searching backward starts and choosing a decode that lands exactly on hit.
+          def neighborhood(target_va):
+            sec=next((s for s in sections if s['exec'] and s['va']<=target_va<s['va']+s['rawSize']),None)
+            if not sec:return []
+            target_off=sec['rawOffset']+(target_va-sec['va'])
+            best=[]
+            for back in range(0,97):
+              so=target_off-back; sva=target_va-back
+              if so<sec['rawOffset']:break
+              rows=[];land=False
+              for ins in md.disasm(raw[so:min(so+256,sec['rawOffset']+sec['rawSize'])],sva):
+                if ins.address==target_va:land=True
+                if ins.address>target_va+96:break
+                if ins.id!=0:rows.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+              if land:
+                best=rows;break
+            return best
+          neighborhoods=[]
+          for h in hits:
+            va=int(h['instructionVa'],16)
+            neighborhoods.append({'hit':h,'disasm':neighborhood(va)})
+          result={'format':'t6-current-client-xaudio-com-guid-probe-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest(),'imageBase':f'0x{base:08X}'},'guidLocations':guid_locs,'comImports':imports,'relevantInstructionHits':hits,'rawIndirectCallPatterns':raw_call_patterns,'neighborhoods':neighborhoods,'proofBoundary':'Exact current-client GUID/import/machine-reference evidence only. The GUID identities are XAudio2 2.7 constants; no retail-binary equivalence is inferred.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_COM_GUID_PROBE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'guidLocations':guid_locs,'comImports':imports,'hitCount':len(hits),'hits':hits,'rawIndirectCallPatterns':raw_call_patterns},indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_COM_GUID_PROBE_V1.json
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_COM_GUID_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_COM_GUID_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
