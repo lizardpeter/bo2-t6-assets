@@ -90,7 +90,17 @@ def inspect(path: Path) -> dict:
     # by the retained top-mip extraction rule EOF-topMipBytes.
     deltas = [a - b for a, b in zip(nonzero, nonzero[1:])]
     candidate_a_compared = min(len(deltas), len(expected))
-    candidate_a = all(deltas[i] == expected[i] for i in range(candidate_a_compared))
+    candidate_a_mismatches = [
+        {
+            "deltaIndex": i,
+            "actualBytes": deltas[i],
+            "expectedBytes": expected[i],
+            "difference": deltas[i] - expected[i],
+        }
+        for i in range(candidate_a_compared)
+        if deltas[i] != expected[i]
+    ]
+    candidate_a = not candidate_a_mismatches
 
     # Candidate B is the same serialized boundaries but maps the observed
     # deltas to smallest->largest mip sizes.  Keeping it explicit prevents the
@@ -124,7 +134,23 @@ def inspect(path: Path) -> dict:
         "sizeWord1EqualsTopMipArithmeticStart": top_boundary_word == top_start_arithmetic,
         "candidateA_LargestToSmallestBoundaryDeltas": candidate_a,
         "candidateAComparedDeltaCount": candidate_a_compared,
+        "candidateAMismatches": candidate_a_mismatches,
         "candidateB_SmallestToLargestBoundaryDeltas": candidate_b,
+    }
+
+
+def _failure_record(row: dict) -> dict:
+    return {
+        "file": row["file"],
+        "format": row["format"],
+        "flags": row["flags"],
+        "width": row["width"],
+        "height": row["height"],
+        "depth": row["depth"],
+        "sizeWords": row["sizeWords"],
+        "boundaryDeltas": row["boundaryDeltas"],
+        "expectedMipBytesLargestToSmallest": row["expectedMipBytesLargestToSmallest"],
+        "candidateAMismatches": row["candidateAMismatches"],
     }
 
 
@@ -138,6 +164,7 @@ def build(root: Path) -> dict:
     a = sum(bool(row["candidateA_LargestToSmallestBoundaryDeltas"]) for row in rows)
     b = sum(bool(row["candidateB_SmallestToLargestBoundaryDeltas"]) for row in rows)
     top = sum(bool(row["sizeWord1EqualsTopMipArithmeticStart"]) for row in rows)
+    a_failures = [_failure_record(row) for row in rows if not row["candidateA_LargestToSmallestBoundaryDeltas"]]
     return {
         "format": FORMAT,
         "root": str(root),
@@ -146,12 +173,14 @@ def build(root: Path) -> dict:
             "formatCounts": dict(sorted(formats.items())),
             "nonzeroSizeWordCounts": {str(k): v for k, v in sorted(nonzero_counts.items())},
             "candidateAFullFitCount": a,
+            "candidateAFailureCount": len(a_failures),
             "candidateBFullFitCount": b,
             "sizeWord1TopBoundaryFitCount": top,
             "allCandidateA": a == len(rows),
             "allCandidateB": b == len(rows),
             "allSizeWord1TopBoundary": top == len(rows),
         },
+        "candidateAFailures": a_failures,
         "rows": rows,
         "proofBoundary": (
             "Header-only empirical classification. No image-name inference, no pixel decode, "
@@ -170,6 +199,8 @@ def main() -> int:
     payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
     args.out.write_bytes(payload)
     print(json.dumps({"out": str(args.out), "bytes": len(payload), "sha256": sha256(payload), **doc["summary"]}, indent=2, sort_keys=True))
+    if doc["candidateAFailures"]:
+        print("CANDIDATE_A_FAILURES", json.dumps(doc["candidateAFailures"], sort_keys=True))
     return 0
 
 
