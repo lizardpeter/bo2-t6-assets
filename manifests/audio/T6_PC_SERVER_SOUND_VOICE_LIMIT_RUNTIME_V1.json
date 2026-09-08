@@ -1,0 +1,130 @@
+{
+  "authority": "exact PC dedicated-server build only",
+  "closedFacts": {
+    "entityAliasLimitTypesClosed": true,
+    "generalAliasLimitTypesClosed": true,
+    "oldestReplacementClosed": true,
+    "priorityReplacementClosed": true,
+    "ramVsStreamVoicePoolSelectionClosed": true,
+    "specialVolumeGroupExclusivityClosed": true,
+    "voiceLimitEntityReplacementClosed": true
+  },
+  "exactFunctionRanges": {
+    "SND_FindFreeVoice": {
+      "bytes": 272,
+      "endVaExclusive": "0x008B2680",
+      "sha256": "8b253b8d2c0ff7e2c4a9944d8c8854b413e163511db7aefc65d3b15303b20f15",
+      "startVa": "0x008B2570"
+    },
+    "SND_GetPlayingInfo": {
+      "bytes": 624,
+      "endVaExclusive": "0x008AD1B0",
+      "sha256": "909e2686c849f26ff2707bd6beb3cf59b5be8a84ffe10a5c38cbeff25f011602",
+      "startVa": "0x008ACF40"
+    },
+    "SND_Limit": {
+      "bytes": 208,
+      "endVaExclusive": "0x008B2750",
+      "sha256": "f1b33defa4519809ce91c90937b1498f94eb72cc823e28cc5445f97834937a6e",
+      "startVa": "0x008B2680"
+    },
+    "SND_LimitVoice": {
+      "bytes": 256,
+      "endVaExclusive": "0x008B2850",
+      "sha256": "76acc81aad1550b1ed29c3bf75912615e1ce0a2e446560276f9a81fa1201d795",
+      "startVa": "0x008B2750"
+    },
+    "Snd_GetGlobalPriorityVolume": {
+      "bytes": 304,
+      "endVaExclusive": "0x008AC770",
+      "sha256": "a0edfb93192d6c4f14f0990773ebd8ceb0819d64b9e60b65dd7e90cf07dbdf1e",
+      "startVa": "0x008AC640"
+    },
+    "Snd_GetLowestPriority": {
+      "bytes": 352,
+      "endVaExclusive": "0x008AC8D0",
+      "sha256": "eed4a0828be56265c980507d7afa878464c23f872b59d5a816e05d2e9b4d1777",
+      "startVa": "0x008AC770"
+    }
+  },
+  "findFreeVoice": {
+    "failure": "returns -1 when no free slot exists and the priority-steal gate is not satisfied",
+    "freeSlot": "returns the first selected-pool index whose g_snd.voiceAliasHash slot is zero",
+    "fullPool": "Snd_GetLowestPriority returns the lowest globalPriority and its channel over that pool",
+    "incomingPriority": "Snd_GetGlobalPriority(alias, Snd_GetGlobalPriorityVolume(alias, startInfo+0x08, -1))",
+    "poolSelection": {
+      "SA_LOADED": "voice indices begin at 10; count = Dvar_GetInt(snd_max_ram_voice)",
+      "allOtherLoadTypeValues": "voice indices begin at 0; count = Dvar_GetInt(snd_max_stream_voice)"
+    },
+    "stealAction": "SND_StopVoice(candidate); exact code asserts the candidate voiceAliasHash slot became zero; return candidate channel",
+    "stealRule": "steal only when incomingPriority > lowestExistingGlobalPriority + Dvar_GetFloat(snd_playing_priority_boost)"
+  },
+  "format": "t6-pc-server-sound-voice-limit-runtime-proof-v1",
+  "generalAndEntityLimits": {
+    "callBindingFromSND_PlaySoundAlias": [
+      "general limit: aliasId(+0x04), limitCount(+0x5D), flags0.limitType(bits25-26), useEnt=false, computed global priority",
+      "entity limit: aliasId(+0x04), entityLimitCount(+0x5E), flags0.entityLimitType(bits27-28), useEnt=true, same SndEntHandle, computed global priority"
+    ],
+    "playingInfo": "SND_GetPlayingInfo(aliasHash,&count,&oldest,&least,&isMultiple,ent,useEnt) scans active matching alias hashes; when useEnt is true it applies the exact entity predicate. `oldest` is selected by the minimum exact voice +0x24 integer; `least` is selected by the minimum exact voice globalPriority at +0xE4.",
+    "rules": {
+      "NONE": "allow immediately; no playing-info census or eviction",
+      "OLDEST": "at/over limit stops the returned oldest channel when nonnegative, then allows; if no oldest channel is returned, allows",
+      "PRIORITY": "at/over limit requires a nonnegative least-priority channel and incomingPriority > existing.globalPriority + snd_playing_priority_boost; on success stops that channel and allows, otherwise rejects",
+      "REJECT": "at/over limit rejects",
+      "commonPreGate": "after SND_GetPlayingInfo, isMultiple==true rejects; count < limitCount allows"
+    },
+    "serverDvar": "snd_playing_priority_boost @ 0x0798749C"
+  },
+  "layout": {
+    "SndAliasBytes": 96,
+    "SndAssetLoadType": {
+      "SA_LOADED": 1,
+      "SA_PRIMED": 3,
+      "SA_STREAMED": 2,
+      "SA_UNKNOWN": 0
+    },
+    "SndLimitType": {
+      "SND_LIMIT_NONE": 0,
+      "SND_LIMIT_OLDEST": 1,
+      "SND_LIMIT_PRIORITY": 3,
+      "SND_LIMIT_REJECT": 2
+    },
+    "aliasIdOffset": "0x04",
+    "entityLimitCountOffset": "0x5E",
+    "flags0": {
+      "entityLimitTypeBits": [27, 28],
+      "limitTypeBits": [25, 26],
+      "loadTypeBits": [15, 16],
+      "voiceLimitBit": 9,
+      "volumeGroupBits": [17, 21]
+    },
+    "flags0Offset": "0x18",
+    "limitCountOffset": "0x5D",
+    "sourceNaming": "Pinned OpenAssetTools T6_Assets.h @ 9dca965366541504b71fa8cfb7ac049cb9b717e1; runtime behavior is taken only from the exact server machine code."
+  },
+  "notYetEstablished": [
+    "PDB/source member name for g_snd+0x158",
+    "PDB/source member name for SndVoice+0x24 although the exact oldest-selection offset is closed",
+    "full semantic name of the SND_GetPlayingInfo isMultiple internal predicate beyond its exact machine-code predicate",
+    "retail t6mp.exe equivalence"
+  ],
+  "proofBoundary": "Every runtime branch above is tied to exact SHA-pinned PC dedicated-server machine-code ranges and exact MAP symbols. T6 field/enum names are imported only where independently declared by pinned T6 asset/source layouts. Unnamed runtime members remain numeric. This does not authorize retail-client behavior.",
+  "source": {
+    "exe": {
+      "bytes": 13711872,
+      "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"
+    },
+    "imageBase": "0x00400000",
+    "map": {
+      "bytes": 9213148,
+      "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+    },
+    "generatedBy": "tools/t6_pc_server_sound_voice_limit_runtime_proof_v1.py",
+    "localGeneratedJsonSha256": "d5c0a28f1dc87e7f23f483078e9b9a5b24982e10d08a13d9d6d9470de9c640a5"
+  },
+  "voiceLimitAndVolumeGroup": {
+    "unnamedGlobal": "The PDB/source member name for g_snd+0x158 is intentionally not assigned here; only its exact address/offset and comparison behavior are promoted.",
+    "voiceLimit": "If incoming alias flags0.voiceLimit bit9 is set, SND_LimitVoice scans all 68 active voices with the same SndEntHandle; any existing alias whose voiceLimit bit9 is also set is stopped via SND_StopVoice before the new attempt continues.",
+    "volumeGroup": "Incoming alias flags0.volumeGroup (bits17-21) is compared with exact g_snd+0x158. If unequal, this gate allows. If equal, any active voice whose alias has the same volumeGroup causes rejection; if none exists, it allows."
+  }
+}
