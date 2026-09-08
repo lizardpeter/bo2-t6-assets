@@ -1,0 +1,106 @@
+{
+  "authority": {
+    "pcDedicatedServerBuild": true,
+    "retailT6mpClient": false,
+    "state": "exact-pc-dedicated-server-proof-including-code-post-gfx-mp-client-promotion-blocked"
+  },
+  "baseProof": {
+    "path": "manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V1.json",
+    "checkpoint": "checkpoints/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V1_2026-09-07.md",
+    "meaning": "The v1 proof byte-gates XZoneInfo flag propagation, DB_GetZonePriority, DB_OverrideAsset, DB_LinkXAssetEntry replacement, common_mp, patch_mp, and ordinary built-in MP-map rows."
+  },
+  "codePostGfxMpEvidence": {
+    "baseString": "code_post_gfx",
+    "baseStringVaHex": "0x00bd435c",
+    "codeFastFileGlobalVaHex": "0x017f6404",
+    "resolvedMpName": "code_post_gfx_mp",
+    "instructionEvidence": [
+      {
+        "bytes": 17,
+        "bytesHex": "6a18685c43bd006804647f01e86ec52300",
+        "label": "CODE_FAST_FILE_NAME <- 'code_post_gfx' base",
+        "vaHex": "0x00551a51"
+      },
+      {
+        "bytes": 17,
+        "bytesHex": "685c4035016a186804647f01e806c92300",
+        "label": "append mode-selected _mp/_zm suffix to CODE_FAST_FILE_NAME",
+        "vaHex": "0x00551bf9"
+      },
+      {
+        "bytes": 28,
+        "bytesHex": "c745d854458f01c745dc02000000c745e404647f01c745e808000000",
+        "label": "DB_LoadGraphicsAssetsForPC rows: patch_mp allocFlags=0x02; code_post_gfx_mp allocFlags=0x08",
+        "vaHex": "0x005571b3"
+      },
+      {
+        "bytes": 18,
+        "bytesHex": "4883f81f0f87440100000fb680f0035500ff",
+        "label": "DB_GetZonePriority low-flag indexed dispatch",
+        "vaHex": "0x0055024e"
+      },
+      {
+        "bytes": 28,
+        "bytesHex": "74025500890255006d0255007b02550066025500820255009c035500",
+        "label": "DB_GetZonePriority low-flag jump table",
+        "vaHex": "0x005503d4"
+      },
+      {
+        "bytes": 32,
+        "bytesHex": "0001060206060603060606060606060406060606060606060606060606060605",
+        "label": "DB_GetZonePriority low-flag index table; flag 0x08 uses entry index 7 -> selector 3",
+        "vaHex": "0x005503f0"
+      },
+      {
+        "bytes": 7,
+        "bytesHex": "b8340000005dc3",
+        "label": "selected low-flag return target -> priority 52",
+        "vaHex": "0x0055027b"
+      }
+    ],
+    "priorityDerivation": "DB_GetZonePriority receives flag 0x08; the function decrements it to table index 7; index-table byte 3 selects jump-table target 0x0055027b; that target returns 0x34 = 52."
+  },
+  "format": "t6-pc-server-xasset-override-proof-v2",
+  "mpFlags": {
+    "code_post_gfx_mp": {
+      "allocFlagsHex": "0x00000008",
+      "priority": 52
+    },
+    "common_mp": {
+      "allocFlagsHex": "0x00000080",
+      "priority": 54
+    },
+    "ordinaryBuiltInMpMap": {
+      "allocFlagsHex": "0x00008000",
+      "example": "mp_nuketown_2020",
+      "priority": 57
+    },
+    "patch_mp": {
+      "allocFlagsHex": "0x00000002",
+      "priority": 65
+    }
+  },
+  "overrideRule": {
+    "codePostGfxVsPatchServerPrediction": "patch_mp",
+    "comparison": "newPriority >= existingPriority",
+    "exactServerPriorityOrder": [
+      "patch_mp:65",
+      "ordinaryBuiltInMpMap:57",
+      "common_mp:54",
+      "code_post_gfx_mp:52"
+    ],
+    "ordinaryDuplicateReplacement": "The byte-gated v1 DB_LinkXAssetEntry proof establishes that a true override result swaps the winning payload and zoneIndex into the stable primary XAssetEntry.",
+    "storedFlagMaskHex": "0x3fffffff"
+  },
+  "pcDedicatedServer": {
+    "exeBytes": 13711872,
+    "exeFile": "CoDMPServer_PC.exe",
+    "exeSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "imageBaseHex": "0x00400000",
+    "mapBytes": 9213148,
+    "mapFile": "CoDMPServer_PC.map.bin",
+    "mapSha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+  },
+  "proofBoundary": "Authoritative only for the exact SHA-pinned T6 PC dedicated-server build. The v1 byte-gated proof closes the ordinary duplicate-XAsset algorithm and the common/map/patch rows; this v2 extension byte-gates the code_post_gfx base construction, _mp suffix append, code FastFile row allocFlags=0x08, and the exact DB_GetZonePriority low-flag dispatch returning priority 52. It does not prove identical flags, priorities, function bytes, or duplicate selection in the retail t6mp.exe client. No production retail-client Material/Technique winner may be selected from this server proof alone.",
+  "verifier": "tools/t6_pc_server_xasset_override_proof_v2.py"
+}
