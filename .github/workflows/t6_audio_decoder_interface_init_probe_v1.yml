@@ -1,0 +1,162 @@
+name: T6 audio decoder interface init probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_decoder_interface_init_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact active references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Scan exact decoder interface xrefs and codec symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, json, re, struct
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_OP_IMM, CS_OP_MEM
+
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mt=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii', errors='strict')
+          BASE=0x00400000
+          pe=struct.unpack_from('<I',exe,0x3c)[0]
+          coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          sections=[]
+          st=opt+osz
+          for i in range(ns):
+              o=st+i*40
+              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8)
+              sections.append({'name':name,'base':BASE+rva,'virtualSize':vs,'rawSize':rs,'rawOffset':ro})
+          text=next(s for s in sections if s['name']=='.text')
+
+          # Public MAP symbols by exact VA; nearest preceding symbol gives a conservative owner label.
+          syms=[]
+          for ln in mt.splitlines():
+              m=re.search(r'\b([0-9A-Fa-f]{8})\b(?:\s+f)?\s+([^\s]+\.obj)\s*$',ln)
+              if m:
+                  va=int(m.group(1),16)
+                  if text['base'] <= va < text['base']+text['rawSize']:
+                      syms.append((va,ln.strip()))
+          syms=sorted(set(syms))
+          sym_vas=[x[0] for x in syms]
+          def owner(va):
+              i=bisect.bisect_right(sym_vas,va)-1
+              return syms[i][1] if i>=0 else None
+
+          def interesting_value(v):
+              return (0x00DE2510 <= v < 0x00DE2700) or (0x00DE3054 <= v < 0x00DE4C74)
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          code=exe[text['rawOffset']:text['rawOffset']+text['rawSize']]
+          xrefs=[]
+          for ins in md.disasm(code,text['base']):
+              vals=[]
+              for op in ins.operands:
+                  if op.type==CS_OP_IMM:
+                      vals.append(op.imm & 0xffffffff)
+                  elif op.type==CS_OP_MEM:
+                      vals.append(op.mem.disp & 0xffffffff)
+              hits=sorted(set(v for v in vals if interesting_value(v)))
+              if hits:
+                  rec={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'hits':[f'0x{x:08X}' for x in hits],'owner':owner(ins.address)}
+                  xrefs.append(rec)
+                  print(json.dumps(rec,sort_keys=True))
+          Path('/tmp/probe/decoder_interface_xrefs.json').write_text(json.dumps(xrefs,indent=2)+'\n')
+
+          print('=== MAP CODEC / DECODER SYMBOL CENSUS ===')
+          terms=('pcm','flac','decoder','vorbis','mp3','xma','adpcm','codec','stream')
+          map_hits=[]
+          for ln in mt.splitlines():
+              low=ln.lower()
+              if any(t in low for t in terms) and ('.obj' in low or ' 00' in low):
+                  map_hits.append(ln.rstrip())
+          for ln in map_hits:
+              print(ln)
+          Path('/tmp/probe/map_codec_symbols.txt').write_text('\n'.join(map_hits)+'\n')
+
+          print('=== ASCII CODEC / DECODER STRINGS ===')
+          # Extract printable NUL-terminated strings and report only sound/codec-relevant hits.
+          string_hits=[]
+          for m in re.finditer(rb'[ -~]{4,}\x00',exe):
+              s=m.group(0)[:-1].decode('ascii','replace')
+              low=s.lower()
+              if any(t in low for t in ('pcm','flac','vorbis','mp3','decoder','adpcm','codec')):
+                  # Resolve raw offset back to VA if possible.
+                  va=None
+                  for sec in sections:
+                      ro=sec['rawOffset']; rs=sec['rawSize']
+                      if ro <= m.start() < ro+rs:
+                          va=sec['base']+(m.start()-ro); break
+                  rec={'va':f'0x{va:08X}' if va is not None else None,'string':s}
+                  string_hits.append(rec)
+                  print(json.dumps(rec,sort_keys=True))
+          Path('/tmp/probe/codec_strings.json').write_text(json.dumps(string_hits,indent=2)+'\n')
+
+          print('=== DECODER GLOBAL REGION RAW-BACKING ===')
+          globals_report=[]
+          for address in (0x00DE2510,0x00DE2514,0x00DE2538,0x00DE2698,0x00DE26F8,0x00DE3054,0x00DE3E64,0x00DE4C74):
+              found=None
+              for sec in sections:
+                  if sec['base'] <= address < sec['base']+sec['virtualSize']:
+                      delta=address-sec['base']
+                      raw_backed=delta < sec['rawSize']
+                      value=None
+                      if raw_backed and delta+4 <= sec['rawSize']:
+                          value=struct.unpack_from('<I',exe,sec['rawOffset']+delta)[0]
+                      found={'address':f'0x{address:08X}','section':sec['name'],'rawBacked':raw_backed,'rawDword':f'0x{value:08X}' if value is not None else None}
+                      break
+              globals_report.append(found or {'address':f'0x{address:08X}','section':None,'rawBacked':False,'rawDword':None})
+          print(json.dumps(globals_report,indent=2))
+          Path('/tmp/probe/global_region.json').write_text(json.dumps(globals_report,indent=2)+'\n')
+
+          # Also report xrefs separately for the two Create slots and pool bases.
+          targets={
+              'format0Create':'0x00DE2538',
+              'format8Create':'0x00DE2698',
+              'format0Pool':'0x00DE3054',
+              'format8Pool':'0x00DE3E64',
+          }
+          target_report={k:[x for x in xrefs if v in x['hits']] for k,v in targets.items()}
+          print('=== TARGET-SPECIFIC XREFS ===')
+          print(json.dumps(target_report,indent=2))
+          Path('/tmp/probe/target_xrefs.json').write_text(json.dumps(target_report,indent=2)+'\n')
+          PY
+
+      - name: Upload exact decoder-interface probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_DECODER_INTERFACE_INIT_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
