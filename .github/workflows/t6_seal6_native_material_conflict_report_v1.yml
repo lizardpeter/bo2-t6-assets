@@ -6,6 +6,9 @@ on:
     paths:
       - 'tools/t6_seal6_native_material_conflict_report_v1.py'
       - 'tools/test_t6_seal6_native_material_conflict_report_v1.py'
+      - 'tools/t6_seal6_native_shader_variant_probe_v1.py'
+      - 'tools/test_t6_seal6_native_shader_variant_probe_v1.py'
+      - 'tools/t6_oat_material_shader_census_v4.py'
       - '.github/workflows/t6_seal6_native_material_conflict_report_v1.yml'
 
 permissions:
@@ -14,15 +17,16 @@ permissions:
 jobs:
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test conflict reporter
+      - name: Test fail-closed SEAL6 native adapters
         shell: bash
         run: |
           set -euo pipefail
           PYTHONPATH=tools python3 tools/test_t6_seal6_native_material_conflict_report_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_seal6_native_shader_variant_probe_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -43,6 +47,7 @@ jobs:
           grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
           mkdir -p /tmp/proof /tmp/game/zone/all /tmp/game/zone/english
           sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+          cp /tmp/oat-unlinker-cache/source_identity.txt /tmp/proof/oat_source_identity.txt
 
       - name: Download and verify exact seven-root SEAL6 MP universe
         shell: bash
@@ -75,20 +80,22 @@ jobs:
             sha256sum "$file" | tee -a /tmp/proof/fastfile_sha256.txt
           done
 
-      - name: Dump native Material records only
+      - name: Dump native Materials and complete TechniqueSet dependencies
         shell: bash
         run: |
           set -euo pipefail
           BIN=/tmp/oat-unlinker-cache/Unlinker
-          : > /tmp/proof/native_material_counts.txt
+          : > /tmp/proof/native_asset_counts.txt
           for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
             if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
             out="/tmp/${zone}_out"
             mkdir -p "$out"
             "$BIN" --no-color --verbose --include-assets material --output-folder "$out" "$ff" > "/tmp/proof/${zone}_material_dump.log" 2>&1
-            count=0
-            if [[ -d "$out/materials" ]]; then count=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
-            echo "$zone materials=$count" | tee -a /tmp/proof/native_material_counts.txt
+            "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$out" "$ff" > "/tmp/proof/${zone}_techset_dump.log" 2>&1
+            mcount=0; tcount=0
+            if [[ -d "$out/materials" ]]; then mcount=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
+            if [[ -d "$out/techsets" ]]; then tcount=$(find "$out/techsets" -type f -name '*.techset' | wc -l); fi
+            echo "$zone materials=$mcount techsets=$tcount" | tee -a /tmp/proof/native_asset_counts.txt
           done
 
       - name: Emit exact physical conflict and role-invariance report
@@ -111,7 +118,31 @@ jobs:
             --out /tmp/proof/T6_SEAL6_NATIVE_MATERIAL_CONFLICT_REPORT_V1.json \
             2>&1 | tee /tmp/proof/conflict_report.log
 
-      - name: Upload exact conflict evidence
+      - name: Close shader signatures for every exact physical target variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOTS=(
+            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
+            --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
+            --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
+            --shader-root common_mp=/tmp/common_mp_out
+            --shader-root common_patch_mp=/tmp/common_patch_mp_out
+            --shader-root patch_mp=/tmp/patch_mp_out
+            --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
+          )
+          PYTHONPATH=tools python3 tools/t6_seal6_native_shader_variant_probe_v1.py \
+            "${ROOTS[@]}" \
+            --variant head_faction=/tmp/faction_seals_mp_out::mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --variant head_patch=/tmp/patch_mp_out::mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --variant arms=/tmp/faction_seals_mp_out::mc/mtl_c_usa_mp_seal6_smg_arms \
+            --variant cornea=/tmp/common_mp_out::mc/mtl_gen_eye_cornea \
+            --variant iris=/tmp/faction_seals_mp_out::mc/mtl_gen_eye_iris_green \
+            --variant mouth=/tmp/common_mp_out::mc/mtl_c_gen_insidemouth \
+            --out /tmp/proof/T6_SEAL6_NATIVE_SHADER_VARIANT_PROBE_V1.json \
+            2>&1 | tee /tmp/proof/shader_variant_probe.log
+
+      - name: Upload exact conflict and shader-signature evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
