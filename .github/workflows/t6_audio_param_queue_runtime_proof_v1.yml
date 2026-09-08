@@ -1,0 +1,44 @@
+name: T6 audio parameter queue runtime proof v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_pc_server_sound_param_queue_runtime_proof_v1.py'
+      - '.github/workflows/t6_audio_param_queue_runtime_proof_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve exact PC server references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/proof
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+      - name: Prove producer-side voice and mix parameter queues
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_pc_server_sound_param_queue_runtime_proof_v1.py \
+            --exe /tmp/ref/CoDMPServer_PC.exe \
+            --map /tmp/ref/CoDMPServer_PC.map \
+            --out /tmp/proof/T6_AUDIO_PC_SERVER_PARAM_QUEUE_RUNTIME_V1.json
+          sha256sum /tmp/proof/T6_AUDIO_PC_SERVER_PARAM_QUEUE_RUNTIME_V1.json
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_PC_SERVER_PARAM_QUEUE_RUNTIME_V1
+          path: /tmp/proof/T6_AUDIO_PC_SERVER_PARAM_QUEUE_RUNTIME_V1.json
+          if-no-files-found: error
+          compression-level: 9
