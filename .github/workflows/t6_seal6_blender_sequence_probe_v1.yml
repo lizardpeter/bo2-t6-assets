@@ -1,0 +1,64 @@
+name: T6 SEAL6 Blender import sequence probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - '.github/workflows/t6_seal6_blender_sequence_probe_v1.yml'
+      - 'tools/t6_blender_probe_xmodel_import_sequence_v1.py'
+      - 'tools/t6_blender_import_xmodel_shader_carrier_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frozen V2 shader carrier
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_FULL_RETAIL_SHADER_ATTRIBUTE_CARRIER_V2
+          run-id: 34186012958
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/source
+
+      - name: Run all-vertex Blender numeric transport probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE=$(find /tmp/source -type f -name 'T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb' -print -quit)
+          test -n "$SOURCE" && test -s "$SOURCE"
+          echo 'b0543f983731afb8cb45d73ebd581026b53a23cf21d08a4178047fcacd5c8a20  '"$SOURCE" | sha256sum -c -
+          mkdir -p /tmp/proof
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq blender python3-numpy >/dev/null
+          blender --version | head -3 | tee /tmp/proof/blender_version.txt
+          PYTHONPATH=tools blender --background \
+            --python tools/t6_blender_probe_xmodel_import_sequence_v1.py -- \
+            --source "$SOURCE" \
+            --out /tmp/proof/T6_SEAL6_BLENDER_IMPORT_SEQUENCE_PROBE_V1.json \
+            2>&1 | tee /tmp/proof/probe.log
+          grep -F 'T6_BLENDER_SEQUENCE_PROBE=' /tmp/proof/probe.log
+          python3 - <<'PY'
+          import json, math
+          d=json.load(open('/tmp/proof/T6_SEAL6_BLENDER_IMPORT_SEQUENCE_PROBE_V1.json'))
+          assert d['format']=='t6-blender-xmodel-import-sequence-probe-v1'
+          assert d['vertices']==13490 and d['triangles']==14968
+          assert d['sameIndexProbe'] is True
+          assert d['nonFiniteComparisonCount']==0
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_BLENDER_IMPORT_SEQUENCE_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
