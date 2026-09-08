@@ -1,0 +1,127 @@
+name: T6 audio voice PCM runtime probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_voice_pcm_runtime_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify exact PC server references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+      - name: Recover voice / decoder / stream symbols and exact machine slices
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,re,struct
+          from pathlib import Path
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mt=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii')
+          BASE=0x400000
+          pe=struct.unpack_from('<I',exe,0x3c)[0]
+          coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          secs=[]; st=opt+osz
+          for i in range(ns):
+              o=st+i*40
+              vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8)
+              secs.append((BASE+rva,rs,ro))
+          def off(va):
+              for b,rs,ro in secs:
+                  if b<=va<b+rs:return ro+va-b
+              raise ValueError(hex(va))
+          def raw(a,n):
+              o=off(a); return exe[o:o+n]
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+
+          # Exact known / frontier addresses.
+          targets=[0x008B99F0,0x008B9B20,0x008B9C30,0x008B9D10,0x008B9DA0,0x008B9DC0,
+                   0x008BA1C0,0x008BA310,0x008BA4D0,0x008BA610,0x008BA620,0x008BA6C0,
+                   0x008BA700,0x008BA710]
+          lines=mt.splitlines()
+          exact={}
+          for a in targets:
+              tok=f'{a:08x}'
+              hits=[ln for ln in lines if re.search(rf'(?i)(?<![0-9a-f]){tok}(?![0-9a-f])',ln)]
+              exact[f'0x{a:08X}']=hits
+          Path('/tmp/probe/exact_map_lines.json').write_text(json.dumps(exact,indent=2)+'\n')
+          print('=== EXACT MAP LINES ===')
+          print(json.dumps(exact,indent=2))
+
+          # Keep a broad exact-address MAP census around the lower sound-driver region.
+          nearby=[]
+          for ln in lines:
+              vals=[int(x,16) for x in re.findall(r'(?i)(?<![0-9a-f])([0-9a-f]{8})(?![0-9a-f])',ln)]
+              if any(0x008B9000<=v<0x008BB000 for v in vals):
+                  nearby.append(ln)
+          Path('/tmp/probe/map_8b9000_8bb000.txt').write_text('\n'.join(nearby)+'\n')
+          print('=== NEARBY MAP SYMBOLS ===')
+          for ln in nearby: print(ln)
+
+          # Exact slices. VoiceStart uses PDB primary code size 159 bytes.
+          ranges={
+              'decoder_shutdown':(0x008B99F0,0x1b),
+              'helper_8b9b20':(0x008B9B20,0x180),
+              'mix_param_free':(0x008B9C30,0x43),
+              'helper_8b9d10':(0x008B9D10,0x90),
+              'stream_shutdown_preload':(0x008B9DA0,0x80),
+              'voice_acquire':(0x008BA1C0,0x150),
+              'voice_start':(0x008BA620,0x9f),
+              'voice_started_done_position':(0x008BA6C0,0x60),
+          }
+          meta={}
+          for name,(a,n) in ranges.items():
+              rb=raw(a,n)
+              ins=list(md.disasm(rb,a))
+              asm='\n'.join(f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}' for i in ins)+'\n'
+              Path('/tmp/probe',name+'.asm').write_text(asm)
+              meta[name]={'startVa':f'0x{a:08X}','bytes':n,'sha256':hashlib.sha256(rb).hexdigest(),'instructionCount':len(ins)}
+              calls=[]
+              for i in ins:
+                  if i.mnemonic=='call' and i.op_str.startswith('0x'):
+                      t=int(i.op_str,16)
+                      tok=f'{t:08x}'
+                      hits=[ln for ln in lines if re.search(rf'(?i)(?<![0-9a-f]){tok}(?![0-9a-f])',ln)]
+                      calls.append({'at':f'0x{i.address:08X}','target':f'0x{t:08X}','mapLines':hits[:12]})
+              meta[name]['directCalls']=calls
+              print('===',name,'===')
+              print(asm)
+              print('calls',json.dumps(calls,indent=2))
+          Path('/tmp/probe/ranges.json').write_text(json.dumps(meta,indent=2,sort_keys=True)+'\n')
+          print('=== RANGE META ===')
+          print(json.dumps(meta,indent=2,sort_keys=True))
+          PY
+      - name: Upload exact runtime probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_VOICE_PCM_RUNTIME_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
