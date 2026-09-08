@@ -14,21 +14,24 @@ def write(root:Path, tag:str)->bytes:
 
 def main()->int:
     with tempfile.TemporaryDirectory() as td:
-        base=Path(td);a=base/'a';b=base/'b';s=base/'shader'
-        a.mkdir();b.mkdir();s.mkdir();ra=write(a,'a');rb=write(b,'b')
+        base=Path(td);a=base/'a';b=base/'b'
+        a.mkdir();b.mkdir();ra=write(a,'a');rb=write(b,'b')
         real=mod.v4.build
         def fake(root,shader_roots):
+            assert len(shader_roots)==1
             staged=root/'materials'/f'{MAT}.json'; raw=staged.read_bytes()
-            owner=str(s.resolve())
+            owner=str(Path(shader_roots[0]).resolve())
             return {'summary':{'unresolvedMaterialCount':0,'divergentParentOwnedDependencyCount':0},'materials':[{'material':MAT,'materialJsonSha256':mod._sha(raw),'techniqueSet':'mc/test_ts','techniqueSetOwners':[owner],'declaredTechniqueTypes':['lit'],'hasLitBinding':True,'programs':[{'techniqueType':'lit','technique':'pimp_test','groupKey':'g','passStageIdentitySha256':'p','passCount':1,'techniqueOwner':owner,'parentTechniqueSetOwners':[owner]}]}]}
         mod.v4.build=fake
         try:
-            r=mod.build([('shader',s)],[('a',a,MAT),('b',b,MAT)])
+            r=mod.build([('a',a),('b',b)],[('va',a,MAT),('vb',b,MAT)])
         finally:
             mod.v4.build=real
         assert r['summary']['variantCount']==2
         assert r['summary']['materialsWithDivergentPhysicalShaderSignatures']==0
         assert r['comparisons'][0]['shaderSignatureInvariantAcrossPhysicalVariants']
+        assert r['variants'][0]['physicalRootLabel']=='a'
+        assert r['variants'][1]['physicalRootLabel']=='b'
         assert r['variants'][0]['physicalMaterialSha256']!=r['variants'][1]['physicalMaterialSha256']
         assert r['variants'][0]['shaderSignatureSha256']==r['variants'][1]['shaderSignatureSha256']
     print('PASS t6_seal6_native_shader_variant_probe_v1')
