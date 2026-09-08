@@ -6,6 +6,8 @@ on:
     paths:
       - 'tools/t6_world_special_render_contract_overlay_v1.py'
       - 'tools/test_t6_world_special_render_contract_overlay_v1.py'
+      - 'tools/t6_oat_world_textured_export_pipeline_v52.py'
+      - 'tools/test_t6_oat_world_textured_export_pipeline_v52.py'
       - '.github/workflows/t6_world_special_render_contract_overlay_v1.yml'
 
 permissions:
@@ -16,15 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compile overlay
+      - name: Compile overlay and production v52
         run: |
           set -euo pipefail
           python3 -m py_compile \
             tools/t6_world_special_render_contract_overlay_v1.py \
-            tools/test_t6_world_special_render_contract_overlay_v1.py
-      - name: Run fail-closed regression
+            tools/test_t6_world_special_render_contract_overlay_v1.py \
+            tools/t6_oat_world_textured_export_pipeline_v52.py \
+            tools/test_t6_oat_world_textured_export_pipeline_v52.py
+      - name: Run fail-closed overlay regression
         env:
           PYTHONPATH: tools
         run: |
           set -euo pipefail
           python3 tools/test_t6_world_special_render_contract_overlay_v1.py
+      - name: Run production v52 wiring regression
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/test_t6_oat_world_textured_export_pipeline_v52.py
