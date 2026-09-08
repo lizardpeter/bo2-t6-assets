@@ -1,0 +1,186 @@
+name: T6 Nuketown production texture dependency census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_production_texture_dependency_census_v1.py'
+      - 'tools/t6_world_material_catalog_legacy_index_v1.py'
+      - 'tools/t6_nuketown_world_source_sidecars_v3.py'
+      - 'tools/t6_nuketown_material_memory_ownership_v1.py'
+      - 'tools/t6_oat_material_manifest_v3.py'
+      - 'tools/t6_oat_material_manifest_v2.py'
+      - 'tools/t6_iwi27_mip_layout_proof_v2.py'
+      - 'tools/t6_iwi27_dds_bridge_v1.py'
+      - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
+      - 'tools/t6_ipak_http_range_v2.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+      - '.github/workflows/t6_nuketown_production_texture_dependency_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch and expand exact retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof /tmp/oat_out
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
+          /tmp/t6_expand /tmp/source/mp_nuketown_2020.ff /tmp/source/mp_nuketown_2020.expanded.bin mp_nuketown_2020 2>&1 | tee /tmp/proof/expand.log
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/source/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+          test "$(stat -c %s /tmp/source/mp_nuketown_2020.expanded.bin)" = 154653476
+
+      - name: Rebuild exact v3 world catalog and legacy index projection
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_source
+          git -C /tmp/oat_source checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          test "$(git -C /tmp/oat_source rev-parse HEAD)" = 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          python3 tools/t6_nuketown_material_memory_ownership_v1.py \
+            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
+            --oat-root /tmp/oat_source \
+            --out /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json
+          python3 tools/t6_nuketown_world_source_sidecars_v3.py \
+            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
+            --ownership-proof /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json \
+            --out-dir /tmp/proof/sidecars_v3
+          python3 tools/t6_world_material_catalog_legacy_index_v1.py \
+            /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json \
+            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json
+
+      - name: Dump exact native Nuketown Materials with pinned OAT
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --include-assets material --output-folder /tmp/oat_out /tmp/source/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/oat_material_dump.log
+          MATROOT=$(find /tmp/oat_out -type d -name materials -print -quit)
+          test -n "$MATROOT" -a -d "$MATROOT"
+          echo "$MATROOT" >/tmp/material_root
+          COUNT=$(find "$MATROOT" -type f -name '*.json' | wc -l)
+          echo "NATIVE_OAT_MATERIAL_JSON_COUNT=$COUNT" | tee /tmp/proof/oat_material_count.txt
+          test "$COUNT" -gt 0
+
+      - name: Build exact production OAT material dependency manifest
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          MATROOT=$(cat /tmp/material_root)
+          python3 tools/t6_oat_material_manifest_v3.py \
+            "$MATROOT" \
+            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
+            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json \
+            --source-texture-extension .dds \
+            2>&1 | tee /tmp/proof/material_manifest.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json'))
+          s=d['stats']
+          assert s['missingMaterialCount']==0,s
+          assert len(d['materials'])==327,(len(d['materials']),s)
+          print('GREEN EXACT 327-MATERIAL PRODUCTION DEPENDENCY MANIFEST',json.dumps(s,sort_keys=True))
+          PY
+
+      - name: Materialize exact 81 pointer-proven retail IWI payloads
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/staged/payloads /tmp/dds81
+          python3 tools/t6_nuketown_shared_ipak_stage_v1.py \
+            --census manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64 \
+            --out-dir /tmp/staged/payloads \
+            --manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python3 tools/t6_iwi27_mip_layout_proof_v2.py \
+            --root /tmp/staged/payloads \
+            --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json
+          python3 tools/t6_iwi27_dds_bridge_v1.py \
+            --staged-manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            --payload-root /tmp/staged/payloads \
+            --layout-proof /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json \
+            --out-root /tmp/dds81 \
+            --manifest /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json
+
+      - name: Count exact production Material image coverage
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_production_texture_dependency_census_v1.py \
+            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json \
+            --dds-bridge /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V1.json \
+            2>&1 | tee /tmp/proof/dependency_census.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V1.json'
+          d=json.load(open(p)); s=d['summary']
+          assert s['materialUniqueImageCount']>0,s
+          assert s['exact81BridgeImageCount']==81,s
+          assert s['productionUniqueImageCount']==s['materialUniqueImageCount'],s
+          print('MATERIAL_TEXTURE_COVERAGE',json.dumps(s,sort_keys=True))
+          print('MISSING_MATERIAL_IMAGES',len(d['missingProductionImages']))
+          for row in d['missingProductionImages'][:80]:
+              print('MISSING',row['image'],'USES',len(row['materialUses']))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_V1
+          path: |
+            /tmp/proof
+            /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json
+          if-no-files-found: error
+          compression-level: 0
