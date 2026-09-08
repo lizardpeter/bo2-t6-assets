@@ -1,0 +1,95 @@
+{
+  "authority": {
+    "pcDedicatedServerBuild": true,
+    "retailT6mpClient": false,
+    "state": "exact-pc-dedicated-server-proof-client-promotion-blocked"
+  },
+  "fastFileNaming": {
+    "baseStrings": {
+      "commonBase": "common",
+      "mpSuffix": "_mp",
+      "patchBase": "patch",
+      "zmSuffix": "_zm"
+    },
+    "commonGlobalVaHex": "0x018f01e8",
+    "mpResolvedNames": {
+      "common": "common_mp",
+      "patch": "patch_mp"
+    },
+    "patchGlobalVaHex": "0x018f4554",
+    "suffixGlobalVaHex": "0x0135405c"
+  },
+  "format": "t6-pc-server-xasset-override-proof-v1",
+  "functionRanges": [
+    {"bytes":480,"endVaHexExclusive":"0x00550410","name":"DB_GetZonePriority","sha256":"591b7bb0cfbdbd21a429981aa8aa87bc8f9cb8a64e179203677000fd8479058f","startVaHex":"0x00550230"},
+    {"bytes":144,"endVaHexExclusive":"0x005504a0","name":"DB_OverrideAsset","sha256":"a3d4e78ed92ca99fc821b21f429c5cadf00131174aab529de87243d574bb74a9","startVaHex":"0x00550410"},
+    {"bytes":2256,"endVaHexExclusive":"0x00550d70","name":"DB_LinkXAssetEntry","sha256":"1be0a50aedb4b5848552d75842d568f4fc2b0e800128f0fe86b002782e15072e","startVaHex":"0x005504a0"},
+    {"bytes":320,"endVaHexExclusive":"0x005510c0","name":"DB_LoadXZone","sha256":"4b7751b245839090d45ef7c53c1ec894d3122dfc44c1e68d7c4ef356db964354","startVaHex":"0x00550f80"},
+    {"bytes":1744,"endVaHexExclusive":"0x00551a40","name":"DB_TryLoadXFileInternal","sha256":"774eb230e5739f047a50005ca0620336a0f997bd8a9e8211044a776ec0395d10","startVaHex":"0x00551370"},
+    {"bytes":1552,"endVaHexExclusive":"0x00552050","name":"DB_InitFastFileNames","sha256":"73491c8706e6ec340503f3e30a519f577fce6b2da5a68d3e31557f7b2f4e411d","startVaHex":"0x00551a40"},
+    {"bytes":1776,"endVaHexExclusive":"0x00556e80","name":"DB_LoadXAssets","sha256":"d6630efa78232bce6cafeb18b99cde569805bc35ad5f490b35b70900f665d55f","startVaHex":"0x00556790"},
+    {"bytes":640,"endVaHexExclusive":"0x00557100","name":"DB_Thread","sha256":"b3de0a6efab70e0b2447e1bf5d40958f908712096fb5fd3d056598068b837dda","startVaHex":"0x00556e80"},
+    {"bytes":112,"endVaHexExclusive":"0x00557200","name":"DB_LoadGraphicsAssetsForPC","sha256":"07810919599dd5fed847827ccc48905f37a40b24b55c59ac2e599331b52e3227","startVaHex":"0x00557190"},
+    {"bytes":144,"endVaHexExclusive":"0x006bfd80","name":"Com_LoadCommonFastFile","sha256":"a87e2354720ffc60dc36e2f60ac4dccbb27b5760176693fcfc7c67b9576a8986","startVaHex":"0x006bfcf0"},
+    {"bytes":848,"endVaHexExclusive":"0x006c0140","name":"Com_LoadLevelFastFiles","sha256":"349e68516bbbe3a8c95f35d58f1346b7a4f83ad9a139cceb5ea805ad935ba84d","startVaHex":"0x006bfdf0"},
+    {"bytes":224,"endVaHexExclusive":"0x00760100","name":"Com_IsAddonMap","sha256":"275d1fe63b97345ff74f4e2379eb277efbb678ea1339423a8b4cd89b4a4d1dbd","startVaHex":"0x00760020"}
+  ],
+  "instructionEvidence": [
+    {"bytes":12,"bytesHex":"6a18685043bd006854458f01","label":"PATCH_FAST_FILE_NAME <- 'patch' base","vaHex":"0x00551a84"},
+    {"bytes":12,"bytesHex":"6a18682043bd0068e8018f01","label":"COMMON_FAST_FILE_NAME <- 'common' base","vaHex":"0x00551adc"},
+    {"bytes":28,"bytesHex":"e8b59c16006a0484c07407681496bb00eb05681096bb00685c403501","label":"mode-selected _mp/_zm suffix copied into COMMON_FASTFILE_SUFFIX","vaHex":"0x00551b26"},
+    {"bytes":17,"bytesHex":"685c4035016a186854458f01e897c72300","label":"append suffix to PATCH_FAST_FILE_NAME","vaHex":"0x00551d68"},
+    {"bytes":17,"bytesHex":"685c4035016a1868e8018f01e8b7c52300","label":"append suffix to COMMON_FAST_FILE_NAME","vaHex":"0x00551f48"},
+    {"bytes":26,"bytesHex":"c745f4e8018f01c745f880000000c745fc00000000e8256ae9ff","label":"Com_LoadCommonFastFile XZoneInfo: COMMON_FAST_FILE_NAME, allocFlags=0x80, freeFlags=0","vaHex":"0x006bfd51"},
+    {"bytes":28,"bytesHex":"c745d854458f01c745dc02000000c745e404647f01c745e808000000","label":"DB_LoadGraphicsAssetsForPC rows: PATCH_FAST_FILE_NAME flag=0x02; CODE_FAST_FILE_NAME flag=0x08","vaHex":"0x005571b3"},
+    {"bytes":16,"bytesHex":"bf984adb00c745fc000000008d642400","label":"Com_IsAddonMap begins exact two-entry prefix table walk","vaHex":"0x00760050"},
+    {"bytes":35,"bytesHex":"03c003c0bb0080000089bc05f4feffff899c05f8feffffc78405fcfeffff0000000046","label":"Com_LoadLevelFastFiles non-addon row: input map name, allocFlags=0x8000, freeFlags=0","vaHex":"0x006bff88"},
+    {"bytes":21,"bytesHex":"8b5704ff450c8b450c83c41889564083c64483c70c","label":"DB_LoadXZone copies XZoneInfo+4 to queued-record+0x40 and advances XZoneInfo by 0x0c","vaHex":"0x00551066"},
+    {"bytes":17,"bytesHex":"be188135018b46406a005056e8cda3ffff","label":"DB_Thread forwards queued flags to DB_TryLoadXFileInternal","vaHex":"0x00556f92"},
+    {"bytes":9,"bytesHex":"56e8e4ce23008b5d0c","label":"DB_TryLoadXFileInternal captures flags argument","vaHex":"0x005513d6"},
+    {"bytes":22,"bytesHex":"8b0d28c249018b95f8feffff6bc94c52899948328f01","label":"DB_TryLoadXFileInternal writes captured flags to g_zoneNames[index].flags","vaHex":"0x005516c1"},
+    {"bytes":53,"bytesHex":"6bf64c8b8648328f0125ffffff3f50e8bafdffff6bff4c8b8f48328f0181e1ffffff3f518bf0e8a3fdffff83c40833d23bf00f9dc2","label":"DB_OverrideAsset mask 0x3fffffff + two DB_GetZonePriority calls + signed setge","vaHex":"0x00550462"},
+    {"bytes":21,"bytesHex":"0fb643080fb64f08e816faffff85c00f85d7010000","label":"DB_LinkXAssetEntry tests DB_OverrideAsset result","vaHex":"0x005509ed"},
+    {"bytes":44,"bytesHex":"668b530c8bc72d70d24901c1f8046689570c8bf36689430ce8ede8ffff8a4f088a43088b75f8884b08884708","label":"override branch relinks chain, calls DB_SwapXAsset, and swaps zoneIndex bytes","vaHex":"0x00550c86"},
+    {"bytes":25,"bytesHex":"3d8000000074203d0001000074123d000200000f85e3000000","label":"DB_GetZonePriority explicit 0x80 branch","vaHex":"0x005502a0"},
+    {"bytes":7,"bytesHex":"b8360000005dc3","label":"DB_GetZonePriority(0x80) -> 54","vaHex":"0x005502c7"},
+    {"bytes":21,"bytesHex":"3d00800000741c3d00000100740e3d000002007579","label":"DB_GetZonePriority explicit 0x8000 branch","vaHex":"0x0055030e"},
+    {"bytes":7,"bytesHex":"b8390000005dc3","label":"DB_GetZonePriority(0x8000) -> 57","vaHex":"0x00550331"}
+  ],
+  "mapSymbols": {
+    "Com_IsAddonMap":"0x00760020","Com_LoadCommonFastFile":"0x006bfcf0","Com_LoadLevelFastFiles":"0x006bfdf0","DB_GetZonePriority":"0x00550230","DB_InitFastFileNames":"0x00551a40","DB_LinkXAssetEntry":"0x005504a0","DB_LoadGraphicsAssetsForPC":"0x00557190","DB_LoadXAssets":"0x00556790","DB_LoadXZone":"0x00550f80","DB_OverrideAsset":"0x00550410","DB_SwapXAsset":"0x0054f590","DB_Thread":"0x00556e80","DB_TryLoadXFileInternal":"0x00551370"
+  },
+  "mpFlags": {
+    "common_mp":{"allocFlagsHex":"0x00000080","priority":54},
+    "ordinaryBuiltInMpMap":{"allocFlagsHex":"0x00008000","example":"mp_nuketown_2020","priority":57},
+    "patch_mp":{"allocFlagsHex":"0x00000002","priority":65}
+  },
+  "overrideRule": {
+    "commonVsPatchReason":"patch priority 65 > common priority 54; load order cannot change this pair's winner",
+    "commonVsPatchServerPrediction":"patch_mp",
+    "comparison":"newPriority >= existingPriority",
+    "mapVsPatchReason":"patch priority 65 > ordinary built-in MP map priority 57; load order cannot change this pair's winner",
+    "mapVsPatchServerPrediction":"patch_mp",
+    "ordinaryDuplicateReplacement":"true result enters replacement branch, DB_SwapXAsset swaps payloads, and zoneIndex bytes are swapped so the stable primary entry owns the winning zone payload",
+    "storedFlagMaskHex":"0x3fffffff"
+  },
+  "pcDedicatedServer": {
+    "exeBytes":13711872,
+    "exeFile":"CoDMPServer_PC.exe",
+    "exeSha256":"f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "imageBaseHex":"0x00400000",
+    "mapBytes":9213148,
+    "mapFile":"CoDMPServer_PC.map.bin",
+    "mapSha256":"34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+  },
+  "proofBoundary": "Authoritative for the ordinary duplicate-XAsset precedence path and the common_mp/patch_mp flags in the exact SHA-pinned CoDMPServer_PC.exe + linker MAP pair only. It proves XZoneInfo.allocFlags propagation into g_zoneNames.flags, the exact server DB_GetZonePriority/DB_OverrideAsset comparison, and DB_LinkXAssetEntry replacement behavior. It does not prove that the retail t6mp.exe client uses identical function bytes, priority values, flag mask, special-case branches, or load-call constants. No production retail-client Material/Technique winner may be selected from this server proof alone.",
+  "xZoneInfo": {
+    "allocFlagsOffset":4,
+    "freeFlagsOffset":8,
+    "gZoneNameFlagsOffset":64,
+    "gZoneNameStrideBytes":76,
+    "nameOffset":0,
+    "queuedFlagsOffset":64,
+    "strideBytes":12
+  }
+}
