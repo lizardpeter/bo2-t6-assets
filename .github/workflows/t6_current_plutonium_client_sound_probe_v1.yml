@@ -1,0 +1,146 @@
+name: T6 current Plutonium client sound probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_client_sound_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SERVER_EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch current client and compare sound-runtime byte signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/ref
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$SERVER_EXE_ID&export=download&confirm=t"
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+
+          UAS='bo2-t6-assets-current-plutonium-client-sound-probe/1'
+          RETAIL_BYTES=12850328
+          RETAIL_SHA256='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'
+          ENDPOINTS=[
+            'https://cdn.plutoniummod.com/updater/prod/info.json',
+            'https://cdn.plutonium.pw/updater/prod/info.json',
+          ]
+          def get(url,timeout=120):
+            req=urllib.request.Request(url,headers={'User-Agent':UAS})
+            with urllib.request.urlopen(req,timeout=timeout) as r:
+              if r.status!=200: raise RuntimeError(f'HTTP {r.status} {url}')
+              return r.read()
+          info=None; used=None; errors=[]
+          for u in ENDPOINTS:
+            try:
+              raw=get(u,60); info=json.loads(raw.decode('utf-8')); used=u; break
+            except Exception as e: errors.append({'url':u,'error':repr(e)})
+          if info is None: raise RuntimeError(f'no live current CDN info endpoint: {errors}')
+          files=info.get('files')
+          if not isinstance(files,list): raise RuntimeError('files is not list')
+          matches=[f for f in files if isinstance(f,dict) and str(f.get('name','')).replace('\\','/').lower()=='games/t6mp.exe']
+          if len(matches)!=1: raise RuntimeError(f'expected exactly one games/t6mp.exe, got {len(matches)}')
+          rec=matches[0]
+          base=info.get('baseUrl'); h=str(rec.get('hash','')).lower(); size=int(rec.get('size'))
+          if not isinstance(base,str) or not base.startswith('https://'): raise RuntimeError('bad baseUrl')
+          if len(h)!=40: raise RuntimeError('bad t6mp SHA1')
+          raw=get(base+h,180)
+          if len(raw)!=size: raise RuntimeError(f't6mp size mismatch {len(raw)} != {size}')
+          sha1=hashlib.sha1(raw).hexdigest(); sha256=hashlib.sha256(raw).hexdigest()
+          if sha1!=h: raise RuntimeError(f't6mp SHA1 mismatch {sha1} != {h}')
+          if raw[:2]!=b'MZ': raise RuntimeError('current t6mp is not MZ')
+
+          def pe(raw):
+            peoff=struct.unpack_from('<I',raw,0x3c)[0]
+            if raw[peoff:peoff+4]!=b'PE\0\0': raise RuntimeError('not PE')
+            coff=peoff+4
+            machine,nsects,_,_,_,optsz,_=struct.unpack_from('<HHIIIHH',raw,coff)
+            opt=coff+20
+            magic=struct.unpack_from('<H',raw,opt)[0]
+            imagebase=struct.unpack_from('<I',raw,opt+28)[0] if magic==0x10b else struct.unpack_from('<Q',raw,opt+24)[0]
+            sections=[]; st=opt+optsz
+            for i in range(nsects):
+              o=st+i*40
+              name=raw[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',raw,o+8)
+              sections.append({'name':name,'rva':rva,'va':imagebase+rva,'virtualSize':vs,'rawSize':rs,'rawOffset':ro,'sha256':hashlib.sha256(raw[ro:ro+rs]).hexdigest()})
+            return {'machine':machine,'imageBase':imagebase,'sections':sections}
+          meta=pe(raw)
+          server=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          if hashlib.sha256(server).hexdigest()!='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d': raise RuntimeError('server identity mismatch')
+
+          def server_va_off(va):
+            p=pe(server)
+            for s in p['sections']:
+              if s['va'] <= va < s['va']+s['rawSize']:
+                return s['rawOffset']+(va-s['va'])
+            raise RuntimeError(hex(va))
+          ranges={
+            'SD_PreUpdate':(0x008B90E0,992),
+            'SD_UpdateVoice':(0x008B9860,144),
+            'SD_MixSetParam':(0x008B9C80,144),
+            'SD_VoiceSetParam':(0x008BA560,176),
+            'SD_VoiceStart':(0x008BA620,159),
+          }
+          signatures=[]
+          for name,(va,n) in ranges.items():
+            off=server_va_off(va); sig=server[off:off+n]
+            poss=[]; start=0
+            while True:
+              x=raw.find(sig,start)
+              if x<0: break
+              poss.append(x); start=x+1
+            locs=[]
+            for x in poss:
+              found=None
+              for s in meta['sections']:
+                if s['rawOffset'] <= x < s['rawOffset']+s['rawSize']:
+                  found={'fileOffset':x,'section':s['name'],'rva':s['rva']+(x-s['rawOffset']),'va':meta['imageBase']+s['rva']+(x-s['rawOffset'])}
+                  break
+              locs.append(found or {'fileOffset':x})
+            signatures.append({'name':name,'serverVa':va,'bytes':n,'sha256':hashlib.sha256(sig).hexdigest(),'currentClientExactMatches':locs})
+
+          needles=[b'XAudio2',b'xaudio2',b'SD_Mix',b'SD_Voice',b'resample',b'Resample',b'sound',b'audio',b'voice']
+          strings=[]
+          data=raw
+          cur=[]; start=0
+          for i,b in enumerate(data+b'\0'):
+            if 32<=b<127:
+              if not cur: start=i
+              cur.append(b)
+            else:
+              if len(cur)>=5:
+                s=bytes(cur)
+                if any(n in s for n in needles): strings.append({'offset':start,'text':s[:300].decode('ascii','replace')})
+              cur=[]
+          strings=strings[:1000]
+          result={
+            'format':'t6-current-plutonium-client-sound-probe-v1',
+            'authority':'current Plutonium CDN object only; not retail-equivalent unless exact pinned identity matches',
+            'cdn':{'infoUrl':used,'endpointErrors':errors,'product':info.get('product'),'revision':info.get('revision'),'baseUrl':base,'fileCount':len(files)},
+            'client':{'name':rec.get('name'),'bytes':len(raw),'manifestSha1':h,'sha1':sha1,'sha256':sha256,'exactPinnedRetailBytes':len(raw)==RETAIL_BYTES,'exactPinnedRetailSha256':sha256==RETAIL_SHA256,'exactPinnedRetail':len(raw)==RETAIL_BYTES and sha256==RETAIL_SHA256,'pe':meta},
+            'serverExactRangeSignatureMatches':signatures,
+            'selectedAsciiStrings':strings,
+            'proofBoundary':'Exact current CDN object identity and byte-signature comparison only. Same-name or shared function bytes do not establish full retail identity or retail address equivalence.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_PLUTONIUM_CLIENT_SOUND_PROBE_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'revision':info.get('revision'),'bytes':len(raw),'sha1':sha1,'sha256':sha256,'exactPinnedRetail':result['client']['exactPinnedRetail'],'signatureMatchCounts':{x['name']:len(x['currentClientExactMatches']) for x in signatures},'selectedStringCount':len(strings)},indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_PLUTONIUM_CLIENT_SOUND_PROBE_V1.json
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_CLIENT_SOUND_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_CLIENT_SOUND_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
