@@ -1,0 +1,87 @@
+name: T6 audio g_sd initializer probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_gsd_initializer_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+      - name: Extract g_sd initializer and targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, hashlib, json, re, struct
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes(); mt=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii')
+          BASE=0x400000; pe=struct.unpack_from('<I',exe,0x3c)[0]; coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',exe,coff); opt=coff+20; st=opt+osz
+          secs=[]
+          for i in range(ns):
+            o=st+i*40; name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace'); vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8); secs.append((name,BASE+rva,vs,rs,ro))
+          def off(va):
+            for n,b,vs,rs,ro in secs:
+              if b<=va<b+rs:return ro+va-b
+            raise ValueError(hex(va))
+          syms=[]
+          for ln in mt.splitlines():
+            m=re.search(r'\s([0-9A-Fa-f]{8})\s+(?:f\s+)?[^\s]+\.obj\s*$',ln)
+            if m: syms.append((int(m.group(1),16),ln.strip()))
+          syms=sorted(set(syms)); vas=[v for v,_ in syms]
+          def exact(va): return [ln for v,ln in syms if v==va]
+          def nextsym(va):
+            i=bisect.bisect_right(vas,va); return syms[i] if i<len(syms) else (va+0x400,None)
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+          targets=[0x00B885A0,0x00B8AEC0]
+          report=[]
+          for start in targets:
+            nva,nline=nextsym(start); end=min(nva,start+0x400)
+            rb=exe[off(start):off(start)+(end-start)]; ins=list(md.disasm(rb,start))
+            rec={'start':f'0x{start:08X}','end':f'0x{end:08X}','sha256':hashlib.sha256(rb).hexdigest(),'map':exact(start),'next':nline,'instructions':[]}
+            print('===',hex(start),exact(start),'end',hex(end),'===')
+            for i in ins:
+              line=f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}'
+              rec['instructions'].append(line); print(line)
+              if i.mnemonic in ('call','jmp') and i.op_str.startswith('0x'):
+                try:
+                  t=int(i.op_str,16); print('    TARGET',hex(t),exact(t))
+                except: pass
+            report.append(rec)
+          Path('/tmp/probe/initializer.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('=== MAP neighborhoods ===')
+          near=[ln for v,ln in syms if 0x00B88300<=v<=0x00B8B100]
+          print('\n'.join(near)); Path('/tmp/probe/map_neighborhood.txt').write_text('\n'.join(near)+'\n')
+          PY
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_GSD_INITIALIZER_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
