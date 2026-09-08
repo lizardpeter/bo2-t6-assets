@@ -69,25 +69,24 @@ jobs:
             --expanded common_mp=/tmp/expanded/common_mp.bin \
             --expanded common_patch_mp=/tmp/expanded/common_patch_mp.bin \
             --expanded patch_mp=/tmp/expanded/patch_mp.bin \
-            --bank-base mpl_common.all \
-            --bank-base mpl_patch.all \
+            --discover-bank-bases \
             --target-file /tmp/proof/mp7_direct_audio_targets.txt \
             --out /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json \
             | tee /tmp/proof/target_extract.log
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json'))
+          assert d['format']=='t6-sndalias-target-extract-v2'
           s=d['summary']
           assert s['targetAliasCount']==18
           assert s['foundTargetAliasCount']==18
           assert s['missingTargetAliasCount']==0
+          assert s['validatedSndBankSectionCount']>0
           by={x['aliasName']:x for x in d['aliases']}
           assert by['wpn_mp7_fire_npc']['aliasIdHex']=='40B8FC12'
           assert by['wpn_mp7_fire_plr']['aliasIdHex']=='41B11A27'
           assert by['wpn_mp7_silencer_fire_npc']['aliasIdHex']=='12E70C8C'
           assert by['wpn_mp7_silencer_fire_plr']['aliasIdHex']=='13DF2AA1'
-          # Every direct MP7 target must now be attached to at least one exact
-          # current-retail SndAlias occurrence. Physical SABS/SABL payload join is separate.
           assert all(x['occurrenceCount']>0 for x in d['aliases'])
           PY
           sha256sum /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json | tee /tmp/proof/manifest_sha256.txt
