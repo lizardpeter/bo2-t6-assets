@@ -1,0 +1,136 @@
+name: T6 Nuketown missing TechniqueSet native closure v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_nuketown_missing_techset_native_closure_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
+          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
+          test '${{ steps.oat-cache.outputs.cache-hit }}' = 'true'
+          test -x "$CACHE_BIN"
+          test -f "$CACHE_META"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$CACHE_META"
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/codepost_mp_out
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download exact MP startup FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/game/zone/all/code_post_gfx_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/game/zone/all/code_post_gfx_mp.ff' | sha256sum -c -
+          stat -c 'bytes=%s' /tmp/game/zone/all/code_post_gfx_mp.ff | tee /tmp/proof/fastfile_identity.txt
+          sha256sum /tmp/game/zone/all/code_post_gfx_mp.ff | tee -a /tmp/proof/fastfile_identity.txt
+
+      - name: Dump native MP startup TechniqueSet universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/oat-unlinker-cache/Unlinker --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/codepost_mp_out /tmp/game/zone/all/code_post_gfx_mp.ff \
+            2>&1 | tee /tmp/proof/code_post_gfx_mp_techset_dump.log
+          test -f /tmp/codepost_mp_out/techsets/hdr_create_lut2dv_827z0f8q.techset
+          test -f /tmp/codepost_mp_out/techsets/mc_lit_sm_r0c0d0n0s0_qwq4q449.techset
+          grep -F 'Dumped techniqueset "hdr_create_lut2dv_827z0f8q"' /tmp/proof/code_post_gfx_mp_techset_dump.log
+          grep -F 'Dumped techniqueset "mc_lit_sm_r0c0d0n0s0_qwq4q449"' /tmp/proof/code_post_gfx_mp_techset_dump.log
+
+      - name: Build exact parent-child-shader manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/proof/source_bindings.json <<'JSON'
+          {
+            "format": "t6-nuketown-missing-techset-source-bindings-v1",
+            "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+            "fastFileSha256": "b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3",
+            "targets": [
+              {"resolved": true, "material": "mp_nuketown2020_lut", "techniqueSet": "hdr_create_lut2dv_827z0f8q"},
+              {"resolved": true, "material": "mc/mtl_furniture_lawn_chair_1_metal", "techniqueSet": "mc_lit_sm_r0c0d0n0s0_qwq4q449"},
+              {"resolved": true, "material": "mc/mtl_p_glo_bomb_stack_01", "techniqueSet": "mc_lit_sm_r0c0d0n0s0_qwq4q449"}
+            ]
+          }
+          JSON
+          PYTHONPATH=tools python3 tools/t6_oat_techset_binding_manifest_v1.py \
+            --oat-root /tmp/codepost_mp_out \
+            --binding-manifest /tmp/proof/source_bindings.json \
+            --out /tmp/proof/T6_NUKETOWN_MISSING_TECHSET_NATIVE_CLOSURE_V1.json \
+            2>&1 | tee /tmp/proof/native_closure.log
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('/tmp/codepost_mp_out')
+          proof=pathlib.Path('/tmp/proof')
+          d=json.load(open(proof/'T6_NUKETOWN_MISSING_TECHSET_NATIVE_CLOSURE_V1.json',encoding='utf-8'))
+          if d.get('errors'):
+              raise SystemExit(d['errors'])
+          expected={'hdr_create_lut2dv_827z0f8q','mc_lit_sm_r0c0d0n0s0_qwq4q449'}
+          observed={r['name'] for r in d['techsets']}
+          if observed != expected:
+              raise SystemExit(f'unexpected TechniqueSet set: {observed}')
+          out=proof/'physical_files'
+          copied=set()
+          def cp(rel):
+              rel=pathlib.Path(rel)
+              src=root/rel
+              if not src.is_file(): raise SystemExit(f'missing physical dependency {rel}')
+              dst=out/rel; dst.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(src,dst); copied.add(rel.as_posix())
+          for ts in d['techsets']:
+              cp(ts['file']['path'])
+          for tech in d['techniques']:
+              cp(tech['file']['path'])
+              for p in tech['passes']:
+                  for sh in p['shaders']:
+                      b=sh.get('binary')
+                      if b: cp(b['path'])
+          summary={
+              'format':'t6-nuketown-missing-techset-native-closure-summary-v1',
+              'sourceFastFile':'code_post_gfx_mp.ff',
+              'sourceFastFileSha256':'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3',
+              'openAssetToolsCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'techniqueSetCount':len(d['techsets']),
+              'techniqueCount':len(d['techniques']),
+              'physicalDependencyFileCount':len(copied),
+              'techniqueSets':sorted(observed),
+              'physicalFiles':sorted(copied),
+              'authoritativePhysicalOwnerWithinThisFastFile':True,
+              'retailRuntimeWinnerSelection':False,
+              'proofBoundary':'Pinned native OAT directly emits both named TechniqueSets and all declared child Technique/shader files from the exact SHA-pinned code_post_gfx_mp.ff. This closes physical source ownership of the two previously missing parents in the MP startup FastFile. It does not by itself select among any same-name runtime duplicate assets in other loaded zones.'
+          }
+          (proof/'T6_NUKETOWN_MISSING_TECHSET_NATIVE_CLOSURE_SUMMARY_V1.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload exact native owner closure
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_MISSING_TECHSET_NATIVE_CLOSURE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
