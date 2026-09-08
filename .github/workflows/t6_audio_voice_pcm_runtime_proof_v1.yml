@@ -30,10 +30,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_pc_server_sound_voice_pcm_runtime_proof_v1.py \
-            --exe /tmp/ref/CoDMPServer_PC.exe \
-            --map /tmp/ref/CoDMPServer_PC.map \
-            --out /tmp/proof/T6_AUDIO_PC_SERVER_VOICE_PCM_RUNTIME_V1.json
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import t6_pc_server_sound_voice_pcm_runtime_proof_v1 as p
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          with open('/tmp/ref/CoDMPServer_PC.map','r',encoding='ascii',newline='') as f:
+              map_text=f.read()
+          result=p.prove(exe,map_text)
+          out=Path('/tmp/proof/T6_AUDIO_PC_SERVER_VOICE_PCM_RUNTIME_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
           sha256sum /tmp/proof/T6_AUDIO_PC_SERVER_VOICE_PCM_RUNTIME_V1.json
       - name: Upload proof
         uses: actions/upload-artifact@v4
