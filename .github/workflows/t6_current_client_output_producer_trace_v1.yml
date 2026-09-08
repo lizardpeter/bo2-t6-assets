@@ -1,0 +1,142 @@
+name: T6 current client output producer trace v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_output_producer_trace_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace submit callers and queue producer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+
+          UA='bo2-t6-assets-output-producer-trace/1'
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          SUBMIT=0x005DFBC0
+          QUEUED=0x01016B0C
+          EVENT=0x01016B08
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode())
+          rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]
+          raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          def disasm_range(start,end):
+            md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+            o=vaoff(start);out=[]
+            for ins in md.disasm(raw[o:o+(end-start)],start):
+              if ins.address>=end:break
+              r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              if ins.mnemonic in ('call','jmp') and ins.operands and ins.operands[0].type==X86_OP_IMM:r['directTarget']=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+              out.append(r)
+            return out
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
+          instructions=[]
+          target_refs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in md.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0:continue
+              reci={'va':ins.address,'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'section':s['name']}
+              instructions.append(reci)
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM:vals.append(op.mem.disp&0xffffffff)
+                elif op.type==X86_OP_IMM:vals.append(op.imm&0xffffffff)
+              kinds=[]
+              if QUEUED in vals:kinds.append('queuedBufferCounter')
+              if EVENT in vals:kinds.append('bufferEndSignalObject')
+              if kinds:target_refs.append({**reci,'kinds':kinds})
+          instructions.sort(key=lambda x:x['va'])
+          idx={x['va']:i for i,x in enumerate(instructions)}
+
+          submit_xrefs=[]
+          for i,x in enumerate(instructions):
+            if x['mnemonic'] not in ('call','jmp'):continue
+            b=bytes.fromhex(x['bytes'])
+            target=None
+            if len(b)>=5 and b[0] in (0xE8,0xE9):
+              disp=struct.unpack('<i',b[1:5])[0]; target=(x['va']+5+disp)&0xffffffff
+            if target==SUBMIT:
+              lo=max(0,i-55);hi=min(len(instructions),i+90)
+              submit_xrefs.append({'xrefVa':f"0x{x['va']:08X}",'kind':x['mnemonic'],'neighborhood':[{**r,'va':f"0x{r['va']:08X}"} for r in instructions[lo:hi]]})
+
+          # Independent raw E8/E9 check inside executable sections.
+          raw_xrefs=[]
+          for s in secs:
+            if not s['exec']:continue
+            data=raw[s['ro']:s['ro']+s['rs']]
+            for j in range(0,len(data)-5):
+              if data[j] not in (0xE8,0xE9):continue
+              va=s['va']+j;disp=struct.unpack('<i',data[j+1:j+5])[0];target=(va+5+disp)&0xffffffff
+              if target==SUBMIT:raw_xrefs.append({'va':f'0x{va:08X}','opcode':f'{data[j]:02x}','capstoneInstructionBoundary':va in idx})
+
+          queue_range=(0x00562120,0x00562240)
+          queue_rows=disasm_range(*queue_range)
+          event_neighborhoods=[]
+          for r in target_refs:
+            va=r['va']
+            i=idx.get(va)
+            if i is None:continue
+            lo=max(0,i-25);hi=min(len(instructions),i+45)
+            event_neighborhoods.append({'ref':{**r,'va':f'0x{va:08X}'},'neighborhood':[{**q,'va':f"0x{q['va']:08X}"} for q in instructions[lo:hi]]})
+
+          result={
+            'format':'t6-current-client-output-producer-trace-v1',
+            'authority':'current Plutonium T6 MP client only',
+            'client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},
+            'submitWrapperVa':f'0x{SUBMIT:08X}',
+            'submitXrefs':submit_xrefs,
+            'rawSubmitXrefs':raw_xrefs,
+            'queueCounterVa':f'0x{QUEUED:08X}',
+            'bufferEndSignalObjectVa':f'0x{EVENT:08X}',
+            'queueGateRange':{'startVa':f'0x{queue_range[0]:08X}','endExclusiveVa':f'0x{queue_range[1]:08X}','sha256':hashlib.sha256(raw[vaoff(queue_range[0]):vaoff(queue_range[0])+(queue_range[1]-queue_range[0])]).hexdigest(),'disasm':queue_rows},
+            'queueAndSignalRefs':target_refs,
+            'queueAndSignalNeighborhoods':event_neighborhoods,
+            'proofBoundary':'Exact current-client machine evidence only. Submit-wrapper identity is established by the prior verified IXAudio2SourceVoice +0x54 call. No retail equivalence or mixer naming is inferred merely from call proximity.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_OUTPUT_PRODUCER_TRACE_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('RAW_SUBMIT_XREFS',json.dumps(raw_xrefs,indent=2))
+          print('CAPSTONE_SUBMIT_XREF_COUNT',len(submit_xrefs))
+          for x in submit_xrefs:
+            print('=== SUBMIT XREF',x['xrefVa'],x['kind'])
+            for r in x['neighborhood']:print('XREF',r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('=== QUEUE GATE',result['queueGateRange']['sha256'])
+          for r in queue_rows:print('QUEUE',r['va'],r['bytes'],r['mnemonic'],r['opStr'],r.get('directTarget',''))
+          print('TARGET_REFS',json.dumps(target_refs,indent=2,sort_keys=True))
+          for n in event_neighborhoods:
+            print('=== STATE REF',n['ref'])
+            for r in n['neighborhood']:print('STATE',r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_OUTPUT_PRODUCER_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_OUTPUT_PRODUCER_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
