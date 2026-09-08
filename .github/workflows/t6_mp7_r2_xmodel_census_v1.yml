@@ -1,0 +1,70 @@
+name: T6 MP7 R2 XModel census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_xmodel_census_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Verify pinned OAT cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat_out
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download exact current R2 common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff -o /tmp/game/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/common_mp.ff | tee /tmp/proof/r2_fastfile_sha256.txt
+
+      - name: Native OAT all-XModel census
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/oat_out /tmp/game/zone/all/common_mp.ff \
+            2>&1 | tee /tmp/proof/common_mp_xmodel.log
+          if grep -q '^ERROR:' /tmp/proof/common_mp_xmodel.log; then
+            echo 'native OAT logged XModel error' >&2
+            exit 1
+          fi
+          find /tmp/oat_out -type f -printf '%P\n' | LC_ALL=C sort > /tmp/proof/xmodel_files.txt
+          wc -l /tmp/proof/xmodel_files.txt | tee /tmp/proof/xmodel_file_count.txt
+          grep -Ei 'hand|arm|view|first|player|seal|merc|cia|fbi|pla|op40' /tmp/proof/xmodel_files.txt \
+            > /tmp/proof/xmodel_viewhand_candidates.txt || true
+          cat /tmp/proof/xmodel_viewhand_candidates.txt
+
+      - name: Upload XModel census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_XMODEL_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
