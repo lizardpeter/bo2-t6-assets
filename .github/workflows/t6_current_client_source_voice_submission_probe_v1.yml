@@ -1,0 +1,121 @@
+name: T6 current client source voice submission probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_source_voice_submission_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace source and mastering voice globals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_MEM,X86_OP_IMM
+
+          UA='bo2-t6-assets-source-voice-submission-probe/1'; INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode()); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower(): raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']: return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          def offva(off):
+            for s in secs:
+              if s['ro']<=off<s['ro']+s['rs']: return s['va']+(off-s['ro'])
+            return None
+
+          SOURCE=0x01016B00; MASTER=0x01016AFC; CALLBACK=0x01016B04
+          targets={SOURCE:'finalSourceVoice',MASTER:'masteringVoice',CALLBACK:'sourceVoiceCallback'}
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True; md.skipdata=True
+          refs=[]
+          for s in secs:
+            if not s['exec']: continue
+            for ins in md.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0: continue
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM: vals.append(op.mem.disp&0xffffffff)
+                elif op.type==X86_OP_IMM: vals.append(op.imm&0xffffffff)
+              kinds=[targets[v] for v in vals if v in targets]
+              if kinds:
+                refs.append({'va':f'0x{ins.address:08X}','section':s['name'],'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'kinds':kinds})
+
+          # Recover broad aligned neighborhoods around every unique xref. Try backward starts until decoding lands exactly on xref.
+          md2=Cs(CS_ARCH_X86,CS_MODE_32); md2.detail=True
+          def neighborhood(target_va,before=96,after=192):
+            sec=next((s for s in secs if s['exec'] and s['va']<=target_va<s['va']+s['rs']),None)
+            if not sec:return []
+            to=vaoff(target_va)
+            for back in range(before+1):
+              so=to-back; sva=target_va-back
+              if so<sec['ro']: break
+              rows=[]; landed=False
+              for ins in md2.disasm(raw[so:min(so+before+after+64,sec['ro']+sec['rs'])],sva):
+                if ins.address==target_va: landed=True
+                if ins.address>target_va+after: break
+                r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+                if ins.mnemonic=='call' and ins.operands and ins.operands[0].type==X86_OP_IMM:
+                  r['directTarget']=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+                rows.append(r)
+              if landed:return rows
+            return []
+          neighborhoods=[]
+          seen=set()
+          for r in refs:
+            va=int(r['va'],16)
+            if va in seen:continue
+            seen.add(va)
+            neighborhoods.append({'xref':r,'disasm':neighborhood(va)})
+
+          source_slots={
+            '0x00':'GetVoiceDetails','0x04':'SetOutputVoices','0x08':'SetEffectChain','0x0C':'EnableEffect','0x10':'DisableEffect','0x14':'GetEffectState','0x18':'SetEffectParameters','0x1C':'GetEffectParameters','0x20':'SetFilterParameters','0x24':'GetFilterParameters','0x28':'SetOutputFilterParameters','0x2C':'GetOutputFilterParameters','0x30':'SetVolume','0x34':'GetVolume','0x38':'SetChannelVolumes','0x3C':'GetChannelVolumes','0x40':'SetOutputMatrix','0x44':'GetOutputMatrix','0x48':'DestroyVoice','0x4C':'Start','0x50':'Stop','0x54':'SubmitSourceBuffer','0x58':'FlushSourceBuffers','0x5C':'Discontinuity','0x60':'ExitLoop','0x64':'GetState','0x68':'SetFrequencyRatio','0x6C':'GetFrequencyRatio','0x70':'SetSourceSampleRate'
+          }
+          # Raw patterns for common compiler forms: mov reg,[SOURCE], mov reg,[reg], mov reg,[reg+slot], call reg.
+          # Keep all immediate SOURCE occurrences and exact 4-byte little endian refs for independent census.
+          raw_refs={}
+          for va,label in targets.items():
+            needle=struct.pack('<I',va); arr=[]; p=0
+            while True:
+              p=raw.find(needle,p)
+              if p<0:break
+              arr.append({'fileOffset':p,'va':f'0x{offva(p):08X}' if offva(p) is not None else None});p+=1
+            raw_refs[label]=arr
+
+          result={'format':'t6-current-client-source-voice-submission-probe-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'globals':{'sourceVoice':'0x01016B00','masteringVoice':'0x01016AFC','sourceVoiceCallback':'0x01016B04'},'createSourceVoiceFacts':{'formatTag':3,'formatName':'WAVE_FORMAT_IEEE_FLOAT','channels':6,'sampleRate':48000,'avgBytesPerSec':1152000,'blockAlign':24,'bitsPerSample':32,'cbSize':0,'flags':6,'flagNames':['XAUDIO2_VOICE_NOPITCH','XAUDIO2_VOICE_NOSRC'],'callback':'0x01016B04','sendList':None,'effectChain':None},'verifiedSourceVoiceSlotMap':source_slots,'executableRefs':refs,'rawAbsoluteRefs':raw_refs,'neighborhoods':neighborhoods,'proofBoundary':'Exact current-client machine/reference evidence only. Method names are assigned only from the verified XAudio2 voice/source-voice declaration order; no pinned-retail identity or address equivalence.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_SOURCE_VOICE_SUBMISSION_PROBE_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('REFS',json.dumps(refs,indent=2,sort_keys=True))
+          for n in neighborhoods:
+            print('=== XREF',n['xref'])
+            for x in n['disasm']: print(x['va'],x['bytes'],x['mnemonic'],x['opStr'],x.get('directTarget',''))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_SOURCE_VOICE_SUBMISSION_PROBE_V1.json
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_SOURCE_VOICE_SUBMISSION_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_SOURCE_VOICE_SUBMISSION_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
