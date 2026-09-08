@@ -7,7 +7,6 @@ on:
       - reversal/firstperson-weapons-closure
     paths:
       - 'tools/t6_retail_dobj_multixmodel_census_v1.py'
-      - 'tools/t6_remote_zip_range_v1.py'
       - '.github/workflows/t6_retail_dobj_multixmodel_census_v1.yml'
 
 permissions:
@@ -24,70 +23,49 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
 
       - name: Compile-check census
-        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py tools/t6_remote_zip_range_v1.py
+        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py
 
-      - name: Range-extract exact retail t6mp.exe
+      - name: Recover exact retail t6mp.exe from content-addressed Plutonium CDN
         shell: bash
         env:
-          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          OBJECT_URL: https://cdn.plutoniummod.com/updater/prod/files/44eba16d0d9c66f40637611137affbe6b0364f20
+          EXPECTED_SHA1: 44eba16d0d9c66f40637611137affbe6b0364f20
           EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
           EXPECTED_BYTES: '12850328'
         run: |
           set -euo pipefail
           mkdir -p /tmp/proof
-          PYTHONPATH=tools python3 - <<'PY'
-          import hashlib,json,os
+          curl -L --fail --retry 4 --retry-delay 5 \
+            --user-agent 'bo2-t6-assets-dobj-multixmodel-census/2' \
+            -o /tmp/t6mp.exe "$OBJECT_URL"
+
+          echo "$EXPECTED_SHA1  /tmp/t6mp.exe" | sha1sum -c -
+          echo "$EXPECTED_SHA256  /tmp/t6mp.exe" | sha256sum -c -
+          test "$(stat -c '%s' /tmp/t6mp.exe)" = "$EXPECTED_BYTES"
+
+          python3 - <<'PY'
+          import hashlib, json, os
           from pathlib import Path
-          from t6_remote_zip_range_v1 import RemoteZip, RemoteZipError
-
-          url=os.environ['ZIP_URL']
-          expected_sha=os.environ['EXPECTED_SHA256'].lower()
-          expected_bytes=int(os.environ['EXPECTED_BYTES'])
-          rz=RemoteZip(url,'bo2-t6-assets-dobj-multixmodel-census/1')
-          entries,meta=rz.central_directory()
-          candidates=[]
-          for e in entries:
-              base=e['name'].rsplit('/',1)[-1].lower()
-              if base.endswith('.exe') and ('t6mp' in base or e['uncompressedSize']==expected_bytes):
-                  candidates.append(e)
-          if not candidates:
-              raise SystemExit('no candidate t6mp executable entries found')
-
-          observed=[]; winner=None; winner_bytes=None
-          for e in candidates:
-              public={k:v for k,v in e.items() if k!='crc32'}
-              public['crc32']=f"{e['crc32']:08x}"
-              try:
-                  raw=rz.extract(e,verify_crc=True)
-              except RemoteZipError as exc:
-                  observed.append({**public,'status':'extract_failed','error':str(exc)})
-                  continue
-              digest=hashlib.sha256(raw).hexdigest()
-              obs={**public,'actualBytes':len(raw),'actualSha256':digest}
-              if len(raw)==expected_bytes and digest==expected_sha:
-                  obs['status']='exact_match'
-                  if winner is not None:
-                      raise SystemExit('more than one exact executable entry matched')
-                  winner=obs; winner_bytes=raw
-              else:
-                  obs['status']='identity_mismatch'
-              observed.append(obs)
-          Path('/tmp/proof/executable_candidates.json').write_text(json.dumps(observed,indent=2,sort_keys=True)+'\n')
-          if winner is None or winner_bytes is None:
-              raise SystemExit('no candidate matched pinned retail executable identity')
-          Path('/tmp/t6mp.exe').write_bytes(winner_bytes)
+          p=Path('/tmp/t6mp.exe')
+          raw=p.read_bytes()
           source={
-              'format':'t6-retail-executable-remote-source-v2',
-              'remoteZip':meta,
-              'entry':winner,
-              'expectedBytes':expected_bytes,
-              'expectedSha256':expected_sha,
-              'status':'exact_sha_pinned_entry_recovered',
+              'format':'t6-retail-executable-content-addressed-source-v1',
+              'objectUrl':os.environ['OBJECT_URL'],
+              'objectKeySha1':os.environ['EXPECTED_SHA1'],
+              'actualSha1':hashlib.sha1(raw).hexdigest(),
+              'expectedBytes':int(os.environ['EXPECTED_BYTES']),
+              'actualBytes':len(raw),
+              'expectedSha256':os.environ['EXPECTED_SHA256'],
+              'actualSha256':hashlib.sha256(raw).hexdigest(),
+              'status':'exact_sha1_sha256_and_size_pinned_object_recovered',
+              'proofBoundary':(
+                  'The CDN object key is accepted only because the downloaded bytes independently satisfy '
+                  'the project-pinned full retail byte length and SHA-256 identity. No filename, archive '
+                  'membership, or same-product inference is used as executable authority.'
+              ),
           }
           Path('/tmp/proof/executable_source.json').write_text(json.dumps(source,indent=2,sort_keys=True)+'\n')
           PY
-          echo '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1  /tmp/t6mp.exe' | sha256sum -c -
-          test "$(stat -c '%s' /tmp/t6mp.exe)" = 12850328
 
       - name: Census exact retail DObj consumers and helper xrefs
         shell: bash
