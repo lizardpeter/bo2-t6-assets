@@ -1,0 +1,120 @@
+name: T6 SEAL6 native Material conflict report v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_seal6_native_material_conflict_report_v1.py'
+      - 'tools/test_t6_seal6_native_material_conflict_report_v1.py'
+      - '.github/workflows/t6_seal6_native_material_conflict_report_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test conflict reporter
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_seal6_native_material_conflict_report_v1.py
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact cached pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          test -f /tmp/oat-unlinker-cache/source_identity.txt
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/game/zone/english
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download and verify exact seven-root SEAL6 MP universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A URLS=(
+            [faction_seals_mp]='https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff'
+            [code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff'
+            [en_code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx_mp.ff'
+            [common_mp]='https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff'
+            [common_patch_mp]='https://r2.houseofkublai.com/bo2/zone/all/common_patch_mp.ff'
+            [patch_mp]='https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff'
+            [mp_nuketown_2020]='https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff'
+          )
+          declare -A SHAS=(
+            [faction_seals_mp]='1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88'
+            [code_post_gfx_mp]='b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3'
+            [en_code_post_gfx_mp]='7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940'
+            [common_mp]='93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'
+            [common_patch_mp]='95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9'
+            [patch_mp]='459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e'
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+          )
+          : > /tmp/proof/fastfile_sha256.txt
+          for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
+            if [[ "$zone" == en_* ]]; then base=/tmp/game/zone/english; else base=/tmp/game/zone/all; fi
+            file="$base/${zone}.ff"
+            curl -fL --retry 4 -o "$file" "${URLS[$zone]}"
+            echo "${SHAS[$zone]}  $file" | sha256sum -c -
+            sha256sum "$file" | tee -a /tmp/proof/fastfile_sha256.txt
+          done
+
+      - name: Dump native Material records only
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          : > /tmp/proof/native_material_counts.txt
+          for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
+            if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
+            out="/tmp/${zone}_out"
+            mkdir -p "$out"
+            "$BIN" --no-color --verbose --include-assets material --output-folder "$out" "$ff" > "/tmp/proof/${zone}_material_dump.log" 2>&1
+            count=0
+            if [[ -d "$out/materials" ]]; then count=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
+            echo "$zone materials=$count" | tee -a /tmp/proof/native_material_counts.txt
+          done
+
+      - name: Emit exact physical conflict and role-invariance report
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_seal6_native_material_conflict_report_v1.py \
+            --root faction_seals_mp=/tmp/faction_seals_mp_out \
+            --root code_post_gfx_mp=/tmp/code_post_gfx_mp_out \
+            --root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out \
+            --root common_mp=/tmp/common_mp_out \
+            --root common_patch_mp=/tmp/common_patch_mp_out \
+            --root patch_mp=/tmp/patch_mp_out \
+            --root mp_nuketown_2020=/tmp/mp_nuketown_2020_out \
+            --target mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --target mc/mtl_c_usa_mp_seal6_smg_arms \
+            --target mc/mtl_gen_eye_cornea \
+            --target mc/mtl_gen_eye_iris_green \
+            --target mc/mtl_c_gen_insidemouth \
+            --out /tmp/proof/T6_SEAL6_NATIVE_MATERIAL_CONFLICT_REPORT_V1.json \
+            2>&1 | tee /tmp/proof/conflict_report.log
+
+      - name: Upload exact conflict evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_NATIVE_MATERIAL_CONFLICT_REPORT_V1
+          path: /tmp/proof
+          if-no-files-found: error
