@@ -1,0 +1,157 @@
+{
+  "format": "t6-mp7-r2-shortsleeve-export-readiness-v1",
+  "target": {
+    "weapon": "mp7_mp",
+    "viewHands": "c_usa_mp_seal6_shortsleeve_viewhands",
+    "gunModel": "t6_wpn_smg_mp7_view",
+    "magazineModel": "t6_attach_mag_mp7_view",
+    "variant": "base MP7, no optional MMS attachment"
+  },
+  "currentR2Identity": {
+    "commonMpFastFileSha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+    "expandedCommonMpBytes": 206493911,
+    "expandedCommonMpSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce",
+    "factionSealsMpFastFileSha256": "1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88",
+    "expandedFactionSealsMpBytes": 6245916,
+    "expandedFactionSealsMpSha256": "21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30"
+  },
+  "gates": [
+    {
+      "id": "weapon_model_membership",
+      "status": "CLOSED_CURRENT_R2",
+      "evidence": "manifests/weapons/T6_MP7_R2_MODEL_TARGETS_V1.json",
+      "facts": {
+        "gunModel": "t6_wpn_smg_mp7_view",
+        "attachViewModel7": "t6_attach_mag_mp7_view",
+        "modelReferencesInvariantAcrossBothPhysicalWeaponCopies": true,
+        "attachment7ViewOffset": {"x": -0.473, "y": 0.0, "z": -3.817, "pitch": 0.0, "yaw": 0.0, "roll": 0.0}
+      }
+    },
+    {
+      "id": "base_weapon_meshes",
+      "status": "CLOSED_CURRENT_R2",
+      "evidence": "manifests/weapons/T6_MP7_R2_BASE_MESH_CLOSURE_V1.json",
+      "facts": {
+        "gun": {"surfaces": 8, "vertices": 4767, "triangles": 3501, "unweightedVertices": 0},
+        "magazine": {"surfaces": 3, "vertices": 430, "triangles": 386, "unweightedVertices": 0},
+        "genericHandsCarrier": {"bones": 70, "vertices": 6, "triangles": 2}
+      }
+    },
+    {
+      "id": "visible_seal6_mesh_and_local_rig",
+      "status": "CLOSED_CURRENT_R2",
+      "evidence": "manifests/weapons/T6_MP7_R2_SEAL6_VIEWHANDS_MESH_CLOSURE_V1.json",
+      "facts": {
+        "bones": 72,
+        "surfaces": 5,
+        "vertices": 6782,
+        "triangles": 9592,
+        "unweightedVertices": 0,
+        "nativeGeometryCanaryExact": true,
+        "visibleOnlyBones": ["tag_gasmask2", "tag_weapon1"],
+        "shared70LocalRotationsExact": true,
+        "shared70LocalTranslationsExact": true,
+        "retailAuthoredParentDifference": {"bone": "tag_torso", "genericParent": "tag_view", "visibleParent": "tag_ads"}
+      }
+    },
+    {
+      "id": "base_xanim_membership_and_notetracks",
+      "status": "CLOSED_CURRENT_R2",
+      "evidence": "manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json",
+      "facts": {"targetXAnimCount": 23, "boneReferenceCount": 1598, "notifyRecordCount": 66}
+    },
+    {
+      "id": "ordinary_xanim_motion_payloads",
+      "status": "CLOSED_CURRENT_R2",
+      "evidence": "manifests/weapons/T6_MP7_R2_XANIM_MOTION_CLOSURE_V1.json",
+      "facts": {
+        "targetXAnimCount": 23,
+        "boneTrackCount": 1598,
+        "allFlatPoolsExhausted": true,
+        "allDeltaPartAbsent": true,
+        "longIndexTrackCount": 0,
+        "randomDataIntRecordCount": 0
+      }
+    },
+    {
+      "id": "xanim_to_xmodel_namespace_binding",
+      "status": "CLOSED_CURRENT_R2_FOR_BASE_COMPONENT_IDENTITIES",
+      "evidence": "manifests/weapons/T6_MP7_R2_VIEWMODEL_BINDING_CLOSURE_V1.json",
+      "facts": {
+        "animationBoneCount": 76,
+        "baseComponentCoverage": "75/76",
+        "soleResidualBone": "j_mms_flip",
+        "residualOwner": "t6_attach_optic_mms_view",
+        "residualIsOptionalAttachment": true,
+        "baseMp7EquipsMms": false,
+        "bindingRule": "ScriptString bone identity, never serialized track position"
+      }
+    },
+    {
+      "id": "ordinary_root_translation_runtime_semantics",
+      "status": "CLOSED_RETAIL_RUNTIME",
+      "evidence": "manifests/xanim/T6_RETAIL_XANIM_ROOT_TRANSLATION_PROOF_V1.json",
+      "facts": {
+        "retailExecutableSha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1",
+        "root": "decoded XAnim translation directly",
+        "nonRoot": "XModel bind-local translation plus decoded XAnim translation delta"
+      }
+    },
+    {
+      "id": "final_dobj_duplicate_bone_merge_and_model_order",
+      "status": "OPEN_FAIL_CLOSED",
+      "facts": {
+        "known": "visible and generic hands rigs share 70 names/local transforms but tag_torso has one authored parent difference",
+        "notYetPromoted": [
+          "exact T6 duplicate-part remap algorithm for this assembled first-person DObj",
+          "exact effective hierarchy after duplicate remapping",
+          "exact model ordering and visible-hands insertion point"
+        ],
+        "forbiddenShortcut": "do not choose generic or visible parent hierarchy by convention and do not import older-engine DObj behavior as retail T6 authority"
+      }
+    },
+    {
+      "id": "shortsleeve_material_and_texture_payload_population",
+      "status": "CLOSED_HISTORICAL_RETAIL_PACKAGE_AWAITING_CURRENT_R2_RECONCILIATION",
+      "facts": {
+        "historicalStage13ExpectedTexturePayloads": 10,
+        "historicalStage13RecoveredIwi": 10,
+        "historicalStage13RecoveredDds": 10,
+        "historicalStage13MissingTextures": [],
+        "runtimeGeneratedZeroBodyGfxImage": ",c_gen_arm_rim_mask_norim_c",
+        "historicalStage8CombinedTextureNames": 154,
+        "historicalStage8OriginalIwi": 154,
+        "historicalStage8Dds": 154,
+        "historicalStage8MaterialJsonCount": 76,
+        "historicalStage8UniqueMaterialImageRefs": 110,
+        "historicalStage8ResolvedMaterialImageRefs": 110,
+        "stage8ArtifactSha256": "36024cea7492e7ea660b7c8116a52a7b9e66a7c531738b043ff047c34ade7520"
+      },
+      "requiredBeforePromotion": "join every material/image role used by the current-R2 short-sleeve/gun/mag surfaces to exact current-R2 physical identities or byte-equivalent retained payloads"
+    },
+    {
+      "id": "final_export_packaging",
+      "status": "OPEN_DEPENDS_ON_DOBJ_AND_VISUAL_RECONCILIATION",
+      "facts": {
+        "required": [
+          "multi-XModel skeleton/skin merge using exact T6 DObj semantics",
+          "exact 23 current-R2 base animations",
+          "exact notetrack sidecar",
+          "current-R2-authoritative materials/textures",
+          "GLB/Blender validation and deterministic hashes"
+        ]
+      }
+    }
+  ],
+  "readiness": {
+    "structuralAnimationExportPercentEstimate": 95,
+    "fullyRetailFaithfulShortsleeveExportPercentEstimate": 92,
+    "estimateIsNotProof": true,
+    "blockingGateCount": 2,
+    "blockingGates": [
+      "final_dobj_duplicate_bone_merge_and_model_order",
+      "shortsleeve_material_and_texture_payload_population current-R2 reconciliation"
+    ]
+  },
+  "proofBoundary": "Percentages are planning estimates only. Promotion remains binary and fail-closed per gate. Current-R2 Weapon/XModel/XAnim identities and payloads are authoritative only where explicitly marked CLOSED_CURRENT_R2. Historical Stage8/Stage13 visual assets are exact retained retail work but remain non-authoritative for current-R2 until identity/byte reconciliation closes. Final first-person DObj hierarchy/order remains open until exact T6 semantics are proven; no older-engine lineage or renderer repair may substitute for that proof."
+}
