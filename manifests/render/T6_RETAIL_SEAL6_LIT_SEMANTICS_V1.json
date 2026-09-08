@@ -1,0 +1,218 @@
+{
+  "backendPolicy": {
+    "completeRetailPixelOutputInBlender": false,
+    "familySelection": "exact VS+PS DXBC SHA pair only",
+    "forbiddenFallbacks": [
+      "invent metallic",
+      "invent roughness",
+      "map SpecularAndGloss to Principled parameters without exact proof",
+      "drop Normal_Detail_Map",
+      "drop cornea Mask/highlight arithmetic",
+      "replace explicit square/sqrt shader operations with ordinary sRGB transfer",
+      "select head runtime winner from patch/faction naming"
+    ],
+    "globalResourcesStillRequiredForCompleteRetailOutput": [
+      "modelLightingSampler texture3D",
+      "gridLightingCoordsAndVis",
+      "grid/reflection lighting SH",
+      "sunPosition/sunDiffuse",
+      "heroLightingR/G/B",
+      "fog outputs/constants",
+      "hdrControl0.x",
+      "reflectionProbeSampler for skin"
+    ],
+    "materialLocalExactNodesNowPossible": true
+  },
+  "families": [
+    {
+      "activeRetailClientWholeMaterialOwnerResolved": false,
+      "id": "seal6-char-skin-hero-lit-v1",
+      "inheritsExactSharedSkinSemantics": true,
+      "materialArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Normal_Detail_Map",
+        "Diffuse_Map",
+        "Reflection_Amount",
+        "Normal_Detail_Scale",
+        "Specular_Amount",
+        "Diffuse_Normal_Height"
+      ],
+      "normal": {
+        "Ndiff": "normalize(Nbase+(combinedXY*Diffuse_Normal_Height).x*T+(combinedXY*Diffuse_Normal_Height).y*B)",
+        "Nspec": "normalize(Nbase+combinedXY.x*T+combinedXY.y*B)",
+        "baseXY": "Normal_Map.rg*4.01574802398681640625-2.01574802398681640625",
+        "combinedXY": "baseXY+(Normal_Detail_Map(detailUV).rg*4.01574802398681640625-2.01574802398681640625)",
+        "detailUV": "UV0*Normal_Detail_Scale"
+      },
+      "ordinaryLitExecutablePairInvariantAcrossPhysicalHeadParents": true,
+      "pixelDxbcSha256": "dbad6541db6ffa00308d732ab2c07777dca960465ebcc9710823ab68b16c78ec",
+      "techniqueSet": "mc_sw4_3d_char_skin_hero_9949fq1j",
+      "vertexDxbcSha256": "b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe"
+    },
+    {
+      "id": "seal6-char-skin-standard-lit-v1",
+      "inheritsExactSharedSkinSemantics": true,
+      "materialArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map",
+        "Reflection_Amount",
+        "Diffuse_Normal_Height_Facing",
+        "Specular_Amount"
+      ],
+      "normal": {
+        "Ndiff": "normalize(Nbase+(normalXY*Diffuse_Normal_Height_Facing).x*T+(normalXY*Diffuse_Normal_Height_Facing).y*B)",
+        "Nspec": "normalize(Nbase+normalXY.x*T+normalXY.y*B)",
+        "normalXY": "Normal_Map.rg*4.01574802398681640625-2.01574802398681640625"
+      },
+      "pixelDxbcSha256": "785e8ef0f0936016ce9dd18f67cdcad1c15bdbed58c174e93049df3f46b79b98",
+      "techniqueSet": "mc_sw4_3d_char_skin_j92387z3",
+      "vertexDxbcSha256": "b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe"
+    },
+    {
+      "alpha": {
+        "gate": "Mask.r*saturate(lobe1+lobe2-0.0500000007450580596923828125)",
+        "lobe1": "highlightHelper(F1,Hightlight_1_Size,Highlight_1_Sharpness,Highlight_1_Brightness)",
+        "lobe2": "highlightHelper(F2,Highlight_2_Size,Highlight_2_Sharpness,Highlight_2_Brightness)",
+        "outAlpha": "sqrt(gate)"
+      },
+      "fillDirectionVertexTransport": {
+        "F1": "-normalize(vec3(dot(Fill_Direction,inverseViewMatrixRow0.xyz),dot(Fill_Direction,inverseViewMatrixRow1.xyz),dot(Fill_Direction,inverseViewMatrixRow2.xyz)))",
+        "F2": "-normalize(vec3(dot(Fill_Direction2,inverseViewMatrixRow0.xyz),dot(Fill_Direction2,inverseViewMatrixRow1.xyz),dot(Fill_Direction2,inverseViewMatrixRow2.xyz)))",
+        "note": "Exact translated row-dot use of inverseViewMatrix rows 40..42."
+      },
+      "forbiddenInferences": [
+        "specular texture",
+        "reflection probe",
+        "generic cornea roughness/IOR",
+        "Principled alpha substitution"
+      ],
+      "highlightHelper": {
+        "H": "normalize(Vcamera-F)",
+        "Vcamera": "normalize(-worldPosition)",
+        "a": "1.0-Sharpness",
+        "lobe": "window*side*Brightness",
+        "lower": "0.7200000286102294921875-0.180000007152557373046875*a",
+        "powerTerm": "exp2(log2(saturate(dot(Nsurface,H)))/max(Size,9.9999997473787516355514526367188e-6))",
+        "side": "sideT*sideT*(3.0-2.0*sideT)",
+        "sideT": "saturate((dot(Nsurface,-F)+0.20000000298023223876953125)*5.0)",
+        "upper": "0.7200000286102294921875+0.180000007152557373046875*a",
+        "window": "windowT*windowT*(3.0-2.0*windowT)",
+        "windowT": "saturate((powerTerm-lower)*(1.0/(upper-lower)))"
+      },
+      "id": "seal6-char-eye-cornea-lit-v1",
+      "materialArguments": [
+        "Mask",
+        "Surface_Normal_Map",
+        "Hightlight_1_Size",
+        "Highlight_2_Brightness",
+        "Highlight_1_Sharpness",
+        "Highlight_2_Size",
+        "Highlight_2_Sharpness",
+        "Highlight_1_Brightness",
+        "OverallBrightness"
+      ],
+      "pixelDxbcSha256": "6d4913fd080a783f1c08e78124884c491725c5e69dfe93846bc27a2a78ada298",
+      "rgb": {
+        "brightness": "OverallBrightness*OverallBrightness",
+        "foggedRgb": "fogColor+fogVisibility*(litRgb-fogColor)",
+        "lightingNormal": "Nbase; Surface_Normal_Map perturbs highlight alpha only",
+        "litRgb": "brightness*(modelLighting+sunLighting)",
+        "lookupUVW": "Nbase*lightingLookupScale.xyz/max(abs(Nbase.x),abs(Nbase.y),abs(Nbase.z))+gridLightingCoordsAndVis.xyz",
+        "modelLighting": "32.0*sample3D(modelLightingSampler,lookupUVW).rgb^2",
+        "outRgb": "sqrt(foggedRgb*hdrControl0.x)",
+        "sunLighting": "saturate(dot(sunPosition.xyz,Nbase))*(gridLightingCoordsAndVis.w*sunDiffuse.rgb)"
+      },
+      "surfaceNormal": {
+        "Nsurface": "normalize(Nbase+normalXY.x*T+normalXY.y*B)",
+        "normalXY": "Surface_Normal_Map.rg*4.01574802398681640625-2.01574802398681640625"
+      },
+      "techniqueSet": "mc_sw4_3d_char_eye_cornea_2eww29wu",
+      "vertexDxbcSha256": "db872ac90083aea7bd1cc0c53a3edd6f5c9bab2ece1a6616d86876169bb72cf5",
+      "vertexMaterialArguments": [
+        "Fill_Direction2",
+        "Fill_Direction"
+      ]
+    }
+  ],
+  "format": "t6-retail-seal6-lit-semantics-v1",
+  "proof": {
+    "glslSha256": {
+      "cornea_ps": "546f5a793bf64861e98e20a9e7e1fe3b862bef58782f1e450325ac7d3b0a8b82",
+      "cornea_vs": "bc4c4c40a186c84f51f97d220980d93e5c0810b250bde119c23eb96a12b60d58",
+      "hero_ps": "b17cfb08bf81972c607a1847264ece9a31db8fcc832a70e71885b5a2436ecfbc",
+      "skin_vs": "196464c7600a52c60d99c6da515d4a84020c29000992ab68f96a6b73d5f90613",
+      "standard_ps": "94ca4f31a5ccf0ee2acb6f416afe41c7b5e6ba60f1227d0d8c4ee1663a744168"
+    },
+    "shaderIrArtifactDigest": "sha256:1cb9304d7b4471e215a5fe3d4b6ee211c074914e7512ed1b62878c3bcc153976",
+    "shaderIrArtifactId": 10038442629,
+    "shaderIrRun": 34179663551,
+    "sourceNativeShaderArtifactId": 10038097215,
+    "sourceNativeShaderRun": 34178602640
+  },
+  "proofBoundary": "Direct finite-value normalization of five exact SHA-pinned SEAL6 ordinary-lit DXBC programs after validated DXBC->SPIR-V translation, SPIRV-Cross pretty-printing, and RDEF argument closure. Family selection is exact VS+PS SHA only. No generic PBR substitution, filename role inference, or retail-client duplicate-precedence claim.",
+  "sharedSkinSemantics": {
+    "diffuse": {
+      "encoded": "Diffuse_Map.rgb*(vertexColor.rgb*vertexColor.rgb)",
+      "lighting": "32.0*vertexColor.a*modelLighting+saturate(dot(L,Ndiff))*(gridLightingCoordsAndVis.w*sunDiffuse.rgb)",
+      "linearLike": "encoded*encoded",
+      "lookupUVW": "Ndiff*lightingLookupScale.xyz/max(abs(Ndiff.x),abs(Ndiff.y),abs(Ndiff.z))+gridLightingCoordsAndVis.xyz",
+      "modelLighting": "sample3D(modelLightingSampler,lookupUVW).rgb^2",
+      "note": "Retail explicitly squares vertex-color RGB before multiplying Diffuse_Map, then squares that product again; this is not (Diffuse*vertexColor)^2.",
+      "rgb": "linearLike*lighting"
+    },
+    "directSpecular": {
+      "C": "characterFactor*SpecularAndGloss.rgb",
+      "HL": "saturate(dot(H,L))",
+      "NH": "saturate(dot(Nspec,H))",
+      "NL": "saturate(dot(Nspec,L))",
+      "P": "exp2(13.0*SpecularAndGloss.a)",
+      "base": "C*C+(1.0-C*C)*exp2(-10.0*HL)",
+      "characterFactor": "1.0-saturate(scriptVector0.x)",
+      "denominator": "1.0099999904632568359375+saturate(SpecularAndGloss.a+0.545000016689300537109375)*(HL*HL-1.0)",
+      "lobe": "shape*NL/denominator",
+      "rgb": "base*lobe*Specular_Amount*(gridLightingCoordsAndVis.w*sunDiffuse.rgb)",
+      "shape": "exp2(log2(NH)*P)*(0.125*P+0.25)"
+    },
+    "final": {
+      "foggedRgb": "fogColor+fogVisibility*(heroRgb-fogColor)",
+      "heroRgb": "vec3(dot(vec4(preHero,1),heroLightingR),dot(vec4(preHero,1),heroLightingG),dot(vec4(preHero,1),heroLightingB))",
+      "outAlpha": "1.0",
+      "outRgb": "sqrt(foggedRgb*hdrControl0.x)",
+      "preHero": "directSpecular.rgb+reflection.rgb+diffuse.rgb"
+    },
+    "reflection": {
+      "F": "saturate((C*C)*(p3-q)+q)",
+      "R": "V-2.0*Nspec*dot(Nspec,V)",
+      "g": "exp2(-9.27999973297119140625*saturate(dot(Nspec,-V)))",
+      "lod": "4.0-4.0*SpecularAndGloss.a",
+      "p0": "1.0416667461395263671875*SpecularAndGloss.a",
+      "p1": "0.4749999940395355224609375*SpecularAndGloss.a",
+      "p2": "0.01822919957339763641357421875*SpecularAndGloss.a-0.015625",
+      "p3": "0.25*SpecularAndGloss.a+0.75",
+      "probeRgb": "sampleCubeLod(reflectionProbeSampler,R,lod).rgb/(sample.a+9.9999999747524270787835121154785e-7)",
+      "q": "p0*min(g,p1)+p2",
+      "rgb": "probeRgb*F*(vertexColor.a*Reflection_Amount)*reflectionLightingRatio"
+    },
+    "tangentBasis": {
+      "B": "tangentHandedness*cross(Nbase,T)",
+      "Nbase": "normalize(decoded/transformed T6 vertex normal)",
+      "T": "decoded/transformed T6 tangent",
+      "normalXYDecode": "sample.rg*4.01574802398681640625-2.01574802398681640625"
+    },
+    "viewAndSun": {
+      "H": "normalize(L-V)",
+      "L": "sunPosition.xyz",
+      "V": "normalize(worldPosition)"
+    }
+  },
+  "summary": {
+    "completeRetailPixelOutputInBlender": false,
+    "exactMaterialArgumentAbiClosed": true,
+    "families": 3,
+    "heroExecutablePairIndependentOfUnresolvedMaterialOwner": true,
+    "uniquePixelPrograms": 3,
+    "uniqueVertexPrograms": 2
+  }
+}
