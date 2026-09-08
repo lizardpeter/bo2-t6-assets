@@ -1,0 +1,137 @@
+name: T6 SEAL6 Blender 5.2.1 direct shader carrier v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - '.github/workflows/t6_seal6_blender_521_direct_carrier_v1.yml'
+      - 'tools/t6_install_blender_5_2_1_linux_x64.sh'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  direct-carrier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frozen exact V2 shader-attribute GLB
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_FULL_RETAIL_SHADER_ATTRIBUTE_CARRIER_V2
+          run-id: 34186012958
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/source
+
+      - name: Install exact Blender 5.2.1 LTS runtime
+        shell: bash
+        run: bash tools/t6_install_blender_5_2_1_linux_x64.sh
+
+      - name: Import exact carrier directly with native Blender 5.2.1 glTF importer
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE=$(find /tmp/source -type f -name 'T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_ATTRIBUTES_V2.glb' -print -quit)
+          test -n "$SOURCE" && test -s "$SOURCE"
+          echo 'b0543f983731afb8cb45d73ebd581026b53a23cf21d08a4178047fcacd5c8a20  '"$SOURCE" | sha256sum -c -
+          mkdir -p /tmp/out /tmp/proof
+          cp "$SOURCE" /tmp/out/source_shader_carrier_v2.glb
+          cat >/tmp/direct_import_521.py <<'PY'
+          import bpy, json, hashlib
+          from pathlib import Path
+
+          src=Path('/tmp/out/source_shader_carrier_v2.glb')
+          bpy.ops.wm.read_factory_settings(use_empty=True)
+          bpy.ops.import_scene.gltf(filepath=str(src), import_pack_images=True)
+          assert bpy.app.version_string == '5.2.1', bpy.app.version_string
+          assert len(bpy.data.armatures)==1, len(bpy.data.armatures)
+          assert len(bpy.data.actions)==6, len(bpy.data.actions)
+          assert len(bpy.data.materials)==12, len(bpy.data.materials)
+          meshes=[o for o in bpy.data.objects if o.type=='MESH']
+          main=[o for o in meshes if o.name=='c_usa_mp_seal6_smg_fb_mesh']
+          assert len(main)==1, [o.name for o in meshes]
+          main=main[0]
+          for o in list(meshes):
+              if o is main: continue
+              data=o.data; bpy.data.objects.remove(o,do_unlink=True)
+              if data.users==0: bpy.data.meshes.remove(data)
+          assert len(main.data.vertices)==13490
+          assert len(main.data.polygons)==14968
+
+          attrs={a.name:{'dataType':a.data_type,'domain':a.domain,'count':len(a.data)} for a in main.data.attributes}
+          colors={a.name:{'dataType':a.data_type,'domain':a.domain,'count':len(a.data)} for a in main.data.color_attributes}
+          required={'_T6_COLOR_RGBA','_T6_XMODEL_NORMAL','_T6_XMODEL_TANGENT','_T6_TANGENT_HANDEDNESS'}
+          present=set(attrs)|set(colors)
+          missing=sorted(required-present)
+          report={
+              'format':'t6-seal6-blender-521-direct-shader-carrier-v1',
+              'blenderVersion':bpy.app.version_string,
+              'sourceSha256':hashlib.sha256(src.read_bytes()).hexdigest(),
+              'geometry':{'vertices':len(main.data.vertices),'triangles':len(main.data.polygons),'joints':102,'materials':len(bpy.data.materials),'animations':len(bpy.data.actions)},
+              'attributes':attrs,
+              'colorAttributes':colors,
+              'requiredCustomAttributes':sorted(required),
+              'missingCustomAttributes':missing,
+              'allRequiredCustomAttributesNativeImport':not missing,
+              'color0Present':'COLOR_0' in present,
+              'standardTangentPresent':'TANGENT' in present,
+              'proofBoundary':'Direct Blender 5.2.1 native glTF import of the frozen SHA-pinned SEAL6 shader-attribute GLB. No binding stripping, reinjection, semantic remapping, standard COLOR_0, or derived tangent fallback is permitted.',
+          }
+          Path('/tmp/proof/T6_SEAL6_BLENDER_521_DIRECT_SHADER_CARRIER_V1.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
+          if missing:
+              raise RuntimeError(f'Blender 5.2.1 native glTF import lost exact custom attributes: {missing}')
+          if report['color0Present'] or report['standardTangentPresent']:
+              raise RuntimeError('forbidden standard COLOR_0/TANGENT appeared')
+          bpy.context.scene['t6_blender_runtime']='5.2.1'
+          bpy.context.scene['t6_shader_attribute_transport']='native Blender 5.2.1 glTF custom attributes'
+          bpy.context.scene['t6_complete_retail_pixel_output']=False
+          out=Path('/tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend')
+          bpy.ops.file.pack_all()
+          bpy.ops.wm.save_as_mainfile(filepath=str(out),compress=False)
+          assert out.is_file() and out.stat().st_size>0
+          PY
+          "$BLENDER" --background --factory-startup --python /tmp/direct_import_521.py 2>&1 | tee /tmp/proof/blender_521_direct_import.log
+          test -s /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend
+          sha256sum /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend | tee /tmp/proof/BLEND_SHA256.txt
+
+      - name: Reopen Blender 5.2.1 carrier and verify custom attributes survive save
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/reopen_521.py <<'PY'
+          import bpy,json
+          from pathlib import Path
+          assert bpy.app.version_string=='5.2.1'
+          meshes=[o for o in bpy.data.objects if o.type=='MESH']
+          main=[o for o in meshes if o.name=='c_usa_mp_seal6_smg_fb_mesh']
+          assert len(main)==1
+          main=main[0]
+          attrs={a.name:{'dataType':a.data_type,'domain':a.domain,'count':len(a.data)} for a in main.data.attributes}
+          colors={a.name:{'dataType':a.data_type,'domain':a.domain,'count':len(a.data)} for a in main.data.color_attributes}
+          required={'_T6_COLOR_RGBA','_T6_XMODEL_NORMAL','_T6_XMODEL_TANGENT','_T6_TANGENT_HANDEDNESS'}
+          present=set(attrs)|set(colors)
+          assert required <= present, sorted(required-present)
+          assert 'COLOR_0' not in present and 'TANGENT' not in present
+          assert len(main.data.vertices)==13490 and len(main.data.polygons)==14968
+          out={'format':'t6-seal6-blender-521-direct-shader-carrier-v1-reopen','blenderVersion':bpy.app.version_string,'attributes':attrs,'colorAttributes':colors,'allRequiredCustomAttributesPresent':True,'vertices':13490,'triangles':14968,'materials':len(bpy.data.materials),'animations':len(bpy.data.actions)}
+          Path('/tmp/proof/T6_SEAL6_BLENDER_521_DIRECT_SHADER_CARRIER_V1_REOPEN.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+          "$BLENDER" --background /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend --python /tmp/reopen_521.py 2>&1 | tee /tmp/proof/blender_521_reopen.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1
+          path: |
+            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend
+            /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
