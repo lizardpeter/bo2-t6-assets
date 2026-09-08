@@ -1,0 +1,82 @@
+{
+  "format": "t6-nuketown-iwi27-dds-bridge-authority-v1",
+  "map": "mp_nuketown_2020",
+  "date": "2026-09-08",
+  "retailSource": {
+    "fastFile": {
+      "file": "mp_nuketown_2020.ff",
+      "bytes": 38433211,
+      "sha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0"
+    },
+    "expanded": {
+      "bytes": 154653476,
+      "sha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+    },
+    "packedImageAliasClosure": "manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64"
+  },
+  "mipLayoutProof": {
+    "tool": "tools/t6_iwi27_mip_layout_proof_v2.py",
+    "toolCommit": "36a6e95d52270af8be9308211cbffff65f4b5908",
+    "workflowRun": 34280371596,
+    "artifactId": 10077366885,
+    "artifactZipSha256": "603f14c547d619d9c77639444ee01fbd359b7b5d05ea1fee8837778c1cb8afa6",
+    "proofJsonBytes": 92738,
+    "proofJsonSha256": "b71a1f1544c4ba8cc0f9204869e37e08281dc3f31339a66540261576302efdda",
+    "fileCount": 81,
+    "completeEightWordFitCount": 81,
+    "completeMipPayloadFitCount": 81,
+    "failureCount": 0,
+    "allTwoDimensional": true,
+    "flagCounts": {
+      "16": 81
+    },
+    "formatCounts": {
+      "DXN": 20,
+      "DXT1": 22,
+      "DXT5": 39
+    },
+    "mipCountCounts": {
+      "6": 2,
+      "7": 4,
+      "8": 8,
+      "9": 24,
+      "10": 43
+    },
+    "serializedPayloadOrder": "smallest-to-largest",
+    "sizeEquation": "size[i] = 64 + sum(mips[min(i,lastMip):]) for i=0..7, with mips ordered largest-to-smallest"
+  },
+  "ddsBridge": {
+    "tool": "tools/t6_iwi27_dds_bridge_v1.py",
+    "toolCommit": "7427cbb7afdb709b69379be23cd209f5bd02db93",
+    "validationWorkflowCommit": "ff0a6cc13dcef3778e0476f1c006e788d70e72d3",
+    "workflowRun": 34280860385,
+    "artifactId": 10077571150,
+    "artifactZipSha256": "267aa6f9e974bf3a37fe6d2f4c4be328782f8e010e6aa2836a88df5d62d8a0ac",
+    "bridgeManifestBytes": 316482,
+    "bridgeManifestSha256": "693a23ccbf5e13d079ecb408393bf151c2c87bbf8f485a26e0d78bf820d8701e",
+    "sourceAliasCount": 81,
+    "sourcePayloadCount": 81,
+    "outputImageNameCount": 81,
+    "ddsFormatCountsByImageName": {
+      "ATI2/BC5_UNORM": 20,
+      "DXT1/BC1": 22,
+      "DXT5/BC3": 39
+    },
+    "allCompressedMipBytesPreserved": true,
+    "unresolvedCount": 0,
+    "conflictCount": 0,
+    "independentFullMipChainChecks": 81,
+    "independentTopMipPixelChecks": 81,
+    "maxRgb565DecoderRoundingDelta": 1,
+    "conversion": "synthesize only the 128-byte legacy DDS header and reverse whole source-proven compressed mip slices from IWI smallest-to-largest into DDS largest-to-smallest; no pixel decompression or recompression"
+  },
+  "observedPromotedFormats": {
+    "0x0b": "IWI DXT1 -> DDS DXT1 / BC1",
+    "0x0d": "IWI DXT5 -> DDS DXT5 / BC3",
+    "0x0e": "IWI DXN -> DDS ATI2 / BC5_UNORM"
+  },
+  "excludedFormats": {
+    "0x0c": "DXT3 is not promoted by bridge v1 because it was absent from the exact 81-payload corpus and the current production DDS decoder does not accept DXT3"
+  },
+  "proofBoundary": "Authoritative only for the exact 81 pointer-proven packed GfxImage payloads represented by the retained packed-image alias closure. It does not claim that these 81 images are the complete Nuketown world texture dependency population. Inline/non-packed images, lightmaps, reflection probes, runtime renderer images and any other dependency class require their own exact closure."
+}
