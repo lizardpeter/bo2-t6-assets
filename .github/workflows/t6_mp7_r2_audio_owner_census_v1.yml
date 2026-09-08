@@ -1,0 +1,232 @@
+name: T6 MP7 R2 audio owner census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_audio_owner_census_v1.yml'
+      - 'manifests/weapons/T6_R2_SNDALIAS_OWNER_CANDIDATE_ZONES_V1.json'
+      - 'manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json'
+      - 'tools/t6_sndalias_target_extract_v1.py'
+      - 'tools/t6_sndalias_expanded_census_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/t6_expand_sha256.txt
+
+      - name: Select bounded candidate zones
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/work /tmp/expanded /tmp/proof
+          python3 - <<'PY'
+          import json,os,pathlib
+          d=json.load(open('manifests/weapons/T6_R2_SNDALIAS_OWNER_CANDIDATE_ZONES_V1.json',encoding='utf-8'))
+          assert d['format']=='t6-r2-sndalias-owner-candidate-zones-v2'
+          zones=d['candidateZoneNames']
+          assert len(zones)==63 and len(set(zones))==63
+          shard=int(os.environ['SHARD']); count=int(os.environ['SHARD_COUNT'])
+          selected=[z for i,z in enumerate(zones) if i % count == shard]
+          pathlib.Path('/tmp/proof/selected_zones.txt').write_text('\n'.join(selected)+'\n')
+          print('selected',len(selected),selected)
+          PY
+
+      - name: Download current R2 candidate FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          : > /tmp/proof/current_fastfiles.tsv
+          while IFS= read -r zone; do
+            test -n "$zone"
+            ff="/tmp/work/$zone.ff"
+            curl -fL --retry 4 "$base/$zone.ff" -o "$ff"
+            bytes=$(stat -c %s "$ff")
+            sha=$(sha256sum "$ff" | awk '{print $1}')
+            printf '%s\t%s\t%s\n' "$zone" "$bytes" "$sha" | tee -a /tmp/proof/current_fastfiles.tsv
+          done < /tmp/proof/selected_zones.txt
+
+      - name: Expand current R2 candidate FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/proof/current_expanded.tsv
+          while IFS= read -r zone; do
+            test -n "$zone"
+            /tmp/t6_expand "/tmp/work/$zone.ff" "/tmp/expanded/$zone.bin" "$zone" \
+              > "/tmp/proof/${zone}_expand.log" 2>&1
+            bytes=$(stat -c %s "/tmp/expanded/$zone.bin")
+            sha=$(sha256sum "/tmp/expanded/$zone.bin" | awk '{print $1}')
+            printf '%s\t%s\t%s\n' "$zone" "$bytes" "$sha" | tee -a /tmp/proof/current_expanded.tsv
+          done < /tmp/proof/selected_zones.txt
+
+      - name: Structurally scan exact MP7 target aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          from t6_sndalias_target_extract_v1 import build
+
+          shard=int(os.environ['SHARD']); count=int(os.environ['SHARD_COUNT'])
+          zones=[x.strip() for x in pathlib.Path('/tmp/proof/selected_zones.txt').read_text().splitlines() if x.strip()]
+          td=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json',encoding='utf-8'))
+          assert td['format']=='t6-mp7-r2-direct-audio-targets-v1'
+          targets=[x['aliasName'] for x in td['targets']]
+          assert len(targets)==18 and len(set(targets))==18
+          sources=[(z,pathlib.Path('/tmp/expanded')/f'{z}.bin') for z in zones]
+          result=build(sources,targets,[],True)
+          assert result['format']=='t6-sndalias-target-extract-v2'
+
+          current=[]
+          for z in zones:
+              ff=pathlib.Path('/tmp/work')/f'{z}.ff'; ex=pathlib.Path('/tmp/expanded')/f'{z}.bin'
+              current.append({
+                  'zoneName':z,
+                  'fastFileBytes':ff.stat().st_size,
+                  'fastFileSha256':hashlib.sha256(ff.read_bytes()).hexdigest(),
+                  'expandedBytes':ex.stat().st_size,
+                  'expandedSha256':hashlib.sha256(ex.read_bytes()).hexdigest(),
+              })
+          result.update({
+              'format':'t6-mp7-r2-audio-owner-census-shard-v1',
+              'shard':shard,'shardCount':count,
+              'candidateZoneCount':63,
+              'selectedCandidateZoneNames':zones,
+              'currentR2Files':current,
+              'authority':{
+                  'candidateNames':'historical locator only',
+                  'allBytesHashesExpansionAndAliasOccurrences':'fresh current r2.houseofkublai.com files',
+              },
+              'proofBoundary':'This shard uses historical evidence only to nominate FastFile filenames. Every retained file identity, expanded stream, bank section, SndAlias occurrence, assetId, and semantic digest is recomputed from current R2 bytes. Printable *.all strings nominate bank sections only; structural SndBank/SndAliasList validation is required before admission. No runtime winner or playback-selection rule is inferred.',
+          })
+          out=pathlib.Path('/tmp/proof')/f'T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_{shard}_V1.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          for a in result['aliases']:
+              if a['occurrenceCount']:
+                  print(a['aliasName'],a['occurrenceCount'],sorted({o['source'] for o in a['occurrences']}))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof/T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_${{ matrix.shard }}_V1.json
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: scan
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Require complete current-R2 candidate coverage and aggregate owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import glob,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_*_V1.json'))
+          if len(files)!=8:
+              raise SystemExit(f'expected 8 shard manifests, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          if sorted(d['shard'] for d in docs)!=list(range(8)):
+              raise SystemExit('shard index coverage is not exact 0..7')
+          if any(d.get('format')!='t6-mp7-r2-audio-owner-census-shard-v1' for d in docs):
+              raise SystemExit('unexpected shard format')
+
+          locator=json.load(open('manifests/weapons/T6_R2_SNDALIAS_OWNER_CANDIDATE_ZONES_V1.json',encoding='utf-8'))
+          expected=locator['candidateZoneNames']
+          current=[r for d in docs for r in d['currentR2Files']]
+          names=[r['zoneName'] for r in current]
+          if len(current)!=63 or len(set(names))!=63 or set(names)!=set(expected):
+              raise SystemExit('current R2 file coverage does not exactly match 63 candidate filenames')
+
+          td=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json',encoding='utf-8'))
+          targets=[x['aliasName'] for x in td['targets']]
+          merged=[]; missing=[]; total_occ=0
+          for name in sorted(targets):
+              rows=[]
+              alias_id=None
+              for d in docs:
+                  a=next(x for x in d['aliases'] if x['aliasName']==name)
+                  if alias_id is None: alias_id=a['aliasIdHex']
+                  elif alias_id!=a['aliasIdHex']: raise SystemExit('alias ID mismatch across shards')
+                  rows.extend(a['occurrences'])
+              if not rows: missing.append(name)
+              total_occ+=len(rows)
+              merged.append({
+                  'aliasName':name,
+                  'aliasIdHex':alias_id,
+                  'occurrenceCount':len(rows),
+                  'ownerZones':sorted({r['source'] for r in rows}),
+                  'ownerBanks':sorted({f"{r['source']}::{r['bankName']}" for r in rows}),
+                  'uniqueNonzeroAssetIds':sorted({r['assetIdHex'] for r in rows if r['assetIdHex']!='00000000'}),
+                  'semanticDigests':sorted({r['semanticDigest'] for r in rows}),
+                  'occurrences':rows,
+              })
+          if missing:
+              raise SystemExit('missing target aliases after complete current-R2 candidate scan: '+repr(missing))
+
+          result={
+              'format':'t6-mp7-r2-audio-owner-census-v1',
+              'summary':{
+                  'candidateZoneCount':63,
+                  'currentR2FastFileCount':63,
+                  'targetAliasCount':len(targets),
+                  'foundTargetAliasCount':len(targets)-len(missing),
+                  'missingTargetAliasCount':len(missing),
+                  'targetAliasOccurrenceCount':total_occ,
+                  'distinctOwnerZoneCount':len({z for a in merged for z in a['ownerZones']}),
+              },
+              'candidateLocator':locator['candidateSource'],
+              'currentR2Files':sorted(current,key=lambda r:r['zoneName']),
+              'aliases':merged,
+              'proofBoundary':'The historical census contributes only the 63 candidate filenames. All 63 files are freshly downloaded from current r2.houseofkublai.com and independently SHA-256 hashed and expanded. Alias owners, bank names, variants, assetIds, and semantic digests come only from structurally validated sections in those current R2 bytes. This closes ownership only within the bounded candidate universe; it does not infer runtime variant selection, duplicate winner precedence, or physical SABS/SABL payload selection.',
+          }
+          out=pathlib.Path('/tmp/proof/T6_MP7_R2_AUDIO_OWNER_CENSUS_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          for a in result['aliases']:
+              print(a['aliasIdHex'],a['aliasName'],'owners',a['ownerZones'],'assetIds',a['uniqueNonzeroAssetIds'])
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_AUDIO_OWNER_CENSUS_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_AUDIO_OWNER_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
