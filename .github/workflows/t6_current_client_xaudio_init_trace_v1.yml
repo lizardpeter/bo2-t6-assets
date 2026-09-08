@@ -1,0 +1,99 @@
+name: T6 current client XAudio2 init trace v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_init_trace_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace exact XAudio2 init function
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM,X86_REG_INVALID
+
+          UA='bo2-t6-assets-xaudio-init-trace/1'; INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode()); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'vs':s.Misc_VirtualSize,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          def offva(off):
+            for s in secs:
+              if s['ro']<=off<s['ro']+s['rs']:return s['va']+(off-s['ro'])
+            return None
+          START=0x00914960; END=0x00914D00
+          o=vaoff(START); md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          rows=[]; globals_seen={}; virtual_calls=[]; direct_calls=[]
+          for ins in md.disasm(raw[o:o+(END-START)],START):
+            if ins.address>=END:break
+            reci={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+            vals=[]
+            for op in ins.operands:
+              if op.type==X86_OP_IMM: vals.append(op.imm&0xffffffff)
+              elif op.type==X86_OP_MEM:
+                # absolute disp only is a useful global candidate; preserve all absolute-looking disps
+                disp=op.mem.disp&0xffffffff
+                if disp>=base:
+                  vals.append(disp)
+                  globals_seen.setdefault(f'0x{disp:08X}',[]).append(reci['va'])
+            if ins.mnemonic=='call':
+              if ins.operands and ins.operands[0].type==X86_OP_IMM:
+                target=ins.operands[0].imm&0xffffffff; direct_calls.append({'va':reci['va'],'target':f'0x{target:08X}'})
+              elif ins.operands and ins.operands[0].type==X86_OP_MEM:
+                m=ins.operands[0].mem
+                virtual_calls.append({'va':reci['va'],'opStr':ins.op_str,'baseReg':ins.reg_name(m.base) if m.base!=X86_REG_INVALID else None,'indexReg':ins.reg_name(m.index) if m.index!=X86_REG_INVALID else None,'disp':m.disp})
+              else:
+                virtual_calls.append({'va':reci['va'],'opStr':ins.op_str,'baseReg':None,'indexReg':None,'disp':None})
+            rows.append(reci)
+          # collect ASCII strings at absolute globals seen where possible
+          strings=[]
+          for g in globals_seen:
+            va=int(g,16)
+            try:go=vaoff(va)
+            except:continue
+            chunk=raw[go:go+300]
+            if chunk:
+              z=chunk.find(b'\0'); z=len(chunk) if z<0 else z
+              b=chunk[:z]
+              if len(b)>=4 and all(32<=x<127 for x in b): strings.append({'va':g,'text':b.decode('ascii','replace'),'xrefs':globals_seen[g]})
+          result={'format':'t6-current-client-xaudio-init-trace-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest(),'imageBase':f'0x{base:08X}'},'range':{'startVa':f'0x{START:08X}','endExclusiveVa':f'0x{END:08X}','bytes':END-START,'sha256':hashlib.sha256(raw[o:o+(END-START)]).hexdigest()},'disasm':rows,'directCalls':direct_calls,'indirectCalls':virtual_calls,'absoluteReferences':globals_seen,'asciiAtAbsoluteReferences':strings,'proofBoundary':'Exact machine trace for current client range only; XAudio2 method names may be assigned only from verified interface slot order.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_INIT_TRACE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('RANGE_SHA256',result['range']['sha256'])
+          for r in rows: print(r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('INDIRECT',json.dumps(virtual_calls,sort_keys=True))
+          print('DIRECT',json.dumps(direct_calls,sort_keys=True))
+          print('STRINGS',json.dumps(strings,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_INIT_TRACE_V1.json
+      - name: Upload trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_INIT_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_INIT_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
