@@ -1,0 +1,44 @@
+name: T6 MP7 R2 retail client locator v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - 'tools/t6_plutonium_archive_t6mp_census_v1.py'
+      - '.github/workflows/t6_mp7_r2_retail_client_locator_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enumerate and verify historical T6 MP clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 tools/t6_plutonium_archive_t6mp_census_v1.py \
+            --out /tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V1.json \
+            | tee /tmp/proof/census.log
+          sha256sum /tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V1.json | tee /tmp/proof/manifest_sha256.txt
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          print('exactRetailMatches',len(d['exactExpectedRetailMatches']))
+          # This locator may close negatively. Do not fail merely because the
+          # archive lacks the retail executable; absence here is not global.
+          PY
+      - name: Upload complete locator proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_RETAIL_CLIENT_LOCATOR_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
