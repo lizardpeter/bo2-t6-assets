@@ -1,0 +1,66 @@
+name: T6 weapon gameplay field contract v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - tools/t6_weapon_gameplay_field_contract_v1.py
+      - .github/workflows/t6_weapon_gameplay_field_contract_v1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch immutable pinned T6 WeaponFields source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-weapon-fields /tmp/out
+          curl -fL --retry 3 \
+            'https://raw.githubusercontent.com/Laupetin/OpenAssetTools/9dca965366541504b71fa8cfb7ac049cb9b717e1/src/ObjCommon/Game/T6/Weapon/WeaponFields.h' \
+            -o /tmp/t6-weapon-fields/WeaponFields.h
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          p=Path('/tmp/t6-weapon-fields/WeaponFields.h')
+          d=p.read_bytes()
+          got=hashlib.sha1(b'blob '+str(len(d)).encode()+b'\0'+d).hexdigest()
+          expected='913e81a417d14516fc131ff5cb864ada3fcaf661'
+          assert got==expected, (got, expected)
+          print('pinned WeaponFields git blob:', got)
+          PY
+
+      - name: Build fail-closed gameplay-field contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_weapon_gameplay_field_contract_v1.py \
+            --weapon-fields /tmp/t6-weapon-fields/WeaponFields.h \
+            --out /tmp/out/T6_WEAPON_GAMEPLAY_FIELD_CONTRACT_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/out/T6_WEAPON_GAMEPLAY_FIELD_CONTRACT_V1.json'))
+          assert d['format']=='t6-weapon-gameplay-field-contract-v1'
+          s=d['summary']
+          assert s['allRequiredGameplayCanariesExact'] is True
+          assert s['fireTimeInternalUnit']=='milliseconds'
+          assert s['damageCurvePoints']==6
+          assert s['nativeDamageRangeUnitConversionAsserted'] is False
+          assert len(d['fields'])==s['fieldCount']
+          assert d['derivedRules']['rateOfFireRpm']['formula']=='60000 / fireTimeMilliseconds'
+          print(json.dumps(s, indent=2, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_WEAPON_GAMEPLAY_FIELD_CONTRACT_V1
+          path: /tmp/out/T6_WEAPON_GAMEPLAY_FIELD_CONTRACT_V1.json
+          if-no-files-found: error
+          compression-level: 0
