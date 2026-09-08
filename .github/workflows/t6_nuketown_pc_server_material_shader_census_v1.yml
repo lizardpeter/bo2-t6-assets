@@ -10,6 +10,10 @@ on:
       - 'tools/t6_oat_material_shader_census_v3.py'
       - 'tools/t6_nuketown_special_material_census_v1.py'
       - 'tools/test_t6_nuketown_special_material_census_v1.py'
+      - 'tools/t6_nuketown_special_full_output_symbolic_v1.py'
+      - 'tools/t6_retail_special_shdr_symbolic_v1.py'
+      - 'tools/t6_retail_special_shdr_operand_census_v1.py'
+      - 'tools/t6_retail_special_shdr_opcode_census_v1.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - 'manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V2.json'
       - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
@@ -32,6 +36,7 @@ jobs:
           PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
           PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_pc_server_v1.py
           PYTHONPATH=tools python3 tools/test_t6_nuketown_special_material_census_v1.py
+          python3 -m py_compile tools/t6_nuketown_special_full_output_symbolic_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -142,18 +147,33 @@ jobs:
           assert s['specialMaterialUseCount'] == 11
           assert s['specialTechniqueSetCount'] == 7
           assert s['familyUseCounts'] == {'rawnormal_special':1,'shadowcaster':2,'unlit':8}
+          assert s['pcServerDuplicateParentSelectionDependencyCount'] == 0
           assert s['retailClientAuthoritativeWinnerCount'] == 0
           print('NUKETOWN SPECIAL SUMMARY', json.dumps(s,indent=2,sort_keys=True))
-          for t in d['specialTechniqueSets']:
-              print('SPECIAL TECHSET', t['family'], t['techniqueSet'], 'uses', t['expectedMaterialUseCount'], 'duplicate_parent_dependency', t['dependsOnPcServerDuplicateParentSelection'])
-              for m in t['materials']:
-                  print('  MATERIAL', m)
-          for g in d['shaderGroups']:
-              print('GROUP', g['techniqueType'], g['groupKey'], g['techniqueSets'], g['techniques'])
-              for p in g['passes']:
-                  print('  PASS', p['index'], 'state', p.get('stateMap'))
-                  for st in p.get('stages',[]):
-                      print('   ', st['kind'], st['asset'], st['sha256'])
+          PY
+
+      - name: Compile exact unlit and emissive full pixel outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_special_full_output_symbolic_v1.py \
+            --census /tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_CENSUS_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json \
+            2>&1 | tee /tmp/proof/nuketown_special_full_output_symbolic.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          s=d['summary']
+          assert s['uniquePixelShaderCount'] == 5
+          assert s['fullOutputSymbolicShaderCount'] == 5
+          assert s['symbolicBlockerCount'] == 0
+          assert s['controlFlowShaderCount'] == 0
+          assert s['sideEffectShaderCount'] == 0
+          assert s['outputComponentCount'] > 0
+          print('GREEN EXACT NUKETOWN UNLIT/EMISSIVE FULL OUTPUT', json.dumps(s,indent=2,sort_keys=True))
+          for r in d['shaderRows']:
+              print('PS',r['sha256'],r['asset'],'nodes',r['nodeCount'],'samples',r['sampleCount'],'outputs',[(x['output'],x['node']) for x in r['outputs']], 'dag',r['dagSha256'])
           PY
 
       - name: Upload exact server-projected census
