@@ -1,10 +1,11 @@
-name: T6 Nuketown IWI27 mip layout probe v1
+name: T6 Nuketown IWI27 mip layout proof v2
 
 on:
   workflow_dispatch:
   push:
     paths:
       - 'tools/t6_iwi27_mip_layout_probe_v1.py'
+      - 'tools/t6_iwi27_mip_layout_proof_v2.py'
       - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
       - 'tools/t6_ipak_http_range_v2.py'
       - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
@@ -50,7 +51,7 @@ jobs:
           print('GREEN EXACT 81 OF 81 IWI SOURCE GATE')
           PY
 
-      - name: Classify serialized IWI27 mip boundaries
+      - name: Preserve exploratory boundary census
         shell: bash
         run: |
           set -euo pipefail
@@ -59,20 +60,37 @@ jobs:
             --root /tmp/staged/payloads \
             --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1.json \
             2>&1 | tee /tmp/proof/probe.log
+
+      - name: Prove complete clamped cumulative mip layout
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_iwi27_mip_layout_proof_v2.py
+          python3 tools/t6_iwi27_mip_layout_proof_v2.py \
+            --root /tmp/staged/payloads \
+            --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json \
+            2>&1 | tee /tmp/proof/proof_v2.log
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1.json'
+          p='/tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json'
           d=json.load(open(p,encoding='utf-8')); s=d['summary']
           assert s['fileCount']==81,s
-          print('MIP_LAYOUT_SUMMARY',json.dumps(s,sort_keys=True))
-          for r in d['rows'][:8]:
-              print('SAMPLE',r['file'],r['format'],r['width'],r['height'],r['sizeWords'],r['boundaryDeltas'],r['expectedMipBytesLargestToSmallest'])
+          assert s['completeEightWordFitCount']==81,s
+          assert s['completeMipPayloadFitCount']==81,s
+          assert s['failureCount']==0,s
+          assert s['allTwoDimensional'] is True,s
+          assert s['serializedPayloadOrder']=='smallest-to-largest',s
+          assert s['formatCounts']=={'DXN':20,'DXT1':22,'DXT5':39},s
+          print('GREEN EXACT IWI27 CLAMPED CUMULATIVE MIP LAYOUT 81 OF 81')
+          print('PROOF_SUMMARY',json.dumps(s,sort_keys=True))
           PY
 
       - name: Upload proof
         uses: actions/upload-artifact@v4
         with:
-          name: T6_NUKETOWN_IWI27_MIP_LAYOUT_PROBE_V1
+          name: T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2
           path: |
             /tmp/proof
             /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json
