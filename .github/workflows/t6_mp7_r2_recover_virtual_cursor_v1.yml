@@ -1,0 +1,45 @@
+name: T6 MP7 R2 recover virtual cursor v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_mp7_r2_recover_virtual_cursor_v1.yml'
+      - 'tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64'
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recover retained cross-XModel VIRTUAL cursor source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          src = pathlib.Path('tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64')
+          packed = src.read_bytes().strip()
+          raw = zlib.decompress(base64.b64decode(packed))
+          expected = 'b33e28e355ee62e869a4a9c44b8a2740a87d5b66896fefab48e1e8656ac4fbad'
+          got = hashlib.sha256(raw).hexdigest()
+          if got != expected:
+              raise SystemExit(f'resolver source SHA mismatch: {got} != {expected}')
+          if len(raw) != 14662:
+              raise SystemExit(f'resolver source byte count drift: {len(raw)} != 14662')
+          out = pathlib.Path('/tmp/t6_nuketown_static_material_alias_resolve_v3.py')
+          out.write_bytes(raw)
+          compile(raw, str(out), 'exec')
+          print(f'RECOVERED {len(raw)} bytes sha256={got}')
+          PY
+
+      - name: Retain source for MP7 adaptation
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_RETAINED_VIRTUAL_CURSOR_SOURCE_V1
+          path: /tmp/t6_nuketown_static_material_alias_resolve_v3.py
+          if-no-files-found: error
