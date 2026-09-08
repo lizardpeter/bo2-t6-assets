@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/t6_mp7_r2_recover_virtual_cursor_v1.yml'
       - 'tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64'
+      - 'tools/t6_xmodel_virtual_cursor_v1.py'
 
 permissions:
   contents: read
@@ -36,6 +37,13 @@ jobs:
           compile(raw, str(out), 'exec')
           print(f'RECOVERED {len(raw)} bytes sha256={got}')
           PY
+
+      - name: Validate reusable MP7 cursor primitives
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_xmodel_virtual_cursor_v1.py
+          python3 tools/t6_xmodel_virtual_cursor_v1.py
 
       - name: Retain source for MP7 adaptation
         uses: actions/upload-artifact@v4
