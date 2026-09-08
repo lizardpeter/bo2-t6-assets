@@ -1,0 +1,140 @@
+name: T6 audio format payload validation v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_format_payload_validation_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact physical payload shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_audio_bank_id_manifest_v1 import parse_bank
+
+          shard=int(os.environ['SHARD']); shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-audio-format-validation-v2/{shard}',timeout=180,retries=7)
+          entries,meta=rz.central_directory()
+          banks=sorted([e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))],key=lambda e:e['name'].lower())
+          if len(banks)!=116: raise SystemExit(f'bank population changed: {len(banks)} != 116')
+          selected=[(i,e) for i,e in enumerate(banks) if i%shard_count==shard]
+          counts=collections.Counter(); failures=[]; bank_rows=[]; examples={}
+          for bi,e in selected:
+              raw=rz.extract(e,verify_crc=True)
+              doc=parse_bank(raw,e['name'])
+              local=collections.Counter()
+              for ent in doc['entries']:
+                  code=int(ent['formatCode']); counts[code]+=1; local[code]+=1
+                  start=int(ent['dataOffset']); size=int(ent['dataBytes']); payload=raw[start:start+size]
+                  if len(payload)!=size:
+                      failures.append({'bank':e['name'],'entry':ent['entryIndex'],'reason':'short_payload'}); continue
+                  if code==0:
+                      expected=int(ent['sampleCount'])*int(ent['channels'])*2
+                      if size!=expected:
+                          failures.append({'bank':e['name'],'entry':ent['entryIndex'],'reason':'pcm16_size_relation','dataBytes':size,'expectedBytes':expected,'sampleCount':ent['sampleCount'],'channels':ent['channels']})
+                      examples.setdefault('PCMS16',{'bank':e['name'],'entry':ent['entryIndex'],'identifierHex':ent['identifierHex'],'dataBytes':size,'sampleCount':ent['sampleCount'],'channels':ent['channels'],'first16Hex':payload[:16].hex()})
+                  elif code==8:
+                      if payload[:4]!=b'fLaC':
+                          failures.append({'bank':e['name'],'entry':ent['entryIndex'],'reason':'flac_magic','first16Hex':payload[:16].hex()})
+                      examples.setdefault('FLAC',{'bank':e['name'],'entry':ent['entryIndex'],'identifierHex':ent['identifierHex'],'dataBytes':size,'sampleCount':ent['sampleCount'],'channels':ent['channels'],'first16Hex':payload[:16].hex()})
+                  else:
+                      failures.append({'bank':e['name'],'entry':ent['entryIndex'],'reason':'unexpected_format','formatCode':code})
+              bank_rows.append({'globalIndex':bi,'path':e['name'],'sha256':hashlib.sha256(raw).hexdigest(),'entryCount':doc['summary']['entryCount'],'formatCodeCounts':dict(sorted(local.items()))})
+              print(bi,e['name'],dict(sorted(local.items())),flush=True)
+          result={
+              'format':'t6-audio-format-payload-validation-shard-v2','shard':shard,'shardCount':shard_count,
+              'allBankCount':116,'remoteZip':meta,'banks':bank_rows,
+              'summary':{'selectedBankCount':len(selected),'entryCount':sum(counts.values()),'formatCodeCounts':dict(sorted(counts.items())),'failureCount':len(failures)},
+              'examples':examples,'failures':failures,
+              'checks':{'0':'dataBytes == sampleCount * channels * 2','8':'payload[0:4] == 664c6143 (fLaC)'},
+              'proofBoundary':'Exact physical payload validation shard. Format-name promotion is performed only by the aggregate after source enum closure and exact all-bank coverage.'
+          }
+          p=pathlib.Path(f'/tmp/proof/T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_SHARD_{shard}_V2.json'); p.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          if failures: raise SystemExit(f'payload validation failures: {len(failures)}')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_SHARD_${{ matrix.shard }}_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_SHARD_*_V2
+          path: /tmp/shards
+          merge-multiple: true
+      - name: Aggregate and fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import collections,glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_SHARD_*_V2.json'))
+          if len(files)!=8: raise SystemExit(f'expected 8 shards, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          banks=[]; counts=collections.Counter(); failures=[]; examples={}; total=0
+          for d in docs:
+              if d.get('format')!='t6-audio-format-payload-validation-shard-v2': raise SystemExit('unexpected shard format')
+              banks.extend(d['banks']); total+=int(d['summary']['entryCount'])
+              for k,v in d['summary']['formatCodeCounts'].items(): counts[int(k)]+=int(v)
+              failures.extend(d['failures'])
+              for k,v in d.get('examples',{}).items(): examples.setdefault(k,v)
+          banks.sort(key=lambda x:x['globalIndex'])
+          if len(banks)!=116 or [b['globalIndex'] for b in banks]!=list(range(116)): raise SystemExit('bank coverage is not exact 0..115')
+          if total!=25446: raise SystemExit(f'entry population changed: {total}')
+          if dict(counts)!={0:4746,8:20700}: raise SystemExit(f'format population changed: {dict(counts)}')
+          if failures: raise SystemExit(f'payload validation failures: {len(failures)}')
+          result={
+              'format':'t6-audio-format-payload-validation-v2',
+              'authority':{
+                  'sourceCommit':'Laupetin/OpenAssetTools@9dca965366541504b71fa8cfb7ac049cb9b717e1',
+                  'sourceEnum':'src/Common/Game/T6/T6_Assets.h: snd_asset_format gives PCMS16=0x0 and FLAC=0x8',
+                  'sourceDumper':'src/ObjWriting/Game/T6/Sound/SndBankDumperT6.cpp maps PCMS16 to WAV/PCM and FLAC to .flac passthrough',
+                  'physicalArchive':docs[0]['remoteZip']
+              },
+              'closedFormatCodes':{'0':'SND_ASSET_FORMAT_PCMS16','8':'SND_ASSET_FORMAT_FLAC'},
+              'physicalValidation':{'PCMS16':'4746/4746 satisfy exact 16-bit interleaved PCM byte relation','FLAC':'20700/20700 begin with native fLaC stream marker'},
+              'summary':{'bankCount':116,'entryCount':total,'formatCodeCounts':{'0':counts[0],'8':counts[8]},'failureCount':0},
+              'examples':examples,'banks':banks,
+              'shardSha256':[{'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()} for p in files],
+              'proofBoundary':'Codec names are source-closed at the exact pinned T6 source commit and independently validated across every physical payload in all 116 CRC-verified SABS/SABL files. This proves how the observed PC bank corpus should be decoded, but does not claim retail t6mp.exe Create-function addresses while the exact retail executable bytes remain unavailable.'
+          }
+          pathlib.Path('/tmp/proof/T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_V2.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
