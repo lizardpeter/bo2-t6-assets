@@ -8,6 +8,9 @@ on:
       - 'tools/t6_nuketown_special_material_census_v1.py'
       - 'tools/t6_nuketown_special_full_output_symbolic_v1.py'
       - 'tools/t6_nuketown_rawnormal_full_output_v1.py'
+      - 'tools/t6_nuketown_rawnormal_input_binding_v1.py'
+      - 'tools/t6_nuketown_shadowcaster_state_v1.py'
+      - 'tools/t6_oat_slot_shader_resolver_v1.py'
       - 'tools/t6_oat_material_shader_census_pc_server_v1.py'
       - 'tools/t6_oat_material_shader_census_v4.py'
       - 'tools/t6_oat_material_shader_census_v3.py'
@@ -38,7 +41,9 @@ jobs:
             tools/t6_nuketown_special_material_input_binding_v1.py \
             tools/t6_nuketown_special_material_census_v1.py \
             tools/t6_nuketown_special_full_output_symbolic_v1.py \
-            tools/t6_nuketown_rawnormal_full_output_v1.py
+            tools/t6_nuketown_rawnormal_full_output_v1.py \
+            tools/t6_nuketown_rawnormal_input_binding_v1.py \
+            tools/t6_nuketown_shadowcaster_state_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -128,15 +133,13 @@ jobs:
 
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_INPUT_BINDING_V1.json'
-          d=json.load(open(p,encoding='utf-8')); s=d['summary']
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_INPUT_BINDING_V1.json',encoding='utf-8')); s=d['summary']
           assert s['materialCount'] == 11
           assert s['reflectedPixelShaderCount'] == 5
           assert s['programBindingCount'] == 19
           assert s['exactRdefTechniqueAssignmentCount'] == 19
           assert s['exactRdefToMaterialTextureMatchCount'] == 19
-          print('GREEN EXACT SPECIAL MATERIAL INPUT BINDING')
-          print(json.dumps(s,indent=2,sort_keys=True))
+          print('GREEN EXACT SPECIAL MATERIAL INPUT BINDING',json.dumps(s,indent=2,sort_keys=True))
           PY
 
       - name: Compile exact raw-normal lit full outputs
@@ -149,18 +152,59 @@ jobs:
             2>&1 | tee /tmp/proof/rawnormal_full_output.log
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_RAWNORMAL_FULL_OUTPUT_V1.json'
-          d=json.load(open(p,encoding='utf-8')); s=d['summary']
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_RAWNORMAL_FULL_OUTPUT_V1.json',encoding='utf-8')); s=d['summary']
           assert s['litProgramCount'] == 22
           assert s['uniquePixelShaderCount'] == 20
           assert s['straightShaderCount'] + s['branchShaderCount'] == 20
           assert s['symbolicBlockerCount'] == 0
           assert s['discardShaderCount'] == 0
           assert s['outputComponentCount'] == 80
-          print('GREEN EXACT NUKETOWN RAWNORMAL FULL OUTPUT')
-          print(json.dumps(s,indent=2,sort_keys=True))
-          for r in d['shaderRows']:
-              print('RAWNORMAL PS',r['sha256'],'branch',r['controlFlow'],'ifs',r['ifCount'],'samples',r['sampleSiteCount'],'nodes',r['nodeCount'],'dag',r['dagSha256'])
+          assert s['sampleSiteCount'] == 446
+          print('GREEN EXACT NUKETOWN RAWNORMAL FULL OUTPUT',json.dumps(s,indent=2,sort_keys=True))
+          PY
+
+      - name: Bind every used raw-normal shader input
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_rawnormal_input_binding_v1.py \
+            --special-census /tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_CENSUS_V1.json \
+            --rawnormal /tmp/proof/T6_NUKETOWN_RAWNORMAL_FULL_OUTPUT_V1.json \
+            --material-root /tmp/map_out \
+            --out /tmp/proof/T6_NUKETOWN_RAWNORMAL_INPUT_BINDING_V1.json \
+            2>&1 | tee /tmp/proof/rawnormal_input_binding.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_RAWNORMAL_INPUT_BINDING_V1.json',encoding='utf-8')); s=d['summary']
+          assert s['pixelShaderCount'] == 20
+          assert s['sampleSiteCount'] == 446
+          assert s['materialOwnedSampleSiteCount'] + s['engineOrCodeSampleSiteCount'] == 446
+          assert s['uniqueMaterialImageCount'] > 0
+          assert s['uniqueEngineResourceBindingCount'] > 0
+          print('GREEN EXACT NUKETOWN RAWNORMAL INPUT BINDING',json.dumps(s,indent=2,sort_keys=True))
+          print('ENGINE RESOURCES',json.dumps(d['engineResourceBindings'],indent=2,sort_keys=True))
+          print('ENGINE CONSTANT LEAVES',json.dumps(d['engineOrCodeConstantLeaves'],indent=2,sort_keys=True))
+          PY
+
+      - name: Prove exact Nuketown shadowcaster states
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_shadowcaster_state_v1.py \
+            --special-census /tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_CENSUS_V1.json \
+            --binding /tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_INPUT_BINDING_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_SHADOWCASTER_STATE_V1.json \
+            2>&1 | tee /tmp/proof/shadowcaster_state.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_SHADOWCASTER_STATE_V1.json',encoding='utf-8')); s=d['summary']
+          assert s['materialCount'] == 2
+          assert s['identicalStatePayloadCount'] == 2
+          assert s['depthPrepassColorWrites'] is False and s['depthPrepassDepthWrites'] is True
+          assert s['shadowmapColorWrites'] is False and s['shadowmapDepthWrites'] is True
+          assert s['shadowmapPolygonOffset'] == 'offsetShadowmap'
+          assert s['exactDepthShaderPairCount'] == 2
+          print('GREEN EXACT NUKETOWN SHADOWCASTER STATE',json.dumps(s,indent=2,sort_keys=True))
           PY
 
       - name: Upload proof
