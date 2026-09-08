@@ -1,0 +1,125 @@
+name: T6 Nuketown retail world source sidecars v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_world_source_sidecars_v1.py'
+      - 'tools/t6_retail_world_formats_45_proof_v1.py'
+      - 'tools/t6_retail_world_material_state_census_v2.py'
+      - 'tools/t6_retail_special_material_family_census_v1.py'
+      - 'tools/t6_world_vertex_audit_v2.py'
+      - 'tools/t6_world_export_pipeline_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_nuketown_world_source_sidecars_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 PC FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
+
+      - name: Fetch and expand exact retail Nuketown FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/source/mp_nuketown_2020.ff /tmp/source/mp_nuketown_2020.expanded.bin mp_nuketown_2020 \
+            2>&1 | tee /tmp/proof/expand.log
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/source/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+          test "$(stat -c %s /tmp/source/mp_nuketown_2020.expanded.bin)" = 154653476
+
+      - name: Regenerate source-derived world sidecars
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_nuketown_world_source_sidecars_v1.py
+          python3 tools/t6_nuketown_world_source_sidecars_v1.py \
+            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
+            --out-dir /tmp/proof/sidecars \
+            2>&1 | tee /tmp/proof/sidecar.log
+
+      - name: Re-run current strict world vertex audit on regenerated compatibility projection
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          S=/tmp/proof/sidecars
+          python3 tools/t6_world_vertex_audit_v2.py \
+            --map mp_nuketown_2020 \
+            --surfaces "$S/mp_nuketown_2020.surfaces_source_v1.json" \
+            --vd0 "$S/mp_nuketown_2020.vd0.bin" \
+            --vd1 "$S/mp_nuketown_2020.vd1.bin" \
+            --materials "$S/mp_nuketown_2020.materials_compat_v1.json" \
+            --catalog "$S/mp_nuketown_2020.material_catalog_source_v1.json" \
+            --prefix "$S/mp_nuketown_2020.technique_prefix_compat_v1.json" \
+            --asset-pointer-base 13472 \
+            --out /tmp/proof/T6_NUKETOWN_WORLD_VERTEX_PROOF_REGENERATED_V1.json \
+            2>&1 | tee /tmp/proof/vertex_audit.log
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/proof/T6_NUKETOWN_WORLD_VERTEX_PROOF_REGENERATED_V1.json'))
+          assert p['badGroupCount']==0
+          assert p['surfaceCount']==5614
+          assert p['uniqueVertexGroups']==340
+          assert p['vd0Bytes']==5285088
+          assert p['vd1Bytes']==33764
+          assert p['observedFormatGroupCounts']=={'0':220,'1':95,'2':7,'3':17,'6':1}
+          print('GREEN REGENERATED NUKETOWN WORLD VERTEX AUDIT')
+          PY
+
+      - name: Exercise base production world exporter from regenerated sidecars
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          S=/tmp/proof/sidecars
+          python3 tools/t6_world_export_pipeline_v1.py \
+            --map mp_nuketown_2020 \
+            --surfaces "$S/mp_nuketown_2020.surfaces_source_v1.json" \
+            --vd0 "$S/mp_nuketown_2020.vd0.bin" \
+            --vd1 "$S/mp_nuketown_2020.vd1.bin" \
+            --indices "$S/mp_nuketown_2020.indices.bin" \
+            --materials "$S/mp_nuketown_2020.materials_compat_v1.json" \
+            --catalog "$S/mp_nuketown_2020.material_catalog_source_v1.json" \
+            --prefix "$S/mp_nuketown_2020.technique_prefix_compat_v1.json" \
+            --asset-pointer-base 13472 \
+            --out-dir /tmp/proof/base_world \
+            2>&1 | tee /tmp/proof/base_world.log
+          python3 - <<'PY'
+          import json,glob
+          p=glob.glob('/tmp/proof/base_world/*world_export_manifest.json'); assert len(p)==1
+          d=json.load(open(p[0])); v=d['validation']; s=d['stats']['normalizedWorld']
+          assert v['vertexAuditBadGroups']==0 and v['allSurfaceMaterialsResolved'] is True
+          assert v['unresolvedSurfaceMaterials']==0 and v['glbRegenerationByteIdentical'] is True
+          assert s['surfaceCount']==5614 and s['vertexGroupCount']==340
+          assert s['serializedVertexCount']==146764 and s['triangleCount']==100280
+          assert s['worldVertFormatGroupCounts']=={'0':220,'1':95,'2':7,'3':17,'6':1}
+          print('GREEN BASE WORLD EXPORT FROM REGENERATED RETAIL SIDECARS')
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_WORLD_SOURCE_SIDECARS_V1
+          path: |
+            /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
