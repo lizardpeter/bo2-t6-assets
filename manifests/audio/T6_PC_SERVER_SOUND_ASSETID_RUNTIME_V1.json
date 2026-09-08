@@ -1,0 +1,113 @@
+{
+  "authority": "exact SHA-pinned PC dedicated-server build only",
+  "closedFacts": {
+    "allocationFailure": "SD_StartAlias calls SND_StopVoice and returns failure",
+    "allocationSuccess": "returned sd_voice* is stored in the driver-voice array and SND_SetVoiceStartInfo is called",
+    "loadedDataPointer": "entry+0x08 offset plus selected runtime bank loaded-data base at bank+0x127C",
+    "loadedLoopingAgreement": "SND_AssetBankGetLooping(entry) must equal SndAlias.flags0 bit0",
+    "loadedOffsetSentinel": "SndAssetBankEntry+0x08 must not equal 0xFFFFFFFF",
+    "loadedRequiredFrameRateHz": 48000,
+    "physicalEntryIdOffset": "0x00",
+    "physicalEntryLookupKey": "the exact 32-bit serialized assetId",
+    "physicalEntrySearch": "binary search over the sorted physical SndAssetBankEntry array",
+    "physicalEntryStrideBytes": 20,
+    "physicalLookupNonzeroInvariant": "SND_AssetBankFindEntry asserts assetId != 0 before searching",
+    "ramHasDataGate": "SD_VoiceHasData returns sd_voice+0x08 != 0 before SD_VoiceStart",
+    "ramVoiceAllocation": "SD_VoiceAllocateRam",
+    "runtimeBankSlotCount": 32,
+    "serializedAssetIdOffset": "SndAlias+0x10",
+    "streamVoiceAllocation": "SD_VoiceAllocateStream"
+  },
+  "dispatch": {
+    "ramPool": "voice index > 9; calls SND_AssetBankFindLoaded with SndAlias+0x10, validates physical metadata, then calls SD_VoiceAllocateRam",
+    "secondaryBoundary": "SD_StartAlias has no Secondary-alias fallback. assetId==0 is not a Secondary sentinel here; physical SND_AssetBankFindEntry additionally asserts the requested id is nonzero.",
+    "streamPool": "voice index <= 9; exact code requires SndAlias.flags0 loadType bits15-16 to be SA_STREAMED(2) or SA_PRIMED(3), then calls SND_AssetBankFindStreamed with SndAlias+0x10"
+  },
+  "driverAllocation": {
+    "commonAcquire": "both allocators first call exact helper 0x008BA1C0 and return null if no sd_voice is obtained",
+    "ram": "initializes RAM state, calls exact helper 0x008B9B20, marks state 3 and returns null if setup fails, otherwise sets data-ready +0x08=1 and state=2 before returning sd_voice*",
+    "stream": "initializes stream state via exact helper 0x008B9D10; a nonzero +0x44 setup-failure state returns null; the success path calls exact helper 0x008B9B20, copies entry byte +0x11 to sd_voice+0x10C, sets state=2, and returns sd_voice*",
+    "unnamedHelpers": "0x008BA1C0, 0x008B9B20, and 0x008B9D10 remain address-only until their MAP/PDB names and deeper semantics are independently closed."
+  },
+  "exactFunctionRanges": {
+    "SD_StartAlias": {
+      "bytes": 833,
+      "endVaExclusive": "0x008B9801",
+      "sha256": "4ed142af3829da86eecb8d5e2db32e53db64decf3651a03bbcfff3c30ff97738",
+      "startVa": "0x008B94C0"
+    },
+    "SD_VoiceAllocateRam": {
+      "bytes": 433,
+      "endVaExclusive": "0x008BA4C1",
+      "sha256": "9a82ead78d8745ac6365ccebee0ee6e754e17d208e0b2fc3dd035357e4099d6c",
+      "startVa": "0x008BA310"
+    },
+    "SD_VoiceAllocateStream": {
+      "bytes": 137,
+      "endVaExclusive": "0x008BA559",
+      "sha256": "356f708d145dcf3b03424abbc5bf88cad925b6da254d2fe55c050df33edcc98f",
+      "startVa": "0x008BA4D0"
+    },
+    "SD_VoiceHasData": {
+      "bytes": 16,
+      "endVaExclusive": "0x008BA620",
+      "sha256": "4edbbea44f2180c146797f430e3ae02de67ac019daf6d847fc26162e0d89a247",
+      "startVa": "0x008BA610"
+    },
+    "SND_AssetBankFindEntry_physical": {
+      "bytes": 160,
+      "endVaExclusive": "0x008B4100",
+      "sha256": "4d58506f53dad05314ac5767df0bcfbc7103f8b9834b3003a33ab03f126176b4",
+      "startVa": "0x008B4060"
+    },
+    "SND_AssetBankFindEntry_runtime": {
+      "bytes": 190,
+      "endVaExclusive": "0x008B495E",
+      "sha256": "d197d45e6e25fd7164837fd1ba9ce780f71fff8ebdd0ae042dcc94328b67ab2c",
+      "startVa": "0x008B48A0"
+    },
+    "SND_AssetBankFindLoaded": {
+      "bytes": 177,
+      "endVaExclusive": "0x008B4A31",
+      "sha256": "bdca163e63805518d60b7c166cefda588c60d3e7aba5ab67838f261be86a6941",
+      "startVa": "0x008B4980"
+    },
+    "SND_AssetBankFindStreamed": {
+      "bytes": 27,
+      "endVaExclusive": "0x008B497B",
+      "sha256": "7bbd5e43740391b1ed04ceb9f6c9b3660853fed4c64c7780762a5936499f6c64",
+      "startVa": "0x008B4960"
+    }
+  },
+  "format": "t6-pc-server-sound-assetid-runtime-proof-v1",
+  "loadedMetadata": {
+    "channelCount": "SND_AssetBankGetChannelCount @ 0x008B41B0",
+    "frameCount": "SND_AssetBankGetFrameCount @ 0x008B41D0",
+    "frameRate": "SND_AssetBankGetFrameRate @ 0x008B4100",
+    "lengthMs": "SND_AssetBankGetLengthMs @ 0x008B41E0",
+    "looping": "SND_AssetBankGetLooping @ 0x008B41C0"
+  },
+  "notYetEstablished": [
+    "retail t6mp.exe equivalence",
+    "full names/prototypes of driver helpers 0x008BA1C0, 0x008B9B20, and 0x008B9D10",
+    "codec-specific sample decode below the sd_voice/backend setup layer"
+  ],
+  "physicalSearch": {
+    "algorithm": "inclusive low/high binary search; midpoint=(low+high)/2; entry=base+midpoint*20; compare uint32 entry+0x00 with requested id; equality stores the exact entry pointer",
+    "runtimeLoaded": "SND_AssetBankFindLoaded scans 32 bank slots under critical section 11, passes the exact id/table/count to physical SND_AssetBankFindEntry, rejects entry+0x08 == 0xFFFFFFFF, and optionally returns loadedBase+offset",
+    "runtimeStreamed": "the overloaded SND_AssetBankFindEntry scans 32 bank slots under critical section 11, selects the streamed descriptor when selector=true, requires its valid byte, derives the physical entry table, and passes the exact id to physical SND_AssetBankFindEntry"
+  },
+  "proofBoundary": "Only exact SHA-pinned PC dedicated-server machine code and exact MAP symbol bindings are authoritative. This closes the assetId-to-bank-entry-to-driver-voice handoff for this build. It does not claim retail t6mp.exe equivalence or codec decode semantics.",
+  "source": {
+    "exe": {
+      "bytes": 13711872,
+      "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"
+    },
+    "generatedBy": "tools/t6_pc_server_sound_assetid_runtime_proof_v1.py",
+    "imageBase": "0x00400000",
+    "map": {
+      "bytes": 9213148,
+      "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+    }
+  }
+}
