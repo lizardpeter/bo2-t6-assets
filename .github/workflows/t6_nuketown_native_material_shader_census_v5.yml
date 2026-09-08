@@ -1,0 +1,204 @@
+name: T6 Nuketown native Material shader census v5 + MP startup
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_material_shader_census_v4.py'
+      - 'tools/test_t6_oat_material_shader_census_v4.py'
+      - 'tools/t6_oat_parent_dependency_conflict_census_v1.py'
+      - 'tools/test_t6_oat_parent_dependency_conflict_census_v1.py'
+      - 'tools/t6_oat_conflict_pc_server_projection_v2.py'
+      - 'tools/test_t6_oat_conflict_pc_server_projection_v2.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V2.json'
+      - '.github/workflows/t6_nuketown_native_material_shader_census_v5.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test provenance and server-only projection logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_oat_material_shader_census_v4.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_parent_dependency_conflict_census_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_conflict_pc_server_projection_v2.py
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build or verify pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat-unlinker-cache
+          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
+          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
+            test -x "$CACHE_BIN"
+            test -f "$CACHE_META"
+            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
+            grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
+            echo 'cache_hit=true' | tee /tmp/proof/oat_cache.txt
+          else
+            echo 'cache_hit=false' | tee /tmp/proof/oat_cache.txt
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+            test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
+            git -C /tmp/oat submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+            git -C /tmp/oat diff --check
+            cd /tmp/oat
+            PREMAKE_NO_PROMPT=1 ./generate.sh
+            make -C build -j2 config=debug_x86 UnlinkerCli
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            install -m 0755 "$BIN" "$CACHE_BIN"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > "$CACHE_META"
+          fi
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
+
+      - name: Save exact pinned OAT Unlinker cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Download SHA-pinned five-root MP dependency universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/game/zone/all/code_post_gfx_mp.ff' | sha256sum -c -
+
+      - name: Dump native map Materials and all five TechniqueSet roots
+        shell: bash
+        run: |
+          set -uo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/map_out /tmp/common_out /tmp/common_patch_out /tmp/patch_out /tmp/code_post_out /tmp/proof
+          : > /tmp/proof/native_dump_return_codes.txt
+          overall_rc=0
+          run_dump() {
+            label="$1"; root="$2"; ff="$3"; kind="$4"; log="/tmp/proof/${label}.log"
+            set +e
+            "$BIN" --no-color --verbose --include-assets "$kind" --output-folder "$root" "$ff" 2>&1 | tee "$log"
+            rc=${PIPESTATUS[0]}
+            set -e
+            printf '%s rc=%s\n' "$label" "$rc" | tee -a /tmp/proof/native_dump_return_codes.txt
+            if test "$rc" -ne 0; then overall_rc=1; fi
+          }
+          set -e
+          run_dump map_material_dump /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff material
+          run_dump map_techset_dump /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff techniqueset
+          run_dump common_techset_dump /tmp/common_out /tmp/game/zone/all/common_mp.ff techniqueset
+          run_dump common_patch_techset_dump /tmp/common_patch_out /tmp/game/zone/all/common_patch_mp.ff techniqueset
+          run_dump patch_techset_dump /tmp/patch_out /tmp/game/zone/all/patch_mp.ff techniqueset
+          run_dump code_post_techset_dump /tmp/code_post_out /tmp/game/zone/all/code_post_gfx_mp.ff techniqueset
+          for root in map_out common_out common_patch_out patch_out code_post_out; do
+            find "/tmp/$root/techsets" -type f -name '*.techset' 2>/dev/null | sort > "/tmp/proof/${root}_techset_files.txt" || true
+          done
+          find /tmp/map_out/materials -type f -name '*.json' | sort > /tmp/proof/map_material_files.txt
+          wc -l /tmp/proof/*_files.txt | tee /tmp/proof/dump_counts.txt
+          if test "$overall_rc" -ne 0; then
+            echo 'At least one required native OAT dump failed; downstream proof blocked.' | tee /tmp/proof/native_dump_gate.txt
+            exit 1
+          fi
+          echo 'All six required native OAT dumps succeeded.' | tee /tmp/proof/native_dump_gate.txt
+
+      - name: Record complete five-root unresolved dependency set
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_oat_parent_dependency_conflict_census_v1.py \
+            --material-root /tmp/map_out \
+            --shader-root /tmp/map_out \
+            --shader-root /tmp/common_out \
+            --shader-root /tmp/common_patch_out \
+            --shader-root /tmp/patch_out \
+            --shader-root /tmp/code_post_out \
+            --out /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V2_FIVE_ROOT.json \
+            2>&1 | tee /tmp/proof/parent_dependency_conflicts_five_root.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V2_FIVE_ROOT.json'
+          d=json.load(open(p,encoding='utf-8'))
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          for row in d['conflicts']:
+              print(row['kind'], row.get('techniqueSet'), row.get('technique'), row.get('parentOwners'))
+          PY
+
+      - name: Project five-root conflicts through exact PC dedicated-server v2 semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_oat_conflict_pc_server_projection_v2.py \
+            --conflicts /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V2_FIVE_ROOT.json \
+            --server-proof manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V2.json \
+            --out /tmp/proof/T6_NUKETOWN_PC_SERVER_CONFLICT_PROJECTION_V2_FIVE_ROOT.json \
+            2>&1 | tee /tmp/proof/pc_server_conflict_projection_v2.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_PC_SERVER_CONFLICT_PROJECTION_V2_FIVE_ROOT.json',encoding='utf-8'))
+          assert d['authoritativeForPcDedicatedServerBuild'] is True
+          assert d['authoritativeForRetailClient'] is False
+          assert d['summary']['authoritativeRetailClientWinnerCount'] == 0
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Run production retail-client census fail-closed over correct five-root universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          PYTHONPATH=tools python3 tools/t6_oat_material_shader_census_v4.py \
+            --material-root /tmp/map_out \
+            --shader-root /tmp/map_out \
+            --shader-root /tmp/common_out \
+            --shader-root /tmp/common_patch_out \
+            --shader-root /tmp/patch_out \
+            --shader-root /tmp/code_post_out \
+            --out /tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V5_FIVE_ROOT.json \
+            2>&1 | tee /tmp/proof/census_v5.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          echo "$RC" > /tmp/proof/census_v5_rc.txt
+          if test "$RC" -eq 0; then
+            echo 'Retail-client census is fully green without precedence selection.'
+          else
+            echo 'Retail-client census remains correctly fail-closed on unresolved duplicate runtime selection.'
+          fi
+          exit "$RC"
+
+      - name: Upload five-root native census evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V5_FIVE_ROOT
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
