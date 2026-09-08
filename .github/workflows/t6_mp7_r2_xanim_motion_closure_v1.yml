@@ -13,6 +13,7 @@ on:
       - 'tools/t6_xanim_quaternion_semantics.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json'
+      - 'manifests/weapons/T6_MP7_R2_XANIM_MOTION_CLOSURE_V1.json'
       - 'manifests/animations/T6_XANIM_HALF_QUATERNION_SEMANTICS_PROOF_V1.json'
 
 permissions:
@@ -75,7 +76,9 @@ jobs:
           import hashlib,json
           from pathlib import Path
           p=Path('/tmp/proof/T6_MP7_R2_XANIM_MOTION_CLOSURE_V1.json')
-          d=json.loads(p.read_text())
+          raw=p.read_bytes()
+          d=json.loads(raw)
+          retained=json.loads(Path('manifests/weapons/T6_MP7_R2_XANIM_MOTION_CLOSURE_V1.json').read_text())
           assert d['format']=='t6-mp7-r2-xanim-motion-closure-v1'
           assert d['source']['expandedCommonMp']['bytes']==206493911
           assert d['source']['expandedCommonMp']['sha256']=='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
@@ -85,7 +88,23 @@ jobs:
           assert d['summary']['allTargetsDeltaPartAbsent'] is True
           assert len(d['targets'])==23
           assert all(x['flatPoolExhaustion'] for x in d['targets'])
-          print('motion_manifest_sha256='+hashlib.sha256(p.read_bytes()).hexdigest())
+
+          assert retained['format']=='t6-mp7-r2-xanim-motion-retained-closure-v1'
+          assert hashlib.sha256(raw).hexdigest()==retained['provenance']['generatedManifestSha256']
+          assert retained['source']==d['source']['expandedCommonMp']
+          assert retained['summary']==d['summary']
+          projected=[]
+          for x in d['targets']:
+              projected.append({
+                  'name':x['name'],
+                  'assetSerializedSha256':x['assetSerializedSha256'],
+                  'normalizedAugmentedCanonicalSha256':x['normalizedAugmentedCanonicalSha256'],
+                  'boneTrackCount':x['boneTrackCount'],
+                  'quatStoredKeyCount':x['quatStoredKeyCount'],
+                  'transStoredKeyCount':x['transStoredKeyCount'],
+              })
+          assert retained['targets']==projected
+          print('motion_manifest_sha256='+hashlib.sha256(raw).hexdigest())
           PY
           sha256sum /tmp/proof/T6_MP7_R2_XANIM_MOTION_CLOSURE_V1.json | tee /tmp/proof/manifest_sha256.txt
 
