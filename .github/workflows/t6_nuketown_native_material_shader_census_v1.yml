@@ -14,10 +14,12 @@ on:
       - 'tools/test_t6_oat_parent_dependency_conflict_census_v1.py'
       - 'tools/t6_oat_conflict_lineage_projection_v1.py'
       - 'tools/test_t6_oat_conflict_lineage_projection_v1.py'
+      - 'tools/t6_pc_server_xasset_override_proof_v1.py'
+      - 'tools/t6_oat_conflict_pc_server_projection_v1.py'
+      - 'tools/test_t6_oat_conflict_pc_server_projection_v1.py'
+      - 'manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V1.json'
       - 'tools/t6_oat_exact_technique_absence_v1.py'
       - 'tools/test_t6_oat_exact_technique_absence_v1.py'
-      - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
-      - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
       - 'tools/t6_oat_techset_binding_manifest_v1.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - '.github/workflows/t6_nuketown_native_material_shader_census_v1.yml'
@@ -40,6 +42,7 @@ jobs:
           PYTHONPATH=tools python3 tools/test_t6_oat_parent_dependency_conflict_census_v1.py
           PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_absence_v1.py
           PYTHONPATH=tools python3 tools/test_t6_oat_conflict_lineage_projection_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_oat_conflict_pc_server_projection_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -161,13 +164,13 @@ jobs:
           run_dump patch_techset_dump /tmp/patch_out /tmp/game/zone/all/patch_mp.ff techniqueset
 
           find /tmp/map_out/materials -type f -name '*.json' 2>/dev/null | sort > /tmp/proof/map_material_files.txt || true
-          : > /tmp/proof/target_technique_physical_files.txt
+          : > /tmp/proof/demoted_candidate_technique_physical_files.txt
           for root in map_out common_out common_patch_out patch_out; do
             find "/tmp/$root/techsets" -type f -name '*.techset' 2>/dev/null | sort > "/tmp/proof/${root}_techset_files.txt" || true
             if test -f "/tmp/$root/techniques/pimp_technique_shadowoverlay_5255c888.tech"; then
               file="/tmp/$root/techniques/pimp_technique_shadowoverlay_5255c888.tech"
               printf '%s bytes=%s sha256=%s\n' "$root" "$(stat -c '%s' "$file")" "$(sha256sum "$file" | awk '{print $1}')" \
-                | tee -a /tmp/proof/target_technique_physical_files.txt
+                | tee -a /tmp/proof/demoted_candidate_technique_physical_files.txt
             fi
           done
           wc -l /tmp/proof/*_files.txt | tee /tmp/proof/dump_counts.txt
@@ -178,7 +181,7 @@ jobs:
           fi
           echo 'All required native OAT dumps succeeded.' | tee /tmp/proof/native_dump_gate.txt
 
-      - name: Prove exact target absence inside successful native Technique roots
+      - name: Record demoted candidate absence inside successful native Technique roots
         shell: bash
         run: |
           set -euo pipefail
@@ -212,8 +215,11 @@ jobs:
             --target-name pimp_technique_shadowoverlay_5255c888 \
             --target-bytes 592 \
             --target-sha256 cc2f2805aef4899b24ed1a181f816bfcdfd18c6ab876a1172cae11f0abd20d71 \
-            --out /tmp/proof/T6_SHADOWCOOKIEOVERLAY_EXACT_TECHNIQUE_ABSENCE_MAP_SHARED_V1.json \
-            2>&1 | tee /tmp/proof/exact_technique_absence.log
+            --out /tmp/proof/T6_DEMOTED_SHADOWOVERLAY_CANDIDATE_ABSENCE_MAP_SHARED_V1.json \
+            2>&1 | tee /tmp/proof/demoted_candidate_absence.log
+          cat > /tmp/proof/DEMOTED_CANDIDATE_PROOF_BOUNDARY.txt <<'EOF'
+          The pimp_technique_shadowoverlay_5255c888 / 592 / cc2f... tuple is an unproven probe candidate, not a source-closed retail target. This absence result is retained only as a scoped forensic negative and must never be used to promote an owner.
+          EOF
 
       - name: Record every unresolved parent-owned dependency conflict
         shell: bash
@@ -228,23 +234,24 @@ jobs:
             --out /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V1.json \
             2>&1 | tee /tmp/proof/parent_dependency_conflicts.log
 
-      - name: Project conflicts through quarantined zone-priority lineage
+      - name: Project conflicts through exact PC dedicated-server semantics
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONPATH=tools python3 tools/t6_oat_conflict_lineage_projection_v1.py \
+          PYTHONPATH=tools python3 tools/t6_oat_conflict_pc_server_projection_v1.py \
             --conflicts /tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V1.json \
-            --root-zone /tmp/map_out=0x00008000 \
-            --root-zone /tmp/patch_out=0x00000008 \
-            --out /tmp/proof/T6_NUKETOWN_CONFLICT_LINEAGE_PROJECTION_V1.json \
-            2>&1 | tee /tmp/proof/conflict_lineage_projection.log
+            --server-proof manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_PC_SERVER_CONFLICT_PROJECTION_V1.json \
+            2>&1 | tee /tmp/proof/pc_server_conflict_projection.log
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_CONFLICT_LINEAGE_PROJECTION_V1.json'
-          d=json.load(open(p,encoding='utf-8'))
-          assert d['authoritative'] is False
-          assert d['summary']['authoritativeWinnerCount'] == 0
-          print('NON-AUTHORITATIVE lineage projection only')
+          c=json.load(open('/tmp/proof/T6_NUKETOWN_PARENT_DEPENDENCY_CONFLICT_CENSUS_V1.json',encoding='utf-8'))
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_PC_SERVER_CONFLICT_PROJECTION_V1.json',encoding='utf-8'))
+          assert d['authoritativeForPcDedicatedServerBuild'] is True
+          assert d['authoritativeForRetailClient'] is False
+          assert d['summary']['authoritativeRetailClientWinnerCount'] == 0
+          assert d['summary']['sourceConflictCount'] == c['summary']['unresolvedConflictCount']
+          print('EXACT PC DEDICATED-SERVER PROJECTION ONLY; RETAIL CLIENT REMAINS FAIL-CLOSED')
           print(json.dumps(d['summary'], indent=2, sort_keys=True))
           PY
 
@@ -285,32 +292,11 @@ jobs:
           fi
           exit "$RC"
 
-      - name: Close exact shadowCookieOverlay Technique owner
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +e
-          PYTHONPATH=tools python3 tools/t6_oat_exact_technique_owner_closure_v2.py \
-            --census /tmp/proof/T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V4.json \
-            --shader-root mp_nuketown_2020=/tmp/map_out \
-            --shader-root common_mp=/tmp/common_out \
-            --shader-root common_patch_mp=/tmp/common_patch_out \
-            --shader-root patch_mp=/tmp/patch_out \
-            --target-name pimp_technique_shadowoverlay_5255c888 \
-            --target-bytes 592 \
-            --target-sha256 cc2f2805aef4899b24ed1a181f816bfcdfd18c6ab876a1172cae11f0abd20d71 \
-            --out /tmp/proof/T6_SHADOWCOOKIEOVERLAY_NATIVE_OWNER_CLOSURE_V2.json \
-            2>&1 | tee /tmp/proof/shadowcookie_owner_closure.log
-          RC=${PIPESTATUS[0]}
-          set -e
-          echo "$RC" > /tmp/proof/shadowcookie_owner_closure_rc.txt
-          exit "$RC"
-
       - name: Upload native shader census proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V4_CONFLICTS
+          name: T6_NUKETOWN_NATIVE_MATERIAL_SHADER_CENSUS_V4_PC_SERVER_PROJECTION
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
