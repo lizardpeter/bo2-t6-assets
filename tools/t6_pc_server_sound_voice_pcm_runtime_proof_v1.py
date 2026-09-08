@@ -120,7 +120,7 @@ def prove(exe: bytes, map_text: str) -> dict:
     require(at(0x008B9D14, 14) == bytes.fromhex("8b75108a46113c0174283c027424"), "source stream-class checks changed")
     require(direct_call_target(at, 0x008B9D57) == 0x008B9E20, "SD_SourceInitStream no longer calls SD_StreamAllocate")
     require(at(0x008B9D5C, 9) == bytes.fromhex("8b4d0883c414894118"), "source stream-pointer publication changed")
-    require(at(0x008B9D69, 15) == bytes.fromhex("b80100000089412889412089412c"), "source stream-allocation failure flags changed")
+    require(at(0x008B9D69, 14) == bytes.fromhex("b80100000089412889412089412c"), "source stream-allocation failure flags changed")
     require(at(0x008B9D7A, 35) == bytes.fromhex("33d2c7412000000000385612c74128000000000f95c2c7412c000000005e8951245dc3"), "source stream success flags changed")
 
     # Voice pool allocation: 128 x 0x180 and output wakeup retry when exhausted.
@@ -130,6 +130,11 @@ def prove(exe: bytes, map_text: str) -> dict:
     require(at(0x008BA203, 6) == bytes.fromhex("81f900960000"), "voice pool span changed")
     require(direct_call_target(at, 0x008BA20B) == 0x008BA8B0, "voice exhaustion no longer wakes output")
     require(at(0x008BA213, 8) == bytes.fromhex("408945fc83f80472"), "voice wakeup retry counter changed")
+
+    # Output wakeup is exactly Sys_SetEvent(&g_sd.outputEvent).
+    require(at(0x008BA8B0, 5) == bytes.fromhex("68887a0801"), "output wakeup event address changed")
+    require(direct_call_target(at, 0x008BA8B5) == 0x006DF180, "output wakeup no longer calls Sys_SetEvent")
+    require(at(0x008BA8BA, 2) == bytes.fromhex("59c3"), "output wakeup return boundary changed")
 
     # Start publishes the exact voice-param pointer after both per-voice tables are empty.
     voice_start = at(0x008BA620, VOICE_START_BYTES)
@@ -182,6 +187,7 @@ def prove(exe: bytes, map_text: str) -> dict:
             "voiceNewParamBase": "0x00E60900",
             "voiceParamBase": "0x00E60B00",
             "outputForceWakeupVa": "0x008BA8B0",
+            "outputWakeupEventAddress": "0x01087A88",
             "allocationWakeupRetryCount": 4,
             "startVa": "0x008BA620",
             "startBytes": VOICE_START_BYTES,
@@ -209,7 +215,9 @@ def main() -> int:
     p.add_argument("--map", dest="map_path", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     a = p.parse_args()
-    result = prove(a.exe.read_bytes(), a.map_path.read_text("ascii"))
+    with a.map_path.open("r", encoding="ascii", newline="") as f:
+        map_text = f.read()
+    result = prove(a.exe.read_bytes(), map_text)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True))
