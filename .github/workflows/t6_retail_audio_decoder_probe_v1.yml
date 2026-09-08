@@ -1,0 +1,227 @@
+name: T6 retail audio decoder probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_retail_audio_decoder_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Locate SHA-pinned retail executable and probe decoder runtime
+        shell: bash
+        env:
+          EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
+          EXPECTED_BYTES: '12850328'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/probe
+          python3 - <<'PY'
+          import hashlib,json,os,re,struct,urllib.error,urllib.request
+          from pathlib import Path
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+
+          expected_sha=os.environ['EXPECTED_SHA256'].lower(); expected_bytes=int(os.environ['EXPECTED_BYTES'])
+          bases=[
+            'https://r2.houseofkublai.com/bo2',
+            'https://r2.houseofkublai.com/bo2/pluto_t6_full_game',
+            'https://r2.houseofkublai.com/bo2/Plutonium/pluto_t6_full_game',
+            'https://r2.houseofkublai.com/bo2/game',
+          ]
+          names=['t6mp.exe','t6mp(1)(1).exe','t6mpv43.exe']
+          candidates=[]; winner=None; raw=None
+          for url in [f'{b}/{n}' for b in bases for n in names]:
+            row={'url':url}
+            try:
+              req=urllib.request.Request(url,headers={'Range':'bytes=0-0','User-Agent':'bo2-t6-assets-retail-audio-probe/1'})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                hdr=dict(r.headers); body=r.read(); row['status']=r.status
+                cr=hdr.get('Content-Range') or hdr.get('content-range'); cl=hdr.get('Content-Length') or hdr.get('content-length')
+              total=None
+              if cr and '/' in cr:
+                try: total=int(cr.rsplit('/',1)[1])
+                except: pass
+              elif cl:
+                try: total=int(cl)
+                except: pass
+              row['reportedBytes']=total
+              if total==expected_bytes:
+                with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-retail-audio-probe/1'}),timeout=90) as r: data=r.read()
+                digest=hashlib.sha256(data).hexdigest(); row['actualBytes']=len(data); row['sha256']=digest
+                if len(data)==expected_bytes and digest==expected_sha:
+                  if winner is not None: raise SystemExit('multiple exact retail executable matches')
+                  winner=url; raw=data; row['identity']='exact_match'
+                else: row['identity']='identity_mismatch'
+              else: row['identity']='not_expected_size'
+            except urllib.error.HTTPError as e: row.update(status=e.code,identity='http_error')
+            except Exception as e: row.update(identity='probe_error',error=repr(e))
+            candidates.append(row)
+          Path('/tmp/probe/r2_candidates.json').write_text(json.dumps(candidates,indent=2,sort_keys=True)+'\n')
+          if raw is None:
+            Path('/tmp/probe/result.json').write_text(json.dumps({'format':'t6-retail-audio-decoder-probe-v1','authority':'none','exactRetailMatch':None,'candidates':candidates},indent=2)+'\n')
+            print(json.dumps({'exactRetailMatch':None,'candidates':candidates},indent=2))
+            raise SystemExit(3)
+
+          # PE mapping.
+          if raw[:2]!=b'MZ': raise SystemExit('not PE')
+          pe=struct.unpack_from('<I',raw,0x3c)[0]; assert raw[pe:pe+4]==b'PE\0\0'
+          coff=pe+4; machine,nsects,_,_,_,opt_size,_=struct.unpack_from('<HHIIIHH',raw,coff); assert machine==0x14c
+          opt=coff+20; image_base=struct.unpack_from('<I',raw,opt+28)[0]; assert image_base==0x400000
+          secs=[]; st=opt+opt_size
+          for i in range(nsects):
+            o=st+i*40; name=raw[o:o+8].split(b'\0',1)[0].decode('ascii','replace'); vs,rva,rs,ro=struct.unpack_from('<IIII',raw,o+8)
+            secs.append({'name':name,'base':image_base+rva,'vs':vs,'rs':rs,'ro':ro})
+          def va_off(va):
+            for s in secs:
+              if s['base']<=va<s['base']+s['rs']: return s['ro']+va-s['base']
+            raise ValueError(hex(va))
+          def raw_at(va,n): o=va_off(va); return raw[o:o+n]
+          def section_for(va):
+            for s in secs:
+              if s['base']<=va<s['base']+s['vs']: return s
+            return None
+          text=next(s for s in secs if s['name']=='.text')
+          text_raw=raw[text['ro']:text['ro']+text['rs']]
+
+          # Locate the direct two-argument wrapper by server-closed invariant bytes:
+          # entry+0x13 format byte; format 0 or 8 only.
+          sig=bytes.fromhex('8a411384c074223c087417')
+          hits=[]; pos=0
+          while True:
+            i=text_raw.find(sig,pos)
+            if i<0: break
+            hits.append(text['base']+i); pos=i+1
+          print('wrapper signature hits', [hex(x) for x in hits])
+          if len(hits)!=1: raise SystemExit(f'wrapper signature not unique: {hits}')
+          sig_va=hits[0]
+          # Back up over conventional 55 8B EC 56 prologue (expected within 16 bytes).
+          start=None
+          for d in range(0,17):
+            va=sig_va-d
+            b=raw_at(va,4)
+            if b.startswith(bytes.fromhex('558bec')):
+              start=va; break
+          if start is None: raise SystemExit('wrapper prologue not found')
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+          wrapper=list(md.disasm(raw_at(start,0x80),start))
+          # Stop at first ret.
+          cut=[]
+          for ins in wrapper:
+            cut.append(ins)
+            if ins.mnemonic=='ret': break
+          Path('/tmp/probe/retail_wrapper.asm').write_text('\n'.join(f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}' for i in cut)+'\n')
+
+          # Extract pool immediates and generic call target from wrapper.
+          pool_imms=[]; generic=None
+          for i in cut:
+            if i.mnemonic=='mov' and i.op_str.startswith('eax, 0x'):
+              try:
+                v=int(i.op_str.split('0x',1)[1],16)
+                if section_for(v) and section_for(v)['name'] in ('.data','.bss'): pool_imms.append(v)
+              except: pass
+            if i.mnemonic=='call' and i.op_str.startswith('0x'):
+              generic=int(i.op_str,16)
+          if generic is None: raise SystemExit('generic decoder call missing')
+          print('wrapper',hex(start),'generic',hex(generic),'pool immediates',[hex(x) for x in pool_imms])
+
+          generic_ins=list(md.disasm(raw_at(generic,0x180),generic))
+          gen_cut=[]
+          for i in generic_ins:
+            gen_cut.append(i)
+            if i.mnemonic=='ret': break
+          Path('/tmp/probe/retail_generic_decoder.asm').write_text('\n'.join(f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}' for i in gen_cut)+'\n')
+
+          # Recover interface Create pointer base from 0x2C-stride indexed absolute memory access.
+          # Match raw bytes 6B C0 2C then find the following disp32 used as [eax+disp32].
+          gb=raw_at(generic,0x180); create_base=None; evidence=[]
+          for m in re.finditer(bytes.fromhex('6bc02c'),gb):
+            p=m.start()+3
+            window=gb[p:p+24]
+            # common encodings: 39 88 disp32, 8b 88 disp32
+            for opcode in (bytes.fromhex('3988'),bytes.fromhex('8b88')):
+              j=window.find(opcode)
+              if j>=0 and j+6<=len(window):
+                v=struct.unpack_from('<I',window,j+2)[0]
+                if section_for(v) is not None:
+                  evidence.append({'at':f'0x{generic+m.start():08X}','candidate':f'0x{v:08X}','opcode':opcode.hex()})
+                  create_base=v
+          if create_base is None: raise SystemExit('Create table base not recovered')
+          print('create_base',hex(create_base),'evidence',evidence)
+
+          # The format-indexed Create slots are base + format*0x2C. Read the retail image values.
+          slots={}
+          for fmt in (0,8):
+            va=create_base+fmt*0x2c
+            val=struct.unpack('<I',raw_at(va,4))[0]
+            slots[str(fmt)]={'slotVa':f'0x{va:08X}','rawCreatePointer':f'0x{val:08X}','section':section_for(va)['name'] if section_for(va) else None,'targetSection':section_for(val)['name'] if val and section_for(val) else None}
+          print('slots',json.dumps(slots,indent=2))
+
+          # Census every raw absolute reference to decoder interface block (+/- one record)
+          # and both wrapper pool addresses. This reveals init writers when slots are zero-in-image.
+          lo=create_base-0x24; hi=create_base+11*0x2c+8
+          refs=[]
+          for i in range(len(text_raw)-3):
+            v=struct.unpack_from('<I',text_raw,i)[0]
+            if lo<=v<hi or v in pool_imms:
+              refs.append({'byteVa':f'0x{text["base"]+i:08X}','value':f'0x{v:08X}'})
+          Path('/tmp/probe/interface_absolute_refs.json').write_text(json.dumps(refs,indent=2)+'\n')
+
+          # Disassemble direct Create targets when statically installed.
+          create_targets={}
+          for fmt,rec in slots.items():
+            t=int(rec['rawCreatePointer'],16)
+            if t and section_for(t) and section_for(t)['name']=='.text':
+              ins=list(md.disasm(raw_at(t,0x500),t)); lines=[]
+              for x in ins:
+                lines.append(f'{x.address:08X}: {x.bytes.hex():<24} {x.mnemonic:<8} {x.op_str}')
+                if x.mnemonic=='ret' and len(lines)>5: break
+              Path(f'/tmp/probe/format{fmt}_create.asm').write_text('\n'.join(lines)+'\n')
+              create_targets[fmt]={'va':f'0x{t:08X}','instructions':len(lines)}
+
+          # Extract codec-relevant ASCII strings and source paths from exact retail bytes.
+          codec_strings=[]
+          for m in re.finditer(rb'[ -~]{4,}\x00',raw):
+            s=m.group(0)[:-1].decode('ascii','replace'); low_s=s.lower()
+            if any(k in low_s for k in ('sd_decode','decoder','pcm16','pcm','flac','vorbis','speex','codec','sound no decoder')):
+              va=None
+              for sec in secs:
+                if sec['ro']<=m.start()<sec['ro']+sec['rs']:
+                  va=sec['base']+(m.start()-sec['ro']); break
+              codec_strings.append({'va':f'0x{va:08X}' if va else None,'string':s})
+          Path('/tmp/probe/codec_strings.json').write_text(json.dumps(codec_strings,indent=2)+'\n')
+          print('codec string count',len(codec_strings))
+          for x in codec_strings[:300]: print(x)
+
+          result={
+            'format':'t6-retail-audio-decoder-probe-v1',
+            'authority':'exact SHA-pinned retail t6mp.exe',
+            'retailExecutable':{'url':winner,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'imageBase':'0x00400000'},
+            'wrapper':{'va':f'0x{start:08X}','signatureVa':f'0x{sig_va:08X}','genericAllocator':f'0x{generic:08X}','poolImmediates':[f'0x{x:08X}' for x in pool_imms]},
+            'decoderInterface':{'createPointerBase':f'0x{create_base:08X}','slots':slots,'evidence':evidence},
+            'createTargets':create_targets,
+            'absoluteReferenceCount':len(refs),
+            'proofBoundary':'Exact retail-byte structural probe. No codec name is promoted solely from linked-library or string presence; codec identity requires a direct installed Create target or independently closed init writer.'
+          }
+          Path('/tmp/probe/result.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload exact retail decoder probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_AUDIO_DECODER_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
