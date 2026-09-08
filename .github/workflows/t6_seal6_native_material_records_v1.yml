@@ -4,86 +4,48 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'tools/t6_seal6_native_material_records_v1.py'
-      - 'tools/test_t6_seal6_native_material_records_v1.py'
-      - 'tools/t6_oat_material_shader_census_v1.py'
-      - 'tools/t6_oat_material_shader_census_v2.py'
-      - 'tools/t6_oat_material_shader_census_v3.py'
-      - 'tools/t6_oat_material_shader_census_v4.py'
-      - 'tools/t6_oat_material_dependency_bundle_v1.py'
-      - 'tools/t6_oat_techset_binding_manifest_v1.py'
-      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_seal6_native_material_conflict_report_v1.py'
+      - 'tools/test_t6_seal6_native_material_conflict_report_v1.py'
       - '.github/workflows/t6_seal6_native_material_records_v1.yml'
 
 permissions:
   contents: read
 
 jobs:
-  close-native-records:
+  physical-conflict-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test target-record fail-closed adapter
+      - name: Test fail-closed conflict reporter
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONPATH=tools python3 tools/test_t6_seal6_native_material_records_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_seal6_native_material_conflict_report_v1.py
 
-      - name: Restore exact pinned OAT Unlinker cache
+      - name: Restore exact pinned OAT Unlinker
         id: oat-cache
         uses: actions/cache/restore@v4
         with:
           path: /tmp/oat-unlinker-cache
           key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
 
-      - name: Build or verify pinned OAT Unlinker
+      - name: Verify exact OAT cache identity
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/game/zone/english /tmp/oat-unlinker-cache
-          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
-          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
-          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          test -f /tmp/oat-unlinker-cache/source_identity.txt
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
           PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/game/zone/english
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+          cp /tmp/oat-unlinker-cache/source_identity.txt /tmp/proof/oat_source_identity.txt
 
-          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
-            test -x "$CACHE_BIN"
-            test -f "$CACHE_META"
-            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
-            grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
-            echo 'cache_hit=true' | tee /tmp/proof/oat_cache.txt
-          else
-            echo 'cache_hit=false' | tee /tmp/proof/oat_cache.txt
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq g++-multilib >/dev/null
-            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
-            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
-            test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
-            git -C /tmp/oat submodule update -q --init --recursive
-            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
-            git -C /tmp/oat diff --check
-            cd /tmp/oat
-            PREMAKE_NO_PROMPT=1 ./generate.sh
-            make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
-            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
-            test -n "$BIN"
-            install -m 0755 "$BIN" "$CACHE_BIN"
-            printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > "$CACHE_META"
-          fi
-          printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > /tmp/proof/oat_source_identity.txt
-          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
-          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
-
-      - name: Save exact pinned OAT Unlinker cache
-        if: steps.oat-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/oat-unlinker-cache
-          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
-
-      - name: Download and SHA-verify exact SEAL6 MP FastFile root universe
+      - name: Download and SHA-verify exact seven-root universe
         shell: bash
         run: |
           set -euo pipefail
@@ -114,138 +76,46 @@ jobs:
             sha256sum "$file" | tee -a /tmp/proof/fastfile_sha256.txt
           done
 
-      - name: Dump native Materials and complete TechniqueSet dependency outputs
+      - name: Dump native Material records
         shell: bash
         run: |
           set -euo pipefail
-          BIN=$(cat /tmp/unlinker_path)
-          : > /tmp/proof/native_dump_return_codes.txt
-          : > /tmp/proof/native_dump_counts.txt
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          : > /tmp/proof/native_material_counts.txt
           for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
             if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
             out="/tmp/${zone}_out"
             mkdir -p "$out"
-            set +e
-            "$BIN" --no-color --verbose --include-assets material --output-folder "$out" "$ff" \
-              > "/tmp/proof/${zone}_material_dump.log" 2>&1
-            mrc=$?
-            "$BIN" --no-color --verbose --include-assets techniqueset --output-folder "$out" "$ff" \
-              > "/tmp/proof/${zone}_techset_dump.log" 2>&1
-            trc=$?
-            set -e
-            printf '%s material_rc=%s techniqueset_rc=%s\n' "$zone" "$mrc" "$trc" | tee -a /tmp/proof/native_dump_return_codes.txt
-            test "$mrc" -eq 0
-            test "$trc" -eq 0
-            mcount=0
-            tcount=0
-            if [[ -d "$out/materials" ]]; then mcount=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
-            if [[ -d "$out/techsets" ]]; then tcount=$(find "$out/techsets" -type f -name '*.techset' | wc -l); fi
-            printf '%s materials=%s techsets=%s\n' "$zone" "$mcount" "$tcount" | tee -a /tmp/proof/native_dump_counts.txt
+            "$BIN" --no-color --verbose --include-assets material --output-folder "$out" "$ff" > "/tmp/proof/${zone}_material_dump.log" 2>&1
+            count=0
+            if [[ -d "$out/materials" ]]; then count=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
+            echo "$zone materials=$count" | tee -a /tmp/proof/native_material_counts.txt
           done
 
-      - name: Close exact head arms eyes and mouth native records
+      - name: Emit exact physical conflict report
         shell: bash
         run: |
           set -euo pipefail
-          MATERIAL_ROOTS=(
-            --material-root faction_seals_mp=/tmp/faction_seals_mp_out
-            --material-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
-            --material-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
-            --material-root common_mp=/tmp/common_mp_out
-            --material-root common_patch_mp=/tmp/common_patch_mp_out
-            --material-root patch_mp=/tmp/patch_mp_out
-            --material-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
-          )
-          SHADER_ROOTS=(
-            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
-            --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
-            --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
-            --shader-root common_mp=/tmp/common_mp_out
-            --shader-root common_patch_mp=/tmp/common_patch_mp_out
-            --shader-root patch_mp=/tmp/patch_mp_out
-            --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
-          )
-          PYTHONPATH=tools python3 tools/t6_seal6_native_material_records_v1.py \
-            "${MATERIAL_ROOTS[@]}" "${SHADER_ROOTS[@]}" \
+          PYTHONPATH=tools python3 tools/t6_seal6_native_material_conflict_report_v1.py \
+            --root faction_seals_mp=/tmp/faction_seals_mp_out \
+            --root code_post_gfx_mp=/tmp/code_post_gfx_mp_out \
+            --root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out \
+            --root common_mp=/tmp/common_mp_out \
+            --root common_patch_mp=/tmp/common_patch_mp_out \
+            --root patch_mp=/tmp/patch_mp_out \
+            --root mp_nuketown_2020=/tmp/mp_nuketown_2020_out \
             --target mc/mtl_c_usa_milcas_mcknight_head_camo \
             --target mc/mtl_c_usa_mp_seal6_smg_arms \
             --target mc/mtl_gen_eye_cornea \
             --target mc/mtl_gen_eye_iris_green \
             --target mc/mtl_c_gen_insidemouth \
-            --out /tmp/proof/T6_SEAL6_NATIVE_MATERIAL_RECORDS_V1.json \
-            2>&1 | tee /tmp/proof/seal6_native_material_records.log
+            --out /tmp/proof/T6_SEAL6_NATIVE_MATERIAL_CONFLICT_REPORT_V1.json \
+            2>&1 | tee /tmp/proof/conflict_report.log
 
-      - name: Archive physical dependency bundles for every closed target
-        shell: bash
-        run: |
-          set -euo pipefail
-          MATERIAL_ROOTS=(
-            --material-root faction_seals_mp=/tmp/faction_seals_mp_out
-            --material-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
-            --material-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
-            --material-root common_mp=/tmp/common_mp_out
-            --material-root common_patch_mp=/tmp/common_patch_mp_out
-            --material-root patch_mp=/tmp/patch_mp_out
-            --material-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
-          )
-          SHADER_ROOTS=(
-            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
-            --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
-            --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
-            --shader-root common_mp=/tmp/common_mp_out
-            --shader-root common_patch_mp=/tmp/common_patch_mp_out
-            --shader-root patch_mp=/tmp/patch_mp_out
-            --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
-          )
-          declare -A TARGETS=(
-            [head]='mc/mtl_c_usa_milcas_mcknight_head_camo'
-            [arms]='mc/mtl_c_usa_mp_seal6_smg_arms'
-            [cornea]='mc/mtl_gen_eye_cornea'
-            [iris]='mc/mtl_gen_eye_iris_green'
-            [mouth]='mc/mtl_c_gen_insidemouth'
-          )
-          for role in head arms cornea iris mouth; do
-            PYTHONPATH=tools python3 tools/t6_oat_material_dependency_bundle_v1.py \
-              "${MATERIAL_ROOTS[@]}" "${SHADER_ROOTS[@]}" \
-              --material-name "${TARGETS[$role]}" \
-              --out "/tmp/proof/bundle_${role}" \
-              > "/tmp/proof/bundle_${role}.log"
-          done
-
-      - name: Emit compact exact-role report
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, pathlib
-          src=pathlib.Path('/tmp/proof/T6_SEAL6_NATIVE_MATERIAL_RECORDS_V1.json')
-          d=json.loads(src.read_text(encoding='utf-8'))
-          report={
-              'format':'t6-seal6-native-material-role-report-v1',
-              'sourceClosureSha256':__import__('hashlib').sha256(src.read_bytes()).hexdigest(),
-              'materials':[],
-          }
-          for m in d['materials']:
-              report['materials'].append({
-                  'material':m['material'],
-                  'materialSha256':m['canonicalMaterialSha256'],
-                  'physicalOwners':[r['rootLabel'] for r in m['physicalMaterialCopies']],
-                  'techniqueSet':m['techniqueSet'],
-                  'techniqueSetOwners':[r['rootLabel'] for r in m['techniqueSetOwners']],
-                  'textures':[
-                      {'index':t['textureIndex'],'semantic':t['semantic'],'name':t['name'],'image':t['image']}
-                      for t in m['orderedTextureRecords']
-                  ],
-              })
-          out=pathlib.Path('/tmp/proof/T6_SEAL6_NATIVE_MATERIAL_ROLE_REPORT_V1.json')
-          out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print(json.dumps(report,indent=2,sort_keys=True))
-          PY
-
-      - name: Upload exact SEAL6 native Material closure
+      - name: Upload exact conflict evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: T6_SEAL6_NATIVE_MATERIAL_RECORDS_V1
+          name: T6_SEAL6_NATIVE_MATERIAL_CONFLICT_REPORT_V1
           path: /tmp/proof
           if-no-files-found: error
