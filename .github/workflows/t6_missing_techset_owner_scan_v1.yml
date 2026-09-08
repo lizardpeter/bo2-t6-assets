@@ -1,0 +1,152 @@
+name: T6 missing TechniqueSet owner scan v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_missing_techset_owner_scan_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan-shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand
+
+      - name: Scan exact missing-parent names in shard
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          SHARD: ${{ matrix.shard }}
+          SHARD_COUNT: '8'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          from t6_remote_zip_range_v1 import RemoteZip
+
+          shard=int(os.environ['SHARD']); shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-missing-techset-owner/{shard}')
+          entries,meta=rz.central_directory()
+          ff=sorted((e for e in entries if e['name'].lower().endswith('.ff')),key=lambda e:e['name'].lower())
+          selected=[(i,e) for i,e in enumerate(ff) if i % shard_count == shard]
+          needles={
+              'hdr_create_lut2dv_827z0f8q': b'hdr_create_lut2dv_827z0f8q\x00',
+              'mc_lit_sm_r0c0d0n0s0_qwq4q449': b'mc_lit_sm_r0c0d0n0s0_qwq4q449\x00',
+          }
+          rows=[]
+          for ordinal,(global_index,e) in enumerate(selected):
+              name=e['name']; fname=name.rsplit('/',1)[-1]; zone=fname[:-3]
+              row={'globalIndex':global_index,'shardIndex':ordinal,'zipPath':name,'file':fname,'zoneName':zone,
+                   'zipCrc32':f"{e['crc32']:08x}",'zipUncompressedBytes':e['uncompressedSize']}
+              ff_path=pathlib.Path('/tmp/work')/f'{global_index:03d}.ff'
+              expanded=pathlib.Path('/tmp/work')/f'{global_index:03d}.expanded.bin'
+              try:
+                  raw=rz.extract(e,verify_crc=True)
+                  row['fastFileBytes']=len(raw); row['fastFileSha256']=hashlib.sha256(raw).hexdigest()
+                  ff_path.write_bytes(raw); del raw
+                  proc=subprocess.run(['/tmp/t6_expand',str(ff_path),str(expanded),zone],stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+                  row['expandRc']=proc.returncode
+                  if proc.returncode!=0 or not expanded.is_file():
+                      row['status']='expand_failed'; row['hits']={}
+                  else:
+                      data=expanded.read_bytes(); row['status']='green'
+                      row['expandedBytes']=len(data); row['expandedSha256']=hashlib.sha256(data).hexdigest()
+                      hits={}
+                      for label,needle in needles.items():
+                          offsets=[]; start=0
+                          while True:
+                              at=data.find(needle,start)
+                              if at<0: break
+                              offsets.append(at); start=at+1
+                          hits[label]={'count':len(offsets),'offsets':offsets[:64]}
+                      row['hits']=hits
+              except Exception as exc:
+                  row['status']='exception'; row['error']=repr(exc); row.setdefault('hits',{})
+              finally:
+                  ff_path.unlink(missing_ok=True); expanded.unlink(missing_ok=True)
+              rows.append(row)
+              print(global_index,row['status'],name,{k:v.get('count',0) for k,v in row.get('hits',{}).items()},flush=True)
+
+          result={
+              'format':'t6-missing-techset-owner-scan-shard-v1','shard':shard,'shardCount':shard_count,
+              'remoteZip':meta,'allFastFileCount':len(ff),'needles':list(needles),'rows':rows,
+              'summary':{'selectedCount':len(rows),'greenExpansionCount':sum(r['status']=='green' for r in rows),
+                         'failedExpansionCount':sum(r['status']!='green' for r in rows),
+                         'zonesByNeedle':{k:[r['zipPath'] for r in rows if r.get('hits',{}).get(k,{}).get('count',0)] for k in needles}},
+              'proofBoundary':'Exact null-terminated literal-name census for this deterministic shard. Every green FastFile is ZIP-CRC verified, SHA-256 pinned, and source-closed decrypted/inflated. Positive name presence identifies a candidate physical source zone only; native XAsset/TechniqueSet ownership still requires a direct asset dump. Negative conclusions require the complete aggregate.'
+          }
+          pathlib.Path(f'/tmp/proof/T6_MISSING_TECHSET_OWNER_SCAN_SHARD_{shard}_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          if result['summary']['failedExpansionCount']:
+              raise SystemExit('one or more FastFiles failed expansion')
+          PY
+
+      - name: Upload shard proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MISSING_TECHSET_OWNER_SCAN_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: scan-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_MISSING_TECHSET_OWNER_SCAN_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Require complete 215-FastFile coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_MISSING_TECHSET_OWNER_SCAN_SHARD_*_V1.json'))
+          if len(files)!=8: raise SystemExit(f'expected 8 shards, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          rows=sorted((r for d in docs for r in d['rows']),key=lambda r:r['globalIndex'])
+          if docs[0]['allFastFileCount']!=215 or len(rows)!=215 or [r['globalIndex'] for r in rows]!=list(range(215)):
+              raise SystemExit('not exact 215-FastFile coverage')
+          bad=[r for r in rows if r['status']!='green']
+          if bad: raise SystemExit(f'non-green rows: {[r["zipPath"] for r in bad]}')
+          needles=docs[0]['needles']
+          zones={k:[{'zipPath':r['zipPath'],'zoneName':r['zoneName'],'fastFileBytes':r['fastFileBytes'],'fastFileSha256':r['fastFileSha256'],'offsets':r['hits'][k]['offsets']} for r in rows if r.get('hits',{}).get(k,{}).get('count',0)] for k in needles}
+          result={'format':'t6-missing-techset-owner-scan-v1','remoteZip':docs[0]['remoteZip'],'needles':needles,'rows':rows,
+                  'summary':{'fastFileCount':215,'greenExpansionCount':215,'failedExpansionCount':0,'zonesByNeedle':zones,'zoneCountsByNeedle':{k:len(v) for k,v in zones.items()}},
+                  'shardManifestSha256':[{'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()} for p in files],
+                  'proofBoundary':'Complete exact null-terminated literal-name census over all 215 FastFiles in the referenced public retail archive. Positive hits identify candidate physical source zones only. A TechniqueSet owner is not promoted until pinned native OAT directly emits the named TechniqueSet from that exact FastFile.'}
+          pathlib.Path('/tmp/proof/T6_MISSING_TECHSET_OWNER_SCAN_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload complete owner candidate census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MISSING_TECHSET_OWNER_SCAN_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
