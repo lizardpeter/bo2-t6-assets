@@ -1,0 +1,80 @@
+name: T6 current client XAudio2 engine xref trace v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_engine_xref_trace_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disassemble all engine-global owner neighborhoods
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+          UA='bo2-t6-assets-xaudio-engine-xref-trace/1';INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          ranges={
+            'xref_004C14':(0x004C13C0,0x004C1480),
+            'xref_0064F0':(0x0064F070,0x0064F120),
+            'xref_006E20':(0x006E1F80,0x006E2180),
+            'xref_009149':(0x009148D0,0x00914960),
+          }
+          imports={}
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports:imports[i.address]={'dll':dll,'name':i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          output={}
+          for name,(start,end) in ranges.items():
+            o=vaoff(start); rows=[]
+            for ins in md.disasm(raw[o:o+(end-start)],start):
+              if ins.address>=end:break
+              r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              if ins.mnemonic=='call':
+                if ins.operands and ins.operands[0].type==X86_OP_IMM:r['directTarget']=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+                b=ins.bytes
+                if len(b)==6 and b[:2]==b'\xff\x15':
+                  iat=struct.unpack('<I',b[2:])[0];r['import']=imports.get(iat);r['iatVa']=f'0x{iat:08X}'
+              rows.append(r)
+            output[name]={'startVa':f'0x{start:08X}','endExclusiveVa':f'0x{end:08X}','sha256':hashlib.sha256(raw[o:o+(end-start)]).hexdigest(),'disasm':rows}
+          result={'format':'t6-current-client-xaudio-engine-xref-trace-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'engineGlobalVa':'0x01016AF8','ranges':output,'verifiedXAudio27SlotMap':{'0x08':'IUnknown::Release','0x0C':'IXAudio2::GetDeviceCount','0x10':'IXAudio2::GetDeviceDetails','0x14':'IXAudio2::Initialize','0x18':'IXAudio2::RegisterForCallbacks','0x1C':'IXAudio2::UnregisterForCallbacks','0x20':'IXAudio2::CreateSourceVoice','0x24':'IXAudio2::CreateSubmixVoice','0x28':'IXAudio2::CreateMasteringVoice','0x2C':'IXAudio2::StartEngine','0x30':'IXAudio2::StopEngine','0x34':'IXAudio2::CommitChanges','0x38':'IXAudio2::GetPerformanceData','0x3C':'IXAudio2::SetDebugConfiguration'},'proofBoundary':'Exact current-client machine evidence. The slot map is the XAudio2 2.7 interface order and is used only when a call is demonstrably through this engine pointer.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_XREF_TRACE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          for name,r in output.items():
+            print('===',name,r['sha256'])
+            for x in r['disasm']:print(x['va'],x['bytes'],x['mnemonic'],x['opStr'],x.get('import',''),x.get('directTarget',''))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_XREF_TRACE_V1.json
+      - name: Upload trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_ENGINE_XREF_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_ENGINE_XREF_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
