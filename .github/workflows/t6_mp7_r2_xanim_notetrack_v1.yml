@@ -1,0 +1,147 @@
+name: T6 MP7 R2 XAnim notetrack v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_xanim_notetrack_v1.yml'
+      - 'tools/t6_mp7_r2_xanim_notetrack_v1.py'
+      - 'tools/test_t6_mp7_r2_xanim_notetrack_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run fail-closed parser regression
+        shell: bash
+        run: python3 tools/test_t6_mp7_r2_xanim_notetrack_v1.py
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/expanded /tmp/oat_out
+          sha256sum /tmp/t6_expand | tee /tmp/proof/expander_sha256.txt
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Verify pinned OAT cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download exact current R2 Weapon owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          for zone in common_mp common_patch_mp; do
+            curl -fL --retry 4 "$base/$zone.ff" -o "/tmp/game/zone/all/$zone.ff"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/*.ff | sort | tee /tmp/proof/r2_fastfile_sha256.txt
+
+      - name: Freshly expand SHA-pinned current R2 common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/t6_expand /tmp/game/zone/all/common_mp.ff /tmp/expanded/common_mp.bin common_mp \
+            > /tmp/proof/common_mp_expand.log 2>&1
+          test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
+          echo 'fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+          sha256sum /tmp/expanded/common_mp.bin | tee /tmp/proof/expanded_sha256.txt
+
+      - name: Fresh native OAT MP7 Weapon physical copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for zone in common_mp common_patch_mp; do
+            out="/tmp/oat_out/${zone}/weapon"
+            mkdir -p "$out"
+            "$BIN" --no-color --verbose --include-assets weapon --output-folder "$out" "/tmp/game/zone/all/$zone.ff" \
+              2>&1 | tee "/tmp/proof/${zone}_weapon.log"
+            if grep -q '^ERROR:' "/tmp/proof/${zone}_weapon.log"; then
+              echo "native OAT logged an error for $zone/weapon" >&2
+              exit 1
+            fi
+            test -f "$out/weapons/mp7_mp"
+            cp "$out/weapons/mp7_mp" "/tmp/proof/${zone}_mp7_mp.weapon"
+          done
+          sha256sum /tmp/proof/*_mp7_mp.weapon | sort | tee /tmp/proof/mp7_weapon_physical_sha256.txt
+
+      - name: Close current-R2 MP7 XAnim and notetrack records
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp7_r2_xanim_notetrack_v1.py \
+            --stream /tmp/expanded/common_mp.bin \
+            --common-mp-ff /tmp/game/zone/all/common_mp.ff \
+            --weapon common_mp=/tmp/oat_out/common_mp/weapon/weapons/mp7_mp \
+            --weapon common_patch_mp=/tmp/oat_out/common_patch_mp/weapon/weapons/mp7_mp \
+            --out /tmp/proof/T6_MP7_R2_XANIM_NOTETRACK_V1.json \
+            | tee /tmp/proof/xanim_notetrack.log
+          python3 - <<'PY'
+          import csv,json
+          from pathlib import Path
+          p=Path('/tmp/proof/T6_MP7_R2_XANIM_NOTETRACK_V1.json')
+          d=json.loads(p.read_text())
+          assert d['format']=='t6-mp7-r2-xanim-notetrack-v1'
+          assert d['source']['expandedCommonMp']['bytes']==206493911
+          assert d['source']['expandedCommonMp']['sha256']=='fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce'
+          assert d['front']['scriptStringCount']==54040
+          assert d['front']['xanimAssetCount']==4233
+          assert d['fullInventory']['structuralRecordCount']==4233
+          assert d['fullInventory']['overlapCount']==0
+          assert d['weaponMembership']['animationUseCountPerCopy']==36
+          assert d['weaponMembership']['uniqueTargetCount']==23
+          assert d['weaponMembership']['roleTableInvariantAcrossCopies'] is True
+          assert len(d['targets'])==23
+          names=[x['name'] for x in d['targets']]
+          assert names[0]=='viewmodel_mp7_idle'
+          assert names[-1]=='viewmodel_mp7_d2p_out'
+          assert 'viewmodel_mp7_reload_empty' in names
+          assert all(x['boneNameCount']==len(x['boneNames']) for x in d['targets'])
+          assert all(x['notifyCount']==len(x['notifies']) for x in d['targets'])
+
+          with open('/tmp/proof/mp7_xanim_summary.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['name','frames','fps','frequency','notifies','bones','rawStructOffset','rawEndOffset','serializedSha256'])
+              for x in d['targets']:
+                  w.writerow([x['name'],x['numframes'],x['framerate'],x['frequency'],x['notifyCount'],x['boneNameCount'],x['rawStructOffset'],x['rawEndOffset'],x['serializedSha256']])
+          with open('/tmp/proof/mp7_notetracks.csv','w',newline='') as f:
+              w=csv.writer(f); w.writerow(['xanim','notifyIndex','name','scriptStringId','serializedTimeFloat','rawOffset'])
+              for x in d['targets']:
+                  for n in x['notifies']:
+                      w.writerow([x['name'],n['index'],n['name'],n['scriptStringId'],repr(n['serializedTimeFloat']),n['rawOffset']])
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_XANIM_NOTETRACK_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_XANIM_NOTETRACK_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
