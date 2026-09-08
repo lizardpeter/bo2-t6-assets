@@ -1,0 +1,105 @@
+name: T6 audio format payload validation v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_format_payload_validation_v1.yml'
+      - 'tools/t6_audio_bank_id_manifest_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source-closed format codes against physical payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections, hashlib, json, pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_audio_bank_id_manifest_v1 import parse_bank
+
+          rz=RemoteZip(__import__('os').environ['ZIP_URL'],'bo2-t6-assets-audio-format-validation/1',timeout=180,retries=7)
+          entries,meta=rz.central_directory()
+          banks=sorted([e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))],key=lambda e:e['name'].lower())
+          if len(banks)!=116: raise SystemExit(f'bank population changed: {len(banks)} != 116')
+
+          counts=collections.Counter(); failures=[]; bank_rows=[]
+          examples={}
+          for bi,e in enumerate(banks):
+              raw=rz.extract(e,verify_crc=True)
+              doc=parse_bank(raw,e['name'])
+              local=collections.Counter()
+              for ent in doc['entries']:
+                  code=int(ent['formatCode']); local[code]+=1; counts[code]+=1
+                  start=int(ent['dataOffset']); size=int(ent['dataBytes']); end=start+size
+                  payload=raw[start:end]
+                  if len(payload)!=size:
+                      failures.append({'bank':e['name'],'entry':ent['entryIndex'],'reason':'short_payload'})
+                      continue
+                  if code==0:
+                      # Source enum: SND_ASSET_FORMAT_PCMS16. The exact physical relation for
+                      # interleaved signed 16-bit PCM is two bytes per sample per channel.
+                      expected=int(ent['sampleCount'])*int(ent['channels'])*2
+                      if size!=expected:
+                          failures.append({'bank':e['name'],'entry':ent['entryIndex'],'formatCode':code,'reason':'pcm16_size_relation','dataBytes':size,'expectedBytes':expected,'samples':ent['sampleCount'],'channels':ent['channels']})
+                      examples.setdefault('PCMS16',{'bank':e['name'],'entry':ent['entryIndex'],'identifierHex':ent['identifierHex'],'dataBytes':size,'sampleCount':ent['sampleCount'],'channels':ent['channels'],'first16Hex':payload[:16].hex()})
+                  elif code==8:
+                      # Source enum: SND_ASSET_FORMAT_FLAC. T6 stores the physical payload as
+                      # a native FLAC stream; exact marker must be present at byte zero.
+                      if payload[:4]!=b'fLaC':
+                          failures.append({'bank':e['name'],'entry':ent['entryIndex'],'formatCode':code,'reason':'flac_magic','first16Hex':payload[:16].hex()})
+                      examples.setdefault('FLAC',{'bank':e['name'],'entry':ent['entryIndex'],'identifierHex':ent['identifierHex'],'dataBytes':size,'sampleCount':ent['sampleCount'],'channels':ent['channels'],'first16Hex':payload[:16].hex()})
+                  else:
+                      failures.append({'bank':e['name'],'entry':ent['entryIndex'],'formatCode':code,'reason':'unexpected_physical_format'})
+              bank_rows.append({'globalIndex':bi,'path':e['name'],'sha256':hashlib.sha256(raw).hexdigest(),'entries':doc['summary']['entryCount'],'formatCodes':dict(sorted(local.items()))})
+              print(bi,e['name'],dict(sorted(local.items())),flush=True)
+              del raw,doc
+
+          expected={0:4746,8:20700}
+          if dict(counts)!=expected:
+              failures.append({'reason':'population_mismatch','actual':dict(counts),'expected':expected})
+          result={
+              'format':'t6-audio-format-payload-validation-v1',
+              'remoteZip':meta,
+              'authority':{
+                  'sourceEnum':'Laupetin/OpenAssetTools@9dca965366541504b71fa8cfb7ac049cb9b717e1 src/Common/Game/T6/T6_Assets.h',
+                  'sourceDumper':'same commit src/ObjWriting/Game/T6/Sound/SndBankDumperT6.cpp',
+                  'physical':'all 116 CRC-verified SABS/SABL files in the referenced archive'
+              },
+              'sourceClosedCodes':{'0':'SND_ASSET_FORMAT_PCMS16','8':'SND_ASSET_FORMAT_FLAC'},
+              'physicalChecks':{
+                  'PCMS16':'for every code-0 entry: dataBytes == sampleCount * channels * 2',
+                  'FLAC':'for every code-8 entry: payload begins with native FLAC marker 66 4c 61 43 (fLaC)'
+              },
+              'summary':{'bankCount':len(banks),'entryCount':sum(counts.values()),'formatCodeCounts':dict(sorted(counts.items())),'failureCount':len(failures)},
+              'examples':examples,
+              'banks':bank_rows,
+              'failures':failures,
+              'proofBoundary':'Format names come from the exact pinned T6 source enum/dumper and are independently checked against every physical bank payload in the retained 116-bank archive. This does not establish retail executable Create-function addresses or claim additional unused format codes occur in the PC retail bank corpus.'
+          }
+          out=pathlib.Path('/tmp/proof/T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_V1.json'); out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          print(json.dumps(examples,indent=2,sort_keys=True))
+          if failures:
+              print(json.dumps(failures[:20],indent=2,sort_keys=True))
+              raise SystemExit(f'format validation failures: {len(failures)}')
+          PY
+      - name: Upload validation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_FORMAT_PAYLOAD_VALIDATION_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
