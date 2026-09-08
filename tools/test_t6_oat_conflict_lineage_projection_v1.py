@@ -4,16 +4,16 @@ from __future__ import annotations
 import t6_oat_conflict_lineage_projection_v1 as projection
 
 
-def doc(owners: list[str]) -> dict:
+def doc(owners: list[str], kind: str = "divergent-parent-owned-child") -> dict:
     return {
         "format": "t6-oat-parent-dependency-conflict-census-v1",
         "authoritativeWinnerSelection": False,
         "conflicts": [{
             "conflictKey": "abc",
-            "kind": "divergent-parent-owned-child",
+            "kind": kind,
             "techniqueSet": "set",
-            "technique": "tech",
-            "declaredTechniqueTypes": ["lit"],
+            "technique": "tech" if owners else None,
+            "declaredTechniqueTypes": ["lit"] if owners else [],
             "materials": ["m"],
             "parentOwners": owners,
         }],
@@ -22,7 +22,7 @@ def doc(owners: list[str]) -> dict:
 
 def main() -> int:
     # Current lineage hypothesis: patch 0x8 => priority 13, ordinary map
-    # 0x8000 => priority 5.  Projection must remain non-authoritative.
+    # 0x8000 => priority 5. Projection must remain non-authoritative.
     result = projection.build(
         doc(["/tmp/map_out", "/tmp/patch_out"]),
         {"/tmp/map_out": 0x8000, "/tmp/patch_out": 0x8},
@@ -30,6 +30,7 @@ def main() -> int:
     assert result["authoritative"] is False
     assert result["authorityState"] == "lineage_projection_only"
     assert result["summary"]["uniqueLineagePredictionCount"] == 1
+    assert result["summary"]["ownerUniverseGapConflictCount"] == 0
     assert result["summary"]["authoritativeWinnerCount"] == 0
     row = result["projections"][0]
     assert row["lineagePredictedPrimaryRoot"] == "/tmp/patch_out"
@@ -53,6 +54,19 @@ def main() -> int:
     assert missing["summary"]["unmappedConflictCount"] == 1
     assert missing["projections"][0]["lineagePredictedPrimaryRoot"] is None
     assert missing["projections"][0]["unmappedParentOwners"] == ["/tmp/unknown"]
+
+    # No physical parent owner is an owner-universe gap, not a priority problem.
+    gap = projection.build(
+        doc([], "missing-parent-techniqueset-owner"),
+        {"/tmp/map_out": 0x8000, "/tmp/patch_out": 0x8},
+    )
+    assert gap["summary"]["ownerUniverseGapConflictCount"] == 1
+    assert gap["summary"]["uniqueLineagePredictionCount"] == 0
+    assert gap["summary"]["unmappedConflictCount"] == 0
+    grow = gap["projections"][0]
+    assert grow["projectionState"] == "no-parent-owner-in-supplied-universe"
+    assert grow["lineagePredictedPrimaryRoot"] is None
+    assert grow["owners"] == []
 
     print("PASS: OAT conflict lineage projection never promotes lineage to authority")
     return 0
