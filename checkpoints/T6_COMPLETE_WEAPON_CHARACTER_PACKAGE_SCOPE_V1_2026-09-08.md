@@ -2,7 +2,7 @@
 
 ## Completion rule
 
-A weapon or character is **not complete** merely because its mesh, textures or animations can be exported.  Completion means that every asset-local gameplay and presentation dependency reachable through the exact retail graph is represented with provenance, while runtime-global or shared dependencies remain explicitly referenced instead of being fabricated or falsely re-owned.
+A weapon or character is **not complete** merely because its mesh, textures or animations can be exported. Completion means that every asset-local gameplay and presentation dependency reachable through the exact retail graph is represented with provenance, while runtime-global or shared dependencies remain explicitly referenced instead of being fabricated or falsely re-owned.
 
 ## Complete weapon package
 
@@ -37,11 +37,26 @@ Every retail weapon family/variant must close, as applicable:
    - ADS timings/FOV and relevant view parameters
    - spread, sway, gun/view kick, recoil/recovery
    - burst/delay, melee, movement, projectile/explosive and special-weapon fields where applicable
-6. **FX / tracer / camo**
+6. **Attachments as executable equip state**
+   - every generic `WeaponAttachment` available to the weapon
+   - every weapon-specific `WeaponAttachmentUnique` linked to that attachment
+   - attachment view/world/ADS/additional models and exact tags/transforms
+   - attachment animation, audio, FX/tracer, overlay, IK, hide-tag, clip and alt-weapon overrides
+   - exact generic gameplay modifiers such as damage-range scale, fire type, fire-time scale, reload-time scales, ADS transition scales, recoil/recovery, sway, hip spread, movement speed, clip size/scale, perks and behavior flags
+   - exact weapon-specific unique fields such as hit-location multipliers and reload-ammo behavior
+   - an equip resolver that starts from the exact base WeaponDef/WeaponVariantDef and composes the selected attachment state without mutating the canonical base definition
+   - no modifier is treated as additive, multiplicative, overriding or precedence-winning until the corresponding retail/source semantics are closed; raw authored fields remain available even when composition semantics are unresolved
+7. **Camos as executable equip state**
+   - enumerate the complete retail WeaponCamo universe, including base-game and DLC FastFiles
+   - preserve physical owner/copy provenance for every camo and do not silently collapse divergent copies
+   - preserve `solidBaseImage`, `patternBaseImage`, every camo set, per-set solid/pattern images, pattern offset/scale, all material sets, replacement flags, exact base-material → camo-material overrides and all eight shader constants
+   - materialize every referenced image/material dependency with exact retail payload provenance
+   - expose camo selection independently from attachment selection so any retail-valid camo can be equipped/removed without rebuilding or corrupting the canonical base weapon
+   - attachment-specific `WeaponAttachmentUnique.weaponCamo` references must remain part of the attachment graph and compose with the selected weapon camo only according to source-proven retail behavior
+8. **FX / tracer**
    - every exact view/world FX dependency
    - tracer/enemy-tracer
-   - WeaponCamo and attachment/camo variants
-7. **Audio**
+9. **Audio**
    - all direct WeaponDef/WeaponVariantDef/WeaponAttachmentUnique sound aliases
    - all XAnim notify / notetrack aliases
    - all attachment sound overrides
@@ -49,7 +64,7 @@ Every retail weapon family/variant must close, as applicable:
    - exact compressed bank payload offsets/sizes/hashes retained
    - decoded PCM/WAV only after the relevant codec path is independently proven
 
-MP7 is the first canary only.  The exporter/planner must be generic and eventually enumerate the complete retail T6 weapon universe across all 215 FastFiles, including MP, campaign, zombies, equipment, launchers, melee and special weapons.
+MP7 is the first canary only. The exporter/planner must be generic and eventually enumerate the complete retail T6 weapon universe across all 215 FastFiles, including MP, campaign, zombies, equipment, launchers, melee and special weapons. Base-game and DLC camos are part of that same all-FastFile universe and are not optional presentation extras.
 
 ## Complete character package
 
@@ -79,7 +94,7 @@ Pinned git blob SHA-1:
 
 `913e81a417d14516fc131ff5cb864ada3fcaf661`
 
-The source table proves `fireTime -> WeaponDef.iFireTime` is `CSPFT_MILLISECONDS`; the pinned InfoString writer reads the internal unsigned integer and divides by 1000 when writing authored seconds.  Therefore, after an exact retail `iFireTime` value is bound, the permitted derived RPM is:
+The source table proves `fireTime -> WeaponDef.iFireTime` is `CSPFT_MILLISECONDS`; the pinned InfoString writer reads the internal unsigned integer and divides by 1000 when writing authored seconds. Therefore, after an exact retail `iFireTime` value is bound, the permitted derived RPM is:
 
 `60000 / iFireTime_ms`
 
@@ -89,10 +104,26 @@ The same field table proves a six-point native damage curve:
 
 Plain `CSPFT_FLOAT` ranges remain native T6 values until world-unit semantics are independently closed; no inch/meter conversion is promoted from convention.
 
+## Attachment + camo source authority
+
+Pinned OpenAssetTools commit:
+
+`9dca965366541504b71fa8cfb7ac049cb9b717e1`
+
+Exact source carriers:
+
+- `src/ObjCommon/Game/T6/Weapon/AttachmentFields.h` — git blob `7fd2d40de567ee1846a1e58567b59540ce154e8a`
+- `src/ObjCommon/Game/T6/Weapon/AttachmentUniqueFields.h` — git blob `b80663ce2743a0a44612218f31ea1d605089e431`
+- `src/ObjCommon/Game/T6/Json/JsonWeaponCamo.h` — git blob `6b76cc2ff8ee3f10b3d6fb46f112939dd7beb548`
+
+These close field/schema identity, not yet runtime composition order. The equip resolver must therefore preserve both canonical authored values and derived/effective values with explicit derivation provenance.
+
 ## Audio authority already available
 
-The current branch includes the 215-FastFile audio closure merged from main.  Its concrete aliases are already joined fail-closed to physical SABS/SABL entries.  Weapon and character packaging must consume that closure instead of rebuilding audio identity from filenames.
+The current branch includes the 215-FastFile audio closure merged from main. Its concrete aliases are already joined fail-closed to physical SABS/SABL entries. Weapon and character packaging must consume that closure instead of rebuilding audio identity from filenames.
 
 ## Proof boundary
 
-No package may be marked complete from names, visual resemblance, surface order, attachment proximity, presumed patch priority or a plausible stat table.  Every edge must originate from exact retail pointers/tables, exact native dumps whose ownership is closed, or independently source-closed executable/loader semantics.  Unresolved dependencies stay unresolved and block the corresponding completion claim.
+No package may be marked complete from names, visual resemblance, surface order, attachment proximity, presumed patch priority or a plausible stat table. Every edge must originate from exact retail pointers/tables, exact native dumps whose ownership is closed, or independently source-closed executable/loader semantics. Unresolved dependencies stay unresolved and block the corresponding completion claim.
+
+In particular, field names such as `fireTimeScale` or `damageRangeScale` do not by themselves prove the exact runtime composition formula or attachment precedence. Until the executable/source application path is closed, those fields are exported as exact authored modifiers while the effective-value calculator remains fail-closed for the unresolved operation.
