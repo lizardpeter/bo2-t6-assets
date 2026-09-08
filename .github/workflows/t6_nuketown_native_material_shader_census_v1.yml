@@ -70,7 +70,9 @@ jobs:
             git -C /tmp/oat diff --check
             cd /tmp/oat
             PREMAKE_NO_PROMPT=1 ./generate.sh
-            make -C build -j"$(nproc)" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+            BUILD_JOBS=2
+            printf 'nproc=%s\nbuild_jobs=%s\n' "$(nproc)" "$BUILD_JOBS" | tee /tmp/proof/oat_build_parallelism.txt
+            make -C build -j"$BUILD_JOBS" config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
             BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
             test -n "$BIN"
             install -m 0755 "$BIN" "$CACHE_BIN"
@@ -100,31 +102,59 @@ jobs:
           echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
           echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
 
-      - name: Dump native map Materials and map/shared TechniqueSets
+      - name: Record runner resource limits
         shell: bash
         run: |
           set -euo pipefail
+          {
+            echo "nproc=$(nproc)"
+            echo "ulimit_user_processes=$(ulimit -u)"
+            echo "ulimit_open_files=$(ulimit -n)"
+            echo "pid_max=$(cat /proc/sys/kernel/pid_max)"
+            if test -r /sys/fs/cgroup/pids.max; then
+              echo "cgroup_pids_max=$(cat /sys/fs/cgroup/pids.max)"
+            fi
+            if test -r /sys/fs/cgroup/pids.current; then
+              echo "cgroup_pids_current=$(cat /sys/fs/cgroup/pids.current)"
+            fi
+            free -h || true
+          } | tee /tmp/proof/runner_resource_limits.txt
+
+      - name: Dump native map Materials and map/shared TechniqueSets
+        shell: bash
+        run: |
+          set -uo pipefail
           BIN=$(cat /tmp/unlinker_path)
-          mkdir -p /tmp/map_out /tmp/common_out /tmp/common_patch_out /tmp/patch_out
+          mkdir -p /tmp/map_out /tmp/common_out /tmp/common_patch_out /tmp/patch_out /tmp/proof
+          : > /tmp/proof/native_dump_return_codes.txt
+          overall_rc=0
 
-          "$BIN" --no-color --verbose --include-assets material \
-            --output-folder /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff \
-            2>&1 | tee /tmp/proof/map_material_dump.log
+          run_dump() {
+            label="$1"
+            root="$2"
+            ff="$3"
+            kind="$4"
+            log="/tmp/proof/${label}.log"
+            set +e
+            "$BIN" --no-color --verbose --include-assets "$kind" \
+              --output-folder "$root" "$ff" \
+              2>&1 | tee "$log"
+            rc=${PIPESTATUS[0]}
+            set -e
+            printf '%s rc=%s\n' "$label" "$rc" | tee -a /tmp/proof/native_dump_return_codes.txt
+            if test "$rc" -ne 0; then
+              overall_rc=1
+            fi
+          }
 
-          "$BIN" --no-color --verbose --include-assets techniqueset \
-            --output-folder /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff \
-            2>&1 | tee /tmp/proof/map_techset_dump.log
-          "$BIN" --no-color --verbose --include-assets techniqueset \
-            --output-folder /tmp/common_out /tmp/game/zone/all/common_mp.ff \
-            2>&1 | tee /tmp/proof/common_techset_dump.log
-          "$BIN" --no-color --verbose --include-assets techniqueset \
-            --output-folder /tmp/common_patch_out /tmp/game/zone/all/common_patch_mp.ff \
-            2>&1 | tee /tmp/proof/common_patch_techset_dump.log
-          "$BIN" --no-color --verbose --include-assets techniqueset \
-            --output-folder /tmp/patch_out /tmp/game/zone/all/patch_mp.ff \
-            2>&1 | tee /tmp/proof/patch_techset_dump.log
+          set -e
+          run_dump map_material_dump /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff material
+          run_dump map_techset_dump /tmp/map_out /tmp/game/zone/all/mp_nuketown_2020.ff techniqueset
+          run_dump common_techset_dump /tmp/common_out /tmp/game/zone/all/common_mp.ff techniqueset
+          run_dump common_patch_techset_dump /tmp/common_patch_out /tmp/game/zone/all/common_patch_mp.ff techniqueset
+          run_dump patch_techset_dump /tmp/patch_out /tmp/game/zone/all/patch_mp.ff techniqueset
 
-          find /tmp/map_out/materials -type f -name '*.json' | sort > /tmp/proof/map_material_files.txt
+          find /tmp/map_out/materials -type f -name '*.json' 2>/dev/null | sort > /tmp/proof/map_material_files.txt || true
           : > /tmp/proof/target_technique_physical_files.txt
           for root in map_out common_out common_patch_out patch_out; do
             find "/tmp/$root/techsets" -type f -name '*.techset' 2>/dev/null | sort > "/tmp/proof/${root}_techset_files.txt" || true
@@ -135,6 +165,12 @@ jobs:
             fi
           done
           wc -l /tmp/proof/*_files.txt | tee /tmp/proof/dump_counts.txt
+
+          if test "$overall_rc" -ne 0; then
+            echo 'One or more required native OAT dumps failed; downstream authoritative census is blocked.' | tee /tmp/proof/native_dump_gate.txt
+            exit 1
+          fi
+          echo 'All required native OAT dumps succeeded.' | tee /tmp/proof/native_dump_gate.txt
 
       - name: Record every unresolved parent-owned dependency conflict
         shell: bash
