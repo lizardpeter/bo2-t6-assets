@@ -1,0 +1,30 @@
+name: T6 world special render-contract overlay v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_world_special_render_contract_overlay_v1.py'
+      - 'tools/test_t6_world_special_render_contract_overlay_v1.py'
+      - '.github/workflows/t6_world_special_render_contract_overlay_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile overlay
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_world_special_render_contract_overlay_v1.py \
+            tools/test_t6_world_special_render_contract_overlay_v1.py
+      - name: Run fail-closed regression
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/test_t6_world_special_render_contract_overlay_v1.py
