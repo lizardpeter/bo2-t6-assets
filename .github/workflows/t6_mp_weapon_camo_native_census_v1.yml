@@ -91,12 +91,16 @@ jobs:
             out=/tmp/oat_out/$zone
             mkdir -p "$out"
             set +e
-            "$BIN" --no-color --verbose --include-assets weaponCamo --output-folder "$out" "/tmp/game/zone/all/$zone.ff" \
+            "$BIN" --no-color --verbose --include-assets camo --output-folder "$out" "/tmp/game/zone/all/$zone.ff" \
               2>&1 | tee "/tmp/proof/${zone}_weapon_camo_dump.log"
             rc=${PIPESTATUS[0]}
             set -e
             echo "$zone rc=$rc" | tee -a /tmp/proof/native_dump_return_codes.txt
             test "$rc" -eq 0
+            if grep -q '^ERROR:' "/tmp/proof/${zone}_weapon_camo_dump.log"; then
+              echo "native OAT logged an error for $zone" >&2
+              exit 1
+            fi
           done
 
       - name: Validate exact native camo counts and preserve all physical copies
@@ -120,19 +124,25 @@ jobs:
                   if d.get('_type')!='weaponCamo': continue
                   if d.get('_game')!='t6' or d.get('_version')!=1:
                       raise SystemExit(f'unexpected WeaponCamo JSON header: {p}')
-                  # OAT's output filename carries the native asset identity. Preserve
-                  # the relative path rather than guessing from inner texture names.
                   rel=str(p.relative_to(zroot))
-                  name=p.stem
+                  # Preserve the full OAT-emitted path as identity evidence. Do not
+                  # collapse directory-bearing asset identities to a basename.
+                  suffix='.json'
+                  asset_path=rel[:-len(suffix)] if rel.endswith(suffix) else rel
+                  if asset_path.startswith('camo/'):
+                      asset_name=asset_path[len('camo/'):]
+                  else:
+                      asset_name=asset_path
                   row={
-                      'zone':zone,'path':rel,'assetNameFromOutputStem':name,
+                      'zone':zone,'path':rel,'assetNameFromOatPath':asset_name,
                       'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),
                       'solidBaseImage':d.get('solidBaseImage'),
                       'patternBaseImage':d.get('patternBaseImage'),
                       'camoSetCount':len(d.get('camoSets',[])),
                       'camoMaterialSetCount':len(d.get('camoMaterials',[])),
+                      'payload':d,
                   }
-                  rows.append(row); found.append(row); by_name[name].append(row)
+                  rows.append(row); found.append(row); by_name[asset_name].append(row)
               zone_counts[zone]=len(found)
               if len(found)!=want:
                   raise SystemExit(f'{zone}: native WeaponCamo count {len(found)} != raw-XAsset canary {want}')
@@ -156,18 +166,20 @@ jobs:
               'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
               'summary':{
                   'physicalCamoCopyCount':len(rows),
-                  'uniqueOutputStemCount':len(by_name),
+                  'uniqueOatAssetNameCount':len(by_name),
                   'zoneCounts':zone_counts,
                   'duplicateNameCount':sum(1 for v in by_name.values() if len(v)>1),
                   'divergentDuplicateNameCount':sum(1 for v in by_name.values() if len({x['sha256'] for x in v})>1),
               },
               'physicalCopies':rows,
               'copyGroups':copies,
-              'proofBoundary':'The three native OAT WeaponCamo populations are count-checked against the independently source-derived raw XAsset census (47/48/1). Every physical copy is retained. Output stem is used only as OAT-emitted asset identity; runtime precedence between duplicate copies is not inferred. This is the MP base/patch canary before the complete 215-FastFile base+DLC census.',
+              'proofBoundary':'The three native OAT WeaponCamo populations are count-checked against the independently source-derived raw XAsset census (47/48/1). Every physical copy and full JSON payload is retained. Runtime precedence between duplicate copies is not inferred. This is the MP base/patch canary before the complete 215-FastFile base+DLC census.',
           }
           out=Path('/tmp/proof/T6_MP_NATIVE_WEAPON_CAMO_CENSUS_V1.json')
           out.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
           print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          print('CAMO NAMES')
+          for name in sorted(by_name): print(name)
           PY
           sha256sum /tmp/proof/T6_MP_NATIVE_WEAPON_CAMO_CENSUS_V1.json | tee /tmp/proof/census_sha256.txt
 
