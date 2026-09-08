@@ -1,4 +1,4 @@
-name: T6 MP attachmenttable native v1
+name: T6 MP weapon option tables native v2
 
 on:
   workflow_dispatch:
@@ -50,7 +50,7 @@ jobs:
           echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
           echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
 
-      - name: Dump native StringTables and locate exact attachment table
+      - name: Dump and preserve exact weapon option source tables
         shell: bash
         run: |
           set -euo pipefail
@@ -69,34 +69,40 @@ jobs:
           from pathlib import Path
           import hashlib,json,shutil
           root=Path('/tmp/oat_out')
-          matches=[]
+          targets=('mp/attachmenttable.csv','mp/weaponoptions.csv')
+          matches={t:[] for t in targets}
           for zone in ('common_mp','common_patch_mp','patch_mp'):
               zr=root/zone
               for p in sorted(x for x in zr.rglob('*') if x.is_file()):
                   rel=p.relative_to(zr).as_posix()
                   low=rel.lower()
-                  if low.endswith('mp/attachmenttable.csv') or low.endswith('attachmenttable.csv'):
-                      b=p.read_bytes()
-                      matches.append({'zone':zone,'path':rel,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
-                      dst=Path('/tmp/proof')/f'{zone}__attachmenttable.csv'
-                      shutil.copyfile(p,dst)
-          if not matches:
-              raise SystemExit('native OAT emitted no mp/attachmenttable.csv from the three exact MP roots')
+                  for target in targets:
+                      if low == target:
+                          b=p.read_bytes()
+                          matches[target].append({'zone':zone,'path':rel,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+                          shutil.copyfile(p,Path('/tmp/proof')/f"{zone}__{Path(target).name}")
+          for target,rows in matches.items():
+              if not rows:
+                  raise SystemExit(f'native OAT emitted no exact {target} from the three SHA-pinned MP roots')
           doc={
-            'format':'t6-mp-native-attachmenttable-v1',
-            'target':'mp/attachmenttable.csv',
+            'format':'t6-mp-native-weapon-option-tables-v2',
+            'targets':matches,
             'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
-            'matches':matches,
-            'proofBoundary':'Exact native StringTable extraction from the three SHA-pinned MP base/patch roots. Physical copies are preserved independently. This stage does not select a retail-client duplicate winner and does not infer option semantics from column text.',
+            'sourceFastFiles':{
+              'common_mp.ff':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+              'common_patch_mp.ff':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+              'patch_mp.ff':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+            },
+            'proofBoundary':'Exact native StringTable extraction from the three SHA-pinned MP base/patch roots. Physical copies are preserved independently. This stage does not infer option semantics, option groups, subindices, camo indices, or retail-client duplicate precedence from column text.',
           }
-          Path('/tmp/proof/T6_MP_NATIVE_ATTACHMENTTABLE_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          Path('/tmp/proof/T6_MP_NATIVE_WEAPON_OPTION_TABLES_V2.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
           print(json.dumps(doc,indent=2,sort_keys=True))
           PY
-          sha256sum /tmp/proof/*attachmenttable.csv /tmp/proof/T6_MP_NATIVE_ATTACHMENTTABLE_V1.json | sort | tee /tmp/proof/output_sha256.txt
+          sha256sum /tmp/proof/*__attachmenttable.csv /tmp/proof/*__weaponoptions.csv /tmp/proof/T6_MP_NATIVE_WEAPON_OPTION_TABLES_V2.json | sort | tee /tmp/proof/output_sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: T6_MP_NATIVE_ATTACHMENTTABLE_V1
+          name: T6_MP_NATIVE_WEAPON_OPTION_TABLES_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 9
