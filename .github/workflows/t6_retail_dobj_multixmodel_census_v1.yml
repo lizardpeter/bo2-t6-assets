@@ -7,6 +7,7 @@ on:
       - reversal/firstperson-weapons-closure
     paths:
       - 'tools/t6_retail_dobj_multixmodel_census_v1.py'
+      - 'tools/t6_retail_exe_wayback_probe_v1.py'
       - '.github/workflows/t6_retail_dobj_multixmodel_census_v1.yml'
 
 permissions:
@@ -22,50 +23,26 @@ jobs:
       - name: Install exact disassembly dependency
         run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
 
-      - name: Compile-check census
-        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py
+      - name: Compile-check proof tools
+        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py tools/t6_retail_exe_wayback_probe_v1.py
 
-      - name: Recover exact retail t6mp.exe from content-addressed Plutonium CDN
+      - name: Probe archived content-addressed objects for exact retail t6mp.exe
         shell: bash
-        env:
-          OBJECT_URL: https://cdn.plutoniummod.com/updater/prod/files/44eba16d0d9c66f40637611137affbe6b0364f20
-          EXPECTED_SHA1: 44eba16d0d9c66f40637611137affbe6b0364f20
-          EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
-          EXPECTED_BYTES: '12850328'
         run: |
           set -euo pipefail
           mkdir -p /tmp/proof
-          curl -L --fail --retry 4 --retry-delay 5 \
-            --user-agent 'bo2-t6-assets-dobj-multixmodel-census/2' \
-            -o /tmp/t6mp.exe "$OBJECT_URL"
+          python3 tools/t6_retail_exe_wayback_probe_v1.py \
+            --out /tmp/proof/T6_RETAIL_EXE_WAYBACK_PROBE_V1.json \
+            --exe-out /tmp/t6mp.exe \
+            | tee /tmp/proof/wayback_probe.log
 
-          echo "$EXPECTED_SHA1  /tmp/t6mp.exe" | sha1sum -c -
-          echo "$EXPECTED_SHA256  /tmp/t6mp.exe" | sha256sum -c -
-          test "$(stat -c '%s' /tmp/t6mp.exe)" = "$EXPECTED_BYTES"
-
-          python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          p=Path('/tmp/t6mp.exe')
-          raw=p.read_bytes()
-          source={
-              'format':'t6-retail-executable-content-addressed-source-v1',
-              'objectUrl':os.environ['OBJECT_URL'],
-              'objectKeySha1':os.environ['EXPECTED_SHA1'],
-              'actualSha1':hashlib.sha1(raw).hexdigest(),
-              'expectedBytes':int(os.environ['EXPECTED_BYTES']),
-              'actualBytes':len(raw),
-              'expectedSha256':os.environ['EXPECTED_SHA256'],
-              'actualSha256':hashlib.sha256(raw).hexdigest(),
-              'status':'exact_sha1_sha256_and_size_pinned_object_recovered',
-              'proofBoundary':(
-                  'The CDN object key is accepted only because the downloaded bytes independently satisfy '
-                  'the project-pinned full retail byte length and SHA-256 identity. No filename, archive '
-                  'membership, or same-product inference is used as executable authority.'
-              ),
+          test -f /tmp/t6mp.exe || {
+            echo 'Wayback probe did not recover an exact identity match' >&2
+            exit 1
           }
-          Path('/tmp/proof/executable_source.json').write_text(json.dumps(source,indent=2,sort_keys=True)+'\n')
-          PY
+          echo '44eba16d0d9c66f40637611137affbe6b0364f20  /tmp/t6mp.exe' | sha1sum -c -
+          echo '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1  /tmp/t6mp.exe' | sha256sum -c -
+          test "$(stat -c '%s' /tmp/t6mp.exe)" = 12850328
 
       - name: Census exact retail DObj consumers and helper xrefs
         shell: bash
@@ -80,9 +57,11 @@ jobs:
             | tee /tmp/proof/proof_sha256.txt
 
       - name: Refuse executable bytes in artifact
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
+          rm -f /tmp/t6mp.exe
           test ! -e /tmp/proof/t6mp.exe
           if find /tmp/proof -type f -size +8M | grep -q .; then
             echo 'unexpected large proof file; refusing artifact' >&2
