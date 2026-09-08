@@ -1,4 +1,4 @@
-name: T6 native missing Secondary target owner census v1
+name: T6 missing Secondary target owner census v2
 
 on:
   workflow_dispatch:
@@ -95,7 +95,7 @@ jobs:
           test -f /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json
           echo '5da7ed9c5cd5ea4c2cd69213438103883f6c804db678db6496f781ed86713f5d  /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json' | sha256sum -c -
 
-      - name: Native SoundBank owner census for exact missing targets
+      - name: Native owner census over every structurally proven SoundBank FastFile
         shell: bash
         run: |
           set -euo pipefail
@@ -110,9 +110,12 @@ jobs:
           rows=census['rows']
           if len(rows)!=215 or [int(r['globalIndex']) for r in rows]!=list(range(215)):
               raise SystemExit('retained alias census no longer provides exact globalIndex 0..214 coverage')
+          snd_rows=[r for r in rows if int(r['summary']['validatedSndBankSectionCount'])>0]
+          if len(snd_rows)!=63 or census['summary']['fastFilesWithValidatedSndBankSections']!=63:
+              raise SystemExit(f'expected exact 63 structurally validated SoundBank FastFiles, got {len(snd_rows)}')
           shard=int(os.environ['SHARD']); n=int(os.environ['SHARD_COUNT'])
-          selected=[r for r in rows if int(r['globalIndex']) % n == shard]
-          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-oat-missing-secondary-owner/{shard}',timeout=180,retries=7)
+          selected=[r for r in snd_rows if int(r['globalIndex']) % n == shard]
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-oat-missing-secondary-owner-v2/{shard}',timeout=180,retries=7)
           entries,meta=rz.central_directory(); by_name={e['name']:e for e in entries}
           out_rows=[]; matches=[]; totals={'nativeSoundBankCsvCount':0,'nativeAliasRowCount':0}
           targets=['wpn_wa2000_bass_swt_silencer','zmb_tomahawk_sparks']
@@ -128,38 +131,42 @@ jobs:
               with log.open('wb') as lf:
                   proc=subprocess.run([os.environ['BIN'],'--no-color','--include-assets','soundbank','--output-folder',str(root),str(ff)],stdout=lf,stderr=subprocess.STDOUT)
               if proc.returncode!=0:
-                  raise SystemExit(f'{source}: native OAT soundbank dump failed rc={proc.returncode}')
+                  raise SystemExit(f'{source}: native OAT SoundBank dump failed rc={proc.returncode}')
               d=scan(root,source,targets)
+              if d['summary']['nativeSoundBankCsvCount'] < 1:
+                  raise SystemExit(f'{source}: structural census proved SoundBank but native OAT emitted no alias CSV')
               totals['nativeSoundBankCsvCount']+=d['summary']['nativeSoundBankCsvCount']
               totals['nativeAliasRowCount']+=d['summary']['nativeAliasRowCount']
               matches.extend(d['matches'])
               out_rows.append({
                   'globalIndex':idx,'sourceFastFile':source,'fastFileSha256':sha,
                   'zipCrc32':f"{int(z['crc32']):08x}",'nativeDumpReturnCode':proc.returncode,
+                  'structuralValidatedSndBankSectionCount':r['summary']['validatedSndBankSectionCount'],
+                  'structuralAliasDefinitionOccurrenceCount':r['summary']['aliasDefinitionOccurrenceCount'],
                   **d['summary']
               })
               print(idx,d['summary']['nativeSoundBankCsvCount'],d['summary']['nativeAliasRowCount'],d['summary']['targetMatchCount'],source,flush=True)
               ff.unlink(missing_ok=True); shutil.rmtree(root)
           result={
-              'format':'t6-oat-missing-secondary-target-owner-census-shard-v1',
-              'shard':shard,'shardCount':n,'allFastFileCount':215,'targets':targets,
+              'format':'t6-oat-missing-secondary-target-owner-census-shard-v2',
+              'shard':shard,'shardCount':n,'archiveFastFileCount':215,'structuralSoundBankFastFileCount':63,'targets':targets,
               'remoteZip':meta,'rows':out_rows,'matches':matches,
               'summary':{
-                  'selectedFastFileCount':len(out_rows),
+                  'selectedNativeFastFileCount':len(out_rows),
                   'greenNativeDumpFastFileCount':sum(r['nativeDumpReturnCode']==0 for r in out_rows),
                   **totals,'targetMatchCount':len(matches)
               },
-              'proofBoundary':'Native pinned-OAT SoundBank alias Name census for one deterministic shard of the exact 215-FastFile archive. Every FF is ZIP-CRC verified and SHA-matched to the retained census; every OAT soundbank dump must return zero. Only native alias CSV Name rows can establish a target owner.'
+              'proofBoundary':'Native pinned-OAT SoundBank alias Name census for one deterministic shard of the 63 FastFiles that the exact retained 215-FastFile structural census proves contain validated SndBank sections. Every selected FF is ZIP-CRC verified and SHA-matched to that census; every native SoundBank dump must return zero and emit at least one alias CSV. The other 152 archive FastFiles are not passed to a SoundBank-only OAT dump because the retained fail-closed structural census proves zero validated SndBank sections in them. Only native alias CSV Name rows can establish a target owner.'
           }
-          pathlib.Path(f'/tmp/proof/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_{shard}_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          pathlib.Path(f'/tmp/proof/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_{shard}_V2.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
           print(json.dumps(result['summary'],indent=2,sort_keys=True))
           PY
 
       - name: Upload native owner shard
         uses: actions/upload-artifact@v4
         with:
-          name: T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_${{ matrix.shard }}_V1
-          path: /tmp/proof/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_${{ matrix.shard }}_V1.json
+          name: T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_${{ matrix.shard }}_V2
+          path: /tmp/proof/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_${{ matrix.shard }}_V2.json
           if-no-files-found: error
           compression-level: 9
 
@@ -168,55 +175,86 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_*_V1
+          pattern: T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_*_V2
           path: /tmp/shards
           merge-multiple: true
-      - name: Require exact 215-FastFile native coverage and aggregate target owners
+      - name: Download exact retained 215-FastFile structural census
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/alias
+          gh run download 34177086929 --repo "$GITHUB_REPOSITORY" --name T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1 --dir /tmp/alias
+          echo '5da7ed9c5cd5ea4c2cd69213438103883f6c804db678db6496f781ed86713f5d  /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json' | sha256sum -c -
+      - name: Require exact 63-native plus 152-structural archive coverage
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/proof
           python3 - <<'PY'
           import glob,hashlib,json,pathlib
-          files=sorted(glob.glob('/tmp/shards/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_*_V1.json'))
+          census=json.load(open('/tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json',encoding='utf-8'))
+          all_rows=census['rows']
+          if len(all_rows)!=215 or [int(r['globalIndex']) for r in all_rows]!=list(range(215)):
+              raise SystemExit('retained structural census is not exact 215 coverage')
+          snd_indices={int(r['globalIndex']) for r in all_rows if int(r['summary']['validatedSndBankSectionCount'])>0}
+          no_snd_indices={int(r['globalIndex']) for r in all_rows if int(r['summary']['validatedSndBankSectionCount'])==0}
+          if len(snd_indices)!=63 or len(no_snd_indices)!=152 or snd_indices|no_snd_indices!=set(range(215)) or snd_indices&no_snd_indices:
+              raise SystemExit('structural SoundBank/non-SoundBank partition mismatch')
+
+          files=sorted(glob.glob('/tmp/shards/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_SHARD_*_V2.json'))
           if len(files)!=8: raise SystemExit(f'expected 8 shards, got {len(files)}')
           docs=[json.load(open(p,encoding='utf-8')) for p in files]
           rows=[]; matches=[]; csv_count=0; alias_rows=0; targets=None
           for d in docs:
-              if d.get('format')!='t6-oat-missing-secondary-target-owner-census-shard-v1': raise SystemExit('bad shard format')
-              if d.get('allFastFileCount')!=215: raise SystemExit('FastFile population mismatch')
+              if d.get('format')!='t6-oat-missing-secondary-target-owner-census-shard-v2': raise SystemExit('bad shard format')
+              if d.get('archiveFastFileCount')!=215 or d.get('structuralSoundBankFastFileCount')!=63: raise SystemExit('archive population mismatch')
               if targets is None: targets=d['targets']
               elif targets!=d['targets']: raise SystemExit('target set differs across shards')
               rows.extend(d['rows']); matches.extend(d['matches'])
               csv_count+=int(d['summary']['nativeSoundBankCsvCount']); alias_rows+=int(d['summary']['nativeAliasRowCount'])
           rows.sort(key=lambda r:r['globalIndex'])
-          if len(rows)!=215 or [r['globalIndex'] for r in rows]!=list(range(215)): raise SystemExit('native shards do not cover exact globalIndex 0..214')
-          if any(r['nativeDumpReturnCode']!=0 for r in rows): raise SystemExit('one or more native OAT dumps failed')
+          native_indices=[int(r['globalIndex']) for r in rows]
+          if len(rows)!=63 or set(native_indices)!=snd_indices or len(native_indices)!=len(set(native_indices)):
+              raise SystemExit('native shards do not cover exactly the 63 structurally proven SoundBank FastFiles')
+          if any(r['nativeDumpReturnCode']!=0 or r['nativeSoundBankCsvCount']<1 for r in rows):
+              raise SystemExit('one or more native OAT SoundBank dumps failed or emitted no alias CSV')
           by_target={t:[] for t in targets}
           for m in matches: by_target[m['target']].append(m)
           result={
-              'format':'t6-oat-missing-secondary-target-owner-census-v1',
-              'targets':targets,'rows':rows,'matches':matches,'ownersByTarget':by_target,
+              'format':'t6-missing-secondary-target-owner-census-v2',
+              'targets':targets,'nativeRows':rows,'matches':matches,'ownersByTarget':by_target,
               'summary':{
-                  'fastFileCount':215,'greenNativeDumpFastFileCount':215,
+                  'archiveFastFileCount':215,
+                  'structuralNoSoundBankFastFileCount':152,
+                  'structuralSoundBankFastFileCount':63,
+                  'greenNativeSoundBankFastFileCount':63,
                   'nativeSoundBankCsvCount':csv_count,'nativeAliasRowCount':alias_rows,
                   'targetMatchCount':len(matches),
                   'targetsWithOwnerCount':sum(bool(v) for v in by_target.values()),
                   'targetsWithoutOwnerCount':sum(not v for v in by_target.values())
               },
+              'source':{
+                  'structuralCensusRun':34177086929,
+                  'structuralCensusArtifact':'T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1',
+                  'structuralCensusArtifactDigest':'sha256:7aa3a37ac803a49d0b629cad446c1475edd682a328d2d39cce07c1fce19eac8a',
+                  'structuralCensusJsonSha256':'5da7ed9c5cd5ea4c2cd69213438103883f6c804db678db6496f781ed86713f5d'
+              },
               'shardJsonSha256':[{'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()} for p in files],
-              'proofBoundary':'Complete native pinned-OAT SoundBank alias Name census over all 215 SHA-identified FastFiles in the referenced archive. Every FastFile passed ZIP CRC, exact retained SHA, and native OAT rc=0. Owner presence requires an exact Name-row match. If a target has zero matches, absence is authoritative only within this exact successfully dumped 215-FastFile SoundBank universe, not outside the archive or for runtime-generated aliases.'
+              'proofBoundary':'Complete owner census within the exact 215-FastFile archive using two fail-closed layers. The retained structural census proves 152 FastFiles contain zero validated SndBank sections and exactly 63 contain validated SndBank sections. Every one of those 63 was ZIP-CRC verified, exact-SHA matched, natively dumped by pinned OAT with rc=0, and required to emit at least one SoundBank alias CSV. Owner presence requires an exact native CSV Name-row match. If a target has zero matches, absence is authoritative only within this exact archive SoundBank universe, not outside the archive or for runtime-generated aliases.'
           }
-          pathlib.Path('/tmp/proof/T6_OAT_MISSING_SECONDARY_TARGET_OWNER_CENSUS_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          pathlib.Path('/tmp/proof/T6_MISSING_SECONDARY_TARGET_OWNER_CENSUS_V2.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
           print(json.dumps(result['summary'],indent=2,sort_keys=True))
           print(json.dumps(by_target,indent=2,sort_keys=True))
           PY
-      - name: Upload complete native target-owner census
+      - name: Upload complete target-owner census
         uses: actions/upload-artifact@v4
         with:
-          name: T6_OAT_MISSING_SECONDARY_TARGET_OWNER_CENSUS_V1
+          name: T6_MISSING_SECONDARY_TARGET_OWNER_CENSUS_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 9
