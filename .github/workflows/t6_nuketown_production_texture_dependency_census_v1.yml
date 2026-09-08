@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/t6_nuketown_production_texture_dependency_census_v1.py'
       - 'tools/t6_world_material_catalog_legacy_index_v1.py'
+      - 'tools/t6_oat_material_root_union_v1.py'
       - 'tools/t6_nuketown_world_source_sidecars_v3.py'
       - 'tools/t6_nuketown_material_memory_ownership_v1.py'
       - 'tools/t6_oat_material_manifest_v3.py'
@@ -55,13 +56,19 @@ jobs:
           grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
           echo "$BIN" >/tmp/unlinker_path
 
-      - name: Fetch and expand exact retail Nuketown
+      - name: Fetch exact five-root MP dependency universe and expand Nuketown
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/source /tmp/proof /tmp/oat_out
-          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          mkdir -p /tmp/source /tmp/proof
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/source/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
           echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
           cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
           /tmp/t6_expand /tmp/source/mp_nuketown_2020.ff /tmp/source/mp_nuketown_2020.expanded.bin mp_nuketown_2020 2>&1 | tee /tmp/proof/expand.log
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/source/mp_nuketown_2020.expanded.bin' | sha256sum -c -
@@ -88,18 +95,49 @@ jobs:
             /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json
 
-      - name: Dump exact native Nuketown Materials with pinned OAT
+      - name: Dump native Materials from all exact dependency roots
         shell: bash
         run: |
           set -euo pipefail
           BIN=$(cat /tmp/unlinker_path)
-          "$BIN" --no-color --include-assets material --output-folder /tmp/oat_out /tmp/source/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/oat_material_dump.log
-          MATROOT=$(find /tmp/oat_out -type d -name materials -print -quit)
-          test -n "$MATROOT" -a -d "$MATROOT"
-          echo "$MATROOT" >/tmp/material_root
-          COUNT=$(find "$MATROOT" -type f -name '*.json' | wc -l)
-          echo "NATIVE_OAT_MATERIAL_JSON_COUNT=$COUNT" | tee /tmp/proof/oat_material_count.txt
-          test "$COUNT" -gt 0
+          for spec in \
+            map=mp_nuketown_2020.ff \
+            common=common_mp.ff \
+            common_patch=common_patch_mp.ff \
+            patch=patch_mp.ff \
+            code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}
+            root="/tmp/oat_$label"
+            mkdir -p "$root"
+            "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee "/tmp/proof/oat_material_dump_${label}.log"
+            matroot=$(find "$root" -type d -name materials -print -quit)
+            test -n "$matroot" -a -d "$matroot"
+            count=$(find "$matroot" -type f -name '*.json' | wc -l)
+            echo "$label $matroot $count" | tee -a /tmp/proof/oat_material_roots.txt
+            test "$count" -gt 0
+          done
+
+      - name: Build required-only fail-closed Material root union
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          map_root=$(awk '$1=="map"{print $2}' /tmp/proof/oat_material_roots.txt)
+          common_root=$(awk '$1=="common"{print $2}' /tmp/proof/oat_material_roots.txt)
+          common_patch_root=$(awk '$1=="common_patch"{print $2}' /tmp/proof/oat_material_roots.txt)
+          patch_root=$(awk '$1=="patch"{print $2}' /tmp/proof/oat_material_roots.txt)
+          code_post_root=$(awk '$1=="code_post"{print $2}' /tmp/proof/oat_material_roots.txt)
+          python3 tools/t6_oat_material_root_union_v1.py \
+            --root "map=$map_root" \
+            --root "common=$common_root" \
+            --root "common_patch=$common_patch_root" \
+            --root "patch=$patch_root" \
+            --root "code_post=$code_post_root" \
+            --required-catalog /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
+            --out-root /tmp/oat_material_union \
+            --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json \
+            2>&1 | tee /tmp/proof/material_union.log
 
       - name: Build exact production OAT material dependency manifest
         env:
@@ -107,9 +145,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MATROOT=$(cat /tmp/material_root)
           python3 tools/t6_oat_material_manifest_v3.py \
-            "$MATROOT" \
+            /tmp/oat_material_union \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
             /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json \
             --source-texture-extension .dds \
@@ -172,7 +209,7 @@ jobs:
           assert s['productionUniqueImageCount']==s['materialUniqueImageCount'],s
           print('MATERIAL_TEXTURE_COVERAGE',json.dumps(s,sort_keys=True))
           print('MISSING_MATERIAL_IMAGES',len(d['missingProductionImages']))
-          for row in d['missingProductionImages'][:80]:
+          for row in d['missingProductionImages'][:120]:
               print('MISSING',row['image'],'USES',len(row['materialUses']))
           PY
 
