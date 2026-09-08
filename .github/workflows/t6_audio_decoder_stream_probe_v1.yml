@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/t6_audio_decoder_stream_probe_v1.yml'
+      - 'tools/t6_pc_server_sound_decoder_stream_runtime_proof_v1.py'
 
 permissions:
   contents: read
@@ -80,7 +81,6 @@ jobs:
                   return s.decode('ascii','replace')
               return None
 
-          # Exact MAP symbol start addresses establish these function boundaries.
           ranges = {
               'SD_DecoderShutdown': (0x008B99F0, 0x008B9A10),
               'SD_DecoderAllocate_impl': (0x008B9A10, 0x008B9B20),
@@ -91,7 +91,6 @@ jobs:
               'SD_StreamAllocate': (0x008B9E20, 0x008BA010),
           }
 
-          # Collect MAP lines keyed by exact public VA.
           map_by_va = {}
           for ln in map_text.splitlines():
               m = re.search(r'\b([0-9A-Fa-f]{8})\b(?:\s+f)?\s+[^\s]+\.obj\s*$', ln)
@@ -155,6 +154,16 @@ jobs:
                       print(ln)
           Path('/tmp/probe/map_neighborhood.json').write_text(json.dumps(near,indent=2)+'\n')
           PY
+
+      - name: Run fail-closed decoder stream runtime proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_pc_server_sound_decoder_stream_runtime_proof_v1.py \
+            --exe /tmp/ref/CoDMPServer_PC.exe \
+            --map /tmp/ref/CoDMPServer_PC.map \
+            --out /tmp/probe/runtime_proof.json
+          sha256sum /tmp/probe/runtime_proof.json
 
       - name: Upload exact decoder stream probe
         uses: actions/upload-artifact@v4
