@@ -1,0 +1,92 @@
+name: T6 retail client archive locator v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_retail_client_archive_locator_v1.yml'
+      - 'tools/t6_remote_zip_range_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      EXPECTED_T6MP_BYTES: '12850328'
+      EXPECTED_T6MP_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect exact ZIP64 central directory and hash executable candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-retail-client-archive-locator/1',timeout=180,retries=7)
+          entries,meta=rz.central_directory()
+          expected_bytes=int(os.environ['EXPECTED_T6MP_BYTES'])
+          expected_sha=os.environ['EXPECTED_T6MP_SHA256'].lower()
+
+          executable_exts=('.exe','.dll','.asi','.cpl')
+          candidates=[]
+          for idx,e in enumerate(entries):
+              name=e['name']; low=name.lower()
+              if low.endswith(executable_exts) or 't6mp' in low or 'blackops' in low or 'plutonium' in low:
+                  candidates.append({
+                      'globalIndex':idx,
+                      'name':name,
+                      'uncompressedBytes':int(e['uncompressedSize']),
+                      'compressedBytes':int(e['compressedSize']),
+                      'crc32':f"{int(e['crc32']):08x}",
+                      'method':int(e['method']),
+                  })
+
+          exact_size=[c for c in candidates if c['uncompressedBytes']==expected_bytes]
+          extracted=[]
+          for c in candidates:
+              # Hash executable-like files that are small enough to be practical; always hash exact-size candidates.
+              if c['uncompressedBytes'] > 100_000_000 and c['uncompressedBytes'] != expected_bytes:
+                  continue
+              e=entries[c['globalIndex']]
+              raw=rz.extract(e,verify_crc=True)
+              digest=hashlib.sha256(raw).hexdigest()
+              rec={**c,'sha256':digest,'first16Hex':raw[:16].hex(),'mz':raw[:2]==b'MZ'}
+              if len(raw)==expected_bytes and digest==expected_sha:
+                  rec['identity']='exact_expected_retail_t6mp'
+              elif len(raw)==expected_bytes:
+                  rec['identity']='expected_size_but_sha_mismatch'
+              else:
+                  rec['identity']='other_executable_candidate'
+              extracted.append(rec)
+              print(json.dumps(rec,sort_keys=True),flush=True)
+
+          matches=[r for r in extracted if r['identity']=='exact_expected_retail_t6mp']
+          result={
+              'format':'t6-retail-client-archive-locator-v1',
+              'remoteZip':meta,
+              'centralDirectoryEntryCount':len(entries),
+              'candidateCount':len(candidates),
+              'candidates':candidates,
+              'exactExpectedSizeCandidateCount':len(exact_size),
+              'hashedCandidates':extracted,
+              'exactExpectedRetailMatches':matches,
+              'expectedRetailIdentity':{'bytes':expected_bytes,'sha256':expected_sha},
+              'proofBoundary':'Exact ZIP64 central-directory census of the same public T6 archive used for the validated 116-bank audio corpus. Candidate files are CRC-verified on extraction and SHA-256 hashed. Absence here is archive-specific, not a global retail-client absence claim.'
+          }
+          pathlib.Path('/tmp/proof/T6_RETAIL_CLIENT_ARCHIVE_LOCATOR_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'entryCount':len(entries),'candidateCount':len(candidates),'exactSizeCount':len(exact_size),'exactMatchCount':len(matches)},indent=2))
+          PY
+      - name: Upload locator result
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_CLIENT_ARCHIVE_LOCATOR_V1
+          path: /tmp/proof/T6_RETAIL_CLIENT_ARCHIVE_LOCATOR_V1.json
+          if-no-files-found: error
+          compression-level: 9
