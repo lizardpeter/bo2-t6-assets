@@ -118,6 +118,7 @@ jobs:
           set -euo pipefail
           BIN=$(cat /tmp/unlinker_path)
           : > /tmp/proof/native_dump_return_codes.txt
+          : > /tmp/proof/native_dump_counts.txt
           for zone in code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
             if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
             out="/tmp/${zone}_out"
@@ -133,8 +134,10 @@ jobs:
             printf '%s material_rc=%s techniqueset_rc=%s\n' "$zone" "$mrc" "$trc" | tee -a /tmp/proof/native_dump_return_codes.txt
             test "$mrc" -eq 0
             test "$trc" -eq 0
-            mcount=$(find "$out/materials" -type f -name '*.json' 2>/dev/null | wc -l)
-            tcount=$(find "$out/techsets" -type f -name '*.techset' 2>/dev/null | wc -l)
+            mcount=0
+            tcount=0
+            if [[ -d "$out/materials" ]]; then mcount=$(find "$out/materials" -type f -name '*.json' | wc -l); fi
+            if [[ -d "$out/techsets" ]]; then tcount=$(find "$out/techsets" -type f -name '*.techset' | wc -l); fi
             printf '%s materials=%s techsets=%s\n' "$zone" "$mcount" "$tcount" | tee -a /tmp/proof/native_dump_counts.txt
           done
 
