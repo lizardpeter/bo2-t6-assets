@@ -1,0 +1,23 @@
+name: T6 audio payload export v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_audio_payload_export_v1.py'
+      - 'tools/test_t6_audio_payload_export_v1.py'
+      - '.github/workflows/t6_audio_payload_export_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fail-closed PC audio exporter
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_audio_payload_export_v1.py
