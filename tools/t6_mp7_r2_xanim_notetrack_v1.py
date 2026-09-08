@@ -505,10 +505,12 @@ def build(stream: Path, common_mp_ff: Path, weapon_paths: dict[str, Path]) -> di
     overlaps = [r for r in records if (r["gapToNextStructuralRecord"] is not None and r["gapToNextStructuralRecord"] < 0)]
     if overlaps:
         raise ValueError(f"{len(overlaps)} structural XAnim overlaps")
+    if front["assetCount"] != 6082:
+        raise ValueError(f"expected retail common_mp XAsset count 6082, got {front['assetCount']}")
     if front["xanimAssetCount"] != 4233:
         raise ValueError(f"expected retail common_mp XAnim count 4233, got {front['xanimAssetCount']}")
-    if front["scriptStringCount"] != 54040:
-        raise ValueError(f"expected retail common_mp ScriptString count 54040, got {front['scriptStringCount']}")
+    if front["scriptStringCount"] != 1189:
+        raise ValueError(f"expected retail common_mp ScriptString count 1189, got {front['scriptStringCount']}")
 
     by_name: dict[str, list[dict[str, Any]]] = {}
     for record in records:
