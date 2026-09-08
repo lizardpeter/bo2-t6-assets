@@ -35,19 +35,20 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/game/zone/all /tmp/expanded /tmp/proof
           base=https://r2.houseofkublai.com/bo2/zone/all
-          for zone in common_mp common_patch_mp patch_mp; do
+          for zone in common_mp common_patch_mp patch_mp code_post_gfx_mp; do
             curl -fL --retry 4 "$base/$zone.ff" -o "/tmp/game/zone/all/$zone.ff"
           done
           echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
           echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
           echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/game/zone/all/code_post_gfx_mp.ff' | sha256sum -c -
           sha256sum /tmp/game/zone/all/*.ff | sort | tee /tmp/proof/r2_fastfile_sha256.txt
 
       - name: Expand exact retail MP roots
         shell: bash
         run: |
           set -euo pipefail
-          for zone in common_mp common_patch_mp patch_mp; do
+          for zone in common_mp common_patch_mp patch_mp code_post_gfx_mp; do
             /tmp/t6_expand "/tmp/game/zone/all/$zone.ff" "/tmp/expanded/$zone.bin" "$zone" \
               > "/tmp/proof/${zone}_expand.log" 2>&1
           done
@@ -69,6 +70,7 @@ jobs:
             --expanded common_mp=/tmp/expanded/common_mp.bin \
             --expanded common_patch_mp=/tmp/expanded/common_patch_mp.bin \
             --expanded patch_mp=/tmp/expanded/patch_mp.bin \
+            --expanded code_post_gfx_mp=/tmp/expanded/code_post_gfx_mp.bin \
             --discover-bank-bases \
             --target-file /tmp/proof/mp7_direct_audio_targets.txt \
             --out /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json \
