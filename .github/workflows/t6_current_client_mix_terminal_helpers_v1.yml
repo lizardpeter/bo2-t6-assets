@@ -1,0 +1,108 @@
+name: T6 current client mix terminal helpers v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_mix_terminal_helpers_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve final mix terminal helpers and exact core boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,collections
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+
+          UA='bo2-t6-assets-mix-terminal-helpers/1';INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          def rows(start,end):
+            o=vaoff(start);out=[]
+            for ins in md.disasm(raw[o:o+(end-start)],start):
+              if ins.address>=end:break
+              r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              if ins.mnemonic in ('call','jmp') and ins.operands and ins.operands[0].type==X86_OP_IMM:r['directTarget']=f'0x{ins.operands[0].imm&0xffffffff:08X}'
+              out.append(r)
+            return out
+          # 6598B0 reachable body ends at the unconditional return 659B1D; 659B20 is a distinct adjacent entry with independent ret 0xc.
+          core=(0x006598B0,0x00659B1E)
+          adjacency=(0x00659B1E,0x00659B80)
+          helper_ranges={
+            'blockCopyCandidate':(0x00A72BF0,0x00A72D80),
+            'sixBy256Terminal':(0x00416BAF,0x00417100),
+            'floatBlockHelper':(0x004D9369,0x004D9700),
+          }
+          traced={}
+          for name,(a,b) in helper_ranges.items():
+            rr=rows(a,b)
+            # preserve through first plausible function terminator; do not assert if none
+            end=None
+            for i,r in enumerate(rr):
+              if r['mnemonic'].startswith('ret'):
+                end=int(r['va'],16)+len(bytes.fromhex(r['bytes']));break
+            sub=[r for r in rr if end is None or int(r['va'],16)<end]
+            traced[name]={'startVa':f'0x{a:08X}','firstReturnEndVa':f'0x{end:08X}' if end else None,'firstReturnBytes':(end-a) if end else None,'firstReturnSha256':hashlib.sha256(raw[vaoff(a):vaoff(a)+(end-a)]).hexdigest() if end else None,'disasm':sub}
+
+          # Summarize memory ops and constants for helpers.
+          for name,h in traced.items():
+            mem=[];const=collections.Counter();calls=[]
+            for r in h['disasm']:
+              va=int(r['va'],16);ins=next(md.disasm(raw[vaoff(va):vaoff(va)+15],va))
+              for op in ins.operands:
+                if op.type==X86_OP_IMM: const[op.imm&0xffffffff]+=1
+                elif op.type==X86_OP_MEM:mem.append({'va':r['va'],'mnemonic':r['mnemonic'],'opStr':r['opStr'],'base':ins.reg_name(op.mem.base) if op.mem.base else None,'index':ins.reg_name(op.mem.index) if op.mem.index else None,'scale':op.mem.scale,'disp':op.mem.disp})
+              if ins.mnemonic=='call':
+                calls.append({'va':r['va'],'target':f'0x{ins.operands[0].imm&0xffffffff:08X}' if ins.operands and ins.operands[0].type==X86_OP_IMM else None,'opStr':ins.op_str})
+            h['memoryOperands']=mem;h['immediates']={f'0x{k:08X}':v for k,v in const.items()};h['calls']=calls
+
+          # Exact direct xrefs to terminal helpers.
+          targets={0x00A72BF0:'blockCopyCandidate',0x00416BAF:'sixBy256Terminal',0x004D9369:'floatBlockHelper'}
+          mds=Cs(CS_ARCH_X86,CS_MODE_32);mds.detail=True;mds.skipdata=True
+          xrefs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in mds.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0 or ins.mnemonic not in ('call','jmp') or not ins.operands or ins.operands[0].type!=X86_OP_IMM:continue
+              t=ins.operands[0].imm&0xffffffff
+              if t in targets:xrefs.append({'va':f'0x{ins.address:08X}','target':f'0x{t:08X}','kind':targets[t],'mnemonic':ins.mnemonic})
+
+          result={'format':'t6-current-client-mix-terminal-helpers-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'mixCoreExactContiguousRange':{'startVa':f'0x{core[0]:08X}','endExclusiveVa':f'0x{core[1]:08X}','bytes':core[1]-core[0],'sha256':hashlib.sha256(raw[vaoff(core[0]):vaoff(core[0])+(core[1]-core[0])]).hexdigest(),'boundaryEvidence':{'returnVa':'0x00659B1D','followingBytes':raw[vaoff(0x00659B1E):vaoff(0x00659B20)].hex(),'adjacentEntryVa':'0x00659B20','adjacentEntryPreview':rows(*adjacency)[:20]}},'helpers':traced,'helperXrefs':xrefs,'terminalCallContract':{'copyCallVa':'0x00659AFC','copyArgsCdecl':['final PCM ring slot','internal 0x1800-byte mix block','0x1800 bytes'],'sixBy256CallVa':'0x00659B0E','sixBy256ArgsCdecl':['6','0x100 (256)','final PCM ring slot','fourth pointer from caller state']},'proofBoundary':'Exact current-client machine evidence only. Helper semantics are not promoted from call arguments alone; body instructions must establish copy/DSP behavior. The core contiguous range is bounded at its own return before a distinct adjacent entry at 0x659B20.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_MIX_TERMINAL_HELPERS_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('CORE_EXACT',result['mixCoreExactContiguousRange'])
+          for name,h in traced.items():
+            print('===',name,h['startVa'],h['firstReturnEndVa'],h['firstReturnBytes'],h['firstReturnSha256'])
+            print('CALLS',json.dumps(h['calls'],indent=2,sort_keys=True))
+            print('IMMEDIATES',json.dumps(h['immediates'],indent=2,sort_keys=True))
+            for r in h['disasm'][:260]:print(name,r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('XREFS',json.dumps(xrefs,indent=2,sort_keys=True))
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_MIX_TERMINAL_HELPERS_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_MIX_TERMINAL_HELPERS_V1.json
+          if-no-files-found: error
+          compression-level: 9
