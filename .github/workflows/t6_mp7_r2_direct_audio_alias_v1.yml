@@ -1,0 +1,100 @@
+name: T6 MP7 R2 direct audio alias v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_direct_audio_alias_v1.yml'
+      - 'tools/t6_sndalias_target_extract_v1.py'
+      - 'tools/t6_sndalias_expanded_census_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/t6_expand_sha256.txt
+
+      - name: Download SHA-pinned retail MP FastFiles from R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/expanded /tmp/proof
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          for zone in common_mp common_patch_mp patch_mp; do
+            curl -fL --retry 4 "$base/$zone.ff" -o "/tmp/game/zone/all/$zone.ff"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/*.ff | sort | tee /tmp/proof/r2_fastfile_sha256.txt
+
+      - name: Expand exact retail MP roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          for zone in common_mp common_patch_mp patch_mp; do
+            /tmp/t6_expand "/tmp/game/zone/all/$zone.ff" "/tmp/expanded/$zone.bin" "$zone" \
+              > "/tmp/proof/${zone}_expand.log" 2>&1
+          done
+          sha256sum /tmp/expanded/*.bin | sort | tee /tmp/proof/expanded_sha256.txt
+
+      - name: Extract all R2-direct MP7 SndAlias variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          d=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json',encoding='utf-8'))
+          assert d['format']=='t6-mp7-r2-direct-audio-targets-v1'
+          assert len(d['targets'])==18
+          p=pathlib.Path('/tmp/proof/mp7_direct_audio_targets.txt')
+          p.write_text('\n'.join(x['aliasName'] for x in d['targets'])+'\n')
+          PY
+          PYTHONPATH=tools python3 tools/t6_sndalias_target_extract_v1.py \
+            --expanded common_mp=/tmp/expanded/common_mp.bin \
+            --expanded common_patch_mp=/tmp/expanded/common_patch_mp.bin \
+            --expanded patch_mp=/tmp/expanded/patch_mp.bin \
+            --bank-base mpl_common.all \
+            --bank-base mpl_patch.all \
+            --target-file /tmp/proof/mp7_direct_audio_targets.txt \
+            --out /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json \
+            | tee /tmp/proof/target_extract.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json'))
+          s=d['summary']
+          assert s['targetAliasCount']==18
+          assert s['foundTargetAliasCount']==18
+          assert s['missingTargetAliasCount']==0
+          by={x['aliasName']:x for x in d['aliases']}
+          assert by['wpn_mp7_fire_npc']['aliasIdHex']=='40B8FC12'
+          assert by['wpn_mp7_fire_plr']['aliasIdHex']=='41B11A27'
+          assert by['wpn_mp7_silencer_fire_npc']['aliasIdHex']=='12E70C8C'
+          assert by['wpn_mp7_silencer_fire_plr']['aliasIdHex']=='13DF2AA1'
+          # Every direct MP7 target must now be attached to at least one exact
+          # current-retail SndAlias occurrence. Physical SABS/SABL payload join is separate.
+          assert all(x['occurrenceCount']>0 for x in d['aliases'])
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_DIRECT_AUDIO_ALIAS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
