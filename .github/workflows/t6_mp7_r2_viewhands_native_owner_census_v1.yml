@@ -1,0 +1,126 @@
+name: T6 MP7 R2 SEAL6 viewhands native owner census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_viewhands_native_owner_census_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          mkdir -p /tmp/game/zone/all /tmp/proof /tmp/oat
+          sha256sum "$BIN" | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download exact five physical MP roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in mp_carrier.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo 'c65c86acf2ad0bcbbe02b8e5db07e3e073402e35d8e50c73899e12b2e128bab3  /tmp/game/zone/all/mp_carrier.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/game/zone/all/code_post_gfx_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/*.ff | sort > /tmp/proof/root_sha256.txt
+
+      - name: Dump each root's physical XModels independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          : > /tmp/proof/dump_status.tsv
+          for z in mp_carrier common_mp common_patch_mp patch_mp code_post_gfx_mp; do
+            OUT="/tmp/oat/$z"
+            mkdir -p "$OUT"
+            set +e
+            "$BIN" --no-color --include-assets xmodel --output-folder "$OUT" "/tmp/game/zone/all/$z.ff" \
+              > "/tmp/proof/${z}_xmodel_dump.log" 2>&1
+            RC=$?
+            set -e
+            printf '%s\t%s\t%s\n' "$z" "$RC" "$(find "$OUT" -type f | wc -l)" | tee -a /tmp/proof/dump_status.tsv
+          done
+
+      - name: Build fail-closed physical ownership manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          roots=['mp_carrier','common_mp','common_patch_mp','patch_mp','code_post_gfx_mp']
+          targets=['c_usa_mp_seal6_longsleeve_viewhands','c_usa_mp_seal6_shortsleeve_viewhands']
+          status={}
+          for line in pathlib.Path('/tmp/proof/dump_status.tsv').read_text().splitlines():
+              z,rc,count=line.split('\t'); status[z]={'returnCode':int(rc),'fileCount':int(count)}
+          rows=[]
+          for z in roots:
+              base=pathlib.Path('/tmp/oat')/z
+              files=[p for p in base.rglob('*') if p.is_file()]
+              rel=[str(p.relative_to(base)) for p in files]
+              for t in targets:
+                  path_hits=[x for x in rel if t.lower() in x.lower()]
+                  content_hits=[]
+                  needle=t.encode()
+                  for p in files:
+                      try: b=p.read_bytes()
+                      except OSError: continue
+                      if needle in b: content_hits.append(str(p.relative_to(base)))
+                  rows.append({'root':z,'target':t,'pathHits':sorted(path_hits),'contentHits':sorted(content_hits)})
+          owners={t:sorted({r['root'] for r in rows if r['target']==t and (r['pathHits'] or r['contentHits'])}) for t in targets}
+          out={
+            'format':'t6-mp7-r2-seal6-viewhands-native-owner-census-v1',
+            'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'roots':status,
+            'targets':rows,
+            'ownersByTarget':owners,
+            'allPhysicalDumpsSucceeded':all(status[z]['returnCode']==0 for z in roots),
+            'proofBoundary':'Each root is passed to pinned OAT independently with include-assets xmodel and no --load dependencies. A target is an ownership candidate only when its exact identity occurs in that root dump output. Zero hits are authoritative only across these five supplied physical roots.'
+          }
+          p=pathlib.Path('/tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_NATIVE_OWNER_CENSUS_V1.json')
+          p.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          if not out['allPhysicalDumpsSucceeded']:
+              raise SystemExit('one or more native XModel dumps failed; ownership census is not authoritative')
+          if any(len(v)!=1 for v in owners.values()):
+              raise SystemExit('viewhands owner is not uniquely closed across five physical roots: '+json.dumps(owners,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_SEAL6_VIEWHANDS_NATIVE_OWNER_CENSUS_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - name: Upload native owner census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_SEAL6_VIEWHANDS_NATIVE_OWNER_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
