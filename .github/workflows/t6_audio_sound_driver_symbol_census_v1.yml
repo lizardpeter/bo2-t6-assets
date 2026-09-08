@@ -1,0 +1,107 @@
+name: T6 audio sound-driver symbol census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_sound_driver_symbol_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+      - name: Install capstone
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+      - name: Census all sound-driver symbols and targeted runtime slices
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,struct,hashlib
+          from pathlib import Path
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+
+          mt=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii')
+          raw=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes(); BASE=0x400000
+          pe=struct.unpack_from('<I',raw,0x3c)[0]; coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',raw,coff); opt=coff+20; st=opt+osz
+          secs=[]
+          for i in range(ns):
+              o=st+i*40; name=raw[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',raw,o+8); secs.append((name,BASE+rva,vs,rs,ro))
+          def off(va):
+              for _,b,_,rs,ro in secs:
+                  if b<=va<b+rs:return ro+va-b
+              raise ValueError(hex(va))
+          def at(va,n):
+              o=off(va); return raw[o:o+n]
+
+          # Public MAP line grammar is stable enough to recover address, decorated name and object owner.
+          rows=[]
+          for ln in mt.splitlines():
+              m=re.search(r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})\s+([fi ]*)\s*(.*)$',ln)
+              if not m: continue
+              decorated,va_s,flags,owner=m.groups(); owner=owner.strip()
+              low_owner=owner.lower(); low_dec=decorated.lower()
+              if (re.search(r'(^|:)(sd_[^:]*|snd_[^:]*)\.obj$',low_owner) or
+                  low_owner.startswith('sd_') or low_owner.startswith('snd_') or
+                  low_dec.startswith('?sd_') or low_dec.startswith('?snd_') or
+                  'sd_xa2_callback' in low_dec or 'sd_xaudio2callbacks' in low_dec):
+                  rows.append({'va':int(va_s,16),'vaHex':'0x'+va_s.upper(),'decorated':decorated,'flags':flags.strip(),'owner':owner,'line':ln})
+          rows.sort(key=lambda r:(r['va'],r['decorated'],r['owner']))
+          Path('/tmp/probe/sound_driver_symbols.json').write_text(json.dumps(rows,indent=2)+'\n')
+          Path('/tmp/probe/sound_driver_symbols.tsv').write_text('va\tdecorated\towner\n'+'\n'.join(f"{r['vaHex']}\t{r['decorated']}\t{r['owner']}" for r in rows)+'\n')
+          print('sound-driver symbol count',len(rows))
+          for r in rows: print(r['vaHex'],r['decorated'],r['owner'])
+
+          # Disassemble the current frontier exactly to the next known public symbol.
+          frontier={
+            'SD_PreUpdate':(0x008B90E0,0x008B94C0),
+            'SD_UpdateVoice':(0x008B9860,0x008B98F0),
+            'SD_MixSetParam':(0x008B9C80,0x008B9D10),
+            'SD_StreamAllocate':(0x008B9E20,0x008BA010),
+            'SD_VoiceSetParam':(0x008BA560,0x008BA610),
+            'SD_OutputForceWakeup':(0x008BA8B0,0x008BA8C0),
+          }
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+          meta={}
+          all_lines=mt.splitlines()
+          for name,(a,b) in frontier.items():
+              rb=at(a,b-a); ins=list(md.disasm(rb,a)); out=[]; calls=[]
+              for x in ins:
+                  out.append(f'{x.address:08X}: {x.bytes.hex():<24} {x.mnemonic:<8} {x.op_str}')
+                  if x.mnemonic=='call' and x.op_str.startswith('0x'):
+                      t=int(x.op_str,16); tok=f'{t:08x}'
+                      hits=[ln for ln in all_lines if re.search(rf'(?i)(?<![0-9a-f]){tok}(?![0-9a-f])',ln)]
+                      calls.append({'at':f'0x{x.address:08X}','target':f'0x{t:08X}','mapLines':hits[:12]})
+              Path('/tmp/probe',name+'.asm').write_text('\n'.join(out)+'\n')
+              meta[name]={'startVa':f'0x{a:08X}','endExclusiveVa':f'0x{b:08X}','rangeBytes':b-a,'rangeSha256':hashlib.sha256(rb).hexdigest(),'directCalls':calls}
+              print('===',name,'==='); print('\n'.join(out)); print('calls',json.dumps(calls,indent=2))
+          Path('/tmp/probe/frontier.json').write_text(json.dumps(meta,indent=2,sort_keys=True)+'\n')
+          PY
+      - name: Upload census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_SOUND_DRIVER_SYMBOL_CENSUS_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
