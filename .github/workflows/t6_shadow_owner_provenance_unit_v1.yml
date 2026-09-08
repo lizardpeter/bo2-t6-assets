@@ -1,4 +1,4 @@
-name: T6 shadow owner provenance unit v4
+name: T6 shadow owner provenance unit v5
 
 on:
   workflow_dispatch:
@@ -15,6 +15,8 @@ on:
       - 'tools/t6_oat_exact_technique_owner_closure_v1.py'
       - 'tools/t6_oat_exact_technique_owner_closure_v2.py'
       - 'tools/test_t6_oat_exact_technique_owner_closure_v2.py'
+      - 'tools/t6_oat_exact_technique_absence_v1.py'
+      - 'tools/test_t6_oat_exact_technique_absence_v1.py'
       - 'tools/t6_oat_material_dependency_bundle_v1.py'
       - 'tools/test_t6_oat_material_dependency_bundle_v1.py'
       - 'tools/t6_oat_techset_binding_manifest_v1.py'
@@ -38,6 +40,8 @@ jobs:
         run: PYTHONPATH=tools python3 tools/test_t6_oat_conflict_lineage_projection_v1.py
       - name: Test exact Technique owner closure gates
         run: PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_owner_closure_v2.py
+      - name: Test exact Technique absence proof
+        run: PYTHONPATH=tools python3 tools/test_t6_oat_exact_technique_absence_v1.py
       - name: Test forensic Material dependency bundle
         run: PYTHONPATH=tools python3 tools/test_t6_oat_material_dependency_bundle_v1.py
       - name: Test non-authoritative zone override diagnostic
