@@ -1,4 +1,4 @@
-name: T6 PC server sound PDB inventory v1
+name: T6 PC server sound PDB inventory v2
 
 on:
   workflow_dispatch:
@@ -26,9 +26,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/source /tmp/proof
-          base="https://raw.githubusercontent.com/$SOURCE_REPO/$SOURCE_COMMIT/analysis/generated"
+          base="https://api.github.com/repos/$SOURCE_REPO/contents/analysis/generated"
           for f in CoDMPServer_PC.procedures.csv.gz CoDMPServer_PC.members.csv.gz CoDMPServer_PC.locals.csv.gz CoDMPServer_PC.data_symbols.csv.gz; do
-            curl -fL --retry 4 "$base/$f" -o "/tmp/source/$f"
+            curl -fL --retry 4 \
+              -H 'Accept: application/vnd.github.raw' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$base/$f?ref=$SOURCE_COMMIT" -o "/tmp/source/$f"
+            gzip -t "/tmp/source/$f"
           done
           sha256sum /tmp/source/*.gz | sort | tee /tmp/proof/source_inventory_gzip_sha256.txt
           cat > /tmp/proof/source_identity.txt <<EOF
@@ -77,7 +81,7 @@ jobs:
               t=values(r).lower()
               hits=[x for x in search_terms if x in t]
               if hits:
-                  rr=dict(r); rr['_searchHits']=hits; candidates.append(rr)
+                  rr=dict(r); rr['_searchHits']=' '.join(hits); candidates.append(rr)
 
           type_terms=('sndalias','sndvoice','sndbank','sndstart','sndasset','sndplay','sndspeaker','sndduck','sndlocal')
           type_members=[]
@@ -86,9 +90,10 @@ jobs:
               if any(x in t for x in type_terms): type_members.append(r)
 
           sound_locals=[]
+          lowered_names=[n.lower() for n in proc_names if len(n)>4]
           for r in locals_:
               t=values(r).lower()
-              if ('\\sound\\' in t or '/sound/' in t or any(n.lower() in t for n in proc_names if len(n)>4)):
+              if ('\\sound\\' in t or '/sound/' in t or any(n in t for n in lowered_names)):
                   sound_locals.append(r)
 
           sound_data=[]
@@ -114,13 +119,17 @@ jobs:
           write_csv(out/'sound_data_symbols.csv',sound_data)
 
           def first_name(r):
+              preferred=('name','procedure_name','symbol_name','function_name')
+              for want in preferred:
+                  for k,v in r.items():
+                      if k and k.lower()==want and v: return v
               for k,v in r.items():
                   if k and 'name' in k.lower() and v: return v
               return ''
           names=sorted({first_name(r) for r in sound if first_name(r)})
           candidate_names=sorted({first_name(r) for r in candidates if first_name(r)})
           summary={
-              'format':'t6-pc-server-sound-pdb-inventory-v1',
+              'format':'t6-pc-server-sound-pdb-inventory-v2',
               'sourceCommit':'ddc05ec55cb7e5487f3ea7a68f16b74ddc6e998f',
               'pcServerExeSha256':'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d',
               'pcServerPdbSha256':'7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc',
@@ -138,17 +147,17 @@ jobs:
               'playbackCandidateNames':candidate_names,
               'proofBoundary':'PDB-derived PC dedicated-server search map only. Procedure names, prototypes, source paths, type members, locals and data symbols come from the SHA-pinned PDB inventory at the pinned reconstruction commit. This identifies exact server analysis targets but does not by itself prove function implementation semantics, retail-client equivalence, or playback behavior.'
           }
-          (out/'T6_PC_SERVER_SOUND_PDB_INVENTORY_V1.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          (out/'T6_PC_SERVER_SOUND_PDB_INVENTORY_V2.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8')
           print(json.dumps(summary['summary'],indent=2,sort_keys=True))
           print('PLAYBACK CANDIDATES')
           for n in candidate_names: print(n)
           PY
-          sha256sum /tmp/proof/*.csv /tmp/proof/T6_PC_SERVER_SOUND_PDB_INVENTORY_V1.json | sort | tee /tmp/proof/output_sha256.txt
+          sha256sum /tmp/proof/*.csv /tmp/proof/T6_PC_SERVER_SOUND_PDB_INVENTORY_V2.json | sort | tee /tmp/proof/output_sha256.txt
 
       - name: Upload exact PC-server sound search map
         uses: actions/upload-artifact@v4
         with:
-          name: T6_PC_SERVER_SOUND_PDB_INVENTORY_V1
+          name: T6_PC_SERVER_SOUND_PDB_INVENTORY_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 9
