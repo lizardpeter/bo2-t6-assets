@@ -1,0 +1,94 @@
+name: T6 current client dynamic audio import probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_audio_dynamic_import_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect delay imports and dynamic audio loader anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,re
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_MEM,X86_OP_IMM
+          UA='bo2-t6-assets-dynamic-audio-import-probe/1';INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60)); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          delay=[]
+          for desc in getattr(pe,'DIRECTORY_ENTRY_DELAY_IMPORT',[]):
+            dll=desc.dll.decode('ascii','replace')
+            delay.append({'dll':dll,'imports':[{'name':i.name.decode('ascii','replace') if i.name else None,'ordinal':i.ordinal,'iatVa':i.address} for i in desc.imports]})
+          normal=[]
+          for desc in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=desc.dll.decode('ascii','replace')
+            for i in desc.imports:
+              name=i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'
+              if name.lower() in ('loadlibrarya','loadlibraryw','getprocaddress','cocreateinstance','cogetclassobject'):
+                normal.append({'dll':dll,'name':name,'iatVa':i.address})
+          # audio/DLL strings
+          strings=[];cur=[];start=0
+          for idx,b in enumerate(raw+b'\0'):
+            if 32<=b<127:
+              if not cur:start=idx
+              cur.append(b)
+            else:
+              if len(cur)>=4:
+                s=bytes(cur).decode('ascii','replace')
+                l=s.lower()
+                if ('xaudio' in l or 'x3daudio' in l or 'xapo' in l or ('audio' in l and '.dll' in l)):
+                  strings.append({'fileOffset':start,'text':s[:500]})
+              cur=[]
+          # section mapping
+          sections=[]
+          for s in pe.sections:
+            sections.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'rawOffset':s.PointerToRawData,'rawSize':s.SizeOfRawData,'virtualSize':s.Misc_VirtualSize,'exec':bool(s.Characteristics&0x20000000)})
+          def offva(off):
+            for s in sections:
+              if s['rawOffset']<=off<s['rawOffset']+s['rawSize']:return s['va']+(off-s['rawOffset'])
+            return None
+          for s in strings:s['va']=f"0x{offva(s['fileOffset']):08X}" if offva(s['fileOffset']) is not None else None
+          wanted={x['iatVa'] for x in normal}; wanted_strings={offva(x['fileOffset']) for x in strings if offva(x['fileOffset']) is not None}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          loader_xrefs={f"0x{x['iatVa']:08X}":[] for x in normal}; string_xrefs={f"0x{x:08X}":[] for x in wanted_strings}
+          for sec in sections:
+            if not sec['exec']:continue
+            for ins in md.disasm(raw[sec['rawOffset']:sec['rawOffset']+sec['rawSize']],sec['va']):
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM:vals.append(op.mem.disp&0xffffffff)
+                elif op.type==X86_OP_IMM:vals.append(op.imm&0xffffffff)
+              for v in vals:
+                if v in wanted:loader_xrefs[f'0x{v:08X}'].append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+                if v in wanted_strings:string_xrefs[f'0x{v:08X}'].append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+          result={'format':'t6-current-client-dynamic-audio-import-probe-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'delayImports':delay,'loaderImports':normal,'audioDllStrings':strings,'loaderXrefs':loader_xrefs,'audioStringXrefs':string_xrefs,'proofBoundary':'Exact PE/import/string/xref evidence for current client only; no pinned-retail equivalence.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_DYNAMIC_AUDIO_IMPORT_PROBE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'delayAudio':[d for d in delay if 'audio' in d['dll'].lower() or 'x3d' in d['dll'].lower() or 'xapo' in d['dll'].lower()],'loaderImports':normal,'audioDllStrings':strings,'stringXrefCounts':{k:len(v) for k,v in string_xrefs.items()}},indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_DYNAMIC_AUDIO_IMPORT_PROBE_V1.json
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_DYNAMIC_AUDIO_IMPORT_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_DYNAMIC_AUDIO_IMPORT_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
