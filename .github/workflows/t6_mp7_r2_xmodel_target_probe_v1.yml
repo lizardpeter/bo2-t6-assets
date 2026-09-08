@@ -1,0 +1,76 @@
+name: T6 MP7 R2 view XModel binding probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_xmodel_target_probe_v1.yml'
+      - 'tools/t6_mp7_r2_xmodel_target_probe_v1.py'
+      - 'tools/t6_xanim_normalize_v1.py'
+      - 'tools/t6_xanim_serialized_walker.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v1.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v2.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/weapons/T6_MP7_R2_MODEL_TARGETS_V1.json'
+      - 'manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile-check probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_mp7_r2_xmodel_target_probe_v1.py \
+            tools/t6_xanim_normalize_v1.py \
+            tools/t6_xmodel_serialized_walker.py \
+            tools/t6_xmodel_skeleton_normalize_v2.py
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          mkdir -p /tmp/game/zone/all /tmp/expanded /tmp/proof
+
+      - name: Download and expand exact current R2 common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff -o /tmp/game/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/game/zone/all/common_mp.ff /tmp/expanded/common_mp.bin common_mp > /tmp/proof/common_mp_expand.log 2>&1
+          test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+
+      - name: Probe Weapon-authored view XModels against MP7 XAnim namespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp7_r2_xmodel_target_probe_v1.py \
+            --stream /tmp/expanded/common_mp.bin \
+            --models manifests/weapons/T6_MP7_R2_MODEL_TARGETS_V1.json \
+            --notetracks manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json \
+            --out /tmp/proof/T6_MP7_R2_XMODEL_TARGET_PROBE_V1.json \
+            | tee /tmp/proof/xmodel_target_probe.log
+          sha256sum /tmp/proof/T6_MP7_R2_XMODEL_TARGET_PROBE_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - name: Upload MP7 view XModel probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_XMODEL_TARGET_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: warn
+          compression-level: 9
