@@ -1,0 +1,93 @@
+name: T6 current client XAudio2 import xref v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_xaudio_import_xref_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover XAudio2 imports and executable xrefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet capstone pefile
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_MEM,X86_OP_IMM
+
+          UA='bo2-t6-assets-xaudio-import-xref/1'; INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(url,t=180):
+            req=urllib.request.Request(url,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode()); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]
+          raw=get(info['baseUrl']+rec['hash']);
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1')
+          Path('/tmp/current_t6mp.exe').write_bytes(raw)
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase
+          imports=[]
+          for desc in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=desc.dll.decode('ascii','replace')
+            for imp in desc.imports:
+              name=imp.name.decode('ascii','replace') if imp.name else f'ordinal:{imp.ordinal}'
+              if 'audio' in dll.lower() or 'audio' in name.lower() or 'x3d' in dll.lower() or 'x3d' in name.lower() or 'xapo' in dll.lower() or 'xapo' in name.lower():
+                imports.append({'dll':dll,'name':name,'iatVa':imp.address})
+          # Also retain DLL names to establish whether XAudio is imported at all.
+          dlls=[d.dll.decode('ascii','replace') for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[])]
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          exec_sections=[]
+          for s in pe.sections:
+            if s.Characteristics & 0x20000000:
+              exec_sections.append((s.Name.rstrip(b'\0').decode('ascii','replace'),base+s.VirtualAddress,s.PointerToRawData,s.SizeOfRawData))
+          xrefs={f"0x{x['iatVa']:08X}":[] for x in imports}
+          wanted={x['iatVa'] for x in imports}
+          for secname,va,ro,rs in exec_sections:
+            for ins in md.disasm(raw[ro:ro+rs],va):
+              refs=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM and (op.mem.disp & 0xffffffff) in wanted:refs.append(op.mem.disp & 0xffffffff)
+                elif op.type==X86_OP_IMM and (op.imm & 0xffffffff) in wanted:refs.append(op.imm & 0xffffffff)
+              for ref in refs:
+                xrefs[f'0x{ref:08X}'].append({'instructionVa':f'0x{ins.address:08X}','section':secname,'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+          # Disassemble useful neighborhoods around each xref.
+          def va_to_off(va):
+            for s in pe.sections:
+              sva=base+s.VirtualAddress
+              if sva<=va<sva+s.SizeOfRawData:return s.PointerToRawData+(va-sva)
+            raise KeyError(va)
+          neighborhoods=[]
+          for imp in imports:
+            for xr in xrefs[f"0x{imp['iatVa']:08X}"]:
+              iva=int(xr['instructionVa'],16); start=max(iva-64,base)
+              # Search back from iva-64 and keep decodes that reach the xref; heuristic context only.
+              try:o=va_to_off(start)
+              except:continue
+              rows=[]
+              for ins in md.disasm(raw[o:o+256],start):
+                if ins.address>iva+128:break
+                rows.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+              neighborhoods.append({'import':imp,'xref':xr,'contextStart':f'0x{start:08X}','disasm':rows})
+          result={'format':'t6-current-client-xaudio-import-xref-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest(),'imageBase':f'0x{base:08X}'},'importDlls':dlls,'audioImports':imports,'xrefs':xrefs,'neighborhoods':neighborhoods,'proofBoundary':'Import and machine xref evidence for current Plutonium client only; no retail equivalence claim.'}
+          Path('/tmp/proof/T6_CURRENT_CLIENT_XAUDIO_IMPORT_XREF_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'audioImports':imports,'xrefCounts':{k:len(v) for k,v in xrefs.items()},'audioDlls':[x for x in dlls if 'audio' in x.lower() or 'x3d' in x.lower() or 'xapo' in x.lower()]},indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_IMPORT_XREF_V1.json
+      - name: Upload xref proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_XAUDIO_IMPORT_XREF_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_XAUDIO_IMPORT_XREF_V1.json
+          if-no-files-found: error
+          compression-level: 9
