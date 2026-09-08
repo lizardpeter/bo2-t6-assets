@@ -118,7 +118,6 @@ def prove(exe: bytes, map_text: str) -> dict:
             "sha256": actual,
         }
 
-    # SD_PreUpdate: exact high-level slot loop = 0x7700 bytes / 0x1C0 = 68 slots.
     require(at(0x008B90FB, 5) == bytes.fromhex("33f633ff90"), "PreUpdate loop initialization changed")
     require(at(0x008B9100, 8) == bytes.fromhex("833cb500a9e50700"), "PreUpdate active-slot table changed")
     require(at(0x008B910E, 7) == bytes.fromhex("8b1cb580780801"), "PreUpdate driver-voice table changed")
@@ -134,7 +133,6 @@ def prove(exe: bytes, map_text: str) -> dict:
     require(call_target(at, 0x008B9233) == 0x008B9C80, "PreUpdate mix-param publication changed")
     require(call_target(at, 0x008B9238) == 0x008BA010, "PreUpdate stream devhost tail changed")
 
-    # SD_UpdateVoice: resolve driver voice, update 64-bit public position, then enqueue a new param iff started.
     require(at(0x008B9867, 8) == bytes.fromhex("833cb58078080100"), "UpdateVoice driver table assertion changed")
     require(call_target(at, 0x008B989C) == 0x008BA710, "UpdateVoice no longer reads driver position")
     require(at(0x008B98A3, 18) == bytes.fromhex("69c9c00100008981a833e5078991ac33e507"), "UpdateVoice high-level position publication changed")
@@ -142,14 +140,12 @@ def prove(exe: bytes, map_text: str) -> dict:
     require(call_target(at, 0x008B98CB) == 0x008B8A50, "UpdateVoice no longer builds replacement param")
     require(call_target(at, 0x008B98D9) == 0x008BA560, "UpdateVoice no longer queues replacement param")
 
-    # SD_VoiceSetParam: param state==1; active voiceParam must exist; atomic replacement is on voiceNewParam.
     require(at(0x008BA582, 3) == bytes.fromhex("833b01"), "VoiceSetParam incoming state invariant changed")
     require(at(0x008BA5AB, 8) == bytes.fromhex("833cb5000be60000"), "VoiceSetParam active voiceParam invariant changed")
     require(at(0x008BA5D8, 7) == bytes.fromhex("8d3cb50009e600"), "VoiceSetParam pending voiceNewParam target changed")
     require(at(0x008BA5E0, 15) == bytes.fromhex("8b37565357ff15f8c1b8003bc675f1"), "VoiceSetParam atomic replacement loop changed")
     require(call_target(at, 0x008BA5F4) == 0x008BA150, "VoiceSetParam no longer frees superseded pending param")
 
-    # Global mix-master params are a separate atomic pointer, not the per-voice queue.
     require(at(0x008B9C9D, 4) == bytes.fromhex("837f7001"), "MixSetParam incoming state invariant changed")
     require(at(0x008B9CD0, 19) == bytes.fromhex("8b350080070156576800800701ffd33bc675ed"), "MixSetParam atomic pointer replacement changed")
     require(call_target(at, 0x008B9CE8) == 0x008B9C30, "MixSetParam no longer frees superseded mix param")
@@ -193,7 +189,7 @@ def prove(exe: bytes, map_text: str) -> dict:
             "incomingStateOffset": "0x70",
             "incomingStateRequiredValue": 1,
             "supersededPointerFreeVa": "0x008B9C30",
-            "separateFromPerVoiceQueue": true,
+            "separateFromPerVoiceQueue": True,
         },
         "mapSymbolEvidence": symbol_evidence,
         "proofBoundary": (
