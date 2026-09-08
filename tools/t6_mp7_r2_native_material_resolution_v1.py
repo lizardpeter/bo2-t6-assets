@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Join raw T6 XModel Material handles to pinned-OAT post-loader GLB material names.
 
-The raw side proves whether each XModel surface Material* is FOLLOW/INSERT-owned
+The raw side proves whether each XModel surface Material* is FOLLOWING/INSERT-owned
 or a packed block/offset alias. The native side is produced only after the
 pinned T6 loader has executed AddPointerLookup/ConvertOffsetToPointerLookup.
 Direct surfaces are used as an order-preserving canary: every direct raw
@@ -89,9 +89,6 @@ def native_surface_materials(path: Path, expected_count: int) -> list[str]:
 
 
 def find_raw_model(raw: dict[str, Any], name: str) -> dict[str, Any]:
-    # v1 raw probe stores model rows under `targets` and names them `name`.
-    # Keep the legacy fallback explicit so future schema drift fails by identity,
-    # not by silently reinterpreting an unrelated row.
     for row in raw.get("targets", []):
         if row.get("name") == name:
             return row
@@ -213,7 +210,7 @@ def main() -> int:
                 })
                 packed_seen.add(key)
             else:
-                if kind not in ("follow", "insert"):
+                if kind not in ("following", "insert"):
                     raise ValueError(f"{name} surface {index}: unsupported direct handle kind {kind!r}")
                 if key in EXPECTED_PACKED:
                     raise ValueError(f"{name} surface {index}: expected packed handle became {kind!r}")
