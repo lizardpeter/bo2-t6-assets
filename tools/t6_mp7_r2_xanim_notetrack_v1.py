@@ -33,7 +33,9 @@ XANIM_SIZE = 104
 NAME_RE = re.compile(r"[A-Za-z0-9_./+\-]{2,160}")
 EXPECTED_COMMON_MP_SHA256 = "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77"
 EXPECTED_EXPANDED_BYTES = 206_493_911
-EXPECTED_EXPANDED_SHA256 = "fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce"
+# Exact digest retained by the Stage18D full-inventory and delta proofs and
+# independently reproduced by the current-R2 source-closed C expander.
+EXPECTED_EXPANDED_SHA256 = "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
 
 
 def sha256_bytes(data: bytes | memoryview) -> str:
