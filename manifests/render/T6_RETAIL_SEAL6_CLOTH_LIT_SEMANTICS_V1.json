@@ -1,0 +1,220 @@
+{
+  "family": {
+    "diffuse": {
+      "encoded": "Diffuse_Map.rgb*(vertexColor.rgb*vertexColor.rgb)",
+      "lighting": "32.0*vertexColor.a*modelLighting+saturate(dot(sunPosition.xyz,Nlighting))*(gridLightingCoordsAndVis.w*sunDiffuse.rgb)",
+      "linearLike": "encoded*encoded",
+      "lookupUVW": "Nlighting*lightingLookupScale.xyz/max(abs(Nlighting.x),abs(Nlighting.y),abs(Nlighting.z))+gridLightingCoordsAndVis.xyz",
+      "modelLighting": "sample3D(modelLightingSampler,lookupUVW).rgb^2",
+      "rgb": "linearLike*lighting"
+    },
+    "directSpecular": {
+      "C": "characterFactor*SpecularAndGloss.rgb",
+      "H": "normalize(L-V)",
+      "HL": "saturate(dot(H,L))",
+      "L": "sunPosition.xyz",
+      "NH": "saturate(dot(Nlighting,H))",
+      "NL": "saturate(dot(L,Nlighting))",
+      "P": "exp2(13.0*SpecularAndGloss.a)",
+      "V": "normalize(worldPosition)",
+      "base": "C*C+(1.0-C*C)*exp2(-10.0*HL)",
+      "characterFactor": "1.0-saturate(scriptVector0.x)",
+      "denominator": "1.0099999904632568359375+saturate(SpecularAndGloss.a+0.545000016689300537109375)*(HL*HL-1.0)",
+      "lobe": "shape*NL/denominator",
+      "rgb": "base*lobe*(gridLightingCoordsAndVis.w*sunDiffuse.rgb)",
+      "shape": "exp2(log2(NH)*P)*(0.125*P+0.25)"
+    },
+    "final": {
+      "foggedRgb": "fogColor+fogVisibility*(heroRgb-fogColor)",
+      "heroRgb": "vec3(dot(vec4(preHero,1),heroLightingR),dot(vec4(preHero,1),heroLightingG),dot(vec4(preHero,1),heroLightingB))",
+      "outAlpha": 1.0,
+      "outRgb": "sqrt(foggedRgb*hdrControl0.x)",
+      "preHero": "directSpecular.rgb+reflection.rgb+diffuse.rgb"
+    },
+    "id": "seal6-char-cloth-lit-v1",
+    "materialArguments": [
+      "SpecularAndGloss",
+      "Normal_Map",
+      "Diffuse_Map"
+    ],
+    "materialConstants": [],
+    "normal": {
+      "Ndiff": "Nlighting",
+      "Nlighting": "normalize(Nbase+normalXY.x*T+normalXY.y*B)",
+      "Nspec": "Nlighting",
+      "diffuseNormalHeightMultiplier": 1.0,
+      "normalXY": "Normal_Map.rg*4.01574802398681640625-2.01574802398681640625",
+      "proof": "The SHA-pinned PS adds decoded normal X*T and Y*B directly before normalize; no Material scalar is read on this path."
+    },
+    "pipelineState": {
+      "alphaTest": "disabled",
+      "blend": "disabled",
+      "colorWriteAlpha": true,
+      "colorWriteRgb": true,
+      "cullFace": "back",
+      "depthTest": "less_equal",
+      "depthWrite": true,
+      "stateBitsIndex": 2,
+      "techniqueType": "lit",
+      "techniqueTypeIndex": 4
+    },
+    "pixelDxbcSha256": "14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19",
+    "pixelGlslSha256": "9bbc2583f17c8167b7cb7886ed5a7ac7a21df9cc3bc895bda6c29f8bf3db4c4a",
+    "reflection": {
+      "F": "saturate((C*C)*(p3-q)+q)",
+      "R": "V-2.0*Nlighting*dot(Nlighting,V)",
+      "g": "exp2(-9.27999973297119140625*saturate(dot(Nlighting,-V)))",
+      "lod": "4.0-4.0*SpecularAndGloss.a",
+      "p0": "1.0416667461395263671875*SpecularAndGloss.a",
+      "p1": "0.4749999940395355224609375*SpecularAndGloss.a",
+      "p2": "0.01822919957339763641357421875*SpecularAndGloss.a-0.015625",
+      "p3": "0.25*SpecularAndGloss.a+0.75",
+      "probeRgb": "sampleCubeLod(reflectionProbeSampler,R,lod).rgb/(sample.a+9.9999999747524270787835121154785e-7)",
+      "q": "p0*min(g,p1)+p2",
+      "rgb": "probeRgb*F*vertexColor.a*reflectionLightingRatio"
+    },
+    "techniqueSet": "mc_sw4_3d_char_cloth_4z8fq5wu",
+    "techniqueSetOwner": "common_mp",
+    "unitMaterialControls": {
+      "Diffuse_Normal_Height_Facing": 1.0,
+      "Reflection_Amount": 1.0,
+      "Specular_Amount": 1.0,
+      "status": "literal-executable-units-not-missing-defaults"
+    },
+    "vertexDxbcSha256": "b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe",
+    "vertexGlslSha256": "196464c7600a52c60d99c6da515d4a84020c29000992ab68f96a6b73d5f90613"
+  },
+  "format": "t6-retail-seal6-cloth-lit-semantics-v1",
+  "materials": [
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_shoes_1",
+      "materialSha256": "be975fdea87981d9174973a0382e7ff87d605c8ca1f210315f1a43d862162d98",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_gear",
+      "materialSha256": "92bb52b8e70c7f93ebca3969be1850d568d8091a849539c0ab18ad4dfc43260c",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_vest_1",
+      "materialSha256": "5fdcdc61e1d8916f17e9d910b9e1fb3901b82845ec55e23fbc445a4ab8e84461",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_pants_1",
+      "materialSha256": "617bebf461b9792382b2724e6dccb483a9c16a0c63b46032e2a8c804e78270d6",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_gloves_2",
+      "materialSha256": "c8abf82ea8e57196840e594a2f15ed92d92c5b15cc3d99a80a7e3f1a737a5891",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_usa_mp_seal6_smg_gear",
+      "materialSha256": "328fb05f80aa11af76503bf6d955e8477f8fbece3a531d06f391ec2fed8a0cc5",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    },
+    {
+      "constants": [],
+      "litStateBitsEntry": 2,
+      "material": "mc/mtl_c_gen_mp_datapad",
+      "materialSha256": "c6fe75d07292807e3a243159d3a5d0652a91b43b1e0bb7de48f0a5b8ed6c4295",
+      "textureArguments": [
+        "SpecularAndGloss",
+        "Normal_Map",
+        "Diffuse_Map"
+      ],
+      "textureCount": 3
+    }
+  ],
+  "proof": {
+    "lod0CensusArtifactDigest": "sha256:1900f6f19944534fd23541544e77cd072c41d319eccdb0b85d6270caeacfa3eb",
+    "lod0CensusArtifactId": 10040436636,
+    "lod0CensusRun": 34185771413,
+    "normalizer": "tools/t6_seal6_cloth_lit_semantics_v1.py",
+    "shaderIrArtifactDigest": "sha256:4ec20867435160f98d0c323d8408f9550b3bfde3a4da3885f0539149b9b0db98",
+    "shaderIrArtifactId": 10040528947,
+    "shaderIrRun": 34186064296
+  },
+  "proofBoundary": "Every family claim is conditioned on the exact VS/PS DXBC SHA pair and the exact seven-material native OAT census. The translated GLSL is whole-file SHA-pinned before reviewed instruction anchors are accepted. Unit normal/specular/reflection controls are literal executable behavior, not defaults inferred from absent Material constants. Runtime model-lighting/probe/SH/fog/HDR values remain external and therefore complete Blender retail output remains false.",
+  "runtimeAbi": {
+    "completeRetailPixelOutputInBlender": false,
+    "pixelConstants": [
+      "sunPosition",
+      "sunDiffuse",
+      "hdrControl0",
+      "lightingLookupScale",
+      "heroLightingR",
+      "heroLightingG",
+      "heroLightingB",
+      "scriptVector0"
+    ],
+    "pixelTextures": [
+      "Normal_Map",
+      "Diffuse_Map",
+      "SpecularAndGloss",
+      "modelLightingSampler",
+      "reflectionProbeSampler"
+    ],
+    "runtimeTextures": [
+      "modelLightingSampler texture3D",
+      "reflectionProbeSampler textureCube"
+    ],
+    "vertexExecutableSameAsSolvedSkinVs": true
+  },
+  "summary": {
+    "completeRetailPixelOutputInBlender": false,
+    "exactMaterialArgumentAbiClosed": true,
+    "exactOrdinaryLitEquationsClosed": true,
+    "literalUnitControlsClosed": true,
+    "materials": 7,
+    "nativeMaterialConstants": 0,
+    "nativeTextureSlots": 21,
+    "uniquePixelPrograms": 1,
+    "uniqueVertexPrograms": 1
+  }
+}
