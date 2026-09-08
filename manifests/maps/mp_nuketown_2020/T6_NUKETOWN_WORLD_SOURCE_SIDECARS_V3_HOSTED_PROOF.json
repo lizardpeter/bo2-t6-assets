@@ -1,0 +1,79 @@
+{
+  "format": "t6-nuketown-world-source-sidecars-v3-hosted-proof",
+  "map": "mp_nuketown_2020",
+  "status": "authoritative-retail-source-gate-green",
+  "implementation": {
+    "adapter": "tools/t6_nuketown_world_source_sidecars_v3.py",
+    "adapterCommit": "10b7c5be7aba08ad3ade74c4d47877c782709bd4",
+    "workflow": ".github/workflows/t6_nuketown_world_source_sidecars_v3.yml",
+    "workflowCommit": "314da533370d7281773f245d40c3d99bc2976752",
+    "ownershipProofTool": "tools/t6_nuketown_material_memory_ownership_v1.py"
+  },
+  "execution": {
+    "runId": 34278658949,
+    "jobId": 102237823336,
+    "conclusion": "success",
+    "artifact": {
+      "id": 10076723807,
+      "name": "T6_NUKETOWN_WORLD_SOURCE_SIDECARS_V3",
+      "zipBytes": 154172373,
+      "zipSha256": "0111accf456b96f421ac9cf2fd70f86c052291a3aadcd70f07141c66587ae938"
+    }
+  },
+  "source": {
+    "retailFastFileSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+    "expandedBytes": 154653476,
+    "expandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505",
+    "ownershipProofJsonSha256": "6b5786897436f9c291e38aacab75ba73baef64bcc86e60d542982754e956be7a"
+  },
+  "sidecarManifest": {
+    "file": "T6_NUKETOWN_WORLD_SOURCE_SIDECARS_V3.json",
+    "bytes": 4268,
+    "sha256": "dfa000d7dc7bb75a271b266a74d50f1d42e87d0250c8410aba926f00d393ea59"
+  },
+  "world": {
+    "surfaceCount": 5614,
+    "materialCount": 327,
+    "ownershipSlotAgreementCount": 327,
+    "referencedTechniqueSetCount": 59,
+    "vertexGroupCount": 340,
+    "materialFormatCounts": {"0": 207, "1": 95, "2": 7, "3": 17, "6": 1},
+    "groupFormatCounts": {"0": 220, "1": 95, "2": 7, "3": 17, "6": 1},
+    "surfaceLightmapCounts": {"0": 4779, "1": 750, "31": 85},
+    "mixedFormatGroupCount": 0,
+    "unresolvedSurfaceMaterialCount": 0
+  },
+  "materialMemory": {
+    "physicalStart": 84463050,
+    "physicalEndExclusive": 84465666,
+    "virtualBlock": 5,
+    "virtualStartOffset": 71642512,
+    "virtualEndOffsetExclusive": 71645128
+  },
+  "strictVertexAudit": {
+    "badGroupCount": 0,
+    "surfaceCount": 5614,
+    "uniqueVertexGroups": 340,
+    "vd0Bytes": 5285088,
+    "vd1Bytes": 33764,
+    "observedFormatGroupCounts": {"0": 220, "1": 95, "2": 7, "3": 17, "6": 1}
+  },
+  "baseWorldExport": {
+    "manifestSha256": "1772d9888558dd3b5d75bb0eddc309b6a2920ba36ca7125d36c6947d3b1d94ca",
+    "manifestBytes": 5453,
+    "allSurfaceMaterialsResolved": true,
+    "unresolvedSurfaceMaterials": 0,
+    "glbRegenerationByteIdentical": true,
+    "groupCount": 340,
+    "primitiveCount": 5614,
+    "materialCount": 327,
+    "vertexCount": 146764,
+    "triangleCount": 100280
+  },
+  "passes": [
+    "GREEN OWNERSHIP-GATED NUKETOWN WORLD SOURCE SIDECARS V3",
+    "GREEN V3 NUKETOWN WORLD VERTEX AUDIT",
+    "GREEN BASE WORLD EXPORT FROM V3 RETAIL SIDECARS"
+  ],
+  "proofBoundary": "This proves the current base GfxWorld export can be regenerated from exact retail Nuketown bytes using loader-derived MaterialMemory ownership, direct surface/Material/TechniqueSet parsing, and deterministic compatibility projections. It does not promote the world-only GLB above the retained full-map v25 release floor and does not yet prove the full v51/v52 texture/shader production stack on these newly regenerated inputs."
+}
