@@ -1,0 +1,122 @@
+name: T6 retail DObj multi-XModel census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - 'tools/t6_retail_dobj_multixmodel_census_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_retail_dobj_multixmodel_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install exact disassembly dependency
+        run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+
+      - name: Compile-check census
+        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py tools/t6_remote_zip_range_v1.py
+
+      - name: Range-extract exact retail t6mp.exe
+        shell: bash
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
+          EXPECTED_BYTES: '12850328'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from t6_remote_zip_range_v1 import RemoteZip, RemoteZipError
+
+          url=os.environ['ZIP_URL']
+          expected_sha=os.environ['EXPECTED_SHA256'].lower()
+          expected_bytes=int(os.environ['EXPECTED_BYTES'])
+          rz=RemoteZip(url,'bo2-t6-assets-dobj-multixmodel-census/1')
+          entries,meta=rz.central_directory()
+          candidates=[]
+          for e in entries:
+              base=e['name'].rsplit('/',1)[-1].lower()
+              if base.endswith('.exe') and ('t6mp' in base or e['uncompressedSize']==expected_bytes):
+                  candidates.append(e)
+          if not candidates:
+              raise SystemExit('no candidate t6mp executable entries found')
+
+          observed=[]; winner=None; winner_bytes=None
+          for e in candidates:
+              public={k:v for k,v in e.items() if k!='crc32'}
+              public['crc32']=f"{e['crc32']:08x}"
+              try:
+                  raw=rz.extract(e,verify_crc=True)
+              except RemoteZipError as exc:
+                  observed.append({**public,'status':'extract_failed','error':str(exc)})
+                  continue
+              digest=hashlib.sha256(raw).hexdigest()
+              obs={**public,'actualBytes':len(raw),'actualSha256':digest}
+              if len(raw)==expected_bytes and digest==expected_sha:
+                  obs['status']='exact_match'
+                  if winner is not None:
+                      raise SystemExit('more than one exact executable entry matched')
+                  winner=obs; winner_bytes=raw
+              else:
+                  obs['status']='identity_mismatch'
+              observed.append(obs)
+          Path('/tmp/proof/executable_candidates.json').write_text(json.dumps(observed,indent=2,sort_keys=True)+'\n')
+          if winner is None or winner_bytes is None:
+              raise SystemExit('no candidate matched pinned retail executable identity')
+          Path('/tmp/t6mp.exe').write_bytes(winner_bytes)
+          source={
+              'format':'t6-retail-executable-remote-source-v2',
+              'remoteZip':meta,
+              'entry':winner,
+              'expectedBytes':expected_bytes,
+              'expectedSha256':expected_sha,
+              'status':'exact_sha_pinned_entry_recovered',
+          }
+          Path('/tmp/proof/executable_source.json').write_text(json.dumps(source,indent=2,sort_keys=True)+'\n')
+          PY
+          echo '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1  /tmp/t6mp.exe' | sha256sum -c -
+          test "$(stat -c '%s' /tmp/t6mp.exe)" = 12850328
+
+      - name: Census exact retail DObj consumers and helper xrefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_retail_dobj_multixmodel_census_v1.py \
+            /tmp/t6mp.exe \
+            --out /tmp/proof/T6_RETAIL_DOBJ_MULTIXMODEL_CENSUS_V1.json \
+            --disasm-out /tmp/proof/dobj_consumer_windows.txt \
+            | tee /tmp/proof/census.log
+          sha256sum /tmp/proof/T6_RETAIL_DOBJ_MULTIXMODEL_CENSUS_V1.json /tmp/proof/dobj_consumer_windows.txt \
+            | tee /tmp/proof/proof_sha256.txt
+
+      - name: Refuse executable bytes in artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e /tmp/proof/t6mp.exe
+          if find /tmp/proof -type f -size +8M | grep -q .; then
+            echo 'unexpected large proof file; refusing artifact' >&2
+            find /tmp/proof -type f -size +8M -ls >&2
+            exit 1
+          fi
+
+      - name: Upload exact-retail DObj census
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_DOBJ_MULTIXMODEL_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
