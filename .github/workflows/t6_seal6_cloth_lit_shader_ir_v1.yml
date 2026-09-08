@@ -1,0 +1,181 @@
+name: T6 SEAL6 cloth ordinary-lit shader IR v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - '.github/workflows/t6_seal6_cloth_lit_shader_ir_v1.yml'
+      - 'tools/t6_dxbc_inspect_v1.py'
+      - 'tools/t6_dxbc_rdef_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  cloth-ir:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact green 12-material owner report
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1
+          run-id: 34185771413
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/census
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Reproduce exact common_mp cloth dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          mkdir -p /tmp/game/zone/all /tmp/common_out /tmp/proof/shaders /tmp/proof/reflection /tmp/proof/glsl /tmp/proof/rdef
+          curl -fL --retry 6 --retry-delay 1 --connect-timeout 30 \
+            -o /tmp/game/zone/all/common_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          /tmp/oat-unlinker-cache/Unlinker --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/common_out /tmp/game/zone/all/common_mp.ff \
+            > /tmp/proof/common_mp_techset_dump.log 2>&1
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          owner=json.load(open('/tmp/census/T6_SEAL6_LOD0_TECHSET_OWNER_REPORT_V1.json'))
+          cloth=next(x for x in owner['techniqueSets'] if x['techniqueSet']=='mc_sw4_3d_char_cloth_4z8fq5wu')
+          assert cloth['physicalOwnerCount']==1
+          assert cloth['activeRetailClientOwnerResolved'] is True
+          o=cloth['owners'][0]
+          assert o['rootLabel']=='common_mp'
+          assert o['sha256']=='77be6f0f0acfb5f1e6194c67036801ddf1c70052206a8ef8e1388f9a0bfc6baa'
+          lit=[x for x in o['bindings'] if 'lit' in x['types']]
+          assert len(lit)==1
+          lit=lit[0]
+          assert lit['types']==['lit','lit sun']
+          assert lit['technique']=='pimp_technique_sw4_3d_char_cloth_b0d91c7'
+          assert lit['parsedPassStageIdentitySha256']=='e9ab8d9214d42fe348893a969adc6194fffa4c87dcc35d1c73bf0f213cb92fa8'
+          assert len(lit['passes'])==1
+          stages=lit['passes'][0]['stages']
+          assert len(stages)==2
+          expected={
+            'vertexShader':('b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe',8892),
+            'pixelShader':('14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19',10996),
+          }
+          root=Path('/tmp/common_out')
+          rows=[]
+          for s in stages:
+              sha,n=expected[s['kind']]
+              assert s['sha256']==sha and s['bytes']==n
+              p=root/s['relativeFile']
+              raw=p.read_bytes()
+              actual=hashlib.sha256(raw).hexdigest()
+              assert len(raw)==n and actual==sha, (p,len(raw),actual)
+              stem='cloth_lit_vs' if s['kind']=='vertexShader' else 'cloth_lit_ps'
+              (Path('/tmp/proof/shaders')/(stem+'.dxbc')).write_bytes(raw)
+              rows.append({'kind':s['kind'],'stem':stem,'asset':s['asset'],'relativeFile':s['relativeFile'],'bytes':n,'sha256':sha,'materialArguments':[a['materialProperty'] for a in s['arguments']]})
+          assert next(x for x in rows if x['kind']=='vertexShader')['materialArguments']==[]
+          assert next(x for x in rows if x['kind']=='pixelShader')['materialArguments']==['SpecularAndGloss','Normal_Map','Diffuse_Map']
+          out={
+            'format':'t6-seal6-cloth-lit-binary-identity-v1',
+            'techniqueSet':cloth['techniqueSet'],
+            'techniqueSetOwner':'common_mp',
+            'techniqueSetSha256':o['sha256'],
+            'litTechnique':lit['technique'],
+            'litParsedPassStageIdentitySha256':lit['parsedPassStageIdentitySha256'],
+            'stages':rows,
+            'proofBoundary':'Exact single-owner common_mp TechniqueSet ordinary-lit binding from the green 12-material owner report; OAT-emitted DXBC is re-read and byte/SHA verified before translation. No shader-family equivalence inferred from names or arguments.'
+          }
+          Path('/tmp/proof/T6_SEAL6_CLOTH_LIT_BINARY_IDENTITY_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+
+      - name: Translate exact cloth DXBC and join RDEF to SPIR-V reflection
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vkd3d-compiler spirv-tools spirv-cross >/dev/null
+          vkd3d-compiler --version | tee /tmp/proof/vkd3d_version.txt
+          spirv-val --version | tee /tmp/proof/spirv_tools_version.txt
+          spirv-cross --version 2>&1 | tee /tmp/proof/spirv_cross_version.txt
+
+          for stem in cloth_lit_vs cloth_lit_ps; do
+            vkd3d-compiler -x dxbc-tpf -b spirv-binary \
+              -o "/tmp/proof/shaders/${stem}.spv" "/tmp/proof/shaders/${stem}.dxbc"
+            spirv-val "/tmp/proof/shaders/${stem}.spv"
+            spirv-dis --raw-id "/tmp/proof/shaders/${stem}.spv" -o "/tmp/proof/shaders/${stem}.spvasm"
+            spirv-cross "/tmp/proof/shaders/${stem}.spv" --reflect > "/tmp/proof/reflection/${stem}.json"
+            spirv-cross "/tmp/proof/shaders/${stem}.spv" --version 450 --vulkan-semantics > "/tmp/proof/glsl/${stem}.glsl"
+            PYTHONPATH=tools python3 tools/t6_dxbc_rdef_v1.py \
+              "/tmp/proof/shaders/${stem}.dxbc" \
+              --spirv-reflection "/tmp/proof/reflection/${stem}.json" \
+              --glsl "/tmp/proof/glsl/${stem}.glsl" \
+              --out "/tmp/proof/rdef/${stem}.json" >/dev/null
+          done
+
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/proof')
+          ident=json.load(open(root/'T6_SEAL6_CLOTH_LIT_BINARY_IDENTITY_V1.json'))
+          rows=[]
+          for stem in ('cloth_lit_vs','cloth_lit_ps'):
+              r=json.load(open(root/'rdef'/f'{stem}.json'))
+              ref=json.load(open(root/'reflection'/f'{stem}.json'))
+              glsl=root/'glsl'/f'{stem}.glsl'
+              spv=root/'shaders'/f'{stem}.spv'
+              dxbc=root/'shaders'/f'{stem}.dxbc'
+              rows.append({
+                'stem':stem,
+                'dxbcSha256':hashlib.sha256(dxbc.read_bytes()).hexdigest(),
+                'spvSha256':hashlib.sha256(spv.read_bytes()).hexdigest(),
+                'glslSha256':hashlib.sha256(glsl.read_bytes()).hexdigest(),
+                'rdefSha256':hashlib.sha256((root/'rdef'/f'{stem}.json').read_bytes()).hexdigest(),
+                'resources':r['resources'],
+                'constantBuffers':r['constantBuffers'],
+                'usedConstants':r.get('translatedSpirv',{}).get('usedConstants',[]),
+                'entryPoints':ref.get('entryPoints',[]),
+              })
+          vs=next(x for x in rows if x['stem']=='cloth_lit_vs')
+          ps=next(x for x in rows if x['stem']=='cloth_lit_ps')
+          assert vs['dxbcSha256']=='b1bacc64d083fb8b2a60ab28e346e14bb6f0dd9cbf21930480f7dc647f42dabe'
+          assert ps['dxbcSha256']=='14053d7a2689973c49430b8cbe7a04e4b8c6d352cda47fd64cb600fab4cf7f19'
+          out={
+            'format':'t6-seal6-cloth-lit-shader-ir-v1',
+            'sourceIdentity':ident,
+            'shaders':rows,
+            'proofBoundary':'Exact SHA-pinned cloth ordinary-lit DXBC translated by vkd3d-compiler, validated by spirv-val, reflected/pretty-printed by SPIRV-Cross, and joined back to original D3D RDEF register/constant identity. This artifact does not yet semantically normalize equations or claim Blender lowering.'
+          }
+          (root/'T6_SEAL6_CLOTH_LIT_SHADER_IR_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({
+            'vs':vs['dxbcSha256'],'ps':ps['dxbcSha256'],
+            'vsUsedConstants':len(vs['usedConstants']),'psUsedConstants':len(ps['usedConstants']),
+            'vsResources':[x['name'] for x in vs['resources']],
+            'psResources':[x['name'] for x in ps['resources']],
+          },indent=2,sort_keys=True))
+          PY
+          find /tmp/proof -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_SEAL6_CLOTH_LIT_SHADER_IR_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
