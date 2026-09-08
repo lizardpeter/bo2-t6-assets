@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Join raw T6 XModel Material handles to pinned-OAT post-loader GLB material names.
 
-The raw side proves whether each XModel surface Material* is FOLLOW/inline-owned
-or a packed block/offset alias.  The native side is produced only after the
+The raw side proves whether each XModel surface Material* is FOLLOW/INSERT-owned
+or a packed block/offset alias. The native side is produced only after the
 pinned T6 loader has executed AddPointerLookup/ConvertOffsetToPointerLookup.
 Direct surfaces are used as an order-preserving canary: every direct raw
 Material name must match the material name on the same native GLB primitive
 before any packed surface identity is accepted.
 
-This closes the resolved Material identity of a packed handle.  It deliberately
+This closes the resolved Material identity of a packed handle. It deliberately
 does not claim which earlier AddPointerLookup slot originally registered that
 packed block/offset; that separate origin-slot ownership proof remains a
 stronger provenance layer.
@@ -22,6 +22,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
+RAW_FORMAT = "t6-mp7-r2-material-handle-probe-v1"
 TARGETS = (
     ("t6_wpn_smg_mp7_view", "common_mp", 8),
     ("t6_attach_mag_mp7_view", "common_mp", 3),
@@ -88,15 +89,45 @@ def native_surface_materials(path: Path, expected_count: int) -> list[str]:
 
 
 def find_raw_model(raw: dict[str, Any], name: str) -> dict[str, Any]:
+    # v1 raw probe stores model rows under `targets` and names them `name`.
+    # Keep the legacy fallback explicit so future schema drift fails by identity,
+    # not by silently reinterpreting an unrelated row.
+    for row in raw.get("targets", []):
+        if row.get("name") == name:
+            return row
     for row in raw.get("models", []):
         if row.get("modelName") == name:
             return row
     raise ValueError(f"raw material probe missing model {name!r}")
 
 
-def pointer_kind(handle: dict[str, Any]) -> str:
-    p = handle.get("pointer") if isinstance(handle.get("pointer"), dict) else {}
-    return str(p.get("kind") or "")
+def raw_surface_rows(raw_model: dict[str, Any], expected_count: int) -> list[dict[str, Any]]:
+    rows = raw_model.get("surfaceMaterials")
+    if not isinstance(rows, list) or len(rows) != expected_count:
+        raise ValueError(
+            f"{raw_model.get('name')!r}: raw surfaceMaterials count "
+            f"{len(rows) if isinstance(rows, list) else None} != {expected_count}"
+        )
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict) or row.get("surface") != index:
+            raise ValueError(
+                f"{raw_model.get('name')!r}: raw surface row {index} is not exact index-preserving data"
+            )
+        if not isinstance(row.get("handle"), dict):
+            raise ValueError(f"{raw_model.get('name')!r} surface {index}: missing raw handle")
+    return rows
+
+
+def direct_name(surface_row: dict[str, Any]) -> str | None:
+    direct = surface_row.get("directMaterial")
+    if direct is None:
+        return None
+    if not isinstance(direct, dict):
+        raise ValueError("directMaterial is not an object")
+    name = direct.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError("directMaterial has no exact consumed name")
+    return name
 
 
 def main() -> int:
@@ -109,6 +140,18 @@ def main() -> int:
 
     raw_path = Path(args.raw_probe)
     raw = json.loads(raw_path.read_text(encoding="utf-8"))
+    if raw.get("format") != RAW_FORMAT:
+        raise ValueError(f"raw probe format drift {raw.get('format')!r} != {RAW_FORMAT!r}")
+    summary = raw.get("summary") or {}
+    if (
+        summary.get("targetCount") != 3
+        or summary.get("surfaceCount") != 16
+        or summary.get("directMaterialNameCount") != 11
+        or summary.get("packedHandleCount") != 5
+        or summary.get("blockerCount") != 0
+    ):
+        raise ValueError(f"raw probe summary drift: {summary}")
+
     dirs = {
         "common_mp": Path(args.common_dir),
         "faction_seals_mp": Path(args.faction_dir),
@@ -117,6 +160,7 @@ def main() -> int:
     result_models: list[dict[str, Any]] = []
     direct_canaries = 0
     packed_rows: list[dict[str, Any]] = []
+    packed_seen: set[tuple[str, int]] = set()
 
     for name, zone, expected_count in TARGETS:
         glb = dirs[zone] / "model_export" / f"{name}_lod0.glb"
@@ -124,38 +168,29 @@ def main() -> int:
             raise ValueError(f"native OAT GLB missing: {glb}")
         native = native_surface_materials(glb, expected_count)
         raw_model = find_raw_model(raw, name)
-        handles = raw_model.get("materials") or []
-        if len(handles) != expected_count:
-            raise ValueError(f"{name}: raw surface count {len(handles)} != {expected_count}")
+        rows = raw_surface_rows(raw_model, expected_count)
 
         surfaces: list[dict[str, Any]] = []
-        for index, (handle, resolved_name) in enumerate(zip(handles, native)):
-            kind = pointer_kind(handle)
+        for index, (surface_row, resolved_name) in enumerate(zip(rows, native)):
+            handle = surface_row["handle"]
+            kind = str(handle.get("kind") or "")
+            raw_name = direct_name(surface_row)
             row: dict[str, Any] = {
                 "surfaceIndex": index,
-                "rawPointer": handle.get("pointer"),
-                "rawInlineName": handle.get("name"),
+                "rawPointer": handle,
+                "rawInlineName": raw_name,
                 "nativeResolvedMaterial": resolved_name,
             }
             key = (name, index)
-            if kind in ("follow", "insert") or handle.get("inline"):
-                raw_name = handle.get("name")
-                if not isinstance(raw_name, str) or not raw_name:
-                    raise ValueError(f"{name} surface {index}: direct raw Material has no name")
-                if raw_name != resolved_name:
-                    raise ValueError(
-                        f"{name} surface {index}: native order/material canary mismatch: "
-                        f"raw={raw_name!r}, native={resolved_name!r}"
-                    )
-                row["classification"] = "direct_raw_and_native_exact"
-                direct_canaries += 1
-            else:
-                p = handle.get("pointer") if isinstance(handle.get("pointer"), dict) else {}
-                block = p.get("block")
-                offset = p.get("offset")
+
+            if kind == "packed":
+                if raw_name is not None:
+                    raise ValueError(f"{name} surface {index}: packed handle unexpectedly consumed direct Material")
                 expected = EXPECTED_PACKED.get(key)
                 if expected is None:
                     raise ValueError(f"unexpected packed surface {name} surface {index}")
+                block = handle.get("block")
+                offset = handle.get("offset")
                 if (block, offset) != expected:
                     raise ValueError(
                         f"{name} surface {index}: packed address drift {(block, offset)} != {expected}"
@@ -176,6 +211,21 @@ def main() -> int:
                     "offset": offset,
                     "nativeResolvedMaterial": resolved_name,
                 })
+                packed_seen.add(key)
+            else:
+                if kind not in ("follow", "insert"):
+                    raise ValueError(f"{name} surface {index}: unsupported direct handle kind {kind!r}")
+                if key in EXPECTED_PACKED:
+                    raise ValueError(f"{name} surface {index}: expected packed handle became {kind!r}")
+                if raw_name is None:
+                    raise ValueError(f"{name} surface {index}: direct raw Material has no consumed name")
+                if raw_name != resolved_name:
+                    raise ValueError(
+                        f"{name} surface {index}: native order/material canary mismatch: "
+                        f"raw={raw_name!r}, native={resolved_name!r}"
+                    )
+                row["classification"] = "direct_raw_and_native_exact"
+                direct_canaries += 1
             surfaces.append(row)
 
         result_models.append({
@@ -189,8 +239,11 @@ def main() -> int:
 
     if direct_canaries != 11:
         raise ValueError(f"direct raw/native canary count {direct_canaries} != 11")
-    if len(packed_rows) != 5:
-        raise ValueError(f"packed raw/native resolution count {len(packed_rows)} != 5")
+    if len(packed_rows) != 5 or packed_seen != set(EXPECTED_PACKED):
+        raise ValueError(
+            f"packed raw/native resolution set drift: count={len(packed_rows)} "
+            f"seen={sorted(packed_seen)} expected={sorted(EXPECTED_PACKED)}"
+        )
 
     out = {
         "schema": "t6_mp7_r2_native_material_resolution_v1",
@@ -224,7 +277,7 @@ def main() -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"PASS native Material resolution: 16 surfaces, 11 direct canaries, 5 packed identities")
+    print("PASS native Material resolution: 16 surfaces, 11 direct canaries, 5 packed identities")
     for row in packed_rows:
         print(
             f"  {row['modelName']} s{row['surfaceIndex']}: "
