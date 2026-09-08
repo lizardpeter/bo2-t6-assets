@@ -1,0 +1,109 @@
+name: T6 SEAL6 LOD0 Blender shader plan v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_seal6_lod0_blender_shader_plan_v2.py'
+      - 'manifests/render/T6_RETAIL_SEAL6_LIT_SEMANTICS_V1.json'
+      - 'manifests/render/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json'
+      - '.github/workflows/t6_seal6_lod0_blender_shader_plan_v2.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  shader-plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact all-12 role plan
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2
+          run-id: 34188450377
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/role
+
+      - name: Download exact native census
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1
+          run-id: 34185771413
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/census
+
+      - name: Pin exact inputs and build shader plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          role=$(find /tmp/role -type f -name 'T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2.json' -print -quit)
+          census=$(find /tmp/census -type f -name 'T6_SEAL6_LOD0_NATIVE_MATERIAL_CENSUS_V1.json' -print -quit)
+          test -s "$role" && test -s "$census"
+          echo '123656501da2055159961142732eec2f70de49dcb2ee9fda486fa0b1f59ba6f8  '"$role" | sha256sum -c -
+          echo 'af037e48e8297698639ad514597aba0e991266bc096b5b01afe722d26c93fcaf  '"$census" | sha256sum -c -
+          echo '2a33279c84fa433b9d424e96d598ad54af99bd67a1515b5232f640a6ab89d26f  manifests/render/T6_RETAIL_SEAL6_LIT_SEMANTICS_V1.json' | sha256sum -c -
+          echo '64a9a0a1a84b5b447e86534c4932ce573c20098cc4e4f07672a1c901195ddfac  manifests/render/T6_RETAIL_SEAL6_CLOTH_LIT_SEMANTICS_V1.json' | sha256sum -c -
+          mkdir -p /tmp/out
+          python3 -m py_compile tools/t6_seal6_lod0_blender_shader_plan_v2.py
+          PYTHONPATH=tools python3 tools/t6_seal6_lod0_blender_shader_plan_v2.py \
+            --role-plan "$role" \
+            --native-census "$census" \
+            --out /tmp/out/T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2.json \
+            | tee /tmp/out/build.log
+
+      - name: Assert exact whole-LOD0 shader ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          p='/tmp/out/T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-seal6-lod0-blender-shader-plan-v2'
+          s=d['summary']
+          assert s=={
+              'targetMaterials':12,
+              'nativeTextureSlotsPreserved':41,
+              'ordinaryLitReferencedTextureSlots':36,
+              'preservedNativeTextureSlotsNotReferencedByOrdinaryLit':5,
+              'nativeMaterialConstants':22,
+              'exactVsPsMaterialArgumentBindings':58,
+              'clothMaterials':7,
+              'characterSpecializedMaterials':5,
+              'allOrdinaryLitMaterialArgumentsClosed':True,
+              'exactOrdinaryLitEquationsClosed':True,
+              'headOrdinaryLitExecutableIndependentOfUnresolvedWholeMaterialOwner':True,
+              'globalRuntimeLightingInputsBoundInBlender':False,
+              'completeRetailPixelOutputInBlender':False,
+          }, s
+          assert len(d['materials'])==12
+          cloth=[r for r in d['materials'] if r['shaderFamilyId']=='seal6-char-cloth-lit-v1']
+          assert len(cloth)==7
+          assert all(len(r['nativeConstants'])==0 for r in cloth)
+          assert all(r['ordinaryLitArguments']['pixel']==['SpecularAndGloss','Normal_Map','Diffuse_Map'] for r in cloth)
+          assert all(r['ordinaryLitArguments']['vertex']==[] for r in cloth)
+          nonlit=[]
+          for r in d['materials']:
+              for slot in r['nativeTextureSlots']:
+                  if not slot['ordinaryLitBinding']['referenced']:
+                      nonlit.append((r['material'],slot['slotIndex'],slot['image']))
+          assert len(nonlit)==5, nonlit
+          assert ('mc/mtl_gen_eye_cornea',2,'sw_radiant_default') in nonlit
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/out/T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2.json | tee /tmp/out/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2
+          path: /tmp/out
+          if-no-files-found: error
+          compression-level: 0
