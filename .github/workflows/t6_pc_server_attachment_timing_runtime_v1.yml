@@ -1,0 +1,84 @@
+name: T6 PC server attachment timing runtime v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - 'tools/t6_pc_server_attachment_timing_runtime_v1.py'
+      - 'tools/test_t6_pc_server_attachment_timing_runtime_v1.py'
+      - '.github/workflows/t6_pc_server_attachment_timing_runtime_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SRC_REPO: lizardpeter/bo2-pc-server-decompile
+      SRC_COMMIT: 504c0d8516c50195342c8a064b2f2571b109659d
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test fail-closed timing proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_pc_server_attachment_timing_runtime_v1.py
+
+      - name: Fetch exact PDB-backed decompile and instruction evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/src /tmp/proof
+          base="https://raw.githubusercontent.com/$SRC_REPO/$SRC_COMMIT/analysis/agent_evidence/fast-025-s/ghidra"
+          ids=(
+            cf_71eea2ace5e894d7
+            cf_9cd45d5d43dcd6c0
+            cf_346232a648091034
+            cf_ee8a908bb0093f69
+            cf_09ada0add4364913
+            cf_1a5c94b0b0af689c
+            cf_c2e03ad474b9a6e7
+          )
+          for id in "${ids[@]}"; do
+            curl -fL --retry 3 "$base/unreviewed/$id.c" -o "/tmp/src/$id.c"
+            curl -fL --retry 3 "$base/disassembly/$id.asm" -o "/tmp/src/$id.asm"
+          done
+          sha256sum /tmp/src/* | sort | tee /tmp/proof/evidence_sha256.txt
+
+      - name: Prove exact multiplicative timing composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_pc_server_attachment_timing_runtime_v1.py \
+            --source-dir /tmp/src \
+            --out /tmp/proof/T6_PC_SERVER_ATTACHMENT_TIMING_RUNTIME_V1.json
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_PC_SERVER_ATTACHMENT_TIMING_RUNTIME_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          s=d['summary']
+          assert d['format']=='t6-pc-server-attachment-timing-runtime-v1'
+          assert s['formulaCount']==7
+          assert s['allMultiplicative'] is True
+          assert s['maxAttachmentSlotsVisited']==3
+          assert s['retailClientPromotionBlocked'] is True
+          fields={r['attachmentScaleField'] for r in d['formulas']}
+          assert fields=={
+            'fFireTimeScale','fReloadTimeScale','fReloadEmptyTimeScale','fReloadAddTimeScale',
+            'fReloadQuickTimeScale','fReloadQuickEmptyTimeScale','fReloadQuickAddTimeScale'
+          }
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_PC_SERVER_ATTACHMENT_TIMING_RUNTIME_V1.json | tee /tmp/proof/proof_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_PC_SERVER_ATTACHMENT_TIMING_RUNTIME_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
