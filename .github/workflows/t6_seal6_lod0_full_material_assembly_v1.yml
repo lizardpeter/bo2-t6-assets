@@ -1,0 +1,221 @@
+name: T6 SEAL6 LOD0 full material assembly v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_install_blender_5_2_1_linux_x64.sh'
+      - 'tools/t6_blender_seal6_lod0_role_nodes_v2.py'
+      - 'tools/t6_blender_seal6_lod0_lit_nodes_v2.py'
+      - 'tools/t6_blender_seal6_lod0_pipeline_state_v2.py'
+      - 'tools/t6_blender_seal6_lod0_full_material_assembly_v1.py'
+      - '.github/workflows/t6_seal6_lod0_full_material_assembly_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download native Blender 5.2.1 exact carrier
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1
+          run-id: 34188137920
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/carrier
+
+      - name: Download exact 12-Material role plan
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2
+          run-id: 34188450377
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/role
+
+      - name: Download exact all-12 shader plan
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2
+          run-id: 34188633935
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/shader
+
+      - name: Download exact all-12 pipeline state
+        uses: actions/download-artifact@v4
+        with:
+          name: T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2
+          run-id: 34188876558
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/pipeline
+
+      - name: Download exact retail texture package
+        uses: actions/download-artifact@v4
+        with:
+          name: SEAL6_FULL_RETAIL_BLENDER
+          run-id: 34171431655
+          github-token: ${{ github.token }}
+          repository: lizardpeter/bo2-t6-assets
+          path: /tmp/fullretail
+
+      - name: Resolve exact inputs and install Blender 5.2.1 LTS
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/input /tmp/out /tmp/proof
+          CARRIER=$(find /tmp/carrier -type f -name 'T6_SEAL6_SMG_LOD0_FULL_RETAIL_SHADER_CARRIER_BLENDER_5_2_1.blend' -print -quit)
+          ROLE=$(find /tmp/role -type f -name 'T6_SEAL6_LOD0_BLENDER_ROLE_PLAN_V2.json' -print -quit)
+          SHADER=$(find /tmp/shader -type f -name 'T6_SEAL6_LOD0_BLENDER_SHADER_PLAN_V2.json' -print -quit)
+          PIPELINE=$(find /tmp/pipeline -type f -name 'T6_SEAL6_LOD0_LIT_PIPELINE_STATE_V2.json' -print -quit)
+          NESTED=$(find /tmp/fullretail -type f -name 'SEAL6_FULL_RETAIL_BLENDER.zip' -print -quit)
+          for p in "$CARRIER" "$ROLE" "$SHADER" "$PIPELINE" "$NESTED"; do test -n "$p" && test -s "$p"; done
+          echo 'b1aec278caacfad84ce8bf0708bacf823ec995b70a60a550ecd202aaeef056a8  '"$CARRIER" | sha256sum -c -
+          echo '123656501da2055159961142732eec2f70de49dcb2ee9fda486fa0b1f59ba6f8  '"$ROLE" | sha256sum -c -
+          unzip -q "$NESTED" -d /tmp/input/fullretail
+          test -d /tmp/input/fullretail/textures
+          printf '%s\n' "$CARRIER" > /tmp/input/carrier.path
+          printf '%s\n' "$ROLE" > /tmp/input/role.path
+          printf '%s\n' "$SHADER" > /tmp/input/shader.path
+          printf '%s\n' "$PIPELINE" > /tmp/input/pipeline.path
+          bash tools/t6_install_blender_5_2_1_linux_x64.sh
+          python3 -m py_compile \
+            tools/t6_blender_seal6_lod0_role_nodes_v2.py \
+            tools/t6_blender_seal6_lod0_lit_nodes_v2.py \
+            tools/t6_blender_seal6_lod0_pipeline_state_v2.py \
+            tools/t6_blender_seal6_lod0_full_material_assembly_v1.py
+
+      - name: Assemble exact all-12 materials on native Blender 5.2.1 carrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARRIER=$(cat /tmp/input/carrier.path)
+          ROLE=$(cat /tmp/input/role.path)
+          SHADER=$(cat /tmp/input/shader.path)
+          PIPELINE=$(cat /tmp/input/pipeline.path)
+          PYTHONPATH=tools "$BLENDER" --background "$CARRIER" --python-use-system-env \
+            --python tools/t6_blender_seal6_lod0_full_material_assembly_v1.py -- \
+            --role-plan "$ROLE" \
+            --shader-plan "$SHADER" \
+            --pipeline-plan "$PIPELINE" \
+            --texture-root /tmp/input/fullretail/textures \
+            --output /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1.blend \
+            --report /tmp/proof/T6_SEAL6_LOD0_FULL_MATERIAL_ASSEMBLY_V1.json \
+            2>&1 | tee /tmp/proof/build.log
+          grep -F 'T6_SEAL6_FULL_MATERIAL_ASSEMBLY_V1=' /tmp/proof/build.log
+          test -s /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1.blend
+          test -s /tmp/proof/T6_SEAL6_LOD0_FULL_MATERIAL_ASSEMBLY_V1.json
+
+      - name: Assert assembled closure before reopen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_SEAL6_LOD0_FULL_MATERIAL_ASSEMBLY_V1.json'))
+          assert d['format']=='t6-blender-seal6-lod0-full-material-assembly-v1'
+          assert d['blenderVersion'].startswith('5.2.1')
+          assert d['geometry']['vertices']==13490 and d['geometry']['triangles']==14968
+          assert d['geometry']['materials']==12 and d['geometry']['animations']==6 and d['geometry']['joints']==102
+          assert d['roleSummary']=={
+            'materialsCompiled':12,'nativeSlotsCompiled':41,'streamedSlotNodes':40,
+            'sharedBuiltInAliasNodes':1,'uniqueExactPngImagesLoaded':39,
+            'allNativeInputsRepresented':True,'completeRetailPixelOutput':False,
+          }
+          assert d['litSummary']=={
+            'materialsCompiled':12,'nativeSourceNodesRetained':41,
+            'ordinaryLitReferencedSourceNodes':36,'preservedNonLitSourceNodes':5,
+            'nativeConstantNodes':22,'executableLiteralUnitNodes':21,
+            'skinLocalDiffuseGraphs':4,'clothLocalDiffuseGraphs':7,
+            'heroDetailNormalGraphs':1,'corneaLocalGraphs':1,
+            'allExactOrdinaryLitEquationsClosed':True,
+            'globalRuntimeLightingInputsBound':False,'completeRetailPixelOutput':False,
+          }
+          assert d['pipelineSummary']=={
+            'materialsCompiled':12,'exactD3DPipelineStatesPreserved':12,
+            'litOpaqueMaterials':11,'litTransMaterials':1,
+            'allBlenderPipelineMappingsExplicitlyAuthoringOnly':True,
+            'completeRetailPixelOutput':False,
+          }
+          assert len(d['preservedNonLitSources'])==5 and all(x['outgoingLinks']==0 for x in d['preservedNonLitSources'])
+          assert d['materialCensus']['nativeSourceNodes']==41
+          assert d['characterLocalAssetReversalExact'] is True
+          assert d['runtimeSceneGlobalsExternal'] is True
+          assert d['completeRetailPixelOutput'] is False
+          print(json.dumps({'blendSha256':d['outputBlendSha256'],'role':d['roleSummary'],'lit':d['litSummary'],'pipeline':d['pipelineSummary']},indent=2,sort_keys=True))
+          PY
+
+      - name: Reopen final Blender 5.2.1 file and verify persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHADER=$(cat /tmp/input/shader.path)
+          cat >/tmp/reopen_final.py <<'PY'
+          import bpy,json,hashlib
+          from pathlib import Path
+          assert bpy.app.version_string.startswith('5.2.1')
+          assert len(bpy.data.armatures)==1 and len(bpy.data.actions)==6 and len(bpy.data.materials)==12
+          meshes=[o for o in bpy.data.objects if o.type=='MESH']
+          main=[o for o in meshes if o.name=='c_usa_mp_seal6_smg_fb_mesh']
+          assert len(main)==1; main=main[0]
+          assert len(main.data.vertices)==13490 and len(main.data.polygons)==14968
+          attrs=set(a.name for a in main.data.attributes)|set(a.name for a in main.data.color_attributes)
+          required={'_T6_COLOR_RGBA','_T6_XMODEL_NORMAL','_T6_XMODEL_TANGENT','_T6_TANGENT_HANDEDNESS'}
+          assert required<=attrs and 'COLOR_0' not in attrs and 'TANGENT' not in attrs
+          shader=json.load(open('/tmp/input/shader_plan_for_reopen.json'))
+          source_count=0; nonlit=[]; cloth=0; exact_states=0
+          for row in shader['materials']:
+              name=row['material']; mat=bpy.data.materials.get(name)
+              if mat is None:
+                  matches=[m for m in bpy.data.materials if m.name==name or m.name.startswith(name+'.')]
+                  assert len(matches)==1; mat=matches[0]
+              assert mat.get('t6_role_complete_native_inputs') is True
+              assert mat.get('t6_exact_material_local_nodes_compiled') is True
+              assert mat.get('t6_pipeline_state_exact_metadata') is True
+              assert mat.get('t6_complete_retail_pixel_output') is False
+              exact_states+=1
+              nodes=list(mat.node_tree.nodes)
+              source=[n for n in nodes if n.name.startswith('T6_SLOT_')]
+              assert len(source)==len(row['nativeTextureSlots']); source_count+=len(source)
+              if row['shaderFamilyId']=='seal6-char-cloth-lit-v1': cloth+=1
+              for slot in row['nativeTextureSlots']:
+                  if slot['ordinaryLitBinding']['referenced']: continue
+                  prefix=f"T6_SLOT_{int(slot['slotIndex']):02d}_"
+                  n=[x for x in source if x.name.startswith(prefix)]
+                  assert len(n)==1
+                  outgoing=sum(len(o.links) for o in n[0].outputs)
+                  assert outgoing==0
+                  nonlit.append((name,slot['slotIndex'],slot['image']))
+          assert source_count==41 and len(nonlit)==5 and cloth==7 and exact_states==12
+          exact_images=[i for i in bpy.data.images if i.name.endswith('__T6_EXACT_DATA')]
+          assert len(exact_images)==39, len(exact_images)
+          assert bpy.context.scene.get('t6_complete_retail_pixel_output') is False
+          out={'format':'t6-seal6-lod0-full-material-assembly-v1-reopen','blenderVersion':bpy.app.version_string,'vertices':13490,'triangles':14968,'joints':102,'materials':12,'animations':6,'nativeSourceNodes':source_count,'preservedNonLitSources':len(nonlit),'clothMaterials':cloth,'exactRetailImages':len(exact_images),'exactPipelineStateMaterials':exact_states,'customShaderAttributesPresent':True,'color0Present':False,'standardTangentPresent':False,'characterLocalAssetReversalExact':True,'runtimeSceneGlobalsExternal':True,'completeRetailPixelOutput':False}
+          Path('/tmp/proof/T6_SEAL6_LOD0_FULL_MATERIAL_ASSEMBLY_V1_REOPEN.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+          cp "$SHADER" /tmp/input/shader_plan_for_reopen.json
+          "$BLENDER" --background /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1.blend \
+            --python-use-system-env --python /tmp/reopen_final.py 2>&1 | tee /tmp/proof/reopen.log
+          test -s /tmp/proof/T6_SEAL6_LOD0_FULL_MATERIAL_ASSEMBLY_V1_REOPEN.json
+          sha256sum /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1.blend | tee /tmp/proof/FINAL_BLEND_SHA256.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1
+          path: |
+            /tmp/out/T6_SEAL6_SMG_LOD0_FULL_RETAIL_EXACT_MATERIALS_BLENDER_5_2_1.blend
+            /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
