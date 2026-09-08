@@ -1,0 +1,111 @@
+name: T6 current client output packet callback trace v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_output_packet_callback_trace_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace packet and callback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+
+          UA='bo2-t6-assets-output-packet-callback-trace/1'
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode())
+          rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]
+          raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          def offva(off):
+            for s in secs:
+              if s['ro']<=off<s['ro']+s['rs']:return s['va']+(off-s['ro'])
+            return None
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          def disasm_range(start,end):
+            o=vaoff(start);out=[]
+            for ins in md.disasm(raw[o:o+(end-start)],start):
+              if ins.address>=end:break
+              r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              if ins.mnemonic=='call' and ins.operands and ins.operands[0].type==X86_OP_IMM:r['directTarget']=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+              out.append(r)
+            return out
+
+          VTABLE=0x00C5E724
+          vo=vaoff(VTABLE)
+          entries=list(struct.unpack('<7I',raw[vo:vo+28]))
+          names=['OnVoiceProcessingPassStart','OnVoiceProcessingPassEnd','OnStreamEnd','OnBufferStart','OnBufferEnd','OnLoopEnd','OnVoiceError']
+          callback=[]
+          for i,(name,va) in enumerate(zip(names,entries)):
+            rows=disasm_range(va,va+0x100)
+            callback.append({'index':i,'name':name,'targetVa':f'0x{va:08X}','firstBytesSha256':hashlib.sha256(raw[vaoff(va):vaoff(va)+0x100]).hexdigest(),'disasm':rows})
+
+          submit_start=0x005DFB80;submit_end=0x005DFC64
+          submit_rows=disasm_range(submit_start,submit_end)
+
+          # Exact executable xrefs to likely output/callback state globals exposed by prior probe.
+          targets={0x01016ADC:'submitUnderrunOrKickCounter',0x01016B0C:'sourceCallbackCounter',0x01016B04:'sourceCallbackObject'}
+          mdscan=Cs(CS_ARCH_X86,CS_MODE_32);mdscan.detail=True;mdscan.skipdata=True
+          refs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in mdscan.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0:continue
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_MEM:vals.append(op.mem.disp&0xffffffff)
+                elif op.type==X86_OP_IMM:vals.append(op.imm&0xffffffff)
+              kinds=[targets[v] for v in vals if v in targets]
+              if kinds:refs.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'kinds':kinds})
+
+          result={
+            'format':'t6-current-client-output-packet-callback-trace-v1',
+            'authority':'current Plutonium T6 MP client only',
+            'client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},
+            'knownFinalVoice':{'channels':6,'sampleRate':48000,'bitsPerSample':32,'blockAlign':24,'submitAudioBytes':0x1800,'framesPerSubmit':0x1800//24,'millisecondsPerSubmit':(0x1800//24)/48000*1000},
+            'submitFunction':{'startVa':f'0x{submit_start:08X}','endExclusiveVa':f'0x{submit_end:08X}','sha256':hashlib.sha256(raw[vaoff(submit_start):vaoff(submit_start)+(submit_end-submit_start)]).hexdigest(),'disasm':submit_rows},
+            'callbackVtableVa':f'0x{VTABLE:08X}','callbackMethods':callback,'stateRefs':refs,
+            'proofBoundary':'Exact current-client machine evidence only. Callback names derive solely from the verified IXAudio2VoiceCallback declaration order. No pinned-retail identity or address equivalence.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_OUTPUT_PACKET_CALLBACK_TRACE_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('PACKET',result['knownFinalVoice'])
+          print('SUBMIT_RANGE_SHA',result['submitFunction']['sha256'])
+          for r in submit_rows:print('SUBMIT',r['va'],r['bytes'],r['mnemonic'],r['opStr'],r.get('directTarget',''))
+          print('CALLBACK_VTABLE',[(x['name'],x['targetVa']) for x in callback])
+          for c in callback:
+            print('===',c['name'],c['targetVa'],c['firstBytesSha256'])
+            for r in c['disasm'][:80]:print('CB',r['va'],r['bytes'],r['mnemonic'],r['opStr'],r.get('directTarget',''))
+          print('STATE_REFS',json.dumps(refs,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_CURRENT_CLIENT_OUTPUT_PACKET_CALLBACK_TRACE_V1.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_OUTPUT_PACKET_CALLBACK_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_OUTPUT_PACKET_CALLBACK_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
