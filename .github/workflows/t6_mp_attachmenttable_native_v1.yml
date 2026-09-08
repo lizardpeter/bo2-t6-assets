@@ -1,0 +1,102 @@
+name: T6 MP attachmenttable native v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp_attachmenttable_native_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Verify cached pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download SHA-pinned MP roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          for zone in common_mp common_patch_mp patch_mp; do
+            curl -fL --retry 4 "$base/$zone.ff" -o "/tmp/game/zone/all/$zone.ff"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+
+      - name: Dump native StringTables and locate exact attachment table
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          mkdir -p /tmp/oat_out
+          for zone in common_mp common_patch_mp patch_mp; do
+            mkdir -p "/tmp/oat_out/$zone"
+            "$BIN" --no-color --verbose --include-assets stringtable --output-folder "/tmp/oat_out/$zone" "/tmp/game/zone/all/$zone.ff" \
+              2>&1 | tee "/tmp/proof/${zone}_stringtable.log"
+            if grep -q '^ERROR:' "/tmp/proof/${zone}_stringtable.log"; then
+              echo "native OAT logged an error for $zone" >&2
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,shutil
+          root=Path('/tmp/oat_out')
+          matches=[]
+          for zone in ('common_mp','common_patch_mp','patch_mp'):
+              zr=root/zone
+              for p in sorted(x for x in zr.rglob('*') if x.is_file()):
+                  rel=p.relative_to(zr).as_posix()
+                  low=rel.lower()
+                  if low.endswith('mp/attachmenttable.csv') or low.endswith('attachmenttable.csv'):
+                      b=p.read_bytes()
+                      matches.append({'zone':zone,'path':rel,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+                      dst=Path('/tmp/proof')/f'{zone}__attachmenttable.csv'
+                      shutil.copyfile(p,dst)
+          if not matches:
+              raise SystemExit('native OAT emitted no mp/attachmenttable.csv from the three exact MP roots')
+          doc={
+            'format':'t6-mp-native-attachmenttable-v1',
+            'target':'mp/attachmenttable.csv',
+            'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'matches':matches,
+            'proofBoundary':'Exact native StringTable extraction from the three SHA-pinned MP base/patch roots. Physical copies are preserved independently. This stage does not select a retail-client duplicate winner and does not infer option semantics from column text.',
+          }
+          Path('/tmp/proof/T6_MP_NATIVE_ATTACHMENTTABLE_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(doc,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/*attachmenttable.csv /tmp/proof/T6_MP_NATIVE_ATTACHMENTTABLE_V1.json | sort | tee /tmp/proof/output_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_NATIVE_ATTACHMENTTABLE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
