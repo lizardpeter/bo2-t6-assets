@@ -16,7 +16,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 import t6_generated_final_output_cbuffer_signature_v1 as techparse
-from t6_oat_slot_shader_resolver_v2 import resolve_slot_shader
+from t6_oat_slot_shader_resolver_v2 import resolve_slot_shaders
 from t6_tech_argument_source_identity_v2 import source_identity
 FORMAT='t6-generated-final-output-texture-resource-binding-v2'
 FINAL_FORMAT='t6-generated-slot4-final-output-symbolic-v3'
@@ -42,7 +42,7 @@ def _sampled(shader:dict)->dict[str,dict]:
 
 def _tech(root:Path,technique:str,sha:str,cache:dict)->dict:
  if technique in cache:return cache[technique]
- resolved=resolve_slot_shader(root,technique,slot_index=4);ps=resolved.get('pixelShaders',[])
+ resolved=resolve_slot_shaders(root,technique,slot_index=4);ps=resolved.get('pixelShaders',[])
  if len(ps)!=1:raise TextureResourceBindingV2Error(f"{technique!r}: slot-4 pixel shader count {len(ps)}")
  if str(ps[0].get('sha256') or '').lower()!=sha.lower():raise TextureResourceBindingV2Error(f"{technique!r}: slot-4 PS {ps[0].get('sha256')} != final-output {sha}")
  path=root/str(resolved['techniqueFile'])
