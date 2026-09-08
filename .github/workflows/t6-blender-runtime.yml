@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/t6-blender-runtime.yml'
+      - 'tools/t6_install_blender_5_2_1_linux_x64.sh'
       - 'tools/t6_blender_generated_layer_preview_v1.py'
       - 'tools/t6_blender_generated_layer_preview_v2.py'
       - 'tools/t6_blender_generated_layer_preview_v3.py'
@@ -31,6 +32,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/t6-blender-runtime.yml'
+      - 'tools/t6_install_blender_5_2_1_linux_x64.sh'
       - 'tools/t6_blender_generated_layer_preview_v1.py'
       - 'tools/t6_blender_generated_layer_preview_v2.py'
       - 'tools/t6_blender_generated_layer_preview_v3.py'
@@ -64,29 +66,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Blender 4.5.13 LTS
+      - name: Install exact Blender 5.2.1 LTS runtime
         shell: bash
-        run: |
-          set -euxo pipefail
-          archive="$RUNNER_TEMP/blender.tar.xz"
-          urls=(
-            "https://mirror.blender.org/release/Blender4.5/blender-4.5.13-linux-x64.tar.xz"
-            "https://download.blender.org/release/Blender4.5/blender-4.5.13-linux-x64.tar.xz"
-            "https://mirrors.nju.edu.cn/blender/release/Blender4.5/blender-4.5.13-linux-x64.tar.xz"
-          )
-          ok=0
-          for url in "${urls[@]}"; do
-            if curl --fail --location --retry 3 --retry-delay 2 --output "$archive" "$url"; then
-              ok=1
-              break
-            fi
-          done
-          test "$ok" -eq 1
-          tar -xJf "$archive" -C "$RUNNER_TEMP"
-          blender="$RUNNER_TEMP/blender-4.5.13-linux-x64/blender"
-          test -x "$blender"
-          "$blender" --version
-          echo "BLENDER=$blender" >> "$GITHUB_ENV"
+        run: bash tools/t6_install_blender_5_2_1_linux_x64.sh
 
       - name: Run v3 actual Blender importer and adapter regression
         shell: bash
