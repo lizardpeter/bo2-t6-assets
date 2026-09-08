@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Resolve exact shader programs for physical SEAL6 Material variants.
+"""Resolve exact shader programs for physical SEAL6 Material/TechniqueSet variants.
 
-A variant names one exact physical OAT Material copy as LABEL=ROOT::MATERIAL.
-The selected JSON is staged alone as the Material root and is resolved against
-the TechniqueSet/Technique dependency output from that same physical FastFile
-root. This is deliberate: when two zones contain divergent same-name parent
-TechniqueSets, a global v4 census must fail closed rather than choose one. This
-probe instead closes each physical chain independently, then compares the exact
-shader signatures without declaring either variant active in retail t6mp.exe.
+A variant is ``LABEL=MATERIAL_ROOT::PARENT_ROOT::MATERIAL``. The native Material
+JSON is read from the explicitly named physical Material root, staged alone, and
+then resolved only against the explicitly named physical TechniqueSet/Technique
+parent root. This is necessary because T6 Materials may reference TechniqueSets
+owned by another FastFile, while same-name TechniqueSets may also have divergent
+physical parent variants.
+
+The parent-root choice must come from separate exact owner evidence. This probe
+never derives it from root order, naming, patch assumptions, or server behavior.
 """
 from __future__ import annotations
 
@@ -41,15 +43,19 @@ def _parse_root(value: str) -> tuple[str, Path]:
     return label.strip(), path
 
 
-def _parse_variant(value: str) -> tuple[str, Path, str]:
-    if "=" not in value or "::" not in value:
-        raise argparse.ArgumentTypeError("variant must be LABEL=ROOT::MATERIAL")
+def _parse_variant(value: str) -> tuple[str, Path, Path, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError("variant must be LABEL=MATERIAL_ROOT::PARENT_ROOT::MATERIAL")
     label, rest = value.split("=", 1)
-    root_s, material = rest.split("::", 1)
-    root = Path(root_s).resolve()
-    if not label.strip() or not root.is_dir() or not material:
+    parts = rest.split("::", 2)
+    if len(parts) != 3:
+        raise argparse.ArgumentTypeError("variant must be LABEL=MATERIAL_ROOT::PARENT_ROOT::MATERIAL")
+    material_root = Path(parts[0]).resolve()
+    parent_root = Path(parts[1]).resolve()
+    material = parts[2]
+    if not label.strip() or not material_root.is_dir() or not parent_root.is_dir() or not material:
         raise argparse.ArgumentTypeError(f"invalid variant {value!r}")
-    return label.strip(), root, material
+    return label.strip(), material_root, parent_root, material
 
 
 def _owner_label(path: str, roots: dict[str, str]) -> str:
@@ -94,20 +100,26 @@ def _canonical_shader_signature(material_row: dict[str, Any]) -> dict[str, Any]:
 
 def build(
     shader_roots: list[tuple[str, Path]],
-    variants: list[tuple[str, Path, str]],
+    variants: list[tuple[str, Path, Path, str]],
 ) -> dict[str, Any]:
     if not shader_roots or not variants:
         raise VariantProbeError("shader roots and variants must be non-empty")
     root_labels = {str(root.resolve()): label for label, root in shader_roots}
     if len(root_labels) != len(shader_roots):
         raise VariantProbeError("duplicate shader root path")
+
     rows = []
-    for label, source_root, material in variants:
-        source_key = str(source_root.resolve())
-        source_root_label = root_labels.get(source_key)
-        if source_root_label is None:
-            raise VariantProbeError(f"{label}: physical Material root is not in supplied shader-root universe")
-        source = source_root / "materials" / f"{material}.json"
+    for label, material_root, parent_root, material in variants:
+        material_key = str(material_root.resolve())
+        parent_key = str(parent_root.resolve())
+        material_root_label = root_labels.get(material_key)
+        parent_root_label = root_labels.get(parent_key)
+        if material_root_label is None:
+            raise VariantProbeError(f"{label}: physical Material root is not in supplied root universe")
+        if parent_root_label is None:
+            raise VariantProbeError(f"{label}: physical parent root is not in supplied root universe")
+
+        source = material_root / "materials" / f"{material}.json"
         if not source.is_file():
             raise VariantProbeError(f"{label}: physical Material missing: {source}")
         raw = source.read_bytes()
@@ -117,49 +129,66 @@ def build(
             raise VariantProbeError(f"{label}: invalid Material JSON: {exc}") from exc
         if doc.get("_game") != "t6" or doc.get("_type") != "material":
             raise VariantProbeError(f"{label}: source is not native T6 Material JSON")
+
+        techset = str(doc.get("techniqueSet") or "")
+        if not techset:
+            raise VariantProbeError(f"{label}: Material has empty techniqueSet")
+        parent_file = parent_root / "techsets" / f"{techset}.techset"
+        if not parent_file.is_file():
+            raise VariantProbeError(
+                f"{label}: explicitly selected parent root does not own TechniqueSet {techset!r}"
+            )
+
         with tempfile.TemporaryDirectory(prefix=f"t6-seal6-{label}-") as td:
             staged_root = Path(td)
             staged = staged_root / "materials" / f"{material}.json"
             staged.parent.mkdir(parents=True, exist_ok=True)
             staged.write_bytes(raw)
-            # Important: close the physical chain against its own parent-owner
-            # root. A separate global census has already proved that divergent
-            # same-name parent definitions cannot be merged safely.
-            census = v4.build(staged_root, [source_root])
+            census = v4.build(staged_root, [parent_root])
+
         summary = census.get("summary") or {}
         if int(summary.get("unresolvedMaterialCount", -1)) != 0:
-            raise VariantProbeError(f"{label}: source-local v4 census unresolved Material dependency")
+            raise VariantProbeError(f"{label}: explicit-parent v4 census unresolved Material dependency")
         if int(summary.get("divergentParentOwnedDependencyCount", -1)) != 0:
-            raise VariantProbeError(f"{label}: source-local v4 census has divergent parent-owned dependency")
+            raise VariantProbeError(f"{label}: explicit-parent v4 census has divergent parent-owned dependency")
         material_rows = [r for r in census.get("materials", []) if r.get("material") == material]
         if len(material_rows) != 1:
             raise VariantProbeError(f"{label}: expected one exact material row, got {len(material_rows)}")
         m = material_rows[0]
         if m.get("materialJsonSha256") != _sha(raw):
             raise VariantProbeError(f"{label}: staged Material identity drift")
+        if str(m.get("techniqueSet") or "") != techset:
+            raise VariantProbeError(f"{label}: TechniqueSet identity drift")
+
         owners = [_owner_label(str(value), root_labels) for value in m.get("techniqueSetOwners", [])]
-        if owners != [source_root_label]:
-            raise VariantProbeError(f"{label}: source-local TechniqueSet owner drift: {owners!r}")
+        if owners != [parent_root_label]:
+            raise VariantProbeError(f"{label}: explicit parent TechniqueSet owner drift: {owners!r}")
         programs = [_program_identity(p, root_labels) for p in m.get("programs", [])]
-        if any(p["techniqueOwner"] != source_root_label for p in programs):
-            raise VariantProbeError(f"{label}: source-local Technique owner drift")
+        if any(p["techniqueOwner"] != parent_root_label for p in programs):
+            raise VariantProbeError(f"{label}: explicit parent Technique owner drift")
+
         signature = _canonical_shader_signature(m)
         rows.append({
             "variant": label,
             "material": material,
-            "physicalRoot": source_key,
-            "physicalRootLabel": source_root_label,
+            "physicalMaterialRoot": material_key,
+            "physicalMaterialRootLabel": material_root_label,
+            "physicalParentRoot": parent_key,
+            "physicalParentRootLabel": parent_root_label,
             "physicalMaterialBytes": len(raw),
             "physicalMaterialSha256": _sha(raw),
-            "techniqueSet": m.get("techniqueSet"),
+            "techniqueSet": techset,
             "techniqueSetOwners": owners,
             "declaredTechniqueTypes": m.get("declaredTechniqueTypes", []),
             "hasLitBinding": bool(m.get("hasLitBinding")),
             "programs": programs,
             "shaderSignature": signature,
-            "shaderSignatureSha256": _sha(json.dumps(signature, sort_keys=True, separators=(",", ":")).encode("utf-8")),
+            "shaderSignatureSha256": _sha(
+                json.dumps(signature, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ),
             "v4Summary": summary,
         })
+
     by_material: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_material.setdefault(row["material"], []).append(row)
@@ -173,6 +202,7 @@ def build(
             "shaderSignatureSha256Values": sorted(sigs),
             "variants": [row["variant"] for row in copies],
         })
+
     return {
         "format": FORMAT,
         "shaderRoots": [{"label": label, "root": str(root)} for label, root in shader_roots],
@@ -187,7 +217,7 @@ def build(
             ),
         },
         "proofBoundary": (
-            "Each variant is one explicitly selected physical native OAT Material record and is closed only against the TechniqueSet/Technique dependencies emitted by that same physical FastFile root. This source-local closure avoids merging divergent same-name parent definitions. Comparisons may establish whether physical shader signatures match or differ, but no divergent Material/TechniqueSet variant is promoted as the active retail-client XAsset without a separate exact t6mp.exe/runtime precedence proof."
+            "Each variant explicitly names both the physical Material root and the physical TechniqueSet/Technique parent root. The parent selection must come from separate exact physical-owner evidence. The staged Material is resolved only against that parent root through the parent-provenance-aware v4 census. No root order or runtime winner is inferred; divergent variants remain separate until retail t6mp.exe/runtime precedence is independently closed."
         ),
     }
 
@@ -195,13 +225,34 @@ def build(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shader-root", action="append", type=_parse_root, required=True, metavar="LABEL=PATH")
-    ap.add_argument("--variant", action="append", type=_parse_variant, required=True, metavar="LABEL=ROOT::MATERIAL")
+    ap.add_argument(
+        "--variant",
+        action="append",
+        type=_parse_variant,
+        required=True,
+        metavar="LABEL=MATERIAL_ROOT::PARENT_ROOT::MATERIAL",
+    )
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     result = build(a.shader_root, a.variant)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"summary": result["summary"], "comparisons": result["comparisons"], "variants": [{"variant": r["variant"], "material": r["material"], "physicalRootLabel": r["physicalRootLabel"], "techniqueSet": r["techniqueSet"], "signature": r["shaderSignatureSha256"], "programs": r["programs"]} for r in result["variants"]]}, indent=2, sort_keys=True))
+    print(json.dumps({
+        "summary": result["summary"],
+        "comparisons": result["comparisons"],
+        "variants": [
+            {
+                "variant": r["variant"],
+                "material": r["material"],
+                "physicalMaterialRootLabel": r["physicalMaterialRootLabel"],
+                "physicalParentRootLabel": r["physicalParentRootLabel"],
+                "techniqueSet": r["techniqueSet"],
+                "signature": r["shaderSignatureSha256"],
+                "programs": r["programs"],
+            }
+            for r in result["variants"]
+        ],
+    }, indent=2, sort_keys=True))
     return 0
 
 
