@@ -50,7 +50,7 @@ def main() -> int:
         map_root = base / "map"
         patch_root = base / "patch"
 
-        # Two Materials share one duplicate parent TechniqueSet.  The conflict
+        # Two Materials share one duplicate parent TechniqueSet. The conflict
         # record must retain both material users and both exact child identities.
         material(map_root, "wpc/a", "parent_set")
         material(map_root, "wpc/b", "parent_set")
@@ -63,6 +63,8 @@ def main() -> int:
         s = result["summary"]
         assert result["authoritativeWinnerSelection"] is False
         assert s["ordinaryNativeMaterialCount"] == 2
+        assert s["missingParentTechniqueSetOwnerConflictCount"] == 0
+        assert s["divergentParentTechniqueSetConflictCount"] == 0
         assert s["divergentParentOwnedChildConflictCount"] == 1
         assert s["missingParentOwnedChildConflictCount"] == 0
         assert s["unresolvedConflictCount"] == 1
@@ -90,12 +92,53 @@ def main() -> int:
         technique(miss_map, "missing_child", "vs", "ps")
         missing = conflict.build(miss_map, [miss_map, miss_patch])
         ms = missing["summary"]
+        assert ms["missingParentTechniqueSetOwnerConflictCount"] == 0
+        assert ms["divergentParentTechniqueSetConflictCount"] == 0
         assert ms["divergentParentOwnedChildConflictCount"] == 0
         assert ms["missingParentOwnedChildConflictCount"] == 1
         mrow = missing["conflicts"][0]
         assert mrow["kind"] == "missing-parent-owned-child"
         assert mrow["missingParentOwners"] == [str(miss_patch.resolve())]
         assert mrow["resolution"] == "unresolved-no-winner-selected"
+
+        # A Material whose TechniqueSet is absent from every supplied shader root
+        # is a scoped owner-universe gap, not a fatal diagnostic exception.
+        absent_map = base / "absent_map"
+        absent_other = base / "absent_other"
+        absent_other.mkdir(parents=True)
+        material(absent_map, "wpc/no_parent", "not_in_roots")
+        absent = conflict.build(absent_map, [absent_map, absent_other])
+        a = absent["summary"]
+        assert a["missingParentTechniqueSetOwnerConflictCount"] == 1
+        assert a["unresolvedConflictCount"] == 1
+        arow = absent["conflicts"][0]
+        assert arow["kind"] == "missing-parent-techniqueset-owner"
+        assert arow["techniqueSet"] == "not_in_roots"
+        assert arow["materials"] == ["wpc/no_parent"]
+        assert arow["parentOwners"] == []
+        assert arow["resolution"] == "unresolved-no-parent-owner-in-supplied-roots"
+
+        # Divergent physical definitions of the parent TechniqueSet itself must be
+        # retained before attempting to choose or merge either child universe.
+        div_map = base / "div_map"
+        div_patch = base / "div_patch"
+        material(div_map, "wpc/div", "div_set")
+        techset(div_map, "div_set", "map_child", "lit")
+        techset(div_patch, "div_set", "patch_child", "unlit")
+        technique(div_map, "map_child", "map_vs", "map_ps")
+        technique(div_patch, "patch_child", "patch_vs", "patch_ps")
+        divergent_parent = conflict.build(div_map, [div_map, div_patch])
+        ds = divergent_parent["summary"]
+        assert ds["divergentParentTechniqueSetConflictCount"] == 1
+        assert ds["checkedParentTechniqueRelationCount"] == 0
+        assert ds["unresolvedConflictCount"] == 1
+        drow = divergent_parent["conflicts"][0]
+        assert drow["kind"] == "divergent-parent-techniqueset-definition"
+        assert drow["techniqueSet"] == "div_set"
+        assert len(drow["ownerTechniqueSets"]) == 2
+        assert drow["distinctSerializedParentIdentityCount"] == 2
+        assert {r["bindings"][0]["technique"] for r in drow["ownerTechniqueSets"]} == {"map_child", "patch_child"}
+        assert drow["resolution"] == "unresolved-no-winner-selected"
 
         # Identical parent-owned children produce no unresolved conflict.
         ok_map = base / "ok_map"
@@ -109,7 +152,7 @@ def main() -> int:
         assert ok["summary"]["unresolvedConflictCount"] == 0
         assert ok["conflicts"] == []
 
-    print("PASS: parent-owned conflict census records exact unresolved dependencies without selecting winners")
+    print("PASS: parent-owned conflict census records parent and child unresolved classes without selecting winners")
     return 0
 
 
