@@ -1,0 +1,96 @@
+name: T6 current client mix bus producer xrefs v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_mix_bus_producer_xrefs_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Census executable references to final mix-bus storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,collections
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json';UA='bo2-t6-assets-mix-bus-xrefs/1'
+          BUS_START=0x01007900; BUS_END=0x01015100
+          STAGING=0x01015100
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
+          insns=[];hits=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in md.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0:continue
+              reci={'va':ins.address,'section':s['name'],'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              insns.append(reci)
+              refs=[]
+              for oi,op in enumerate(ins.operands):
+                if op.type==X86_OP_IMM:
+                  v=op.imm&0xffffffff
+                  if BUS_START<=v<=STAGING:refs.append({'operandIndex':oi,'kind':'immediate','address':v})
+                elif op.type==X86_OP_MEM:
+                  # Only absolute or index-with-absolute-displacement forms can identify this range statically.
+                  v=op.mem.disp&0xffffffff
+                  if BUS_START<=v<=STAGING:
+                    role='writeCandidate' if oi==0 and ins.mnemonic not in ('cmp','test','comiss','ucomiss','lea','movzx','movsx','prefetcht0','prefetchnta') else 'readOrAddress'
+                    refs.append({'operandIndex':oi,'kind':'memoryDisplacement','address':v,'baseReg':ins.reg_name(op.mem.base) if op.mem.base else None,'indexReg':ins.reg_name(op.mem.index) if op.mem.index else None,'scale':op.mem.scale,'role':role})
+              if refs:hits.append({**reci,'refs':refs})
+          insns.sort(key=lambda x:x['va']);imap={x['va']:i for i,x in enumerate(insns)}
+          neighborhoods=[]
+          for h in hits:
+            i=imap[h['va']];lo=max(0,i-35);hi=min(len(insns),i+60)
+            neighborhoods.append({'hit':{**h,'va':f"0x{h['va']:08X}"},'neighborhood':[{**r,'va':f"0x{r['va']:08X}"} for r in insns[lo:hi]]})
+
+          # Raw little-endian occurrences of exact base/staging and every 0x1800 bus boundary in executable sections.
+          boundary_addrs=list(range(BUS_START,BUS_END,0x1800))+[STAGING]
+          rawrefs=[]
+          for addr in boundary_addrs:
+            pat=struct.pack('<I',addr)
+            for s in secs:
+              if not s['exec']:continue
+              data=raw[s['ro']:s['ro']+s['rs']];p=0
+              while True:
+                p=data.find(pat,p)
+                if p<0:break
+                rawrefs.append({'address':f'0x{addr:08X}','fileOffset':s['ro']+p,'va':f"0x{s['va']+p:08X}",'section':s['name']});p+=1
+
+          byaddr=collections.Counter()
+          for h in hits:
+            for r in h['refs']:byaddr[r['address']]+=1
+          result={'format':'t6-current-client-mix-bus-producer-xrefs-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'mixBusRange':{'startVa':f'0x{BUS_START:08X}','endExclusiveVa':f'0x{BUS_END:08X}','bytes':BUS_END-BUS_START,'knownBusStride':0x1800},'planarStagingVa':f'0x{STAGING:08X}','instructionHits':[{**h,'va':f"0x{h['va']:08X}"} for h in hits],'hitNeighborhoods':neighborhoods,'rawBoundaryAddressOccurrences':rawrefs,'referenceCountsByAddress':{f'0x{k:08X}':v for k,v in sorted(byaddr.items())},'proofBoundary':'Exact current-client executable references only. The range is selected because 0x6598B0 body-proven reads 0x1800-spaced blocks from core arg1=0x01007900 and the terminal handoff separately proves 0x01015100 as planar staging. References identify candidate producer/consumer owners; write ownership is not inferred from proximity alone.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_MIX_BUS_PRODUCER_XREFS_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('HIT_COUNT',len(hits),'RAW_COUNT',len(rawrefs))
+          print('COUNTS',json.dumps(result['referenceCountsByAddress'],indent=2,sort_keys=True))
+          for n in neighborhoods:
+            print('=== HIT',json.dumps(n['hit'],sort_keys=True))
+            for r in n['neighborhood']:print('CTX',r['va'],r['bytes'],r['mnemonic'],r['opStr'])
+          print('RAW',json.dumps(rawrefs,indent=2,sort_keys=True))
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_MIX_BUS_PRODUCER_XREFS_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_MIX_BUS_PRODUCER_XREFS_V1.json
+          if-no-files-found: error
+          compression-level: 9
