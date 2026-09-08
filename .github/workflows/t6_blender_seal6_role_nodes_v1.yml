@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONPATH=tools "$BLENDER" --background --factory-startup \
+          PYTHONPATH=tools "$BLENDER" --background --factory-startup --python-use-system-env \
             --python tools/test_t6_blender_seal6_role_nodes_v1.py \
             2>&1 | tee /tmp/blender_seal6_role_nodes_v1_test.log
           grep -F 'T6_BLENDER_SEAL6_ROLE_NODES_V1_TEST=' /tmp/blender_seal6_role_nodes_v1_test.log
