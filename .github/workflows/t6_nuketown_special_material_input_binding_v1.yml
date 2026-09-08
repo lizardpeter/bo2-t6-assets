@@ -10,6 +10,7 @@ on:
       - 'tools/t6_nuketown_rawnormal_full_output_v1.py'
       - 'tools/t6_nuketown_rawnormal_input_binding_v1.py'
       - 'tools/t6_nuketown_shadowcaster_state_v1.py'
+      - 'tools/t6_nuketown_special_render_replay_contract_v1.py'
       - 'tools/t6_oat_slot_shader_resolver_v1.py'
       - 'tools/t6_oat_material_shader_census_pc_server_v1.py'
       - 'tools/t6_oat_material_shader_census_v4.py'
@@ -21,6 +22,7 @@ on:
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - 'manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V2.json'
       - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
+      - 'manifests/render/T6_NUKETOWN_SPECIAL_RENDER_CLOSURE_V1.json'
       - '.github/workflows/t6_nuketown_special_material_input_binding_v1.yml'
 
 permissions:
@@ -43,7 +45,8 @@ jobs:
             tools/t6_nuketown_special_full_output_symbolic_v1.py \
             tools/t6_nuketown_rawnormal_full_output_v1.py \
             tools/t6_nuketown_rawnormal_input_binding_v1.py \
-            tools/t6_nuketown_shadowcaster_state_v1.py
+            tools/t6_nuketown_shadowcaster_state_v1.py \
+            tools/t6_nuketown_special_render_replay_contract_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -179,11 +182,11 @@ jobs:
           assert s['pixelShaderCount'] == 20
           assert s['sampleSiteCount'] == 446
           assert s['materialOwnedSampleSiteCount'] + s['engineOrCodeSampleSiteCount'] == 446
-          assert s['uniqueMaterialImageCount'] > 0
-          assert s['uniqueEngineResourceBindingCount'] > 0
+          assert s['uniqueMaterialImageCount'] == 3
+          assert s['uniqueMaterialSamplerStateCount'] == 1
+          assert s['uniqueMaterialNameHashCount'] == 6
+          assert s['uniqueEngineResourceBindingCount'] == 6
           print('GREEN EXACT NUKETOWN RAWNORMAL INPUT BINDING',json.dumps(s,indent=2,sort_keys=True))
-          print('ENGINE RESOURCES',json.dumps(d['engineResourceBindings'],indent=2,sort_keys=True))
-          print('ENGINE CONSTANT LEAVES',json.dumps(d['engineOrCodeConstantLeaves'],indent=2,sort_keys=True))
           PY
 
       - name: Prove exact Nuketown shadowcaster states
@@ -205,6 +208,32 @@ jobs:
           assert s['shadowmapPolygonOffset'] == 'offsetShadowmap'
           assert s['exactDepthShaderPairCount'] == 2
           print('GREEN EXACT NUKETOWN SHADOWCASTER STATE',json.dumps(s,indent=2,sort_keys=True))
+          PY
+
+      - name: Build exact special render replay contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_special_render_replay_contract_v1.py \
+            --closure manifests/render/T6_NUKETOWN_SPECIAL_RENDER_CLOSURE_V1.json \
+            --rawnormal /tmp/proof/T6_NUKETOWN_RAWNORMAL_FULL_OUTPUT_V1.json \
+            --rawnormal-binding /tmp/proof/T6_NUKETOWN_RAWNORMAL_INPUT_BINDING_V1.json \
+            --special-binding /tmp/proof/T6_NUKETOWN_SPECIAL_MATERIAL_INPUT_BINDING_V1.json \
+            --shadowcaster /tmp/proof/T6_NUKETOWN_SHADOWCASTER_STATE_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_SPECIAL_RENDER_REPLAY_CONTRACT_V1.json \
+            2>&1 | tee /tmp/proof/special_render_replay_contract.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_SPECIAL_RENDER_REPLAY_CONTRACT_V1.json',encoding='utf-8')); s=d['summary']
+          assert s['rawnormalProgramCount'] == 22
+          assert s['rawnormalPixelShaderCount'] == 20
+          assert s['specialMaterialCount'] == 11
+          assert s['shadowcasterMaterialCount'] == 2
+          assert s['rawnormalStaticMaterialImageCount'] == 3
+          assert s['rawnormalRuntimeTextureIdentityCount'] == 6
+          assert s['rawnormalRuntimeConstantVariableIdentityCount'] == 39
+          print('GREEN EXACT NUKETOWN SPECIAL RENDER REPLAY CONTRACT',json.dumps(s,indent=2,sort_keys=True))
+          print(d['contractDigestSha256'])
           PY
 
       - name: Upload proof
