@@ -79,10 +79,14 @@ jobs:
           assert eye['alpha']['outAlpha']=='sqrt(gate)'
           assert 'Mask.r' in eye['alpha']['gate']
           assert 'Surface_Normal_Map perturbs highlight alpha only' in eye['rgb']['lightingNormal']
+          assert 'dot(Fill_Direction,inverseViewMatrixRow0.xyz)' in eye['fillDirectionVertexTransport']['F1']
           forbidden=' '.join(d['backendPolicy']['forbiddenFallbacks']).lower()
           assert 'invent metallic' in forbidden and 'invent roughness' in forbidden
-          # Guard a subtle character-only operation that must not regress to the older lprobe formula.
-          assert d['sharedSkinSemantics']['diffuse']['encoded']=='Diffuse_Map.rgb * (vertexColor.rgb*vertexColor.rgb)'
+          # Guard character-only math that must not regress to the older lprobe formula.
+          assert d['sharedSkinSemantics']['diffuse']['encoded']=='Diffuse_Map.rgb*(vertexColor.rgb*vertexColor.rgb)'
+          reflection=d['sharedSkinSemantics']['reflection']
+          for k in ('p0','p1','p2','p3'):
+              assert 'SpecularAndGloss.a' in reflection[k]
           print(json.dumps(d['summary'],indent=2,sort_keys=True))
           PY
           cp /tmp/input/ir/T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json /tmp/proof/
