@@ -1,0 +1,75 @@
+{
+  "artifact": {
+    "id": 10073069231,
+    "name": "T6_NUKETOWN_PC_SERVER_MATERIAL_SHADER_CENSUS_V1",
+    "workflowRun": 34269131978,
+    "zipSha256": "1e3320561546c97e4dacf1504dc5a487cc267dacd0bc1656f6e64f74b4a7ef3d"
+  },
+  "dagSetSha256": "b2feaffde261ab1f4500761bffd0df03bc18184e055c84909e4fe3a3cdc2a052",
+  "format": "t6-nuketown-special-full-output-symbolic-seal-v1",
+  "generatedJson": {
+    "name": "T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json",
+    "sha256": "3df9fadb2b40136312359327ff178f74bb7f3068d6022bc386ccfec051a83206"
+  },
+  "map": "mp_nuketown_2020",
+  "proofBoundary": "Complete o0 dataflow is reconstructed directly from the exact native-OAT-selected SM4 pixel-shader bytes for Nuketown unlit/emissive groups. Each shader byte stream is SHA-256 checked against the native census. The compiler rejects control flow, discard, unsupported opcodes and read-before-write. This seal proves arithmetic/dataflow only; exact Material input ownership, sampler state and framebuffer/render-state behavior remain separate closure layers.",
+  "shaderRows": [
+    {
+      "asset": "pimp_shader_unlit_4ea12045.hlsl",
+      "dagSha256": "f62b2b1b754cccf47d7531cf5eb101a4aeaaa340adf4f54f35246a8af8b65093",
+      "nodeCount": 47,
+      "outputNodes": {"o0.w": 13, "o0.x": 44, "o0.y": 45, "o0.z": 46},
+      "pixelShaderSha256": "19d4d2ce53fa78e1f3bb5cc3cc472f3b71d15c715eff0f5adc731d8ce1fc0370",
+      "sampleCount": 1,
+      "sampleRegisters": [{"opcode": "sample", "sampler": 0, "texture": 0}]
+    },
+    {
+      "asset": "pimp_shader_vertcolorsimple_b871d333.hlsl",
+      "dagSha256": "2f2f325e732a4fb085751fe7e4c54a3280d6cda8131519f253e3bcadd0351708",
+      "nodeCount": 40,
+      "outputNodes": {"o0.w": 39, "o0.x": 33, "o0.y": 35, "o0.z": 37},
+      "pixelShaderSha256": "2a2510a4df2ae2c98a7c421ed3cb96fc617e5201747577dc36c158235e7c78c7",
+      "sampleCount": 1,
+      "sampleRegisters": [{"opcode": "sample", "sampler": 0, "texture": 0}]
+    },
+    {
+      "asset": "pimp_shader_radiant_46ce1b1c.hlsl",
+      "dagSha256": "59580002896ee8b124a5ce3d47be60a6a797e1b166b3fc91d9bc8b735ab8f471",
+      "nodeCount": 33,
+      "outputNodes": {"o0.w": 25, "o0.x": 28, "o0.y": 30, "o0.z": 32},
+      "pixelShaderSha256": "cffae8606c1d91c9f9b2bb773053d05689b3f67dce7702507d61acf81878befc",
+      "sampleCount": 1,
+      "sampleRegisters": [{"opcode": "sample", "sampler": 0, "texture": 0}]
+    },
+    {
+      "asset": "pimp_shader_unlitdecalblend_5c3f6d9c.hlsl",
+      "dagSha256": "02f3ecf2da4814a2ea6cbcb84a2e20b8eb10ec97e9eb072c67bee50ea02bd592",
+      "nodeCount": 27,
+      "outputNodes": {"o0.w": 19, "o0.x": 22, "o0.y": 24, "o0.z": 26},
+      "pixelShaderSha256": "e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b",
+      "sampleCount": 1,
+      "sampleRegisters": [{"opcode": "sample", "sampler": 0, "texture": 0}]
+    },
+    {
+      "asset": "pimp_shader_unlit_4b1d2e0b.hlsl",
+      "dagSha256": "3003daac384143bee0a31661b47e007cfbe57c4c786369d66bc3cadc379408fe",
+      "nodeCount": 32,
+      "outputNodes": {"o0.w": 13, "o0.x": 29, "o0.y": 30, "o0.z": 31},
+      "pixelShaderSha256": "f483cbb31106fecb6ca2b0c381108c0b0e5ed879ae793476bf92b28d1c2ca262",
+      "sampleCount": 1,
+      "sampleRegisters": [{"opcode": "sample", "sampler": 0, "texture": 0}]
+    }
+  ],
+  "summary": {
+    "controlFlowShaderCount": 0,
+    "fullOutputSymbolicShaderCount": 5,
+    "nodeCount": 179,
+    "outputComponentCount": 20,
+    "selectedTechniqueGroupCount": 11,
+    "sideEffectShaderCount": 0,
+    "symbolicBlockerCount": 0,
+    "textureSampleCount": 5,
+    "uniqueDagCount": 5,
+    "uniquePixelShaderCount": 5
+  }
+}
