@@ -149,7 +149,7 @@ jobs:
               print(name)
           PY
           )
-          test "${#TECHSETS[@]}" -ge 3
+          test "${#TECHSETS[@]}" -eq 4
           ARGS=()
           for name in "${TECHSETS[@]}"; do ARGS+=(--techset "$name"); done
           PYTHONPATH=tools python3 tools/t6_seal6_techset_physical_owner_report_v1.py \
@@ -159,9 +159,14 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/proof/T6_SEAL6_LOD0_TECHSET_OWNER_REPORT_V1.json'))
+          assert d['summary']['requestedTechniqueSets']==4
+          cloth=next(x for x in d['techniqueSets'] if x['techniqueSet']=='mc_sw4_3d_char_cloth_4z8fq5wu')
+          assert cloth['physicalOwnerCount']==1
+          assert cloth['owners'][0]['rootLabel']=='common_mp'
+          assert cloth['parentChildShaderSignatureInvariantAcrossOwners'] is True
           print(json.dumps(d['summary'],indent=2,sort_keys=True))
           for row in d['techniqueSets']:
-              print(row['techniqueSet'], 'owners=', [x['rootLabel'] for x in row['copies']])
+              print(row['techniqueSet'], 'owners=', [x['rootLabel'] for x in row['owners']])
           PY
 
       - uses: actions/upload-artifact@v4
