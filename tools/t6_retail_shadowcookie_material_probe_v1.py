@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Forensic T6 retail-executable probe for shadow-cookie/global Material evidence.
+"""Forensic T6 retail-executable probe for native shadowoverlay runtime evidence.
 
-This is intentionally a *probe*, not an ownership promotion tool.  Input must be
-one exact retail PC t6mp.exe build.  The probe:
+This is intentionally a *probe*, not an ownership or runtime-semantics promotion
+tool. Input must be one exact retail PC t6mp.exe build. The probe:
 
 * SHA/size/PE32 gates the executable;
-* inventories exact renderer/material strings (shadowcookieoverlay, shadowoverlay,
-  neighbors) and all printable shadow/cookie/overlay strings;
+* inventories exact built-in Material names and shadow-overlay renderer/dvar
+  anchors, plus all printable shadow/cookie/overlay strings;
 * records PE-section provenance for every string;
 * records every physical 32-bit absolute pointer to each exact string;
-* inspects 8-byte pair-table windows around those pointers, because historical
-  CoD renderer lineage stored built-in Material rows as {name pointer, global
-  Material** slot};
+* inspects 8-byte pair-table windows around Material-name pointers, because
+  historical CoD renderer lineage stored built-in Material rows as
+  {name pointer, global Material** slot};
 * optionally disassembles .text with Capstone and records exact instructions
   whose immediate/memory operands reference discovered string VAs.
 
-The historical pair-table shape is used only to *collect candidates*.  Nothing
-in this output proves that T6 uses the same struct, that a candidate slot is an
-rgp field, or that any Material owns a particular Technique.  Promotion requires
-an independently fail-closed adapter after the exact T6 layout/call path is
-closed.
+The historical pair-table shape and renderer symbol names are used only to
+collect candidates. Nothing in this output proves that T6 uses the historical
+struct/layout, that a candidate slot is an rgp field, or that a string reference
+is the shadowoverlay draw/producer path. Promotion requires independent
+fail-closed closure against this exact executable.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ EXPECTED_SHA256 = "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d
 EXPECTED_BYTES = 12_850_328
 EXPECTED_IMAGE_BASE = 0x00400000
 
-EXACT_NAMES = [
+MATERIAL_EXACT_NAMES = [
     "$default",
     "white",
     "$additive",
@@ -49,6 +49,26 @@ EXACT_NAMES = [
     "stencildisplay",
     "floatz_display",
 ]
+
+# These names come from T6 renderer lineage and are search anchors only. Their
+# presence/absence and exact xrefs are factual for the SHA-pinned executable;
+# mapping a hit to a retail T6 high-level function remains a separate gate.
+RUNTIME_EXACT_NAMES = [
+    "sm_showOverlay",
+    "sm_showOverlayDepthBounds",
+    "RB_GetShadowOverlayDepthBounds",
+    "RB_SetSunShadowOverlayScaleAndBias",
+    "RB_DrawSunShadowOverlay",
+]
+
+EXACT_NAMES = MATERIAL_EXACT_NAMES + RUNTIME_EXACT_NAMES
+PAIR_WINDOW_ANCHORS = {
+    "shadowcookieoverlay",
+    "shadowoverlay",
+    "shadowcookieblur",
+    "shadowcaster",
+    "shadowclear",
+}
 
 
 class ProbeError(RuntimeError):
@@ -213,7 +233,7 @@ def _pointer_occurrences(pe: PE, target_va: int):
 
 
 def _pair_window(pe: PE, pointer_off: int, radius: int = 8):
-    # Treat pointer_off as a potential first dword of an 8-byte row.  The caller
+    # Treat pointer_off as a potential first dword of an 8-byte row. The caller
     # does not claim that this interpretation is correct; it is forensic output.
     rows = []
     base = pointer_off - radius * 8
@@ -237,7 +257,7 @@ def _pair_window(pe: PE, pointer_off: int, radius: int = 8):
             "slotSectionWritable": bool(slot_sec and slot_sec["writable"]),
         })
     score = sum(1 for r in rows if r["resolvedName"] and r["slotSection"])
-    exact_hits = [r for r in rows if r["resolvedName"] in EXACT_NAMES]
+    exact_hits = [r for r in rows if r["resolvedName"] in MATERIAL_EXACT_NAMES]
     return {
         "scoreResolvedNameAndSlotSection": score,
         "exactKnownRows": exact_hits,
@@ -307,7 +327,7 @@ def build(path: Path):
                 prow["stringVa"] = va
                 prow["stringVaHex"] = f"0x{va:08x}"
                 ptr_rows.append(prow)
-                if name in {"shadowcookieoverlay", "shadowoverlay", "shadowcookieblur", "shadowcaster", "shadowclear"}:
+                if name in PAIR_WINDOW_ANCHORS:
                     win = _pair_window(pe, int(prow["fileOffset"]))
                     if win["scoreResolvedNameAndSlotSection"] >= 3 or len(win["exactKnownRows"]) >= 3:
                         windows.append({
@@ -329,8 +349,9 @@ def build(path: Path):
         dedup.append(w)
 
     capstone = _capstone_refs(pe, target_vas_for_disasm)
+    keyword_strings = _keyword_strings(pe)
     return {
-        "format": "t6-retail-shadowcookie-material-probe-v1",
+        "format": "t6-retail-shadowoverlay-runtime-probe-v2",
         "retailExecutable": {
             "file": path.name,
             "bytes": len(pe.data),
@@ -339,19 +360,27 @@ def build(path: Path):
         },
         "sections": pe.sections,
         "exactStrings": exact,
-        "keywordStrings": _keyword_strings(pe),
+        "keywordStrings": keyword_strings,
         "absolutePointerOccurrences": ptrs,
         "candidateEightBytePairWindows": dedup,
         "textReferences": capstone,
+        "runtimeSearchTargets": {
+            "authoritativeSerializedMaterial": "shadowoverlay",
+            "serializedTechniqueSet": "trivial_shadowoverlay_14e2e827",
+            "serializedTechnique": "pimp_technique_trivial_7bf1260",
+            "codeImageSource": {"valueHex": "0x00000008", "accessor": "feedbackSampler"},
+            "codeConstantSource": {"valueHex": "0x0000001a", "accessor": "filterTap[0]"},
+            "lineageOnlyRendererAnchors": RUNTIME_EXACT_NAMES,
+        },
         "summary": {
             "exactStringOccurrenceCounts": {k: len(v) for k, v in exact.items()},
-            "keywordStringCount": len(_keyword_strings(pe)),
+            "keywordStringCount": len(keyword_strings),
             "pointerOccurrenceCounts": {k: len(v) for k, v in ptrs.items()},
             "candidatePairWindowCount": len(dedup),
             "textReferenceCount": len(capstone.get("references", [])),
         },
         "proofBoundary": (
-            "Exact static-byte forensic probe of one SHA-pinned T6 retail PC executable. Exact string presence, PE-section placement, absolute pointer occurrences, and decoded x86 references are factual for this executable. Eight-byte pair windows are candidate collection only: historical renderer table shape is not promoted to T6 semantics. This output does not prove rgp field identity, runtime registration order, FastFile ownership, Material->TechniqueSet ownership, or the owner of pimp_technique_shadowoverlay_5255c888."
+            "Exact static-byte forensic probe of one SHA-pinned T6 retail PC executable. Exact string presence, PE-section placement, absolute pointer occurrences, and decoded x86 references are factual for this executable. Eight-byte pair windows are candidate collection only: historical renderer table shape is not promoted to T6 semantics. Renderer routine/dvar names are lineage search anchors only even if literal strings are found. The source ids feedbackSampler=0x8 and filterTap[0]=0x1A are independently source-closed T6 identities, but this probe does not infer their retail producer/consumer path merely from their numeric values. This output does not by itself prove rgp field identity, runtime registration order, draw scheduling, the image assigned to codeImages[8], the values assigned to filterTap[0], or any relationship to the demoted pimp_technique_shadowoverlay_5255c888 probe candidate."
         ),
     }
 
@@ -365,8 +394,10 @@ def main() -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result["summary"], indent=2, sort_keys=True))
-    for name in ("shadowcookieoverlay", "shadowoverlay", "shadowcookieblur", "shadowcaster", "shadowclear"):
+    for name in sorted(PAIR_WINDOW_ANCHORS):
         print(name, "strings", len(result["exactStrings"][name]), "ptrs", len(result["absolutePointerOccurrences"][name]))
+    for name in RUNTIME_EXACT_NAMES:
+        print("runtime_anchor", name, "strings", len(result["exactStrings"][name]), "ptrs", len(result["absolutePointerOccurrences"][name]))
     print("pair_windows", len(result["candidateEightBytePairWindows"]))
     print("text_refs", len(result["textReferences"].get("references", [])))
     return 0
