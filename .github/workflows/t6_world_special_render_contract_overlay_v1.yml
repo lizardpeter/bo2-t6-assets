@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install production image dependencies
+        run: python3 -m pip install --disable-pip-version-check pillow numpy
       - name: Compile overlay and production v52
         run: |
           set -euo pipefail
