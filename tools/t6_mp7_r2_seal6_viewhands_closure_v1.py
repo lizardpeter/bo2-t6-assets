@@ -3,25 +3,30 @@
 
 Authority chain:
 - exact SHA-pinned current-R2 common_mp for the 70-bone hands carrier;
-- exact SHA-pinned faction_seals_mp physical owner for both visible SEAL6 rigs;
-- source-order top-level XAsset/XModel catalog, never name-byte scanning;
-- reusable storage only through the unique VIRTUAL allocation replay in
-  t6_xmodel_skeleton_normalize_v2 / t6_xmodel_mesh_normalize_v3;
-- native OAT geometry counts are used only as independent canaries.
+- exact SHA-pinned faction_seals_mp, whose physical ownership of both visible
+  SEAL6 XModels was independently established by dependency-free native OAT;
+- exact inline serialized XModel identity + full XModel walker is used only to
+  locate the already-owned physical record inside that SHA-pinned stream;
+- reusable storage, if encountered, remains fail-closed unless the unique
+  VIRTUAL allocation replay can be established;
+- native OAT geometry counts are independent canaries, not ownership evidence.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import struct
 from pathlib import Path
 
-from t6_clipmap_normalize_v5 import parse_top_level_xasset_table
-from t6_xmodel_skeleton_normalize_v2 import build_xmodel_catalog, normalize_skeleton
+from t6_xmodel_serialized_walker import XModelWalker, XMODEL_SIZE
+from t6_xmodel_skeleton_normalize_v2 import normalize_skeleton
 from t6_xmodel_mesh_normalize_v3 import normalize_mesh
 
 CARRIER_START = 58906792
 CARRIER_NAME = 'viewmodel_hands_no_model'
+FOLLOWING = 0xFFFFFFFF
+INSERT = 0xFFFFFFFE
 TARGETS = {
     'c_usa_mp_seal6_longsleeve_viewhands': {
         'vertices': 5935, 'triangles': 9278, 'surfaces': 4, 'bones': 72,
@@ -33,6 +38,40 @@ TARGETS = {
     },
 }
 EXPECTED_VISIBLE_EXTRAS = ['tag_gasmask2', 'tag_weapon1']
+
+
+def _find_exact_inline_xmodel(data: bytes, name: str) -> dict:
+    """Locate one exact physical XModel record after ownership is already proven."""
+    needle = name.encode('ascii') + b'\0'
+    occurrences = []
+    p = 0
+    while True:
+        hit = data.find(needle, p)
+        if hit < 0:
+            break
+        occurrences.append(hit)
+        p = hit + 1
+    matches = []
+    for hit in occurrences:
+        start = hit - XMODEL_SIZE
+        if start < 0:
+            continue
+        raw = struct.unpack_from('<I', data, start)[0]
+        if raw not in (FOLLOWING, INSERT):
+            continue
+        try:
+            walk = XModelWalker(data, start).walk_xmodel()
+        except Exception:
+            continue
+        x = walk.get('xmodel', {})
+        if x.get('name') == name and walk.get('assetFixedStart') == start:
+            matches.append(walk)
+    if len(matches) != 1:
+        raise ValueError(
+            f'{name}: expected one exact inline serialized XModel identity in its proven physical owner; '
+            f'got {len(matches)} structural matches from {len(occurrences)} literal occurrences'
+        )
+    return matches[0]
 
 
 def _by_name(skel: dict) -> dict[str, dict]:
@@ -126,26 +165,28 @@ def main() -> None:
         if carrier['identity']['name'] != CARRIER_NAME or carrier['skeleton']['numBones'] != 70:
             raise ValueError('carrier identity/bone count changed')
 
-        table = parse_top_level_xasset_table(faction)
-        catalog = build_xmodel_catalog(faction, len(table['entries']) - 1)
-        matches = {}
-        for name in TARGETS:
-            rows = [(idx, rec) for idx, rec in catalog.items() if rec.get('name') == name]
-            if len(rows) != 1:
-                raise ValueError(f'{name}: expected exactly one structural XModel record, got {len(rows)}')
-            matches[name] = rows[0]
-
+        matches = {name: _find_exact_inline_xmodel(faction, name) for name in TARGETS}
         all_ok = True
         for name, oracle in TARGETS.items():
-            idx, rec = matches[name]
-            start = int(rec['fixedSourceStart'])
-            skel = normalize_skeleton(faction, start, xasset_index=idx, identity_name=name)
+            walk = matches[name]
+            start = int(walk['assetFixedStart'])
+            if walk.get('blockers'):
+                raise ValueError(f'{name}: serialized XModel walker blockers {walk["blockers"]}')
+            # Physical owner is already established independently.  These two
+            # target records are inline identities; if their nested arrays are
+            # packed, normalize_skeleton/normalize_mesh still fail closed here.
+            skel = normalize_skeleton(faction, start, identity_name=name)
             bind = _shared_binding_comparison(carrier, skel)
             row = {
                 'name': name,
-                'xassetIndex': idx,
                 'assetFixedStart': start,
-                'structuralSerializedName': rec.get('name'),
+                'assetSerializedEnd': walk['assetSerializedEnd'],
+                'assetSerializedBytes': walk['assetSerializedBytes'],
+                'assetSerializedSha256': walk['assetSerializedSha256'],
+                'identityLocator': {
+                    'mode': 'exact_inline_serialized_name_in_independently_proven_physical_owner',
+                    'literalOccurrenceCount': faction.count(name.encode('ascii') + b'\0'),
+                },
                 'skeletonSource': skel['skeletonSource'],
                 'numBones': skel['skeleton']['numBones'],
                 'numRootBones': skel['skeleton']['numRootBones'],
@@ -153,7 +194,7 @@ def main() -> None:
                 'nativeOracle': oracle,
             }
             try:
-                mesh = normalize_mesh(faction, start, xasset_index=idx, identity_name=name)
+                mesh = normalize_mesh(faction, start, identity_name=name)
                 ms = _mesh_summary(mesh)
                 row['mesh'] = ms
                 row['meshError'] = None
@@ -192,12 +233,13 @@ def main() -> None:
         out.setdefault('summary', {'authoritative': False})
 
     out['proofBoundary'] = (
-        'Visible SEAL6 viewhands are located from the source-order top-level XAsset/XModel catalog in the exact '
-        'faction_seals_mp stream. Packed VIRTUAL skeleton/mesh arrays may be reused only through one unique earlier '
-        'physical XModel whose allocation signature and XSurface nested packed pointers replay exactly. Shared hands '
-        'rig compatibility requires the 70-bone common_mp carrier namespace, hierarchy, raw int16 local rotations, and '
-        'local translations to match by ScriptString-resolved bone identity. Native OAT counts are independent canaries, '
-        'not ownership authority. Materials and final DObj assembly/order remain separate gates.'
+        'Native dependency-free OAT already establishes faction_seals_mp as a physical owner of both exact visible '
+        'SEAL6 XModels. Exact inline serialized name plus a valid full XModel walk is therefore used only as a locator '
+        'inside that SHA-pinned physical owner, not as ownership evidence. Packed VIRTUAL nested arrays remain fail-closed '
+        'unless unique allocator replay can establish an earlier physical owner. Shared hands-rig compatibility requires '
+        'the 70-bone common_mp carrier namespace, hierarchy, raw int16 local rotations, and local translations to match '
+        'by resolved bone identity. Native OAT geometry counts are independent canaries. Materials and final DObj '
+        'assembly/order remain separate gates.'
     )
     text = json.dumps(out, indent=2, sort_keys=True) + '\n'
     a.out.write_text(text, encoding='utf-8')
