@@ -1,0 +1,68 @@
+name: T6 public audio bank inventory v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_public_audio_bank_inventory_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory SABS/SABL entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections,json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-audio-bank-inventory/1')
+          entries,meta=rz.central_directory()
+          banks=[e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))]
+          banks.sort(key=lambda e:e['name'].lower())
+          methods=collections.Counter(int(e['method']) for e in banks)
+          rows=[{
+              'path':e['name'],
+              'method':int(e['method']),
+              'crc32':f"{int(e['crc32']):08x}",
+              'compressedBytes':int(e['compressedSize']),
+              'uncompressedBytes':int(e['uncompressedSize']),
+              'localHeaderOffset':int(e['localHeaderOffset']),
+          } for e in banks]
+          doc={
+              'format':'t6-public-audio-bank-inventory-v1',
+              'remoteZip':meta,
+              'summary':{
+                  'bankCount':len(rows),
+                  'sabsCount':sum(r['path'].lower().endswith('.sabs') for r in rows),
+                  'sablCount':sum(r['path'].lower().endswith('.sabl') for r in rows),
+                  'compressionMethods':{str(k):v for k,v in sorted(methods.items())},
+                  'compressedBytes':sum(r['compressedBytes'] for r in rows),
+                  'uncompressedBytes':sum(r['uncompressedBytes'] for r in rows),
+              },
+              'banks':rows,
+              'proofBoundary':'Exact ZIP64 central-directory inventory of SABS/SABL entries. No bank payload semantics are promoted until bank bytes or exact stored-entry ranges are independently validated.'
+          }
+          pathlib.Path('/tmp/proof/T6_PUBLIC_AUDIO_BANK_INVENTORY_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          for r in rows: print(r['method'],r['uncompressedBytes'],r['crc32'],r['path'])
+          if len(rows)!=116:
+              raise SystemExit(f'archive audio-bank population changed: {len(rows)} != 116')
+          PY
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_PUBLIC_AUDIO_BANK_INVENTORY_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
