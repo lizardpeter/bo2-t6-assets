@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/t6_mp7_r2_authoritative_package_census_v1.yml'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_mp7_r2_raw_package_v1.py'
 
 permissions:
   contents: read
@@ -104,7 +105,6 @@ jobs:
                   files=sorted(p for p in zr.rglob('*') if p.is_file())
                   for p in files: inventory.append(row(zone,typ,p))
 
-          # Locate the exact physical base weapon path, not merely files that mention mp7_mp.
           weapon_copies=[]
           for zone in zones:
               zr=root/zone/'weapon'
@@ -112,10 +112,8 @@ jobs:
                   p=zr/rel
                   if p.is_file(): weapon_copies.append(row(zone,'weapon',p)|{'sourcePath':str(p)})
           if not weapon_copies:
-              # OAT currently emits authored weapon files without an extension. Fail rather than fall back to literal search.
               raise SystemExit('no exact native OAT weapons/mp7_mp physical file found')
 
-          # Find exact MP7 attachment-unique assets using BOTH path and file content as a recall census.
           unique=[]
           for zone in zones:
               zr=root/zone/'attachmentunique'
@@ -124,14 +122,12 @@ jobs:
                   if 'mp7' in low or b'mp7' in b.lower():
                       unique.append(row(zone,'attachmentunique',p)|{'sourcePath':str(p)})
 
-          # Preserve all generic attachment assets because applicability is a retail graph property, not a filename guess.
           generic=[]
           for zone in zones:
               zr=root/zone/'attachment'
               for p in sorted(x for x in zr.rglob('*') if x.is_file()):
                   generic.append(row(zone,'attachment',p)|{'sourcePath':str(p)})
 
-          # Exact weapon-specific camo carrier.
           camo=[]
           for zone in zones:
               zr=root/zone/'camo'
@@ -142,9 +138,8 @@ jobs:
           if not camo:
               raise SystemExit('no exact native camo_mp7 carrier found')
 
-          # Copy exact relevant physical records into the artifact under provenance-preserving directories.
           selected=weapon_copies+unique+generic+camo
-          for i,r in enumerate(selected):
+          for r in selected:
               src=Path(r.pop('sourcePath'))
               dst=package/r['zone']/r['assetType']/r['path']
               dst.parent.mkdir(parents=True,exist_ok=True)
@@ -152,7 +147,6 @@ jobs:
               if hashlib.sha256(dst.read_bytes()).hexdigest()!=r['sha256']:
                   raise SystemExit('artifact copy hash mismatch')
 
-          # Textual base-weapon dependency tokens are preserved as diagnostics only.
           token_rows=[]
           for r in weapon_copies:
               p=package/r['zone']/r['assetType']/r['path']
@@ -190,11 +184,43 @@ jobs:
           }
           (proof/'T6_MP7_R2_AUTHORITATIVE_PACKAGE_CENSUS_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
           print(json.dumps(doc['summary'],indent=2,sort_keys=True))
-          print('WEAPON COPIES',[(r['zone'],r['path'],r['sha256']) for r in weapon_copies])
-          print('MP7 UNIQUE',[(r['zone'],r['path']) for r in unique])
-          print('CAMO',[(r['zone'],r['path'],r['sha256']) for r in camo])
           PY
           sha256sum /tmp/proof/T6_MP7_R2_AUTHORITATIVE_PACKAGE_CENSUS_V1.json | tee /tmp/proof/package_census_sha256.txt
+
+      - name: Compile fail-closed raw retail MP7 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp7_r2_raw_package_v1.py \
+            --package-root /tmp/package \
+            --out /tmp/proof/T6_MP7_R2_RAW_PACKAGE_V1.json \
+            | tee /tmp/proof/raw_package.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_MP7_R2_RAW_PACKAGE_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          s=d['summary']
+          assert s['weaponPhysicalCopies']==2
+          assert s['weaponFieldRowsPerCopy']==1027
+          assert s['weaponFieldDiffCount']==17
+          assert s['weaponAttachmentIdentityCountCommonMp']==16
+          assert s['weaponAttachmentIdentityCountCommonPatchMp']==16
+          assert s['mp7AttachmentUniqueIdentityCount']==15
+          assert s['mp7AttachmentUniquePhysicalCopyCount']==30
+          assert s['mp7AttachmentUniqueDivergentIdentityCount']==0
+          assert s['commonMpCamoSets']==30 and s['commonPatchMpCamoSets']==40
+          assert s['commonMpCamoMaterialSets']==4 and s['commonPatchMpCamoMaterialSets']==15
+          names={x['name']:(x['commonMp'],x['commonPatchMp']) for x in d['weapon']['fieldDiffs']}
+          assert names['penetrateType']==('medium','small')
+          assert names['maxDamageRange']==('800','750')
+          assert names['hipSpreadFireAdd']==('0.3','0.6')
+          assert d['weapon']['attachmentListDelta']=={
+              'removedFromCommonPatchMp':['grip'],
+              'addedInCommonPatchMp':['grip_smg'],
+          }
+          assert d['authority']['runtimeWinnerSelected'] is False
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_RAW_PACKAGE_V1.json | tee /tmp/proof/raw_package_sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
