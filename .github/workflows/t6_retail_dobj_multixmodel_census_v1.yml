@@ -8,6 +8,7 @@ on:
     paths:
       - 'tools/t6_retail_dobj_multixmodel_census_v1.py'
       - 'tools/t6_retail_exe_wayback_probe_v1.py'
+      - 'tools/t6_retail_exe_archive_metadata_probe_v2.py'
       - '.github/workflows/t6_retail_dobj_multixmodel_census_v1.yml'
 
 permissions:
@@ -16,7 +17,7 @@ permissions:
 jobs:
   census:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -24,9 +25,13 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
 
       - name: Compile-check proof tools
-        run: python3 -m py_compile tools/t6_retail_dobj_multixmodel_census_v1.py tools/t6_retail_exe_wayback_probe_v1.py
+        run: >-
+          python3 -m py_compile
+          tools/t6_retail_dobj_multixmodel_census_v1.py
+          tools/t6_retail_exe_wayback_probe_v1.py
+          tools/t6_retail_exe_archive_metadata_probe_v2.py
 
-      - name: Probe archived content-addressed objects for exact retail t6mp.exe
+      - name: Probe direct archived content-addressed objects
         shell: bash
         run: |
           set -euo pipefail
@@ -36,8 +41,22 @@ jobs:
             --exe-out /tmp/t6mp.exe \
             | tee /tmp/proof/wayback_probe.log
 
+      - name: Trace source-backed historical archive manifests when direct object is absent
+        if: ${{ hashFiles('/tmp/t6mp.exe') == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_exe_archive_metadata_probe_v2.py \
+            --out /tmp/proof/T6_RETAIL_EXE_ARCHIVE_METADATA_PROBE_V2.json \
+            --exe-out /tmp/t6mp.exe \
+            | tee /tmp/proof/archive_metadata_probe.log
+
+      - name: Enforce exact retail executable identity
+        shell: bash
+        run: |
+          set -euo pipefail
           test -f /tmp/t6mp.exe || {
-            echo 'Wayback probe did not recover an exact identity match' >&2
+            echo 'No archived source recovered the exact retail executable' >&2
             exit 1
           }
           echo '44eba16d0d9c66f40637611137affbe6b0364f20  /tmp/t6mp.exe' | sha1sum -c -
