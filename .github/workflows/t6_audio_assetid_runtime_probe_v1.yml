@@ -1,0 +1,151 @@
+name: T6 audio assetId runtime probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_assetid_runtime_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact active references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/ref/CoDMPServer_PC.exe \
+            "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/ref/CoDMPServer_PC.map \
+            "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Extract exact sound runtime slices
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, re, struct
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          map_text=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii',errors='strict')
+          IMAGE_BASE=0x00400000
+
+          peoff=struct.unpack_from('<I',exe,0x3c)[0]
+          coff=peoff+4
+          _,nsects,_,_,_,optsz,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          image_base=struct.unpack_from('<I',exe,opt+28)[0]
+          assert image_base==IMAGE_BASE
+          sections=[]
+          st=opt+optsz
+          for i in range(nsects):
+              o=st+i*40
+              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rawsz,rawoff=struct.unpack_from('<IIII',exe,o+8)
+              sections.append((name,IMAGE_BASE+rva,vs,rawsz,rawoff))
+          def off(va):
+              for name,base,vs,rawsz,rawoff in sections:
+                  if base <= va < base+rawsz:
+                      return rawoff+(va-base)
+              raise ValueError(hex(va))
+          def data(va,n): return exe[off(va):off(va)+n]
+          def sha(va,n): return hashlib.sha256(data(va,n)).hexdigest()
+
+          targets={
+            'SND_AssetBankFindEntry_loaded_physical':0x008B4060,
+            'SND_AssetBankFindEntry_streamed':0x008B48A0,
+            'SND_AssetBankFindStreamed':0x008B4960,
+            'SND_AssetBankFindLoaded':0x008B4980,
+            'SD_StartAlias':0x008B94C0,
+            'SND_SetVoiceStartInfo':0x008B1A40,
+            'SD_VoiceAllocateRam':0x008BA310,
+            'SD_VoiceAllocateStream':0x008BA4D0,
+          }
+
+          # Keep every MAP line that binds or mentions one of the exact targets.
+          print('=== MAP TARGET LINES ===')
+          for name,va in targets.items():
+              hits=[ln for ln in map_text.splitlines() if name.split('_loaded_physical')[0] in ln and f'{va:08x}' in ln.lower()]
+              print(f'{name} @ 0x{va:08X}')
+              for ln in hits[:10]: print('  '+ln)
+
+          # Extract candidate absolute addresses from MAP lines and use the next code symbol
+          # only as a diagnostic boundary. We still emit broad disassembly windows below.
+          addr_name=[]
+          for ln in map_text.splitlines():
+              m=re.search(r'\b([0-9A-Fa-f]{8})\b',ln)
+              if not m: continue
+              va=int(m.group(1),16)
+              if 0x00400000 <= va < 0x02000000:
+                  addr_name.append((va,ln.strip()))
+          addr_name.sort()
+          print('=== NEXT MAP ADDRESSES ===')
+          for name,va in targets.items():
+              nxt=next(((a,l) for a,l in addr_name if a>va),None)
+              print(name, f'0x{va:08X}', 'NEXT', (f'0x{nxt[0]:08X} {nxt[1]}' if nxt else 'NONE'))
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+          md.detail=False
+          ranges={
+            'asset_loaded_physical':(0x008B4060,0x008B48A0),
+            'asset_streamed_find':(0x008B48A0,0x008B49E0),
+            'sd_start_alias':(0x008B94C0,0x008B9B00),
+            'sd_voice_alloc':(0x008BA300,0x008BA680),
+          }
+          out={}
+          for key,(start,end) in ranges.items():
+              raw=data(start,end-start)
+              lines=[]
+              for ins in md.disasm(raw,start):
+                  lines.append(f'{ins.address:08X}: {ins.bytes.hex():<24} {ins.mnemonic:<8} {ins.op_str}')
+              Path(f'/tmp/probe/{key}.asm').write_text('\n'.join(lines)+'\n')
+              out[key]={'start':f'0x{start:08X}','endExclusive':f'0x{end:08X}','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'instructions':len(lines)}
+
+          Path('/tmp/probe/ranges.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print('=== RANGE IDENTITIES ===')
+          print(json.dumps(out,indent=2,sort_keys=True))
+
+          # Print only the semantically relevant lines plus nearby context into the job log.
+          needles=(
+            '8b94c0','8b4960','8b4980','8b48a0','8b4060','8ba310','8ba4d0','8b1a40',
+            '0000bb80','ffffffff'
+          )
+          for key in ('asset_loaded_physical','asset_streamed_find','sd_start_alias','sd_voice_alloc'):
+              lines=Path(f'/tmp/probe/{key}.asm').read_text().splitlines()
+              hit=set()
+              for i,line in enumerate(lines):
+                  low=line.lower()
+                  if any(n in low for n in needles):
+                      for j in range(max(0,i-6),min(len(lines),i+7)): hit.add(j)
+              print(f'=== RELEVANT {key} ===')
+              for i in sorted(hit): print(lines[i])
+          PY
+
+      - name: Upload exact probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_ASSETID_RUNTIME_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
