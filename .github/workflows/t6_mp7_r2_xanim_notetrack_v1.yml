@@ -14,6 +14,7 @@ on:
       - 'manifests/stage18d/raw_xasset_parser_proof.json'
       - 'manifests/stage18d/xanim_full_inventory_proof.json'
       - 'manifests/stage18d/xanim_delta_proof.json'
+      - 'manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json'
 
 permissions:
   contents: read
@@ -165,10 +166,12 @@ jobs:
             --out /tmp/proof/T6_MP7_R2_XANIM_NOTETRACK_V1.json \
             | tee /tmp/proof/xanim_notetrack.log
           python3 - <<'PY'
-          import csv,json
+          import csv,hashlib,json
           from pathlib import Path
           p=Path('/tmp/proof/T6_MP7_R2_XANIM_NOTETRACK_V1.json')
-          d=json.loads(p.read_text())
+          raw=p.read_bytes()
+          d=json.loads(raw)
+          retained=json.loads(Path('manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json').read_text())
           assert d['format']=='t6-mp7-r2-xanim-notetrack-v1'
           assert d['source']['expandedCommonMp']['bytes']==206493911
           assert d['source']['expandedCommonMp']['sha256']=='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
@@ -187,6 +190,34 @@ jobs:
           assert 'viewmodel_mp7_reload_empty' in names
           assert all(x['boneNameCount']==len(x['boneNames']) for x in d['targets'])
           assert all(x['notifyCount']==len(x['notifies']) for x in d['targets'])
+
+          # The retained closure is a durable projection of the exact green
+          # generated manifest. Fail if either the full manifest bytes or any
+          # projected role/record/notetrack field silently drifts.
+          assert hashlib.sha256(raw).hexdigest()==retained['provenance']['generatedManifestSha256']
+          assert retained['front']==d['front']
+          assert retained['fullInventory']==d['fullInventory']
+          assert retained['summary']==d['summary']
+          assert retained['roleTableInvariantAcrossCopies'] is True
+          assert retained['roleUses']==d['weaponMembership']['roleUses']
+          physical=[{k:x[k] for k in ('zone','bytes','sha256','emittedFieldRowCount','animationUseCount')} for x in d['weaponMembership']['physicalCopies']]
+          assert retained['weaponPhysicalCopies']==physical
+          projected=[]
+          for x in d['targets']:
+              projected.append({
+                  'name':x['name'],
+                  'roles':[u['field'] for u in x['weaponRoleUses']],
+                  'frames':x['numframes'],
+                  'fps':x['framerate'],
+                  'frequency':x['frequency'],
+                  'bones':x['boneNameCount'],
+                  'notifies':[[n['name'],n['scriptStringId'],n['serializedTimeFloat']] for n in x['notifies']],
+                  'rawStructOffset':x['rawStructOffset'],
+                  'rawEndOffset':x['rawEndOffset'],
+                  'serializedBytes':x['serializedBytes'],
+                  'serializedSha256':x['serializedSha256'],
+              })
+          assert retained['targets']==projected
 
           with open('/tmp/proof/mp7_xanim_summary.csv','w',newline='') as f:
               w=csv.writer(f); w.writerow(['name','frames','fps','frequency','notifies','bones','rawStructOffset','rawEndOffset','serializedSha256'])
