@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Map the two homologous current-client T6 skeleton-consumer paths.
+"""Map homologous current-client T6 skeleton-consumer paths.
 
-NON-AUTHORITATIVE for retail semantics.  This is a locator pass only.
+NON-AUTHORITATIVE for retail semantics. This is a locator pass only.
 
-The exact retail proof already retained five skeleton-helper byte witnesses.  A
+The exact retail proof already retained five skeleton-helper byte witnesses. A
 prior differential pass showed that all five have unique current-client matches
 at one uniform +0x5810 relocation, while the surrounding functions changed.
-This pass uses only those matched helper targets to find their direct callers,
-groups the six calls into the two consumer paths, and emits instruction-aligned
-windows plus memory/immediate access summaries for locating the higher-level
-multi-XModel/DObj merge code.
+This pass uses only those matched helper targets and *instruction-aligned*
+Capstone call instructions to locate real direct callers. This intentionally
+rejects the earlier raw-byte E8 scan as caller authority because embedded E8
+bytes can mimic rel32 calls.
 
 Nothing discovered only in the comparison client may be promoted as retail
 behavior without a separate exact-retail witness.
@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import struct
 from pathlib import Path
 from typing import Any
 
@@ -66,20 +65,15 @@ def all_text_insns(pe: PE, data: bytes):
     return rows
 
 
-def raw_rel32_callers(pe: PE, data: bytes, target: int) -> list[int]:
-    out: list[int] = []
-    for sec in pe.sections:
-        if not sec["executable"]:
+def aligned_direct_callers(insns, target: int) -> list[int]:
+    out = []
+    for insn in insns:
+        if insn.mnemonic != "call" or not insn.operands:
             continue
-        raw = data[sec["rawOff"]:sec["rawOff"] + sec["rawSize"]]
-        for i in range(max(0, len(raw) - 4)):
-            if raw[i] != 0xE8:
-                continue
-            rel = struct.unpack_from("<i", raw, i + 1)[0]
-            va = sec["va"] + i
-            if va + 5 + rel == target:
-                out.append(va)
-    return sorted(out)
+        op = insn.operands[0]
+        if op.type == X86_OP_IMM and int(op.imm) == target:
+            out.append(insn.address)
+    return out
 
 
 def group_calls(calls: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -141,30 +135,31 @@ def main() -> int:
     if sorted(set(shifts)) != [EXPECTED_SHIFT]:
         raise ProbeError(f"uniform relocation drift: {[hex(x) for x in shifts]}")
 
-    targets = {label: va + EXPECTED_SHIFT for label, va in RETAIL_HELPER_VA.items()}
-    calls: list[dict[str, Any]] = []
-    for label, target in targets.items():
-        callers = raw_rel32_callers(pe, data, target)
-        if len(callers) != 2:
-            raise ProbeError(f"{label} caller count {len(callers)} != 2")
-        for va in callers:
-            calls.append({"helper": label, "targetVa": target, "callVa": va})
-
-    groups = group_calls(calls)
-    if len(groups) != 2 or any(sorted(x["helper"] for x in g) != ["nonRoot", "rootNoParent", "rootWithParent"] for g in groups):
-        raise ProbeError(f"caller grouping is not two complete 3-helper consumers: {groups!r}")
-
     insns = all_text_insns(pe, data)
     addr_to_index = {insn.address: i for i, insn in enumerate(insns)}
+    targets = {label: va + EXPECTED_SHIFT for label, va in RETAIL_HELPER_VA.items()}
+    calls: list[dict[str, Any]] = []
+    aligned_counts = {}
+    for label, target in targets.items():
+        callers = aligned_direct_callers(insns, target)
+        aligned_counts[label] = len(callers)
+        for va in callers:
+            calls.append({"helper": label, "targetVa": target, "callVa": va})
+    if not calls:
+        raise ProbeError("no instruction-aligned calls to any shifted skeleton helper")
+
+    groups = group_calls(calls)
+    complete_groups = [
+        g for g in groups
+        if set(x["helper"] for x in g) == {"rootNoParent", "rootWithParent", "nonRoot"}
+    ]
+    if not complete_groups:
+        raise ProbeError(f"no caller cluster contains all three skeleton helpers: {groups!r}")
+
     doc_groups = []
     lines = []
     for gi, group in enumerate(groups):
-        call_indices = []
-        for row in group:
-            idx = addr_to_index.get(row["callVa"])
-            if idx is None:
-                raise ProbeError(f"call 0x{row['callVa']:x} not on Capstone instruction boundary")
-            call_indices.append(idx)
+        call_indices = [addr_to_index[row["callVa"]] for row in group]
         lo = max(0, min(call_indices) - 110)
         hi = min(len(insns), max(call_indices) + 111)
         window = insns[lo:hi]
@@ -191,8 +186,11 @@ def main() -> int:
         raw_start = pe.va_to_off(window[0].address)
         raw_end = pe.va_to_off(window[-1].address) + window[-1].size
         raw = data[raw_start:raw_end]
+        helper_set = sorted(set(x["helper"] for x in group))
         row = {
             "group": gi,
+            "completeThreeHelperConsumer": set(helper_set) == {"rootNoParent", "rootWithParent", "nonRoot"},
+            "helperSet": helper_set,
             "helperCalls": sorted(group, key=lambda x: x["callVa"]),
             "windowStartVa": window[0].address,
             "windowEndVaExclusive": window[-1].address + window[-1].size,
@@ -204,7 +202,8 @@ def main() -> int:
         }
         doc_groups.append(row)
         lines.append(
-            f"===== CURRENT COMPARISON CONSUMER {gi} "
+            f"===== CURRENT COMPARISON CALLER CLUSTER {gi} "
+            f"complete={row['completeThreeHelperConsumer']} "
             f"0x{window[0].address:08X}-0x{window[-1].address + window[-1].size:08X} "
             f"sha256={row['windowSha256']} ====="
         )
@@ -228,13 +227,15 @@ def main() -> int:
         "validatedUniformRelocationDeltaHex": f"0x{EXPECTED_SHIFT:X}",
         "anchorOccurrences": anchor_occurrences,
         "shiftedHelperTargets": targets,
+        "instructionAlignedCallerCounts": aligned_counts,
         "helperCalls": sorted(calls, key=lambda x: x["callVa"]),
-        "consumerGroups": doc_groups,
+        "callerClusters": doc_groups,
         "summary": {
             "uniqueAnchorCount": len(anchor_occurrences),
-            "helperCallerCount": len(calls),
-            "consumerGroupCount": len(groups),
-            "eachConsumerCallsAllThreeHelpers": True,
+            "instructionAlignedHelperCallerCount": len(calls),
+            "callerClusterCount": len(groups),
+            "completeThreeHelperConsumerCount": len(complete_groups),
+            "rawE8CallerCountsFromV3AreNotAuthority": True,
         },
         "proofBoundary": (
             "This pass is a locator over the exact SHA-pinned comparison client. The five anchors are tied to "
@@ -249,9 +250,11 @@ def main() -> int:
     args.disasm_out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(json.dumps({
         "uniformShift": f"0x{EXPECTED_SHIFT:X}",
+        "instructionAlignedCallerCounts": aligned_counts,
         "helperCalls": len(calls),
-        "consumerGroups": len(groups),
-        "groupCallVas": [[f"0x{x['callVa']:X}" for x in g] for g in groups],
+        "callerClusters": len(groups),
+        "completeThreeHelperConsumers": len(complete_groups),
+        "clusterCallVas": [[f"0x{x['callVa']:X}" for x in g] for g in groups],
         "manifestSha256": sha256(payload.encode()),
     }, sort_keys=True))
     return 0
