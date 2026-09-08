@@ -1,0 +1,148 @@
+name: T6 Nuketown IWI27 DDS bridge v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_iwi27_mip_layout_probe_v1.py'
+      - 'tools/t6_iwi27_mip_layout_proof_v2.py'
+      - 'tools/t6_iwi27_dds_bridge_v1.py'
+      - 'tools/t6_dds_texture_stage_v1.py'
+      - 'tools/t6_nuketown_ipak_partial_texture_export_v2.py'
+      - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
+      - 'tools/t6_ipak_http_range_v2.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+      - '.github/workflows/t6_nuketown_iwi27_dds_bridge_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install exact runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+          python3 -m pip install --quiet pillow
+
+      - name: Materialize exact 81 of 81 retail IWI payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/staged/payloads /tmp/proof /tmp/dds
+          PYTHONPATH=tools python3 tools/t6_nuketown_shared_ipak_stage_v1.py \
+            --census manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64 \
+            --out-dir /tmp/staged/payloads \
+            --manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+
+      - name: Re-prove full IWI27 mip layout
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_iwi27_mip_layout_probe_v1.py tools/t6_iwi27_mip_layout_proof_v2.py tools/t6_iwi27_dds_bridge_v1.py
+          python3 tools/t6_iwi27_mip_layout_proof_v2.py \
+            --root /tmp/staged/payloads \
+            --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json \
+            2>&1 | tee /tmp/proof/layout.log
+
+      - name: Losslessly bridge IWI27 to DDS by exact image name
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_iwi27_dds_bridge_v1.py \
+            --staged-manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            --payload-root /tmp/staged/payloads \
+            --layout-proof /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json \
+            --out-root /tmp/dds \
+            --manifest /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
+            2>&1 | tee /tmp/proof/bridge.log
+
+      - name: Independently validate DDS container and every compressed mip
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from t6_dds_texture_stage_v1 import _decode_dds
+          from t6_nuketown_ipak_partial_texture_export_v2 import decode_bc1,decode_bc3,decode_bc5_normal
+
+          def sha(b): return hashlib.sha256(b).hexdigest()
+          m=json.load(open('/tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json',encoding='utf-8'))
+          s=m['summary']
+          assert s['sourceAliasCount']==81,s
+          assert s['sourcePayloadCount']==81,s
+          assert s['allCompressedMipBytesPreserved'] is True,s
+          assert s['unresolvedCount']==0 and s['conflictCount']==0,s
+          dds_files=sorted(Path('/tmp/dds').rglob('*.dds'))
+          assert len(dds_files)==s['outputImageNameCount'],(len(dds_files),s)
+
+          direct_pixel_checks=0
+          full_chain_checks=0
+          for row in m['outputs']:
+              dds=Path('/tmp/dds')/row['output']
+              db=dds.read_bytes()
+              assert db[:4]==b'DDS '
+              assert len(db)==row['ddsBytes'] and sha(db)==row['ddsSha256']
+              w,h,rgba,meta=_decode_dds(db,reconstruct_bc5_normal_z=('ATI2/BC5' in row['ddsFormat'] and 5 in row['semantics']))
+              assert (w,h)==(row['width'],row['height'])
+              source=Path('/tmp/staged/payloads')/(row['sourceIwiSha256']+'.iwi')
+              ib=source.read_bytes(); assert sha(ib)==row['sourceIwiSha256']
+              sizes=row['mipBytesLargestToSmallest']
+              cursor=128; dds_mips=[]
+              for n in sizes:
+                  part=db[cursor:cursor+n]; assert len(part)==n
+                  dds_mips.append(part); cursor+=n
+              assert cursor==len(db)
+              assert b''.join(reversed(dds_mips))==ib[64:]
+              for proof,part in zip(row['mips'],dds_mips):
+                  assert proof['byteIdentical'] is True
+                  assert proof['bytes']==len(part)
+                  assert proof['ddsCompressedSha256']==sha(part)==proof['sourceCompressedSha256']
+              full_chain_checks+=1
+
+              top=ib[-sizes[0]:]
+              assert top==dds_mips[0]
+              if row['iwiFormat']=='DXT1':
+                  expected=decode_bc1(top,w,h); assert rgba==expected; direct_pixel_checks+=1
+              elif row['iwiFormat']=='DXT5':
+                  expected=decode_bc3(top,w,h); assert rgba==expected; direct_pixel_checks+=1
+              elif row['iwiFormat']=='DXN' and 5 in row['semantics']:
+                  expected=decode_bc5_normal(top,w,h); assert rgba==expected; direct_pixel_checks+=1
+
+          assert full_chain_checks==s['outputImageNameCount']
+          assert direct_pixel_checks>0
+          print('GREEN LOSSLESS IWI27 -> DDS FULL MIP CHAINS',full_chain_checks)
+          print('GREEN INDEPENDENT TOP-MIP PIXEL DECODES',direct_pixel_checks)
+          print('DDS_SUMMARY',json.dumps(s,sort_keys=True))
+          PY
+
+      - name: Upload proof and reusable DDS root
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_IWI27_DDS_BRIDGE_V1
+          path: |
+            /tmp/proof
+            /tmp/dds
+            /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json
+          if-no-files-found: error
+          compression-level: 0
