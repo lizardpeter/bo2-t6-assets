@@ -1,4 +1,4 @@
-name: T6 audio assetId runtime probe v1
+name: T6 audio assetId runtime probe v2
 
 on:
   workflow_dispatch:
@@ -20,132 +20,74 @@ jobs:
       MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
     steps:
       - uses: actions/checkout@v4
-
       - name: Download and verify exact active references
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/ref /tmp/probe
-          curl --fail --location --retry 5 --retry-all-errors \
-            -o /tmp/ref/CoDMPServer_PC.exe \
-            "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
-          curl --fail --location --retry 5 --retry-all-errors \
-            -o /tmp/ref/CoDMPServer_PC.map \
-            "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
           echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
           echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
-
       - name: Install disassembler
         run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
-
       - name: Extract exact sound runtime slices
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json, re, struct
+          import hashlib,json,re,struct
           from pathlib import Path
-          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
-
-          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
-          map_text=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii',errors='strict')
-          IMAGE_BASE=0x00400000
-
-          peoff=struct.unpack_from('<I',exe,0x3c)[0]
-          coff=peoff+4
-          _,nsects,_,_,_,optsz,_=struct.unpack_from('<HHIIIHH',exe,coff)
-          opt=coff+20
-          image_base=struct.unpack_from('<I',exe,opt+28)[0]
-          assert image_base==IMAGE_BASE
-          sections=[]
-          st=opt+optsz
-          for i in range(nsects):
-              o=st+i*40
-              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
-              vs,rva,rawsz,rawoff=struct.unpack_from('<IIII',exe,o+8)
-              sections.append((name,IMAGE_BASE+rva,vs,rawsz,rawoff))
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes(); mt=Path('/tmp/ref/CoDMPServer_PC.map').read_text('ascii')
+          BASE=0x400000; pe=struct.unpack_from('<I',exe,0x3c)[0]; coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',exe,coff); opt=coff+20; assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          secs=[]; st=opt+osz
+          for i in range(ns):
+            o=st+i*40; vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8); secs.append((BASE+rva,rs,ro))
           def off(va):
-              for name,base,vs,rawsz,rawoff in sections:
-                  if base <= va < base+rawsz:
-                      return rawoff+(va-base)
-              raise ValueError(hex(va))
-          def data(va,n): return exe[off(va):off(va)+n]
-          def sha(va,n): return hashlib.sha256(data(va,n)).hexdigest()
-
-          targets={
-            'SND_AssetBankFindEntry_loaded_physical':0x008B4060,
-            'SND_AssetBankFindEntry_streamed':0x008B48A0,
-            'SND_AssetBankFindStreamed':0x008B4960,
-            'SND_AssetBankFindLoaded':0x008B4980,
-            'SD_StartAlias':0x008B94C0,
-            'SND_SetVoiceStartInfo':0x008B1A40,
-            'SD_VoiceAllocateRam':0x008BA310,
-            'SD_VoiceAllocateStream':0x008BA4D0,
-          }
-
-          # Keep every MAP line that binds or mentions one of the exact targets.
-          print('=== MAP TARGET LINES ===')
-          for name,va in targets.items():
-              hits=[ln for ln in map_text.splitlines() if name.split('_loaded_physical')[0] in ln and f'{va:08x}' in ln.lower()]
-              print(f'{name} @ 0x{va:08X}')
-              for ln in hits[:10]: print('  '+ln)
-
-          # Extract candidate absolute addresses from MAP lines and use the next code symbol
-          # only as a diagnostic boundary. We still emit broad disassembly windows below.
-          addr_name=[]
-          for ln in map_text.splitlines():
-              m=re.search(r'\b([0-9A-Fa-f]{8})\b',ln)
-              if not m: continue
-              va=int(m.group(1),16)
-              if 0x00400000 <= va < 0x02000000:
-                  addr_name.append((va,ln.strip()))
-          addr_name.sort()
-          print('=== NEXT MAP ADDRESSES ===')
-          for name,va in targets.items():
-              nxt=next(((a,l) for a,l in addr_name if a>va),None)
-              print(name, f'0x{va:08X}', 'NEXT', (f'0x{nxt[0]:08X} {nxt[1]}' if nxt else 'NONE'))
-
+            for b,rs,ro in secs:
+              if b<=va<b+rs:return ro+va-b
+            raise ValueError(hex(va))
+          def raw(a,b):return exe[off(a):off(a)+(b-a)]
           md=Cs(CS_ARCH_X86,CS_MODE_32)
-          md.detail=False
+          addrs=[0x8B4060,0x8B4100,0x8B41B0,0x8B41C0,0x8B41D0,0x8B41E0,0x8B48A0,0x8B4960,0x8B4980,0x8B94C0,0x8B1A40,0x8BA310,0x8BA4D0,0x8BA610,0x8BA620]
+          print('=== EXACT MAP ADDRESS LINES ===')
+          for a in addrs:
+            tok=f'{a:08x}'
+            hits=[ln for ln in mt.splitlines() if re.search(rf'(?i)(?<![0-9a-f]){tok}(?![0-9a-f])',ln)]
+            print(f'-- 0x{a:08X} --'); [print(x) for x in hits[:12]]
           ranges={
-            'asset_loaded_physical':(0x008B4060,0x008B48A0),
-            'asset_streamed_find':(0x008B48A0,0x008B49E0),
-            'sd_start_alias':(0x008B94C0,0x008B9B00),
-            'sd_voice_alloc':(0x008BA300,0x008BA680),
+            'find_entry':(0x8B4060,0x8B4100),
+            'entry_helpers':(0x8B4100,0x8B4230),
+            'find_streamed_generic':(0x8B48A0,0x8B4960),
+            'find_streamed_wrapper':(0x8B4960,0x8B4980),
+            'find_loaded':(0x8B4980,0x8B4B00),
+            'sd_start_alias':(0x8B94C0,0x8B9801),
+            'voice_allocate_ram':(0x8BA310,0x8BA4D0),
+            'voice_allocate_stream':(0x8BA4D0,0x8BA610),
+            'voice_post_alloc':(0x8BA610,0x8BA680),
           }
-          out={}
-          for key,(start,end) in ranges.items():
-              raw=data(start,end-start)
-              lines=[]
-              for ins in md.disasm(raw,start):
-                  lines.append(f'{ins.address:08X}: {ins.bytes.hex():<24} {ins.mnemonic:<8} {ins.op_str}')
-              Path(f'/tmp/probe/{key}.asm').write_text('\n'.join(lines)+'\n')
-              out[key]={'start':f'0x{start:08X}','endExclusive':f'0x{end:08X}','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'instructions':len(lines)}
-
-          Path('/tmp/probe/ranges.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
-          print('=== RANGE IDENTITIES ===')
-          print(json.dumps(out,indent=2,sort_keys=True))
-
-          # Print only the semantically relevant lines plus nearby context into the job log.
-          needles=(
-            '8b94c0','8b4960','8b4980','8b48a0','8b4060','8ba310','8ba4d0','8b1a40',
-            '0000bb80','ffffffff'
-          )
-          for key in ('asset_loaded_physical','asset_streamed_find','sd_start_alias','sd_voice_alloc'):
-              lines=Path(f'/tmp/probe/{key}.asm').read_text().splitlines()
-              hit=set()
-              for i,line in enumerate(lines):
-                  low=line.lower()
-                  if any(n in low for n in needles):
-                      for j in range(max(0,i-6),min(len(lines),i+7)): hit.add(j)
-              print(f'=== RELEVANT {key} ===')
-              for i in sorted(hit): print(lines[i])
+          meta={}
+          for k,(a,b) in ranges.items():
+            rb=raw(a,b); lines=[f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}' for i in md.disasm(rb,a)]
+            Path('/tmp/probe',k+'.asm').write_text('\n'.join(lines)+'\n')
+            meta[k]={'start':f'0x{a:08X}','endExclusive':f'0x{b:08X}','bytes':len(rb),'sha256':hashlib.sha256(rb).hexdigest(),'instructions':len(lines)}
+          Path('/tmp/probe/ranges.json').write_text(json.dumps(meta,indent=2,sort_keys=True)+'\n')
+          print('=== RANGE IDENTITIES ==='); print(json.dumps(meta,indent=2,sort_keys=True))
+          for k in ranges:
+            print('===',k,'===')
+            ls=Path('/tmp/probe',k+'.asm').read_text().splitlines()
+            if k in ('find_loaded','voice_allocate_ram','voice_allocate_stream','voice_post_alloc'):
+              [print(x) for x in ls]
+            else:
+              for x in ls:
+                if any(n in x.lower() for n in ('call','0xbb80','0xffffffff','[ebp + 8]','[eax + 0x10]','[edx + 8]')): print(x)
           PY
-
       - name: Upload exact probe
         uses: actions/upload-artifact@v4
         with:
-          name: T6_AUDIO_ASSETID_RUNTIME_PROBE_V1
+          name: T6_AUDIO_ASSETID_RUNTIME_PROBE_V2
           path: /tmp/probe
           if-no-files-found: error
           compression-level: 9
