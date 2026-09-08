@@ -128,7 +128,7 @@ def prove(exe: bytes, map_text: str) -> dict:
     require(call_target(at, 0x008B9142) == 0x008BA610, "PreUpdate no longer checks SD_VoiceHasData")
     require(call_target(at, 0x008B91D6) == 0x008B8A50, "PreUpdate no longer builds voice param")
     require(call_target(at, 0x008B91DD) == 0x008BA620, "PreUpdate no longer starts driver voice")
-    require(at(0x008B9214, 14) == bytes.fromhex("81c7c00100004681ff00770000"), "PreUpdate loop stride/span changed")
+    require(at(0x008B9214, 13) == bytes.fromhex("81c7c00100004681ff00770000"), "PreUpdate loop stride/span changed")
     require(call_target(at, 0x008B9227) == 0x008B9B70, "PreUpdate mix-param allocation changed")
     require(call_target(at, 0x008B922D) == 0x008B8450, "PreUpdate mix-param population changed")
     require(call_target(at, 0x008B9233) == 0x008B9C80, "PreUpdate mix-param publication changed")
