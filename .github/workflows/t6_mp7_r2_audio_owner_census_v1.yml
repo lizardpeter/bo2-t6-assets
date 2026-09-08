@@ -54,22 +54,33 @@ jobs:
           print('selected',len(selected),selected)
           PY
 
-      - name: Download current R2 candidate FastFiles
+      - name: Download reachable current R2 candidate FastFiles
         shell: bash
         run: |
           set -euo pipefail
           base=https://r2.houseofkublai.com/bo2/zone/all
           : > /tmp/proof/current_fastfiles.tsv
+          : > /tmp/proof/reachable_zones.txt
+          : > /tmp/proof/unavailable_zones.txt
           while IFS= read -r zone; do
             test -n "$zone"
             ff="/tmp/work/$zone.ff"
-            curl -fL --retry 4 "$base/$zone.ff" -o "$ff"
+            set +e
+            curl -fL --retry 2 "$base/$zone.ff" -o "$ff"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              rm -f "$ff"
+              echo "$zone" | tee -a /tmp/proof/unavailable_zones.txt
+              continue
+            fi
             bytes=$(stat -c %s "$ff")
             sha=$(sha256sum "$ff" | awk '{print $1}')
             printf '%s\t%s\t%s\n' "$zone" "$bytes" "$sha" | tee -a /tmp/proof/current_fastfiles.tsv
+            echo "$zone" >> /tmp/proof/reachable_zones.txt
           done < /tmp/proof/selected_zones.txt
 
-      - name: Expand current R2 candidate FastFiles
+      - name: Expand reachable current R2 candidate FastFiles
         shell: bash
         run: |
           set -euo pipefail
@@ -81,7 +92,7 @@ jobs:
             bytes=$(stat -c %s "/tmp/expanded/$zone.bin")
             sha=$(sha256sum "/tmp/expanded/$zone.bin" | awk '{print $1}')
             printf '%s\t%s\t%s\n' "$zone" "$bytes" "$sha" | tee -a /tmp/proof/current_expanded.tsv
-          done < /tmp/proof/selected_zones.txt
+          done < /tmp/proof/reachable_zones.txt
 
       - name: Structurally scan exact MP7 target aliases
         shell: bash
@@ -92,17 +103,24 @@ jobs:
           from t6_sndalias_target_extract_v1 import build
 
           shard=int(os.environ['SHARD']); count=int(os.environ['SHARD_COUNT'])
-          zones=[x.strip() for x in pathlib.Path('/tmp/proof/selected_zones.txt').read_text().splitlines() if x.strip()]
+          selected=[x.strip() for x in pathlib.Path('/tmp/proof/selected_zones.txt').read_text().splitlines() if x.strip()]
+          reachable=[x.strip() for x in pathlib.Path('/tmp/proof/reachable_zones.txt').read_text().splitlines() if x.strip()]
+          unavailable=[x.strip() for x in pathlib.Path('/tmp/proof/unavailable_zones.txt').read_text().splitlines() if x.strip()]
+          if set(reachable) & set(unavailable):
+              raise SystemExit('reachable/unavailable overlap')
+          if set(reachable)|set(unavailable) != set(selected):
+              raise SystemExit('candidate disposition is incomplete')
+
           td=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json',encoding='utf-8'))
           assert td['format']=='t6-mp7-r2-direct-audio-targets-v1'
           targets=[x['aliasName'] for x in td['targets']]
           assert len(targets)==18 and len(set(targets))==18
-          sources=[(z,pathlib.Path('/tmp/expanded')/f'{z}.bin') for z in zones]
+          sources=[(z,pathlib.Path('/tmp/expanded')/f'{z}.bin') for z in reachable]
           result=build(sources,targets,[],True)
           assert result['format']=='t6-sndalias-target-extract-v2'
 
           current=[]
-          for z in zones:
+          for z in reachable:
               ff=pathlib.Path('/tmp/work')/f'{z}.ff'; ex=pathlib.Path('/tmp/expanded')/f'{z}.bin'
               current.append({
                   'zoneName':z,
@@ -112,19 +130,22 @@ jobs:
                   'expandedSha256':hashlib.sha256(ex.read_bytes()).hexdigest(),
               })
           result.update({
-              'format':'t6-mp7-r2-audio-owner-census-shard-v1',
+              'format':'t6-mp7-r2-audio-owner-census-shard-v2',
               'shard':shard,'shardCount':count,
               'candidateZoneCount':63,
-              'selectedCandidateZoneNames':zones,
+              'selectedCandidateZoneNames':selected,
+              'reachableCurrentR2ZoneNames':reachable,
+              'unavailableCurrentR2ZoneNames':unavailable,
               'currentR2Files':current,
               'authority':{
                   'candidateNames':'historical locator only',
                   'allBytesHashesExpansionAndAliasOccurrences':'fresh current r2.houseofkublai.com files',
               },
-              'proofBoundary':'This shard uses historical evidence only to nominate FastFile filenames. Every retained file identity, expanded stream, bank section, SndAlias occurrence, assetId, and semantic digest is recomputed from current R2 bytes. Printable *.all strings nominate bank sections only; structural SndBank/SndAliasList validation is required before admission. No runtime winner or playback-selection rule is inferred.',
+              'proofBoundary':'This shard uses historical evidence only to nominate FastFile filenames. A historical filename that is absent from the current R2 mirror is recorded as unavailable and contributes no evidence. Every retained file identity, expanded stream, bank section, SndAlias occurrence, assetId, and semantic digest is recomputed from current R2 bytes. Printable *.all strings nominate bank sections only; structural SndBank/SndAliasList validation is required before admission. No runtime winner or playback-selection rule is inferred.',
           })
           out=pathlib.Path('/tmp/proof')/f'T6_MP7_R2_AUDIO_OWNER_CENSUS_SHARD_{shard}_V1.json'
           out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('reachable',len(reachable),'unavailable',len(unavailable),unavailable)
           print(json.dumps(result['summary'],indent=2,sort_keys=True))
           for a in result['aliases']:
               if a['occurrenceCount']:
@@ -151,7 +172,7 @@ jobs:
           path: /tmp/shards
           merge-multiple: true
 
-      - name: Require complete current-R2 candidate coverage and aggregate owners
+      - name: Require complete candidate disposition and aggregate current-R2 owners
         shell: bash
         run: |
           set -euo pipefail
@@ -164,15 +185,23 @@ jobs:
           docs=[json.load(open(p,encoding='utf-8')) for p in files]
           if sorted(d['shard'] for d in docs)!=list(range(8)):
               raise SystemExit('shard index coverage is not exact 0..7')
-          if any(d.get('format')!='t6-mp7-r2-audio-owner-census-shard-v1' for d in docs):
+          if any(d.get('format')!='t6-mp7-r2-audio-owner-census-shard-v2' for d in docs):
               raise SystemExit('unexpected shard format')
 
           locator=json.load(open('manifests/weapons/T6_R2_SNDALIAS_OWNER_CANDIDATE_ZONES_V1.json',encoding='utf-8'))
           expected=locator['candidateZoneNames']
+          selected=[z for d in docs for z in d['selectedCandidateZoneNames']]
+          if len(selected)!=63 or len(set(selected))!=63 or set(selected)!=set(expected):
+              raise SystemExit('candidate filename shard coverage is incomplete')
+          reachable=[z for d in docs for z in d['reachableCurrentR2ZoneNames']]
+          unavailable=[z for d in docs for z in d['unavailableCurrentR2ZoneNames']]
+          if set(reachable) & set(unavailable):
+              raise SystemExit('reachable/unavailable overlap across shards')
+          if set(reachable)|set(unavailable) != set(expected):
+              raise SystemExit('candidate disposition is incomplete across shards')
           current=[r for d in docs for r in d['currentR2Files']]
-          names=[r['zoneName'] for r in current]
-          if len(current)!=63 or len(set(names))!=63 or set(names)!=set(expected):
-              raise SystemExit('current R2 file coverage does not exactly match 63 candidate filenames')
+          if len(current)!=len(reachable) or {r['zoneName'] for r in current}!=set(reachable):
+              raise SystemExit('current R2 file manifest does not match reachable candidates')
 
           td=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_TARGETS_V1.json',encoding='utf-8'))
           targets=[x['aliasName'] for x in td['targets']]
@@ -198,13 +227,14 @@ jobs:
                   'occurrences':rows,
               })
           if missing:
-              raise SystemExit('missing target aliases after complete current-R2 candidate scan: '+repr(missing))
+              raise SystemExit('missing target aliases after bounded current-R2 scan: '+repr(missing))
 
           result={
-              'format':'t6-mp7-r2-audio-owner-census-v1',
+              'format':'t6-mp7-r2-audio-owner-census-v2',
               'summary':{
                   'candidateZoneCount':63,
-                  'currentR2FastFileCount':63,
+                  'reachableCurrentR2FastFileCount':len(reachable),
+                  'unavailableHistoricalLocatorCount':len(unavailable),
                   'targetAliasCount':len(targets),
                   'foundTargetAliasCount':len(targets)-len(missing),
                   'missingTargetAliasCount':len(missing),
@@ -212,13 +242,15 @@ jobs:
                   'distinctOwnerZoneCount':len({z for a in merged for z in a['ownerZones']}),
               },
               'candidateLocator':locator['candidateSource'],
+              'unavailableHistoricalLocators':sorted(unavailable),
               'currentR2Files':sorted(current,key=lambda r:r['zoneName']),
               'aliases':merged,
-              'proofBoundary':'The historical census contributes only the 63 candidate filenames. All 63 files are freshly downloaded from current r2.houseofkublai.com and independently SHA-256 hashed and expanded. Alias owners, bank names, variants, assetIds, and semantic digests come only from structurally validated sections in those current R2 bytes. This closes ownership only within the bounded candidate universe; it does not infer runtime variant selection, duplicate winner precedence, or physical SABS/SABL payload selection.',
+              'proofBoundary':'The historical census contributes only 63 candidate filenames. Each reachable candidate is freshly downloaded from current r2.houseofkublai.com and independently SHA-256 hashed and expanded; absent historical filenames are recorded and contribute no evidence. Alias owners, bank names, variants, assetIds, and semantic digests come only from structurally validated sections in reachable current R2 bytes. This proves target presence and ownership within this bounded locator universe; it does not claim a complete listing of every object currently stored on R2, runtime variant selection, duplicate winner precedence, or physical SABS/SABL payload selection.',
           }
           out=pathlib.Path('/tmp/proof/T6_MP7_R2_AUDIO_OWNER_CENSUS_V1.json')
           out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
           print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          print('unavailable',sorted(unavailable))
           for a in result['aliases']:
               print(a['aliasIdHex'],a['aliasName'],'owners',a['ownerZones'],'assetIds',a['uniqueNonzeroAssetIds'])
           PY
