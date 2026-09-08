@@ -1,0 +1,206 @@
+name: T6 MP7 R2 authoritative package census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_authoritative_package_census_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Verify pinned OAT cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game/zone/all /tmp/oat_out /tmp/package
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          grep -qx "compat_patch_sha256=$PATCH_SHA" /tmp/oat-unlinker-cache/source_identity.txt
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Download authoritative current retail MP FastFiles from R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://r2.houseofkublai.com/bo2/zone/all
+          for zone in common_mp common_patch_mp patch_mp; do
+            curl -fL --retry 4 "$base/$zone.ff" -o "/tmp/game/zone/all/$zone.ff"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/*.ff | sort | tee /tmp/proof/r2_fastfile_sha256.txt
+
+      - name: Native OAT dump weapon/attachment/attachmentunique/camo populations
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for zone in common_mp common_patch_mp patch_mp; do
+            for typ in weapon attachment attachmentunique camo; do
+              out="/tmp/oat_out/${zone}/${typ}"
+              mkdir -p "$out"
+              set +e
+              "$BIN" --no-color --verbose --include-assets "$typ" --output-folder "$out" "/tmp/game/zone/all/$zone.ff" \
+                2>&1 | tee "/tmp/proof/${zone}_${typ}.log"
+              rc=${PIPESTATUS[0]}
+              set -e
+              printf '%s\t%s\t%s\n' "$zone" "$typ" "$rc" | tee -a /tmp/proof/native_return_codes.tsv
+              test "$rc" -eq 0
+              if grep -q '^ERROR:' "/tmp/proof/${zone}_${typ}.log"; then
+                echo "native OAT logged an error for $zone/$typ" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Build exact MP7 package census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,shutil,re
+
+          root=Path('/tmp/oat_out')
+          proof=Path('/tmp/proof')
+          package=Path('/tmp/package')
+          package.mkdir(parents=True,exist_ok=True)
+          zones=('common_mp','common_patch_mp','patch_mp')
+          types=('weapon','attachment','attachmentunique','camo')
+
+          def row(zone,typ,p):
+              b=p.read_bytes()
+              return {
+                  'zone':zone,'assetType':typ,
+                  'path':p.relative_to(root/zone/typ).as_posix(),
+                  'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),
+              }
+
+          inventory=[]
+          for zone in zones:
+              for typ in types:
+                  zr=root/zone/typ
+                  files=sorted(p for p in zr.rglob('*') if p.is_file())
+                  for p in files: inventory.append(row(zone,typ,p))
+
+          # Locate the exact physical base weapon path, not merely files that mention mp7_mp.
+          weapon_copies=[]
+          for zone in zones:
+              zr=root/zone/'weapon'
+              for rel in ('weapons/mp7_mp','weapons/mp7_mp.txt','weapons/mp7_mp.json'):
+                  p=zr/rel
+                  if p.is_file(): weapon_copies.append(row(zone,'weapon',p)|{'sourcePath':str(p)})
+          if not weapon_copies:
+              # OAT currently emits authored weapon files without an extension. Fail rather than fall back to literal search.
+              raise SystemExit('no exact native OAT weapons/mp7_mp physical file found')
+
+          # Find exact MP7 attachment-unique assets using BOTH path and file content as a recall census.
+          unique=[]
+          for zone in zones:
+              zr=root/zone/'attachmentunique'
+              for p in sorted(x for x in zr.rglob('*') if x.is_file()):
+                  rel=p.relative_to(zr).as_posix(); b=p.read_bytes(); low=rel.lower()
+                  if 'mp7' in low or b'mp7' in b.lower():
+                      unique.append(row(zone,'attachmentunique',p)|{'sourcePath':str(p)})
+
+          # Preserve all generic attachment assets because applicability is a retail graph property, not a filename guess.
+          generic=[]
+          for zone in zones:
+              zr=root/zone/'attachment'
+              for p in sorted(x for x in zr.rglob('*') if x.is_file()):
+                  generic.append(row(zone,'attachment',p)|{'sourcePath':str(p)})
+
+          # Exact weapon-specific camo carrier.
+          camo=[]
+          for zone in zones:
+              zr=root/zone/'camo'
+              for p in sorted(x for x in zr.rglob('*') if x.is_file()):
+                  rel=p.relative_to(zr).as_posix().lower()
+                  if rel in ('camo/camo_mp7.json','camo_mp7.json') or rel.endswith('/camo_mp7.json'):
+                      camo.append(row(zone,'camo',p)|{'sourcePath':str(p)})
+          if not camo:
+              raise SystemExit('no exact native camo_mp7 carrier found')
+
+          # Copy exact relevant physical records into the artifact under provenance-preserving directories.
+          selected=weapon_copies+unique+generic+camo
+          for i,r in enumerate(selected):
+              src=Path(r.pop('sourcePath'))
+              dst=package/r['zone']/r['assetType']/r['path']
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(src,dst)
+              if hashlib.sha256(dst.read_bytes()).hexdigest()!=r['sha256']:
+                  raise SystemExit('artifact copy hash mismatch')
+
+          # Textual base-weapon dependency tokens are preserved as diagnostics only.
+          token_rows=[]
+          for r in weapon_copies:
+              p=package/r['zone']/r['assetType']/r['path']
+              b=p.read_bytes()
+              try: text=b.decode('utf-8')
+              except UnicodeDecodeError: text=''
+              tokens=sorted(set(re.findall(r'[A-Za-z0-9_./~-]{3,}',text)))
+              token_rows.append({'zone':r['zone'],'tokenCount':len(tokens),'tokens':tokens})
+
+          doc={
+              'format':'t6-mp7-r2-authoritative-package-census-v1',
+              'authority':{
+                  'retailValuesAndAssetDependencies':'SHA-pinned FastFiles downloaded from r2.houseofkublai.com are authoritative',
+                  'legacyServerPdb':'guidance_only_for_candidate_runtime_semantics',
+              },
+              'sourceFastFiles':{
+                  'common_mp.ff':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+                  'common_patch_mp.ff':'95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9',
+                  'patch_mp.ff':'459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e',
+              },
+              'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'summary':{
+                  'physicalWeaponCopies':len(weapon_copies),
+                  'mp7AttachmentUniqueCandidateCopies':len(unique),
+                  'genericAttachmentPhysicalCopies':len(generic),
+                  'mp7CamoCarrierPhysicalCopies':len(camo),
+                  'selectedPhysicalRecordCount':len(selected),
+              },
+              'weaponCopies':weapon_copies,
+              'attachmentUniqueCandidates':unique,
+              'genericAttachmentCopies':generic,
+              'camoCarrierCopies':camo,
+              'weaponTextTokens':token_rows,
+              'proofBoundary':'Physical retail records and their values come only from exact current R2 FastFiles. Attachment applicability is not inferred from filenames; all generic attachment copies are retained for later exact compatibility resolution. Legacy server/PDB semantics are not promoted in this census.',
+          }
+          (proof/'T6_MP7_R2_AUTHORITATIVE_PACKAGE_CENSUS_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(doc['summary'],indent=2,sort_keys=True))
+          print('WEAPON COPIES',[(r['zone'],r['path'],r['sha256']) for r in weapon_copies])
+          print('MP7 UNIQUE',[(r['zone'],r['path']) for r in unique])
+          print('CAMO',[(r['zone'],r['path'],r['sha256']) for r in camo])
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_AUTHORITATIVE_PACKAGE_CENSUS_V1.json | tee /tmp/proof/package_census_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_AUTHORITATIVE_PACKAGE_CENSUS_V1
+          path: |
+            /tmp/proof
+            /tmp/package
+          if-no-files-found: error
+          compression-level: 9
