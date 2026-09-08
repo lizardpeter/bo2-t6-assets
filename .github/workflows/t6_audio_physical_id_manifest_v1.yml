@@ -1,0 +1,203 @@
+name: T6 physical audio ID manifest v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_audio_bank_id_manifest_v1.py'
+      - 'tools/test_t6_audio_bank_id_manifest_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - '.github/workflows/t6_audio_physical_id_manifest_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test exact T6 bank-table parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_audio_bank_id_manifest_v1.py
+
+  bank-shard:
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract, CRC-verify, SHA-pin, and parse bank shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_audio_bank_id_manifest_v1 import parse_bank
+
+          shard=int(os.environ['SHARD']); shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-audio-id-manifest/{shard}',timeout=180,retries=7)
+          entries,meta=rz.central_directory()
+          banks=sorted(
+              [e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))],
+              key=lambda e:e['name'].lower(),
+          )
+          if len(banks)!=116:
+              raise SystemExit(f'archive bank population changed: {len(banks)} != 116')
+          selected=[(i,e) for i,e in enumerate(banks) if i % shard_count==shard]
+          rows=[]; id_counts=collections.Counter(); format_counts=collections.Counter(); entry_total=0
+          for local,(global_index,e) in enumerate(selected):
+              raw=rz.extract(e,verify_crc=True)
+              d=parse_bank(raw,e['name'])
+              if d['summary']['invalidDataEntryCount']:
+                  raise SystemExit(f"{e['name']}: invalid payload ranges")
+              if d['bank']['bytes']!=int(e['uncompressedSize']):
+                  raise SystemExit(f"{e['name']}: ZIP/parser size disagreement")
+              for item in d['entries']:
+                  ident=item['identifierHex']; id_counts[ident]+=1
+                  format_counts[item['formatName']]+=1
+                  item['bankGlobalIndex']=global_index
+                  item['bankPath']=e['name']
+              entry_total+=d['summary']['entryCount']
+              rows.append({
+                  'globalIndex':global_index,
+                  'zipPath':e['name'],
+                  'zipCrc32':f"{int(e['crc32']):08x}",
+                  'zipMethod':int(e['method']),
+                  'zipCompressedBytes':int(e['compressedSize']),
+                  'manifest':d,
+              })
+              print(
+                  global_index,
+                  f"entries={d['summary']['entryCount']}",
+                  d['bank']['sha256'],
+                  e['name'],
+                  flush=True,
+              )
+              del raw,d
+
+          result={
+              'format':'t6-audio-physical-id-manifest-shard-v1',
+              'shard':shard,
+              'shardCount':shard_count,
+              'remoteZip':meta,
+              'allBankCount':116,
+              'banks':rows,
+              'identifierOccurrenceCounts':dict(sorted(id_counts.items())),
+              'summary':{
+                  'selectedBankCount':len(rows),
+                  'entryCount':entry_total,
+                  'uniqueIdentifierCount':len(id_counts),
+                  'formatCounts':dict(sorted(format_counts.items())),
+                  'invalidDataEntryCount':0,
+                  'compressedBytesTransferred':sum(r['zipCompressedBytes'] for r in rows),
+              },
+              'proofBoundary':'Exact physical T6 audio-bank shard. Every ZIP entry is CRC-verified, the resulting SABS/SABL bytes are SHA-256 pinned, and every 72-byte bank header, dependency table, 20-byte audio entry, and 16-byte checksum record is structurally parsed. No external filename mapping or SndAlias linkage is applied.',
+          }
+          pathlib.Path(f'/tmp/proof/T6_AUDIO_PHYSICAL_ID_MANIFEST_SHARD_{shard}_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+      - name: Upload bank shard manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_PHYSICAL_ID_MANIFEST_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof/T6_AUDIO_PHYSICAL_ID_MANIFEST_SHARD_${{ matrix.shard }}_V1.json
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: bank-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_AUDIO_PHYSICAL_ID_MANIFEST_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+      - name: Aggregate exact 116-bank physical ID universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import collections,glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_AUDIO_PHYSICAL_ID_MANIFEST_SHARD_*_V1.json'))
+          if len(files)!=8: raise SystemExit(f'expected 8 shard manifests, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          banks=[]; ids=collections.Counter(); formats=collections.Counter(); total=0; invalid=0
+          for d in docs:
+              if d.get('format')!='t6-audio-physical-id-manifest-shard-v1': raise SystemExit('unexpected shard format')
+              if d.get('allBankCount')!=116: raise SystemExit('bank population disagreement')
+              banks.extend(d['banks'])
+              for k,v in d['identifierOccurrenceCounts'].items(): ids[k]+=int(v)
+              for k,v in d['summary']['formatCounts'].items(): formats[k]+=int(v)
+              total+=int(d['summary']['entryCount']); invalid+=int(d['summary']['invalidDataEntryCount'])
+          banks.sort(key=lambda r:r['globalIndex'])
+          if len(banks)!=116 or [r['globalIndex'] for r in banks]!=list(range(116)):
+              raise SystemExit('bank shards do not provide exact 0..115 coverage')
+          if invalid: raise SystemExit(f'invalid physical audio entries: {invalid}')
+          # Independent regeneration should reproduce the retained retail catalog.
+          if total!=25446:
+              raise SystemExit(f'physical entry population changed: {total} != 25446')
+          if dict(formats)!={'FLAC':20700,'PCMS16':4746}:
+              raise SystemExit(f'physical format population changed: {dict(formats)}')
+
+          compact_entries=[]
+          for bank in banks:
+              for e in bank['manifest']['entries']:
+                  compact_entries.append(e)
+          result={
+              'format':'t6-audio-physical-id-manifest-v1',
+              'remoteZip':docs[0]['remoteZip'],
+              'summary':{
+                  'bankCount':116,
+                  'entryCount':total,
+                  'uniqueIdentifierCount':len(ids),
+                  'identifierDuplicateOccurrenceCount':total-len(ids),
+                  'formatCounts':dict(sorted(formats.items())),
+                  'invalidDataEntryCount':0,
+              },
+              'identifierOccurrenceCounts':dict(sorted(ids.items())),
+              'banks':[
+                  {
+                      'globalIndex':b['globalIndex'],
+                      'zipPath':b['zipPath'],
+                      'zipCrc32':b['zipCrc32'],
+                      'zipMethod':b['zipMethod'],
+                      'zipCompressedBytes':b['zipCompressedBytes'],
+                      'bank':b['manifest']['bank'],
+                      'summary':b['manifest']['summary'],
+                  }
+                  for b in banks
+              ],
+              'entries':compact_entries,
+              'shardManifestSha256':[
+                  {'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()}
+                  for p in files
+              ],
+              'proofBoundary':'Complete physical ID universe for all 116 SABS/SABL entries in the referenced public retail archive. Every bank is ZIP-CRC verified and SHA-256 pinned before exact T6 table parsing. The 25,446-entry and format populations independently reproduce the retained local retail catalog. This manifest does not infer alias linkage or runtime selection.',
+          }
+          pathlib.Path('/tmp/proof/T6_AUDIO_PHYSICAL_ID_MANIFEST_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+      - name: Upload complete physical audio ID manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_PHYSICAL_ID_MANIFEST_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
