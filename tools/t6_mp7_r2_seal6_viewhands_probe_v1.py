@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Probe retail SEAL6 first-person viewhands against the proven T6 hands carrier.
 
-The candidate names are locators only. Promotion comes from exact raw inline-name
-XModel records, resolved retail bone names/topology, and strict normalized mesh
-payloads. Cross-FastFile ScriptString numeric ids are retained but never compared
-as global identities because each expanded XFile has its own serialized string
-table.
+Candidate names are locators only. Map-owned candidates are resolved through the
+source-derived top-level XAsset catalog and the proven StringTable logical map;
+packed-name identity therefore does not imply ownership. Promotion still
+requires an exact serialized XModel record, resolved retail bone names/topology,
+and a strict normalized mesh payload. Cross-FastFile ScriptString numeric ids
+are retained but never compared as global identities because each expanded
+XFile has its own serialized string table.
 """
 from __future__ import annotations
 
@@ -15,9 +17,11 @@ import json
 import struct
 from pathlib import Path
 
+from t6_clipmap_normalize_v5 import ASSET_TYPE_XMODEL, parse_top_level_xasset_table
+from t6_clipmap_normalize_v6 import walk_map_prefix_stringtable
 from t6_xmodel_serialized_walker import XModelWalker, XMODEL_SIZE
-from t6_xmodel_skeleton_normalize_v2 import normalize_skeleton
-from t6_xmodel_mesh_normalize_v1 import Normalizer
+from t6_xmodel_skeleton_normalize_v2 import build_xmodel_catalog, normalize_skeleton
+from t6_xmodel_mesh_normalize_v2 import Normalizer
 
 FOLLOWING = 0xFFFFFFFF
 COMMON_BYTES = 206_493_911
@@ -58,6 +62,25 @@ def find_inline_xmodel(data: bytes, name: str) -> dict:
             matches.append(w)
     require(len(matches)==1, f"{name}: expected one exact raw inline-name XModel, got {len(matches)} from {len(positions)} literal occurrences")
     return matches[0]
+
+def build_map_catalog(data: bytes) -> tuple[dict[str, dict], dict[int, str], dict]:
+    table=parse_top_level_xasset_table(data)
+    xindices=[i for i,e in enumerate(table["entries"]) if e["type"] == ASSET_TYPE_XMODEL]
+    require(bool(xindices), "mp_carrier: no top-level XModel assets")
+    catalog=build_xmodel_catalog(data,max(xindices))
+    require(len(catalog)==len(xindices), f"mp_carrier: XModel catalog cardinality {len(catalog)} != {len(xindices)}")
+    prefix=walk_map_prefix_stringtable(data,table)
+    by_name={}
+    for idx in xindices:
+        rec=dict(catalog[idx])
+        ent=table["entries"][idx]
+        require(ent["headerPointerRaw"] == FOLLOWING, f"mp_carrier XModel asset {idx}: top-level header is not FOLLOWING")
+        rec["xAssetEntryRawStart"]=ent["rawStart"]
+        rec["xAssetHeaderPointerRaw"]=ent["headerPointerRaw"]
+        name=rec["name"]
+        require(name not in by_name, f"mp_carrier: duplicate resolved XModel name {name}")
+        by_name[name]=rec
+    return by_name,prefix["logicalToText"],prefix
 
 def bone_rows(skel: dict) -> list[dict]:
     return skel["skeleton"]["bones"]
@@ -113,13 +136,25 @@ def mesh_summary(mesh: dict) -> dict:
         "normalizedMeshCanonicalSha256":hashlib.sha256(json.dumps(mesh,sort_keys=True,separators=(",",":")).encode()).hexdigest(),
     }
 
-def model_record(data: bytes, name: str) -> tuple[dict,dict,dict]:
+def inline_model_record(data: bytes, name: str) -> tuple[dict,dict,dict]:
     walk=find_inline_xmodel(data,name)
     require(not walk["blockers"], f"{name}: serialized XModel blockers {walk['blockers']}")
     skel=normalize_skeleton(data,walk["assetFixedStart"],identity_name=name)
     require(skel["validation"]["allBoneNamesResolved"], f"{name}: unresolved bones")
     require(skel["validation"]["hierarchyValid"], f"{name}: invalid hierarchy")
     mesh=Normalizer(data,walk["assetFixedStart"]).normalize()
+    require(mesh["identity"]["name"] == name, f"{name}: mesh identity disagreement")
+    return walk,skel,mesh
+
+def catalog_model_record(data: bytes, name: str, rec: dict, logical_to_text: dict[int,str]) -> tuple[dict,dict,dict]:
+    start=int(rec["fixedSourceStart"]); idx=int(rec["assetIndex"])
+    walk=XModelWalker(data,start).walk_xmodel()
+    require(not walk["blockers"], f"{name}: serialized XModel blockers {walk['blockers']}")
+    skel=normalize_skeleton(data,start,xasset_index=idx,identity_name=name)
+    require(skel["validation"]["allBoneNamesResolved"], f"{name}: unresolved bones")
+    require(skel["validation"]["hierarchyValid"], f"{name}: invalid hierarchy")
+    mesh=Normalizer(data,start,logical_to_text=logical_to_text).normalize()
+    require(mesh["identity"]["name"] == name, f"{name}: packed-name mesh identity disagreement: {mesh['identity']['name']}")
     return walk,skel,mesh
 
 def build(common_path: Path, map_path: Path) -> dict:
@@ -127,24 +162,32 @@ def build(common_path: Path, map_path: Path) -> dict:
     require(len(common)==COMMON_BYTES, f"common expanded bytes {len(common)} != {COMMON_BYTES}")
     require(sha256(common)==COMMON_SHA256, "common expanded SHA mismatch")
 
-    cwalk,cskel,cmesh=model_record(common,CARRIER)
+    cwalk,cskel,cmesh=inline_model_record(common,CARRIER)
+    map_by_name,logical_to_text,prefix=build_map_catalog(mp)
     candidates=[]
     for name in CANDIDATES:
-        walk,skel,mesh=model_record(mp,name)
+        require(name in map_by_name, f"mp_carrier: exact XModel {name} absent from source-derived catalog")
+        rec=map_by_name[name]
+        walk,skel,mesh=catalog_model_record(mp,name,rec,logical_to_text)
         ms=mesh_summary(mesh)
         require(ms["meaningfulVisibleGeometry"], f"{name}: only {ms['vertexCount']} verts/{ms['triangleCount']} tris")
         require(ms["allVerticesWeighted"], f"{name}: {ms['unweightedVertexCount']} unweighted vertices")
         comp=compare_skeletons(cskel,skel)
         candidates.append({
             "name":name,
+            "xassetIndex":int(rec["assetIndex"]),
+            "xAssetEntryRawStart":int(rec["xAssetEntryRawStart"]),
             "xmodelFixedStart":walk["assetFixedStart"],
             "xmodelSerializedEnd":walk["assetSerializedEnd"],
             "xmodelSerializedBytes":walk["assetSerializedBytes"],
             "xmodelSerializedSha256":walk["assetSerializedSha256"],
+            "nameSource":rec["nameSource"],
+            "namePointer":rec["namePointer"],
             "numBones":walk["xmodel"]["numBones"],
             "numRootBones":walk["xmodel"]["numRootBones"],
             "numSurfs":walk["xmodel"]["numSurfs"],
             "numLods":walk["xmodel"]["numLods"],
+            "skeletonSource":skel["skeletonSource"],
             "localScriptStringIds":[int(b["scriptStringId"]) for b in bone_rows(skel)],
             "boneNames":[b["name"] for b in bone_rows(skel)],
             "mesh":ms,
@@ -156,6 +199,8 @@ def build(common_path: Path, map_path: Path) -> dict:
         "source":{
             "expandedCommonMp":{"bytes":len(common),"sha256":sha256(common)},
             "expandedMpCarrier":{"bytes":len(mp),"sha256":sha256(mp)},
+            "mpCarrierXModelCatalogCount":len(map_by_name),
+            "mpCarrierStringTableProof":prefix["assets"]["stringTable"],
         },
         "carrier":{
             "name":CARRIER,
@@ -175,7 +220,7 @@ def build(common_path: Path, map_path: Path) -> dict:
             "topologyCompatibleCandidates":[x["name"] for x in candidates if x["carrierComparison"]["sharedBoneTopologyAgreement"]],
         },
         "proofBoundary":(
-            "Candidate names are locators only. Each promoted row is an exact raw inline-name XModel from the expanded current retail mp_carrier FastFile, with a strict decoded mesh and resolved skeleton. Cross-FastFile binding comparisons use resolved bone names and parent-name topology; serialized ScriptString numeric ids are retained per XFile and are not treated as global ids. This probe establishes candidate asset ownership/compatibility, not which SEAL6 sleeve variant runtime selects for a particular player class/loadout."
+            "Candidate names are locators only. Map-owned identities are recovered from the exact top-level XAsset catalog in source order; packed names resolve only through the internally proven StringTable VIRTUAL mapping. Each promoted row must then pass the strict serialized XModel walker, skeleton normalizer, and mesh normalizer. Cross-FastFile binding comparisons use resolved bone names and parent-name topology; serialized ScriptString numeric ids are retained per XFile and are not treated as global ids. This probe establishes candidate asset ownership/compatibility, not which SEAL6 sleeve variant runtime selects for a particular player class/loadout."
         ),
     }
 
@@ -189,7 +234,7 @@ def main() -> int:
     a.out.parent.mkdir(parents=True,exist_ok=True)
     text=json.dumps(d,indent=2,sort_keys=True)+"\n"
     a.out.write_text(text,encoding="utf-8")
-    print(json.dumps({"out":str(a.out),"bytes":len(text.encode()),"sha256":hashlib.sha256(text.encode()).hexdigest(),"summary":d["summary"],"candidates":[{"name":x["name"],"bones":x["numBones"],"verts":x["mesh"]["vertexCount"],"tris":x["mesh"]["triangleCount"],"shared":x["carrierComparison"]["sharedBoneCount"],"sameBoneSet":x["carrierComparison"]["sameResolvedBoneNameSet"],"topologyAgreement":x["carrierComparison"]["sharedBoneTopologyAgreement"]} for x in d["candidates"]]},indent=2,sort_keys=True))
+    print(json.dumps({"out":str(a.out),"bytes":len(text.encode()),"sha256":hashlib.sha256(text.encode()).hexdigest(),"summary":d["summary"],"candidates":[{"name":x["name"],"xassetIndex":x["xassetIndex"],"nameSource":x["nameSource"],"skeletonSource":x["skeletonSource"]["mode"],"bones":x["numBones"],"verts":x["mesh"]["vertexCount"],"tris":x["mesh"]["triangleCount"],"shared":x["carrierComparison"]["sharedBoneCount"],"sameBoneSet":x["carrierComparison"]["sameResolvedBoneNameSet"],"topologyAgreement":x["carrierComparison"]["sharedBoneTopologyAgreement"]} for x in d["candidates"]]},indent=2,sort_keys=True))
     return 0
 
 if __name__=="__main__":
