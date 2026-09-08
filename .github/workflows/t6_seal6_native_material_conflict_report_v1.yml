@@ -10,7 +10,11 @@ on:
       - 'tools/test_t6_seal6_native_shader_variant_probe_v1.py'
       - 'tools/t6_seal6_techset_physical_owner_report_v1.py'
       - 'tools/test_t6_seal6_techset_physical_owner_report_v1.py'
+      - 'tools/t6_seal6_lit_shader_binary_report_v1.py'
+      - 'tools/test_t6_seal6_lit_shader_binary_report_v1.py'
+      - 'tools/t6_dxbc_inspect_v1.py'
       - 'tools/t6_oat_material_shader_census_v4.py'
+      - 'manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json'
       - '.github/workflows/t6_seal6_native_material_conflict_report_v1.yml'
 
 permissions:
@@ -30,6 +34,7 @@ jobs:
           PYTHONPATH=tools python3 tools/test_t6_seal6_native_material_conflict_report_v1.py
           PYTHONPATH=tools python3 tools/test_t6_seal6_native_shader_variant_probe_v1.py
           PYTHONPATH=tools python3 tools/test_t6_seal6_techset_physical_owner_report_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_seal6_lit_shader_binary_report_v1.py
 
       - name: Restore exact pinned OAT Unlinker cache
         id: oat-cache
@@ -144,6 +149,41 @@ jobs:
             --techset mc_sw4_3d_char_eye_cornea_2eww29wu \
             --out /tmp/proof/T6_SEAL6_TECHSET_PHYSICAL_OWNER_REPORT_V1.json \
             2>&1 | tee /tmp/proof/techset_owner_report.log
+
+      - name: Verify archive and classify exact ordinary-lit DXBC binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOTS=(
+            --root faction_seals_mp=/tmp/faction_seals_mp_out
+            --root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
+            --root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
+            --root common_mp=/tmp/common_mp_out
+            --root common_patch_mp=/tmp/common_patch_mp_out
+            --root patch_mp=/tmp/patch_mp_out
+            --root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
+          )
+          PYTHONPATH=tools python3 tools/t6_seal6_lit_shader_binary_report_v1.py \
+            --owner-report /tmp/proof/T6_SEAL6_TECHSET_PHYSICAL_OWNER_REPORT_V1.json \
+            "${ROOTS[@]}" \
+            --solved-semantics manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json \
+            --archive-dir /tmp/proof/seal6_lit_dxbc \
+            --out /tmp/proof/T6_SEAL6_LIT_SHADER_BINARY_REPORT_V1.json \
+            2>&1 | tee /tmp/proof/lit_shader_binary_report.log
+          python3 - <<'PY'
+          import json, pathlib
+          d=json.load(open('/tmp/proof/T6_SEAL6_LIT_SHADER_BINARY_REPORT_V1.json',encoding='utf-8'))
+          s=d['summary']
+          assert s['techniqueSetFamilies']==3
+          assert s['physicalLitVariants']==4
+          assert s['uniqueVertexDxbcPrograms']==2
+          assert s['uniquePixelDxbcPrograms']==3
+          assert s['heroSerializedLitPassIdentityInvariant'] is False
+          assert s['heroExecutableVsPsPairInvariant'] is True
+          files=list(pathlib.Path('/tmp/proof/seal6_lit_dxbc').glob('*.cso'))
+          assert len(files)==5, files
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
 
       - name: Close explicitly proven Material to physical parent shader chains
         shell: bash
