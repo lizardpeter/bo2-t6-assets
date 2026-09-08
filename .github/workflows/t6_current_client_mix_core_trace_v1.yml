@@ -1,0 +1,131 @@
+name: T6 current client software mix core trace v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_mix_core_trace_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace 0x6598B0 mix core
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request,collections
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM,X86_REG_EBP,X86_REG_ESP
+
+          UA='bo2-t6-assets-mix-core-trace/1'; INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          START=0x006598B0; SCAN_END=0x0065D000
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode()); rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0]; raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower(): raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections: secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']: return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          imports={}
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports: imports[i.address]={'dll':dll,'name':i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          o=vaoff(START);rows=[]
+          for ins in md.disasm(raw[o:o+(SCAN_END-START)],START):
+            if ins.address>=SCAN_END:break
+            rows.append({'va':ins.address,'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+          # Prefer first RET followed by >=3 INT3; if compiler emits adjacent function without padding, this may overrun and is not authoritative.
+          end=None;end_basis=None
+          for i,r in enumerate(rows):
+            if not r['mnemonic'].startswith('ret'):continue
+            j=i+1;pads=0
+            while j<len(rows) and rows[j]['mnemonic']=='int3':pads+=1;j+=1
+            if pads>=3:
+              end=r['va']+len(bytes.fromhex(r['bytes']));end_basis=f'ret_plus_{pads}_int3';break
+          if end is None:end=SCAN_END;end_basis='scan_limit'
+          frows=[r for r in rows if r['va']<end]
+
+          calls=[];argrefs=[];writes=[];constants=collections.Counter();absrefs=collections.defaultdict(list)
+          interesting_immediates={0x100,6,24,0x1800,0x9000,48000,0xbb80,0x1000000}
+          for r in frows:
+            va=r['va']; ins=next(md.disasm(raw[vaoff(va):vaoff(va)+15],va))
+            for op in ins.operands:
+              if op.type==X86_OP_IMM:
+                v=op.imm&0xffffffff;constants[v]+=1
+                if v>=base:absrefs[f'0x{v:08X}'].append(f'0x{va:08X}')
+              elif op.type==X86_OP_MEM:
+                if op.mem.base in (X86_REG_EBP,X86_REG_ESP) and op.mem.disp>0:
+                  argrefs.append({'va':f'0x{va:08X}','mnemonic':ins.mnemonic,'opStr':ins.op_str,'base':ins.reg_name(op.mem.base),'disp':op.mem.disp})
+                if op.mem.base==0 and op.mem.index==0 and (op.mem.disp&0xffffffff)>=base:
+                  absrefs[f'0x{op.mem.disp&0xffffffff:08X}'].append(f'0x{va:08X}')
+            if ins.mnemonic=='call':
+              c={'va':f'0x{va:08X}','opStr':ins.op_str}
+              if ins.operands and ins.operands[0].type==X86_OP_IMM:c['target']=f'0x{ins.operands[0].imm&0xffffffff:08X}'
+              b=ins.bytes
+              if len(b)==6 and b[:2]==b'\xff\x15':
+                iat=struct.unpack('<I',b[2:])[0];c['iatVa']=f'0x{iat:08X}';c['import']=imports.get(iat)
+              calls.append(c)
+            if ins.operands and ins.operands[0].type==X86_OP_MEM and ins.mnemonic not in ('cmp','test','comiss','ucomiss','prefetcht0','prefetchnta'):
+              m=ins.operands[0].mem
+              writes.append({'va':f'0x{va:08X}','mnemonic':ins.mnemonic,'opStr':ins.op_str,'baseReg':ins.reg_name(m.base) if m.base else None,'indexReg':ins.reg_name(m.index) if m.index else None,'scale':m.scale,'disp':m.disp})
+
+          # xrefs to core across executable sections
+          mds=Cs(CS_ARCH_X86,CS_MODE_32);mds.skipdata=True
+          boundaries=set()
+          for s in secs:
+            if s['exec']:boundaries.update(i.address for i in mds.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']) if i.id)
+          xrefs=[]
+          for s in secs:
+            if not s['exec']:continue
+            data=raw[s['ro']:s['ro']+s['rs']]
+            for j in range(len(data)-5):
+              if data[j] not in (0xe8,0xe9):continue
+              va=s['va']+j;t=(va+5+struct.unpack('<i',data[j+1:j+5])[0])&0xffffffff
+              if t==START:xrefs.append({'va':f'0x{va:08X}','opcode':f'{data[j]:02x}','instructionBoundary':va in boundaries})
+
+          # printable direct strings
+          strings=[]
+          for vs,xs in absrefs.items():
+            va=int(vs,16)
+            try:so=vaoff(va)
+            except:continue
+            chunk=raw[so:so+512];z=chunk.find(b'\0');z=len(chunk) if z<0 else z;b=chunk[:z]
+            if len(b)>=4 and all(32<=c<127 for c in b):strings.append({'va':vs,'text':b.decode('ascii','replace'),'xrefs':xs})
+
+          iconst={f'0x{k:08X}':v for k,v in constants.items() if k in interesting_immediates}
+          result={'format':'t6-current-client-software-mix-core-trace-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'entryVa':f'0x{START:08X}','functionEndCandidateVa':f'0x{end:08X}','endBasis':end_basis,'functionBytes':end-START,'functionSha256':hashlib.sha256(raw[o:o+(end-START)]).hexdigest(),'knownCallerContract':{'caller':'0x005A8900','callVa':'0x005A8934','argumentsCdecl':['0x01007900','final 0x1800-byte PCM ring slot','0x01015100','128-byte-aligned 0x1880-byte stack scratch region','[0x01007084]','0x01000000','0x02E52480']},'directXrefs':xrefs,'calls':calls,'stackArgumentReferences':argrefs,'memoryWrites':writes,'interestingImmediateCounts':iconst,'absoluteReferences':dict(absrefs),'directStrings':strings,'disasm':[{**r,'va':f"0x{r['va']:08X}"} for r in frows],'proofBoundary':'Exact current-client machine evidence only. The destination argument is proven by the upstream six-slot final PCM ring handoff. Function-end candidate is structural unless independently corroborated. No retail equivalence or source-level name is inferred.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_SOFTWARE_MIX_CORE_TRACE_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('FUNCTION',result['entryVa'],result['functionEndCandidateVa'],result['endBasis'],result['functionBytes'],result['functionSha256'])
+          print('XREFS',json.dumps(xrefs,indent=2))
+          print('INTERESTING_CONSTANTS',json.dumps(iconst,indent=2,sort_keys=True))
+          print('CALLS',json.dumps(calls,indent=2,sort_keys=True))
+          print('ARGREFS',json.dumps(argrefs[:120],indent=2,sort_keys=True))
+          print('WRITES_COUNT',len(writes))
+          print('WRITES_HEAD',json.dumps(writes[:160],indent=2,sort_keys=True))
+          print('STRINGS',json.dumps(strings,indent=2,sort_keys=True))
+          print('DISASM_HEAD')
+          for r in frows[:300]:print(f"CORE 0x{r['va']:08X} {r['bytes']} {r['mnemonic']} {r['opStr']}")
+          print('DISASM_TAIL')
+          for r in frows[-120:]:print(f"CORE 0x{r['va']:08X} {r['bytes']} {r['mnemonic']} {r['opStr']}")
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_SOFTWARE_MIX_CORE_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_SOFTWARE_MIX_CORE_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
