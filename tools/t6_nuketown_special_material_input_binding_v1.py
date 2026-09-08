@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """Bind exact Nuketown special full-output shader leaves to native Material inputs.
 
-This stage joins three exact evidence layers produced from the same pinned OAT
+This stage joins four exact evidence layers produced from the same pinned OAT
 run:
 
 1. the finite Nuketown special Material census;
 2. the complete full-output SM4 DAGs for exact unlit/emissive pixel shaders;
-3. the native OAT Material JSON records from the SHA-pinned retail map.
+3. the exact dumped Technique text selected by each Material program; and
+4. the native OAT Material JSON records from the SHA-pinned retail map.
 
 For each selected Material program, the exact shader is re-opened from its exact
 Technique owner, SHA-256 checked, and its DXBC RDEF chunk is parsed. Every used
-texture/sampler register is resolved by reflected binding name. The reflected
-texture name must resolve to exactly one native Material texture entry, whose
-image identity and full sampler state are retained. Used constant-buffer symbols
-are resolved to reflected cbuffer/variable names and are joined to Material
-constants only when the names agree exactly.
+texture/sampler register is resolved by reflected shader binding name. That exact
+left-hand shader name must appear in the exact dumped Technique as a
+`material.<name>` assignment. The right-hand Material texture name must then
+resolve to exactly one native Material texture entry, whose image identity and
+full sampler state are retained.
 
-No binding is guessed from semantic/family/material naming.
+Used constant-buffer symbols are resolved to reflected cbuffer/variable names
+and are joined to Material constants only when the names agree exactly.
+
+No binding is guessed by stripping suffixes, semantic/family/material naming, or
+register position.
 """
 from __future__ import annotations
 
@@ -198,6 +203,36 @@ def _material_path(root: Path, name: str) -> Path:
     return path
 
 
+def _technique_material_texture_binding(owner: str, technique: str, shader_name: str) -> dict[str, Any]:
+    """Resolve one reflected shader name through the exact dumped Technique text.
+
+    OAT Technique syntax explicitly separates the shader variable on the left
+    from the Material texture source on the right, e.g.
+    `colorMapSampler = material.colorMap;`. We follow that exact assignment and
+    require one unique RHS. No suffix rewrite is allowed.
+    """
+    if not owner or not technique or not shader_name:
+        raise BindingError("incomplete Technique material-texture binding identity")
+    path = Path(owner) / "techniques" / f"{technique}.tech"
+    if not path.is_file():
+        raise BindingError(f"missing exact dumped Technique {path}")
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r"(?m)^\s*" + re.escape(shader_name) + r"\s*=\s*material\.([A-Za-z_][A-Za-z0-9_]*)\s*;\s*(?://.*)?$"
+    )
+    hits = sorted(set(pattern.findall(text)))
+    if len(hits) != 1:
+        raise BindingError(f"{technique}: shader binding {shader_name!r} -> material RHS hits {hits}")
+    return {
+        "technique": technique,
+        "techniquePath": str(path),
+        "techniqueSha256": _sha(path),
+        "shaderBinding": shader_name,
+        "materialTextureName": hits[0],
+        "assignment": f"{shader_name} = material.{hits[0]}",
+    }
+
+
 def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[str, Any]:
     special = _load_json(special_path)
     symbolic = _load_json(symbolic_path)
@@ -297,10 +332,12 @@ def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[
     material_rows = []
     program_binding_count = 0
     exact_texture_match_count = 0
+    exact_technique_assignment_count = 0
     material_constant_match_count = 0
     unresolved_constant_symbols: set[tuple[str, str, str]] = set()
     sampler_states = set()
     images = set()
+    technique_hashes = set()
 
     for name, special_row in sorted(special_materials.items()):
         path = _material_path(material_root, name)
@@ -338,16 +375,28 @@ def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[
                 raise BindingError(f"{name}: shader {hh} missing reflected evidence")
             rr = reflected[hh]
             resource_name = rr["textureBinding"]["name"]
-            texture_hits = [t for t in textures if isinstance(t, dict) and t.get("name") == resource_name]
+
+            technique_binding = _technique_material_texture_binding(
+                str(program.get("techniqueOwner") or ""),
+                str(program.get("technique") or ""),
+                resource_name,
+            )
+            exact_technique_assignment_count += 1
+            technique_hashes.add(technique_binding["techniqueSha256"])
+            material_texture_name = technique_binding["materialTextureName"]
+            texture_hits = [t for t in textures if isinstance(t, dict) and t.get("name") == material_texture_name]
             if len(texture_hits) != 1:
-                raise BindingError(f"{name}: RDEF texture {resource_name!r} -> Material texture hits {texture_hits}")
+                raise BindingError(
+                    f"{name}: exact Technique maps RDEF {resource_name!r} to material.{material_texture_name}; "
+                    f"native Material texture hits {texture_hits}"
+                )
             tex = texture_hits[0]
             sampler_state = tex.get("samplerState")
             if not isinstance(sampler_state, dict):
-                raise BindingError(f"{name}: exact texture {resource_name!r} lacks samplerState")
+                raise BindingError(f"{name}: exact texture {material_texture_name!r} lacks samplerState")
             image = str(tex.get("image") or "")
             if not image:
-                raise BindingError(f"{name}: exact texture {resource_name!r} lacks image identity")
+                raise BindingError(f"{name}: exact texture {material_texture_name!r} lacks image identity")
             sampler_states.add(json.dumps(sampler_state, sort_keys=True, separators=(",", ":")))
             images.add(image)
             exact_texture_match_count += 1
@@ -376,6 +425,7 @@ def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[
                     "pixelShaderSha256": hh,
                     "rdefTexture": rr["textureBinding"],
                     "rdefSampler": rr["samplerBinding"],
+                    "techniqueMaterialTextureBinding": technique_binding,
                     "materialTexture": {
                         "name": tex.get("name"),
                         "semantic": tex.get("semantic"),
@@ -416,7 +466,9 @@ def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[
             "materialCount": len(material_rows),
             "programBindingCount": program_binding_count,
             "reflectedPixelShaderCount": len(reflected),
+            "exactRdefTechniqueAssignmentCount": exact_technique_assignment_count,
             "exactRdefToMaterialTextureMatchCount": exact_texture_match_count,
+            "uniqueTechniqueFileCount": len(technique_hashes),
             "uniqueImageCount": len(images),
             "uniqueSamplerStateCount": len(sampler_states),
             "materialConstantMatchCount": material_constant_match_count,
@@ -429,8 +481,8 @@ def build(special_path: Path, symbolic_path: Path, material_root: Path) -> dict[
         ],
         "evidenceDigestSha256": _digest(result_core),
         "proofBoundary": (
-            "All texture bindings are joined by exact shader RDEF resource name to exactly one native OAT Material texture entry. "
-            "Shader bytes and Material JSON are both read from the exact pinned-OAT run; shader bytes are re-hashed against the native Technique census. "
+            "Each used texture register is named by exact DXBC RDEF, then resolved through the exact dumped Technique assignment from that shader variable to material.<name>, then joined by that exact right-hand name to one native OAT Material texture entry. "
+            "No RDEF-name suffix rewrite or semantic/name resemblance is used. Shader bytes, Technique text and Material JSON all come from the same pinned-OAT run over SHA-pinned retail FastFiles; shader bytes are re-hashed against the native census and Technique files are independently SHA-256 retained. "
             "Material samplerState is retained exactly from OAT. Constant-buffer symbols are named only by RDEF and are joined to Material constants only on exact variable-name equality. "
             "Unmatched constant leaves remain unresolved runtime/code/shader inputs and are not assigned semantics by register position or name resemblance."
         ),
