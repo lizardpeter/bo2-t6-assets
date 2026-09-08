@@ -1,0 +1,90 @@
+name: T6 MP7 R2 direct audio physical v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_direct_audio_physical_v1.yml'
+      - 'manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_ASSET_IDS_V1.json'
+      - 'tools/t6_audio_bank_id_manifest_v1.py'
+      - 'tools/t6_audio_target_payload_extract_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  physical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Materialize current R2 physical-bank locator target set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/package/audio
+          python3 - <<'PY'
+          import json,pathlib
+          d=json.load(open('manifests/weapons/T6_MP7_R2_DIRECT_AUDIO_ASSET_IDS_V1.json',encoding='utf-8'))
+          assert d['format']=='t6-mp7-r2-direct-audio-asset-ids-v1'
+          assert d['assetIdCount']==14
+          ids=d['assetIdsHex']
+          assert len(ids)==14 and len(set(ids))==14
+          assert d['historicalPhysicalLocator']['bankPath']=='sound/cmn_root.all.sabl'
+          pathlib.Path('/tmp/proof/target_ids.txt').write_text('\n'.join(ids)+'\n')
+          PY
+
+      - name: Download candidate bank from current R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=https://r2.houseofkublai.com/bo2/sound/cmn_root.all.sabl
+          curl -fL --retry 4 "$url" -o /tmp/cmn_root.all.sabl
+          stat -c 'bytes=%s' /tmp/cmn_root.all.sabl | tee /tmp/proof/current_bank_size.txt
+          sha256sum /tmp/cmn_root.all.sabl | tee /tmp/proof/current_bank_sha256.txt
+
+      - name: Validate bank and extract exact target payload spans
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_audio_target_payload_extract_v1.py \
+            /tmp/cmn_root.all.sabl \
+            --target-file /tmp/proof/target_ids.txt \
+            --source 'https://r2.houseofkublai.com/bo2/sound/cmn_root.all.sabl' \
+            --payload-dir /tmp/package/audio \
+            --out /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_PHYSICAL_V1.json \
+            | tee /tmp/proof/extract.log
+          python3 - <<'PY'
+          import json,hashlib,pathlib
+          d=json.load(open('/tmp/proof/T6_MP7_R2_DIRECT_AUDIO_PHYSICAL_V1.json',encoding='utf-8'))
+          assert d['format']=='t6-audio-target-payload-extract-v1'
+          s=d['summary']
+          assert s['targetIdentifierCount']==14
+          assert s['foundTargetIdentifierCount']==14
+          assert s['missingTargetIdentifierCount']==0
+          assert s['targetPhysicalOccurrenceCount']==14
+          assert s['targetPayloadBytes']>0
+          for t in d['targets']:
+              assert t['occurrenceCount']==1
+              o=t['occurrences'][0]
+              p=pathlib.Path('/tmp/package/audio')/o['payloadFile']
+              assert p.stat().st_size==o['dataBytes']
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==o['payloadSha256']
+              assert o['formatName'] in ('PCMS16','FLAC','MP3','XMA4')
+              assert o['sampleRateHz'] is not None
+              assert o['channels']>0
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_DIRECT_AUDIO_PHYSICAL_V1.json | tee /tmp/proof/manifest_sha256.txt
+          find /tmp/package/audio -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/payload_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_DIRECT_AUDIO_PHYSICAL_V1
+          path: |
+            /tmp/proof
+            /tmp/package
+          if-no-files-found: error
+          compression-level: 9
