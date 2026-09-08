@@ -1,0 +1,146 @@
+{
+  "format": "t6-audio-pc-server-alias-selection-runtime-v1",
+  "authority": {
+    "scope": "T6 PC dedicated server only",
+    "retailClientEquivalence": false,
+    "proofBoundary": "Machine-code behavior is authoritative only for the SHA-pinned CoDMPServer_PC.exe. The pinned T6 OpenAssetTools header is used only to name and lay out fields independently accessed by the exact server bytes; it is not used to infer runtime behavior."
+  },
+  "referenceArtifacts": {
+    "exe": {"name": "CoDMPServer_PC.exe", "size": 13711872, "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"},
+    "pdb": {"name": "CoDMPServer_PC.pdb", "size": 49196032, "sha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc"},
+    "map": {"name": "CoDMPServer_PC.map", "size": 9213148, "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"},
+    "serverEvidenceCommit": "504c0d8516c50195342c8a064b2f2571b109659d",
+    "pdbConfiguration": "codmpRelease DedicatedServer - PC"
+  },
+  "infrastructureNote": {
+    "workflowRun": 34184093168,
+    "job": 101928841779,
+    "runnerId": 0,
+    "runnerName": "",
+    "steps": [],
+    "classification": "runner allocation/startup failure; no checkout, parser, gzip, or evidence command executed"
+  },
+  "sndObject": {
+    "functions": 88,
+    "symbols": 262,
+    "publicSymbols": 238,
+    "staticSymbols": 24,
+    "dataSymbols": 174,
+    "inlineSymbols": 12
+  },
+  "exactFunctions": {
+    "SND_AliasGetNeverPlayedTwice": {"va": "0x008AA7B0", "size": 64, "sha256": "d8f5c1ebb09a9c0bea5a4d1ce82c6a9ece649a51cbb3c5f48e2dbc44ef34c289"},
+    "SND_AliasSetNeverPlayedTwice": {"va": "0x008AA7F0", "size": 64, "sha256": "9f1cacfad507a03a9bb23d568325a47662584c614bb35e6522fc62d293b8c16e"},
+    "SND_AliasHasPlayed": {"va": "0x008AA830", "size": 64, "sha256": "0167e6b9cfabd33254cdd6de1ec3d648883c0681e72593bb47462246995b2a3d"},
+    "SND_PickSoundAliasFromList": {"va": "0x008ACC50", "size": 480, "sha256": "1ce10bd622bbe38e5963ee62944ea0b996cb7ed90db7f49039160dc69000ac1e"},
+    "SND_PickSoundAlias": {"va": "0x008ACE30", "size": 80, "sha256": "bb28e65fa8fb43d79089afad652b5f805ec5ffd26cbba95fba083df1a18968f6"},
+    "SND_CheckValidSecondary": {"va": "0x008ACE80", "size": 192, "sha256": "10f79f80ccaffffb921c4cd42b91a8608f9f5185e1a52d91b7fe5d2d012f34e5"},
+    "SND_SetVoiceStartInfo": {"va": "0x008B1A40", "size": 2864, "sha256": "27f8bfa15b3e1ecadfba09f10ed012fa9b7d92569b40abd6ea2b52b101b07414"},
+    "SND_FindFreeVoice": {"va": "0x008B2570", "size": 272, "sha256": "8b253b8d2c0ff7e2c4a9944d8c8854b413e163511db7aefc65d3b15303b20f15"},
+    "SND_PlaySoundAlias": {"va": "0x008B2850", "size": 2432, "sha256": "d8c4616935b59272d8382d42bc7487aaee2abe83d431f8b774f06a4da2f585a5"},
+    "SND_BankAliasLookupCache": {"va": "0x008B4ED0", "size": 192, "sha256": "fa6e0b5b83abff415d4b3c74fd3e72d8327f086517bf609a4921e66b7703123f"}
+  },
+  "callerClosure": {
+    "SND_AliasGetNeverPlayedTwice": [{"callsite": "0x008B29B6", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}],
+    "SND_AliasHasPlayed": [{"callsite": "0x008B29C3", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}],
+    "SND_AliasSetNeverPlayedTwice": [
+      {"callsite": "0x008B30A3", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"},
+      {"callsite": "0x008B3136", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"},
+      {"callsite": "0x008B315C", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}
+    ],
+    "SND_PickSoundAliasFromList": [
+      {"callsite": "0x008ACE6C", "caller": "SND_PickSoundAlias", "callerStart": "0x008ACE30", "object": "snd.obj"},
+      {"callsite": "0x008B2983", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}
+    ],
+    "SND_PickSoundAlias": [
+      {"callsite": "0x008C25F5", "caller": "SND_Whizby", "callerStart": "0x008C2590", "object": "snd_public_async.obj"},
+      {"callsite": "0x008C2622", "caller": "SND_Whizby", "callerStart": "0x008C2590", "object": "snd_public_async.obj"}
+    ],
+    "SND_CheckValidSecondary": [{"callsite": "0x008B29F8", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}],
+    "SND_FindFreeVoice": [{"callsite": "0x008B2F9F", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"}],
+    "SND_SetVoiceStartInfo": [
+      {"callsite": "0x008B9633", "caller": "SD_StartAlias", "callerStart": "0x008B94C0", "object": "sd_api.obj"},
+      {"callsite": "0x008B977B", "caller": "SD_StartAlias", "callerStart": "0x008B94C0", "object": "sd_api.obj"}
+    ],
+    "SND_PlaySoundAlias": [
+      {"callsite": "0x008AD9AB", "caller": "SND_StopVoicePFutz", "callerStart": "0x008AD860", "object": "snd.obj"},
+      {"callsite": "0x008B2A5F", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"},
+      {"callsite": "0x008B306C", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"},
+      {"callsite": "0x008B3117", "caller": "SND_PlaySoundAlias", "callerStart": "0x008B2850", "object": "snd.obj"},
+      {"callsite": "0x008B368A", "caller": "SND_UpdateDebug", "callerStart": "0x008B32D0", "object": "snd.obj"},
+      {"callsite": "0x008B3B80", "caller": "SND_SetGlobalFutz", "callerStart": "0x008B3AC0", "object": "snd.obj"},
+      {"callsite": "0x008B3C0D", "caller": "SND_SetGlobalFutz", "callerStart": "0x008B3AC0", "object": "snd.obj"},
+      {"callsite": "0x008B3C82", "caller": "SND_SetGlobalFutz", "callerStart": "0x008B3AC0", "object": "snd.obj"},
+      {"callsite": "0x008BCB25", "caller": "SNDL_Play", "callerStart": "0x008BC9D0", "object": "snd_local.obj"},
+      {"callsite": "0x008BE3AA", "caller": "SNDL_UpdateStaticSounds", "callerStart": "0x008BE0F0", "object": "snd_local.obj"},
+      {"callsite": "0x008BE501", "caller": "SNDL_UpdateStaticSounds", "callerStart": "0x008BE0F0", "object": "snd_local.obj"},
+      {"callsite": "0x008BEC3C", "caller": "SNDL_SetFrontendMusic", "callerStart": "0x008BEBB0", "object": "snd_local.obj"},
+      {"callsite": "0x008BEF1C", "caller": "SNDL_PlayLoops", "callerStart": "0x008BEDE0", "object": "snd_local.obj"}
+    ],
+    "SND_FindAlias": [
+      {"callsite": "0x00617D1A", "caller": "ScrCmd_SoundExists", "callerStart": "0x00617D10", "object": "g_scr_main_mp.obj"},
+      {"callsite": "0x008ACE5E", "caller": "SND_PickSoundAlias", "callerStart": "0x008ACE30", "object": "snd.obj"},
+      {"callsite": "0x008ACF03", "caller": "SND_CheckValidSecondary", "callerStart": "0x008ACE80", "object": "snd.obj"},
+      {"callsite": "0x008B6D07", "caller": "SND_IsAliasNameLooping", "callerStart": "0x008B6D00", "object": "snd_bank.obj"},
+      {"callsite": "0x00A2FB8B", "caller": "R_Cinematic_StartSound", "callerStart": "0x00A2FAF0", "object": "gfx_d3d:r_cinematic.obj"},
+      {"callsite": "0x00A30F5C", "caller": "R_Cinematic_UpdateFrame", "callerStart": "0x00A30940", "object": "gfx_d3d:r_cinematic.obj"}
+    ]
+  },
+  "layoutCorroboration": {
+    "source": "Laupetin/OpenAssetTools",
+    "commit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "path": "src/Common/Game/T6/T6_Assets.h",
+    "facts": [
+      "SndAlias.secondaryName is at +0x0C in the 32-bit layout",
+      "SndAlias.flags0 randomizeType occupies bits 29-31",
+      "SND_RANDOMIZE_ENTITY_VARIANT = 4, corresponding to flags0 bit 31",
+      "SndAlias.flags1 neverPlayTwice is bit 0",
+      "SndAlias.probability is the byte at +0x58"
+    ]
+  },
+  "behavior": {
+    "picker": {
+      "aliasStride": 96,
+      "maxVariantsExamined": 64,
+      "contextTypeOffset": 36,
+      "contextValueOffset": 40,
+      "sequenceOffsetInList": 16,
+      "rules": [
+        "null list or count 0 returns null",
+        "count >= 64 asserts and the examined count is clamped to 64",
+        "contextType 0 is eligible",
+        "an entity-context exact match is eligible",
+        "contextValue 0 is an eligible wildcard",
+        "otherwise the global SND context value must equal alias contextValue",
+        "zero eligible aliases returns null and one eligible alias returns it",
+        "flags0 bit 31 / SND_RANDOMIZE_ENTITY_VARIANT seeds RandWithSeed from alias-list pointer plus the picker integer argument; SND_PlaySoundAlias supplies SndEntHandle & 0xFFF as that integer",
+        "otherwise a nonzero global seed uses RandWithSeed",
+        "otherwise CRT rand() is used; for more than two eligible aliases it retries up to 100 times to avoid the prior SndAliasList.sequence index",
+        "the chosen eligible index is written to SndAliasList.sequence"
+      ]
+    },
+    "neverPlayTwice": {
+      "property": "flags1 bit 0 at alias+0x1C",
+      "playedState": "flags1 bit 1 at alias+0x1C",
+      "enforcement": "SND_PlaySoundAlias returns -1 before secondary or driver playback when neverPlayTwice is set and playedState is already set",
+      "successUpdate": "SND_PlaySoundAlias sets playedState=1 on its observed successful normal exits; SD_StartAlias failure cleans up the allocated voice and returns -1 without that update"
+    },
+    "probability": {
+      "field": "alias+0x58 byte",
+      "scale": "value / 255.0",
+      "rule": "value 0 bypasses stochastic rejection; otherwise SND_PlaySoundAlias rejects only when engine random() > value/255.0"
+    },
+    "secondary": {
+      "field": "alias+0x0C secondaryName",
+      "lookup": "SND_HashName -> SND_BankAliasLookupCache",
+      "missingTarget": "a null cache/lookup result skips secondary recursion and continues the primary alias play path",
+      "validation": [
+        "looping primary cannot chain to non-looping secondary",
+        "non-looping primary cannot chain to looping secondary",
+        "the secondary-name chain is checked against the starting primary alias name for recursion",
+        "validation follows at most 10 secondary-chain hops"
+      ],
+      "archiveImplication": "For the two previously ownerless serialized secondaryName values, the exact PC-server unresolved-lookup behavior is omission of the secondary while preserving the primary play attempt."
+    }
+  }
+}
