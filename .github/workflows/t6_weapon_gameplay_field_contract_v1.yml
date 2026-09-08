@@ -50,10 +50,15 @@ jobs:
           assert d['format']=='t6-weapon-gameplay-field-contract-v1'
           s=d['summary']
           assert s['allRequiredGameplayCanariesExact'] is True
+          assert s['sourceRowOrderPreserved'] is True
+          assert s['sourceDuplicateRowsPreserved'] is True
           assert s['fireTimeInternalUnit']=='milliseconds'
           assert s['damageCurvePoints']==6
           assert s['nativeDamageRangeUnitConversionAsserted'] is False
-          assert len(d['fields'])==s['fieldCount']
+          assert len(d['fields'])==s['fieldRowCount']
+          assert s['uniqueAuthoredFieldNames'] <= s['fieldRowCount']
+          assert s['duplicateAuthoredFieldNameCount'] >= 1
+          assert 'guidedMissileType' in d['duplicateAuthoredFieldNames']
           assert d['derivedRules']['rateOfFireRpm']['formula']=='60000 / fireTimeMilliseconds'
           print(json.dumps(s, indent=2, sort_keys=True))
           PY
