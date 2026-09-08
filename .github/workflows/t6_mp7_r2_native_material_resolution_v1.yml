@@ -1,0 +1,136 @@
+name: T6 MP7 R2 native material resolution v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - 'tools/t6_mp7_r2_native_material_resolution_v1.py'
+      - 'tools/t6_mp7_r2_material_handle_probe_v1.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_mp7_r2_native_material_resolution_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile-check proof tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_mp7_r2_native_material_resolution_v1.py \
+            tools/t6_mp7_r2_material_handle_probe_v1.py \
+            tools/t6_xmodel_serialized_walker.py
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Verify pinned OAT and prepare workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-unlinker-cache/source_identity.txt
+          mkdir -p /tmp/game/zone/all /tmp/expanded /tmp/proof /tmp/oat_common /tmp/oat_faction
+          sha256sum /tmp/oat-unlinker-cache/Unlinker | tee /tmp/proof/unlinker_sha256.txt
+          cp /tmp/oat-unlinker-cache/source_identity.txt /tmp/proof/oat_source_identity.txt
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/proof/expander_sha256.txt
+
+      - name: Download and pin exact current R2 sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff -o /tmp/game/zone/all/common_mp.ff
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff -o /tmp/game/zone/all/faction_seals_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88  /tmp/game/zone/all/faction_seals_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/common_mp.ff /tmp/game/zone/all/faction_seals_mp.ff | tee /tmp/proof/source_fastfile_sha256.txt
+
+      - name: Expand exact sources and reproduce raw handles
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/t6_expand /tmp/game/zone/all/common_mp.ff /tmp/expanded/common_mp.bin common_mp > /tmp/proof/common_expand.log 2>&1
+          /tmp/t6_expand /tmp/game/zone/all/faction_seals_mp.ff /tmp/expanded/faction_seals_mp.bin faction_seals_mp > /tmp/proof/faction_expand.log 2>&1
+          test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+          test "$(stat -c%s /tmp/expanded/faction_seals_mp.bin)" = '6245916'
+          echo '21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30  /tmp/expanded/faction_seals_mp.bin' | sha256sum -c -
+          python3 tools/t6_mp7_r2_material_handle_probe_v1.py \
+            --common-stream /tmp/expanded/common_mp.bin \
+            --faction-stream /tmp/expanded/faction_seals_mp.bin \
+            --out /tmp/proof/T6_MP7_R2_MATERIAL_HANDLE_PROBE_V1.json \
+            | tee /tmp/proof/raw_probe.log
+
+      - name: Native OAT resolve current R2 XModels
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/oat_common /tmp/game/zone/all/common_mp.ff \
+            2>&1 | tee /tmp/proof/common_native_xmodel.log
+          "$BIN" --no-color --verbose --include-assets xmodel --output-folder /tmp/oat_faction /tmp/game/zone/all/faction_seals_mp.ff \
+            2>&1 | tee /tmp/proof/faction_native_xmodel.log
+          if grep -q '^ERROR:' /tmp/proof/common_native_xmodel.log; then
+            echo 'native OAT common_mp XModel error' >&2
+            exit 1
+          fi
+          if grep -q '^ERROR:' /tmp/proof/faction_native_xmodel.log; then
+            echo 'native OAT faction_seals_mp XModel error' >&2
+            exit 1
+          fi
+          test -f /tmp/oat_common/model_export/t6_wpn_smg_mp7_view_lod0.glb
+          test -f /tmp/oat_common/model_export/t6_attach_mag_mp7_view_lod0.glb
+          test -f /tmp/oat_faction/model_export/c_usa_mp_seal6_shortsleeve_viewhands_lod0.glb
+
+      - name: Join raw packed handles to native post-loader Materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp7_r2_native_material_resolution_v1.py \
+            --raw-probe /tmp/proof/T6_MP7_R2_MATERIAL_HANDLE_PROBE_V1.json \
+            --common-dir /tmp/oat_common \
+            --faction-dir /tmp/oat_faction \
+            --out /tmp/proof/T6_MP7_R2_NATIVE_MATERIAL_RESOLUTION_V1.json \
+            | tee /tmp/proof/native_material_resolution.log
+          sha256sum /tmp/proof/T6_MP7_R2_NATIVE_MATERIAL_RESOLUTION_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - name: Retain exact native target GLBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof/native_targets/common_mp /tmp/proof/native_targets/faction_seals_mp
+          cp /tmp/oat_common/model_export/t6_wpn_smg_mp7_view_lod0.glb /tmp/proof/native_targets/common_mp/
+          cp /tmp/oat_common/model_export/t6_attach_mag_mp7_view_lod0.glb /tmp/proof/native_targets/common_mp/
+          cp /tmp/oat_faction/model_export/c_usa_mp_seal6_shortsleeve_viewhands_lod0.glb /tmp/proof/native_targets/faction_seals_mp/
+          sha256sum /tmp/proof/native_targets/common_mp/*.glb /tmp/proof/native_targets/faction_seals_mp/*.glb \
+            | tee /tmp/proof/native_target_glb_sha256.txt
+
+      - name: Upload native Material-resolution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_NATIVE_MATERIAL_RESOLUTION_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
