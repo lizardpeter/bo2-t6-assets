@@ -145,7 +145,31 @@ jobs:
             --out /tmp/proof/T6_SEAL6_TECHSET_PHYSICAL_OWNER_REPORT_V1.json \
             2>&1 | tee /tmp/proof/techset_owner_report.log
 
-      - name: Upload exact conflict and TechniqueSet-owner evidence
+      - name: Close explicitly proven Material to physical parent shader chains
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOTS=(
+            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
+            --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
+            --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
+            --shader-root common_mp=/tmp/common_mp_out
+            --shader-root common_patch_mp=/tmp/common_patch_mp_out
+            --shader-root patch_mp=/tmp/patch_mp_out
+            --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
+          )
+          PYTHONPATH=tools python3 tools/t6_seal6_native_shader_variant_probe_v1.py \
+            "${ROOTS[@]}" \
+            --variant head_faction=/tmp/faction_seals_mp_out::/tmp/faction_seals_mp_out::mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --variant head_patch=/tmp/patch_mp_out::/tmp/patch_mp_out::mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --variant arms=/tmp/faction_seals_mp_out::/tmp/common_mp_out::mc/mtl_c_usa_mp_seal6_smg_arms \
+            --variant cornea=/tmp/common_mp_out::/tmp/common_mp_out::mc/mtl_gen_eye_cornea \
+            --variant iris=/tmp/faction_seals_mp_out::/tmp/common_mp_out::mc/mtl_gen_eye_iris_green \
+            --variant mouth=/tmp/common_mp_out::/tmp/common_mp_out::mc/mtl_c_gen_insidemouth \
+            --out /tmp/proof/T6_SEAL6_NATIVE_SHADER_VARIANT_PROBE_V1.json \
+            2>&1 | tee /tmp/proof/shader_variant_probe.log
+
+      - name: Upload exact conflict and shader-chain evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
