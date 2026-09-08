@@ -2,12 +2,12 @@
 """Resolve exact shader programs for physical SEAL6 Material variants.
 
 A variant names one exact physical OAT Material copy as LABEL=ROOT::MATERIAL.
-The selected JSON is staged alone as the Material root and is then passed to the
-existing parent-provenance-aware native OAT v4 census against an explicit shader
-root universe. This deliberately separates physical Material selection from
-runtime duplicate precedence: the tool reports what each physical copy reaches,
-then compares those reached shader identities. It never declares which divergent
-copy is active in retail t6mp.exe.
+The selected JSON is staged alone as the Material root and is resolved against
+the TechniqueSet/Technique dependency output from that same physical FastFile
+root. This is deliberate: when two zones contain divergent same-name parent
+TechniqueSets, a global v4 census must fail closed rather than choose one. This
+probe instead closes each physical chain independently, then compares the exact
+shader signatures without declaring either variant active in retail t6mp.exe.
 """
 from __future__ import annotations
 
@@ -103,6 +103,10 @@ def build(
         raise VariantProbeError("duplicate shader root path")
     rows = []
     for label, source_root, material in variants:
+        source_key = str(source_root.resolve())
+        source_root_label = root_labels.get(source_key)
+        if source_root_label is None:
+            raise VariantProbeError(f"{label}: physical Material root is not in supplied shader-root universe")
         source = source_root / "materials" / f"{material}.json"
         if not source.is_file():
             raise VariantProbeError(f"{label}: physical Material missing: {source}")
@@ -118,33 +122,42 @@ def build(
             staged = staged_root / "materials" / f"{material}.json"
             staged.parent.mkdir(parents=True, exist_ok=True)
             staged.write_bytes(raw)
-            census = v4.build(staged_root, [root for _name, root in shader_roots])
+            # Important: close the physical chain against its own parent-owner
+            # root. A separate global census has already proved that divergent
+            # same-name parent definitions cannot be merged safely.
+            census = v4.build(staged_root, [source_root])
         summary = census.get("summary") or {}
         if int(summary.get("unresolvedMaterialCount", -1)) != 0:
-            raise VariantProbeError(f"{label}: v4 census unresolved Material dependency")
+            raise VariantProbeError(f"{label}: source-local v4 census unresolved Material dependency")
         if int(summary.get("divergentParentOwnedDependencyCount", -1)) != 0:
-            raise VariantProbeError(f"{label}: v4 census has divergent parent-owned dependency")
+            raise VariantProbeError(f"{label}: source-local v4 census has divergent parent-owned dependency")
         material_rows = [r for r in census.get("materials", []) if r.get("material") == material]
         if len(material_rows) != 1:
             raise VariantProbeError(f"{label}: expected one exact material row, got {len(material_rows)}")
         m = material_rows[0]
         if m.get("materialJsonSha256") != _sha(raw):
             raise VariantProbeError(f"{label}: staged Material identity drift")
+        owners = [_owner_label(str(value), root_labels) for value in m.get("techniqueSetOwners", [])]
+        if owners != [source_root_label]:
+            raise VariantProbeError(f"{label}: source-local TechniqueSet owner drift: {owners!r}")
+        programs = [_program_identity(p, root_labels) for p in m.get("programs", [])]
+        if any(p["techniqueOwner"] != source_root_label for p in programs):
+            raise VariantProbeError(f"{label}: source-local Technique owner drift")
+        signature = _canonical_shader_signature(m)
         rows.append({
             "variant": label,
             "material": material,
-            "physicalRoot": str(source_root.resolve()),
+            "physicalRoot": source_key,
+            "physicalRootLabel": source_root_label,
             "physicalMaterialBytes": len(raw),
             "physicalMaterialSha256": _sha(raw),
             "techniqueSet": m.get("techniqueSet"),
-            "techniqueSetOwners": [
-                _owner_label(str(value), root_labels) for value in m.get("techniqueSetOwners", [])
-            ],
+            "techniqueSetOwners": owners,
             "declaredTechniqueTypes": m.get("declaredTechniqueTypes", []),
             "hasLitBinding": bool(m.get("hasLitBinding")),
-            "programs": [_program_identity(p, root_labels) for p in m.get("programs", [])],
-            "shaderSignature": _canonical_shader_signature(m),
-            "shaderSignatureSha256": _sha(json.dumps(_canonical_shader_signature(m), sort_keys=True, separators=(",", ":")).encode("utf-8")),
+            "programs": programs,
+            "shaderSignature": signature,
+            "shaderSignatureSha256": _sha(json.dumps(signature, sort_keys=True, separators=(",", ":")).encode("utf-8")),
             "v4Summary": summary,
         })
     by_material: dict[str, list[dict[str, Any]]] = {}
@@ -174,7 +187,7 @@ def build(
             ),
         },
         "proofBoundary": (
-            "Each variant is one explicitly selected physical native OAT Material record. Its shader dependencies are closed by the parent-provenance-aware v4 census inside the supplied shader-root universe. Comparisons may establish shader-signature invariance between physical copies, but no divergent Material copy is promoted as the active retail-client XAsset without a separate t6mp.exe/runtime precedence proof."
+            "Each variant is one explicitly selected physical native OAT Material record and is closed only against the TechniqueSet/Technique dependencies emitted by that same physical FastFile root. This source-local closure avoids merging divergent same-name parent definitions. Comparisons may establish whether physical shader signatures match or differ, but no divergent Material/TechniqueSet variant is promoted as the active retail-client XAsset without a separate exact t6mp.exe/runtime precedence proof."
         ),
     }
 
@@ -188,7 +201,7 @@ def main() -> int:
     result = build(a.shader_root, a.variant)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"summary": result["summary"], "comparisons": result["comparisons"], "variants": [{"variant": r["variant"], "material": r["material"], "techniqueSet": r["techniqueSet"], "signature": r["shaderSignatureSha256"], "programs": r["programs"]} for r in result["variants"]]}, indent=2, sort_keys=True))
+    print(json.dumps({"summary": result["summary"], "comparisons": result["comparisons"], "variants": [{"variant": r["variant"], "material": r["material"], "physicalRootLabel": r["physicalRootLabel"], "techniqueSet": r["techniqueSet"], "signature": r["shaderSignatureSha256"], "programs": r["programs"]} for r in result["variants"]]}, indent=2, sort_keys=True))
     return 0
 
 
