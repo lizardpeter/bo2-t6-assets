@@ -1,0 +1,123 @@
+name: T6 current client mixer-to-output handoff trace v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_mix_handoff_trace_v1.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace buffer acquisition and fill functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pefile capstone
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86_const import X86_OP_IMM,X86_OP_MEM
+
+          UA='bo2-t6-assets-mix-handoff-trace/1';INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            req=urllib.request.Request(u,headers={'User-Agent':UA})
+            with urllib.request.urlopen(req,timeout=t) as r:return r.read()
+          info=json.loads(get(INFO,60).decode());rec=[x for x in info['files'] if x['name'].replace('\\','/').lower()=='games/t6mp.exe'][0];raw=get(info['baseUrl']+rec['hash'])
+          if hashlib.sha1(raw).hexdigest()!=rec['hash'].lower():raise RuntimeError('sha1 mismatch')
+          pe=pefile.PE(data=raw,fast_load=False);base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'va':base+s.VirtualAddress,'ro':s.PointerToRawData,'rs':s.SizeOfRawData,'exec':bool(s.Characteristics&0x20000000)})
+          def vaoff(va):
+            for s in secs:
+              if s['va']<=va<s['va']+s['rs']:return s['ro']+(va-s['va'])
+            raise KeyError(hex(va))
+          imports={}
+          for d in getattr(pe,'DIRECTORY_ENTRY_IMPORT',[]):
+            dll=d.dll.decode('ascii','replace')
+            for i in d.imports:imports[i.address]={'dll':dll,'name':i.name.decode('ascii','replace') if i.name else f'ordinal:{i.ordinal}'}
+          md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+          def trace(start,end):
+            o=vaoff(start);out=[]
+            for ins in md.disasm(raw[o:o+(end-start)],start):
+              if ins.address>=end:break
+              r={'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}
+              if ins.mnemonic in ('call','jmp'):
+                if ins.operands and ins.operands[0].type==X86_OP_IMM:r['directTarget']=f'0x{(ins.operands[0].imm&0xffffffff):08X}'
+                b=ins.bytes
+                if len(b)==6 and b[:2] in (b'\xff\x15',b'\xff\x25'):
+                  iat=struct.unpack('<I',b[2:])[0];r['iatVa']=f'0x{iat:08X}';r['import']=imports.get(iat)
+              out.append(r)
+            return out
+          ranges={
+            'outputThread':(0x0050D720,0x0050D832),
+            'bufferAcquire':(0x0063B840,0x0063BBC0),
+            'bufferFill':(0x00426050,0x00426500),
+            'queueWait':(0x006A40C0,0x006A40D0),
+          }
+          traced={}
+          for n,(a,b) in ranges.items():
+            traced[n]={'startVa':f'0x{a:08X}','endExclusiveVa':f'0x{b:08X}','sha256':hashlib.sha256(raw[vaoff(a):vaoff(a)+(b-a)]).hexdigest(),'disasm':trace(a,b)}
+
+          # Find exact xrefs to fill/acquire and output buffer-related absolute 0x01015100.
+          targets={0x0063B840:'bufferAcquire',0x00426050:'bufferFill',0x01015100:'outputStateOrBufferGlobal'}
+          mds=Cs(CS_ARCH_X86,CS_MODE_32);mds.detail=True;mds.skipdata=True
+          refs=[]
+          for s in secs:
+            if not s['exec']:continue
+            for ins in mds.disasm(raw[s['ro']:s['ro']+s['rs']],s['va']):
+              if ins.id==0:continue
+              vals=[]
+              for op in ins.operands:
+                if op.type==X86_OP_IMM:vals.append(op.imm&0xffffffff)
+                elif op.type==X86_OP_MEM:vals.append(op.mem.disp&0xffffffff)
+              kinds=[]
+              if ins.mnemonic in ('call','jmp') and ins.operands and ins.operands[0].type==X86_OP_IMM:
+                t=ins.operands[0].imm&0xffffffff
+                if t in targets:kinds.append(targets[t])
+              for v in vals:
+                if v==0x01015100:kinds.append('outputStateOrBufferGlobal')
+              if kinds:refs.append({'va':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'kinds':sorted(set(kinds))})
+
+          # Extract printable strings referenced directly by the two candidate functions.
+          function_ranges=[ranges['bufferAcquire'],ranges['bufferFill']]
+          direct_abs=set()
+          for a,b in function_ranges:
+            for r in trace(a,b):
+              # Parse common absolute immediates from capstone operand detail by redisassembling one instruction.
+              va=int(r['va'],16);o=vaoff(va)
+              for ins in md.disasm(raw[o:o+15],va):
+                if ins.address!=va:break
+                for op in ins.operands:
+                  if op.type==X86_OP_IMM: direct_abs.add(op.imm&0xffffffff)
+                  elif op.type==X86_OP_MEM and op.mem.disp>=base: direct_abs.add(op.mem.disp&0xffffffff)
+                break
+          strings=[]
+          for va in sorted(direct_abs):
+            try:o=vaoff(va)
+            except:continue
+            chunk=raw[o:o+256];z=chunk.find(b'\0');z=len(chunk) if z<0 else z;b=chunk[:z]
+            if len(b)>=4 and all(32<=x<127 for x in b):strings.append({'va':f'0x{va:08X}','text':b.decode('ascii','replace')})
+
+          result={'format':'t6-current-client-mix-handoff-trace-v1','authority':'current Plutonium T6 MP client only','client':{'revision':info.get('revision'),'bytes':len(raw),'sha1':hashlib.sha1(raw).hexdigest(),'sha256':hashlib.sha256(raw).hexdigest()},'ranges':traced,'xrefs':refs,'candidateStrings':strings,'knownHandoff':{'outputThreadVa':'0x0050D720','bufferAcquireCallVa':'0x0050D760','bufferAcquireTargetVa':'0x0063B840','bufferPointerRegister':'ESI','fillCallVa':'0x0050D76D','fillTargetVa':'0x00426050','fillArgsPushOrder':['0x01015100','ESI'], 'submitCallVa':'0x0050D773','submitTargetVa':'0x005DFBC0'},'proofBoundary':'Exact current-client machine evidence only. Functions are described structurally as acquire/fill only from their proven position in the final output handoff; no retail identity or original source-level name is inferred.'}
+          out=Path('/tmp/proof/T6_CURRENT_CLIENT_MIX_HANDOFF_TRACE_V1.json');out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print('CLIENT',result['client'])
+          print('HANDOFF',json.dumps(result['knownHandoff'],indent=2))
+          for n,r in traced.items():
+            print('===',n,r['sha256'])
+            for x in r['disasm']:print(n,x['va'],x['bytes'],x['mnemonic'],x['opStr'],x.get('directTarget',''),x.get('import',''))
+          print('XREFS',json.dumps(refs,indent=2,sort_keys=True))
+          print('STRINGS',json.dumps(strings,indent=2,sort_keys=True))
+          print('PROOF_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_MIX_HANDOFF_TRACE_V1
+          path: /tmp/proof/T6_CURRENT_CLIENT_MIX_HANDOFF_TRACE_V1.json
+          if-no-files-found: error
+          compression-level: 9
