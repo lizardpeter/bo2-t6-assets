@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Diagnose T6 duplicate-XAsset precedence under retained lineage evidence.
+"""Diagnose T6 duplicate-XAsset precedence under retained OpenBO2 lineage.
 
-This tool is intentionally NON-AUTHORITATIVE.  It encodes the reconstructed
-DB_GetZonePriority / DB_OverrideAsset rule recorded in
-T6_XASSET_OVERRIDE_LINEAGE_V1_2026-09-07.md and can be used to make concrete,
-falsifiable predictions for a future exact-retail executable/runtime gate.
+This tool is intentionally NON-AUTHORITATIVE and is now also explicitly
+SUPERSEDED for exact PC dedicated-server diagnostics.  The SHA-pinned
+CoDMPServer_PC.exe + MAP proof in tools/t6_pc_server_xasset_override_proof_v1.py
+shows that the exact PC server uses a different flag mask and materially
+different DB_GetZonePriority values from this reconstructed OpenBO2 table.
 
-It MUST NOT be used to select a retail asset winner in production manifests.
+Retain this tool only as historical lineage / branch-selection evidence.  Use
+t6_oat_conflict_pc_server_projection_v1.py for the exact PC dedicated-server
+projection.  Neither tool may select a retail t6mp.exe client winner.
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+# Historical OpenBO2 lineage only; NOT the exact PC dedicated-server table.
 # OpenBO2 a64812d21946baf710cec7fa26b98ad0d193903b,
 # src/code/src_noserver/database/db_registry.cpp::DB_GetZonePriority.
 ZONE_PRIORITY = {
@@ -124,9 +128,6 @@ def load_candidates(path: Path) -> list[Candidate]:
 
 
 def diagnose(candidates: list[Candidate]) -> dict:
-    # Under the inspected lineage rule a higher priority supersedes a lower one;
-    # equality is resolved by the later loaded candidate because DB_OverrideAsset
-    # uses >=.  We model this only to generate a prediction to test later.
     ordered = sorted(candidates, key=lambda c: c.load_ordinal)
     primary = ordered[0]
     events = []
@@ -152,7 +153,7 @@ def diagnose(candidates: list[Candidate]) -> dict:
     return {
         "format": "t6-zone-override-lineage-diagnostic-v1",
         "authoritative": False,
-        "authorityState": "lineage_prediction_only",
+        "authorityState": "historical_openbo2_lineage_superseded_for_pc_server",
         "lineage": {
             "primarySource": {
                 "repository": "builtbyxeno/OpenBO2",
@@ -161,6 +162,7 @@ def diagnose(candidates: list[Candidate]) -> dict:
             },
             "rule": "new_priority >= existing_priority; primary payload swaps on override",
             "zoneFlagMask": f"0x{ZONE_FLAG_MASK:08x}",
+            "exactPcServerReplacement": "manifests/engine/T6_PC_SERVER_XASSET_OVERRIDE_PROOF_V1.json",
         },
         "candidates": [
             {
@@ -177,12 +179,8 @@ def diagnose(candidates: list[Candidate]) -> dict:
         "lineagePredictedPrimary": primary.label,
         "lineagePriorityOrder": [c.label for c in ranked],
         "proofBoundary": (
-            "NON-AUTHORITATIVE diagnostic. The priority table/link algorithm is retained T6 lineage, "
-            "not yet instruction-byte-closed against SHA-256 "
-            "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1. "
-            "Zone-flag labels from additional reconstruction sources are also lineage evidence. "
-            "Do not use lineagePredictedPrimary to choose a retail XAsset in a production census. "
-            "Promotion requires exact retail static proof or a genuine runtime duplicate-chain observation."
+            "HISTORICAL NON-AUTHORITATIVE OpenBO2 lineage only. The exact SHA-pinned PC dedicated server independently disproves this table/mask as exact PC-server behavior; use the exact PC-server proof/projector for that build. "
+            "This output must not choose a PC-server or retail t6mp.exe production winner. Retail-client promotion still requires exact client static proof or a genuine runtime duplicate-chain observation."
         ),
     }
 
