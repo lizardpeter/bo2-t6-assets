@@ -7,7 +7,6 @@ on:
       - reversal/firstperson-weapons-closure
     paths:
       - 'tools/t6_retail_dobj_multixmodel_census_v1.py'
-      - 'tools/t6_retail_exe_wayback_probe_v1.py'
       - 'tools/t6_retail_exe_archive_metadata_probe_v2.py'
       - '.github/workflows/t6_retail_dobj_multixmodel_census_v1.yml'
 
@@ -28,24 +27,13 @@ jobs:
         run: >-
           python3 -m py_compile
           tools/t6_retail_dobj_multixmodel_census_v1.py
-          tools/t6_retail_exe_wayback_probe_v1.py
           tools/t6_retail_exe_archive_metadata_probe_v2.py
 
-      - name: Probe direct archived content-addressed objects
+      - name: Trace source-backed historical archive manifests
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/proof
-          python3 tools/t6_retail_exe_wayback_probe_v1.py \
-            --out /tmp/proof/T6_RETAIL_EXE_WAYBACK_PROBE_V1.json \
-            --exe-out /tmp/t6mp.exe \
-            | tee /tmp/proof/wayback_probe.log
-
-      - name: Trace source-backed historical archive manifests when direct object is absent
-        if: ${{ hashFiles('/tmp/t6mp.exe') == '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
           python3 tools/t6_retail_exe_archive_metadata_probe_v2.py \
             --out /tmp/proof/T6_RETAIL_EXE_ARCHIVE_METADATA_PROBE_V2.json \
             --exe-out /tmp/t6mp.exe \
