@@ -1,0 +1,81 @@
+name: T6 weapon attachment + camo contract v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - tools/t6_weapon_attachment_camo_contract_v1.py
+      - tools/test_t6_weapon_attachment_camo_contract_v1.py
+      - .github/workflows/t6_weapon_attachment_camo_contract_v1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test fail-closed contract adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_weapon_attachment_camo_contract_v1.py
+
+      - name: Fetch immutable pinned T6 attachment and camo sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-equip-source /tmp/out
+          base='https://raw.githubusercontent.com/Laupetin/OpenAssetTools/9dca965366541504b71fa8cfb7ac049cb9b717e1'
+          curl -fL --retry 3 "$base/src/ObjCommon/Game/T6/Weapon/AttachmentFields.h" -o /tmp/t6-equip-source/AttachmentFields.h
+          curl -fL --retry 3 "$base/src/ObjCommon/Game/T6/Weapon/AttachmentUniqueFields.h" -o /tmp/t6-equip-source/AttachmentUniqueFields.h
+          curl -fL --retry 3 "$base/src/ObjCommon/Game/T6/Json/JsonWeaponCamo.h" -o /tmp/t6-equip-source/JsonWeaponCamo.h
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected={
+              'AttachmentFields.h':'7fd2d40de567ee1846a1e58567b59540ce154e8a',
+              'AttachmentUniqueFields.h':'b80663ce2743a0a44612218f31ea1d605089e431',
+              'JsonWeaponCamo.h':'6b76cc2ff8ee3f10b3d6fb46f112939dd7beb548',
+          }
+          for name,exp in expected.items():
+              d=(Path('/tmp/t6-equip-source')/name).read_bytes()
+              got=hashlib.sha1(b'blob '+str(len(d)).encode()+b'\0'+d).hexdigest()
+              assert got==exp,(name,got,exp)
+              print(name,got)
+          PY
+
+      - name: Build exact attachment + camo source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_weapon_attachment_camo_contract_v1.py \
+            --attachment-fields /tmp/t6-equip-source/AttachmentFields.h \
+            --attachment-unique-fields /tmp/t6-equip-source/AttachmentUniqueFields.h \
+            --weapon-camo-json /tmp/t6-equip-source/JsonWeaponCamo.h \
+            --out /tmp/out/T6_WEAPON_ATTACHMENT_CAMO_CONTRACT_V1.json
+          python3 - <<'PY'
+          import json
+          p='/tmp/out/T6_WEAPON_ATTACHMENT_CAMO_CONTRACT_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          s=d['summary']
+          assert d['format']=='t6-weapon-attachment-camo-contract-v1'
+          assert s['allRequiredCanariesExact'] is True
+          assert s['runtimeCompositionSemanticsClosed'] is False
+          assert s['camoEquipSchemaClosed'] is True
+          assert d['weaponCamoSchema']['shaderConstCount']==8
+          assert d['equipStateContract']['canonicalBaseWeaponImmutable'] is True
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/out/T6_WEAPON_ATTACHMENT_CAMO_CONTRACT_V1.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_WEAPON_ATTACHMENT_CAMO_CONTRACT_V1
+          path: /tmp/out/T6_WEAPON_ATTACHMENT_CAMO_CONTRACT_V1.json
+          if-no-files-found: error
+          compression-level: 0
