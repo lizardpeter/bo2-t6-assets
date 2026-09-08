@@ -83,11 +83,12 @@ jobs:
           path: /tmp/oat-unlinker-cache
           key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
 
-      - name: Download and SHA-verify exact MP FastFile root universe
+      - name: Download and SHA-verify exact SEAL6 MP FastFile root universe
         shell: bash
         run: |
           set -euo pipefail
           declare -A URLS=(
+            [faction_seals_mp]='https://r2.houseofkublai.com/bo2/zone/all/faction_seals_mp.ff'
             [code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff'
             [en_code_post_gfx_mp]='https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx_mp.ff'
             [common_mp]='https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff'
@@ -96,6 +97,7 @@ jobs:
             [mp_nuketown_2020]='https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff'
           )
           declare -A SHAS=(
+            [faction_seals_mp]='1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88'
             [code_post_gfx_mp]='b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3'
             [en_code_post_gfx_mp]='7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940'
             [common_mp]='93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77'
@@ -104,7 +106,7 @@ jobs:
             [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
           )
           : > /tmp/proof/fastfile_sha256.txt
-          for zone in code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
+          for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
             if [[ "$zone" == en_* ]]; then base=/tmp/game/zone/english; else base=/tmp/game/zone/all; fi
             file="$base/${zone}.ff"
             curl -fL --retry 4 -o "$file" "${URLS[$zone]}"
@@ -119,7 +121,7 @@ jobs:
           BIN=$(cat /tmp/unlinker_path)
           : > /tmp/proof/native_dump_return_codes.txt
           : > /tmp/proof/native_dump_counts.txt
-          for zone in code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
+          for zone in faction_seals_mp code_post_gfx_mp en_code_post_gfx_mp common_mp common_patch_mp patch_mp mp_nuketown_2020; do
             if [[ "$zone" == en_* ]]; then ff="/tmp/game/zone/english/${zone}.ff"; else ff="/tmp/game/zone/all/${zone}.ff"; fi
             out="/tmp/${zone}_out"
             mkdir -p "$out"
@@ -146,6 +148,7 @@ jobs:
         run: |
           set -euo pipefail
           MATERIAL_ROOTS=(
+            --material-root faction_seals_mp=/tmp/faction_seals_mp_out
             --material-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
             --material-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
             --material-root common_mp=/tmp/common_mp_out
@@ -154,6 +157,7 @@ jobs:
             --material-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
           )
           SHADER_ROOTS=(
+            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
             --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
             --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
             --shader-root common_mp=/tmp/common_mp_out
@@ -163,11 +167,11 @@ jobs:
           )
           PYTHONPATH=tools python3 tools/t6_seal6_native_material_records_v1.py \
             "${MATERIAL_ROOTS[@]}" "${SHADER_ROOTS[@]}" \
-            --target mtl_gen_pc_usa_milcas_mcknight_head_camo \
-            --target mtl_gen_usa_milcas_mcknight_armlower \
-            --target mtl_gen_pc_usa_milcas_standard_cornea_l \
-            --target mtl_gen_pc_usa_milcas_standard_iris_l \
-            --target mtl_gen_usa_milcas_standard_inside_mouth \
+            --target mc/mtl_c_usa_milcas_mcknight_head_camo \
+            --target mc/mtl_c_usa_mp_seal6_smg_arms \
+            --target mc/mtl_gen_eye_cornea \
+            --target mc/mtl_gen_eye_iris_green \
+            --target mc/mtl_c_gen_insidemouth \
             --out /tmp/proof/T6_SEAL6_NATIVE_MATERIAL_RECORDS_V1.json \
             2>&1 | tee /tmp/proof/seal6_native_material_records.log
 
@@ -176,6 +180,7 @@ jobs:
         run: |
           set -euo pipefail
           MATERIAL_ROOTS=(
+            --material-root faction_seals_mp=/tmp/faction_seals_mp_out
             --material-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
             --material-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
             --material-root common_mp=/tmp/common_mp_out
@@ -184,6 +189,7 @@ jobs:
             --material-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
           )
           SHADER_ROOTS=(
+            --shader-root faction_seals_mp=/tmp/faction_seals_mp_out
             --shader-root code_post_gfx_mp=/tmp/code_post_gfx_mp_out
             --shader-root en_code_post_gfx_mp=/tmp/en_code_post_gfx_mp_out
             --shader-root common_mp=/tmp/common_mp_out
@@ -192,11 +198,11 @@ jobs:
             --shader-root mp_nuketown_2020=/tmp/mp_nuketown_2020_out
           )
           declare -A TARGETS=(
-            [head]='mtl_gen_pc_usa_milcas_mcknight_head_camo'
-            [arms]='mtl_gen_usa_milcas_mcknight_armlower'
-            [cornea]='mtl_gen_pc_usa_milcas_standard_cornea_l'
-            [iris]='mtl_gen_pc_usa_milcas_standard_iris_l'
-            [mouth]='mtl_gen_usa_milcas_standard_inside_mouth'
+            [head]='mc/mtl_c_usa_milcas_mcknight_head_camo'
+            [arms]='mc/mtl_c_usa_mp_seal6_smg_arms'
+            [cornea]='mc/mtl_gen_eye_cornea'
+            [iris]='mc/mtl_gen_eye_iris_green'
+            [mouth]='mc/mtl_c_gen_insidemouth'
           )
           for role in head arms cornea iris mouth; do
             PYTHONPATH=tools python3 tools/t6_oat_material_dependency_bundle_v1.py \
