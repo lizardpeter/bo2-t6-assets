@@ -1,0 +1,97 @@
+name: T6 complete zero Secondary target join v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_sndalias_zero_secondary_join_v2.py'
+      - 'tools/test_t6_sndalias_zero_secondary_join_v2.py'
+      - '.github/workflows/t6_sndalias_zero_secondary_join_v2.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NATIVE_RUN: '34181062551'
+      NATIVE_ARTIFACT: T6_OAT_ZERO_SECONDARY_ALL_FASTFILE_V1
+      ZERO_RUN: '34178852305'
+      ZERO_ARTIFACT: T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1
+      ALIAS_RUN: '34177086929'
+      ALIAS_ARTIFACT: T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1
+      PHYSICAL_RUN: '34178324098'
+      PHYSICAL_ARTIFACT: T6_AUDIO_ALIAS_PHYSICAL_JOIN_V1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test complete Secondary target join
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_sndalias_zero_secondary_join_v2.py
+
+      - name: Download exact retained source artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/native /tmp/zero /tmp/alias /tmp/physical /tmp/proof
+          gh run download "$NATIVE_RUN" --repo "$GITHUB_REPOSITORY" --name "$NATIVE_ARTIFACT" --dir /tmp/native
+          gh run download "$ZERO_RUN" --repo "$GITHUB_REPOSITORY" --name "$ZERO_ARTIFACT" --dir /tmp/zero
+          gh run download "$ALIAS_RUN" --repo "$GITHUB_REPOSITORY" --name "$ALIAS_ARTIFACT" --dir /tmp/alias
+          gh run download "$PHYSICAL_RUN" --repo "$GITHUB_REPOSITORY" --name "$PHYSICAL_ARTIFACT" --dir /tmp/physical
+          test -f /tmp/native/T6_OAT_ZERO_SECONDARY_ALL_FASTFILE_V1.json
+          test -f /tmp/zero/T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1.json
+          test -f /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json
+          test -f /tmp/physical/T6_AUDIO_ALIAS_PHYSICAL_JOIN_V1.json
+          echo '09cac679a1a243e29cb9cc6de632702ff2ea48953f2a5225ea5023a41c3366aa  /tmp/native/T6_OAT_ZERO_SECONDARY_ALL_FASTFILE_V1.json' | sha256sum -c -
+          echo '6a05d394c591c074570751e68429c47ba6f801701826199780994326ae125fed  /tmp/zero/T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1.json' | sha256sum -c -
+          echo '5da7ed9c5cd5ea4c2cd69213438103883f6c804db678db6496f781ed86713f5d  /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json' | sha256sum -c -
+          echo 'e7bd3a6cb3cc2e9060d540b5abc2e37085c106beaab4379a167431b7d1a1a6c4  /tmp/physical/T6_AUDIO_ALIAS_PHYSICAL_JOIN_V1.json' | sha256sum -c -
+          cat > /tmp/proof/source_artifacts.txt <<EOF
+          native_run=$NATIVE_RUN
+          native_artifact=$NATIVE_ARTIFACT
+          native_artifact_digest=sha256:08d0b39561327a8736a61f325d99b2cfeb06d88f96454b7a1e99871930df1817
+          zero_run=$ZERO_RUN
+          zero_artifact=$ZERO_ARTIFACT
+          zero_artifact_digest=sha256:12be3d7b1fbfacdc0a46fc8912355721815202a34c720f14ef5d932b09019483
+          alias_run=$ALIAS_RUN
+          alias_artifact=$ALIAS_ARTIFACT
+          alias_artifact_digest=sha256:7aa3a37ac803a49d0b629cad446c1475edd682a328d2d39cce07c1fce19eac8a
+          physical_run=$PHYSICAL_RUN
+          physical_artifact=$PHYSICAL_ARTIFACT
+          physical_artifact_digest=sha256:3ab090b1b4518bd34c5d6808c95b80ca1da540010036188dc82f90a59bda28b5
+          EOF
+
+      - name: Classify every native-resolved Secondary target
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_sndalias_zero_secondary_join_v2.py \
+            --native /tmp/native/T6_OAT_ZERO_SECONDARY_ALL_FASTFILE_V1.json \
+            --zero /tmp/zero/T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1.json \
+            --aliases /tmp/alias/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json \
+            --physical-join /tmp/physical/T6_AUDIO_ALIAS_PHYSICAL_JOIN_V1.json \
+            --out /tmp/proof/T6_SNDALIAS_ZERO_SECONDARY_JOIN_V2.json
+          sha256sum /tmp/proof/T6_SNDALIAS_ZERO_SECONDARY_JOIN_V2.json | tee /tmp/proof/join_v2_json_sha256.txt
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_SNDALIAS_ZERO_SECONDARY_JOIN_V2.json',encoding='utf-8'))
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          print('TARGETS')
+          for row in d['secondaryTargets']:
+              print(row['classification'],row['occurrenceCount'],row['secondaryAliasIdHex'],row['secondaryName'])
+          PY
+
+      - name: Upload complete Secondary target join
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SNDALIAS_ZERO_SECONDARY_JOIN_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
