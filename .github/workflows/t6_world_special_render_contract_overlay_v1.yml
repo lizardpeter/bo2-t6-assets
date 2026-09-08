@@ -8,6 +8,8 @@ on:
       - 'tools/test_t6_world_special_render_contract_overlay_v1.py'
       - 'tools/t6_oat_world_textured_export_pipeline_v52.py'
       - 'tools/test_t6_oat_world_textured_export_pipeline_v52.py'
+      - 'tools/t6_generated_final_output_texture_resource_binding_v2.py'
+      - 'tools/t6_oat_slot_shader_resolver_v2.py'
       - '.github/workflows/t6_world_special_render_contract_overlay_v1.yml'
 
 permissions:
@@ -25,7 +27,8 @@ jobs:
             tools/t6_world_special_render_contract_overlay_v1.py \
             tools/test_t6_world_special_render_contract_overlay_v1.py \
             tools/t6_oat_world_textured_export_pipeline_v52.py \
-            tools/test_t6_oat_world_textured_export_pipeline_v52.py
+            tools/test_t6_oat_world_textured_export_pipeline_v52.py \
+            tools/t6_generated_final_output_texture_resource_binding_v2.py
       - name: Run fail-closed overlay regression
         env:
           PYTHONPATH: tools
