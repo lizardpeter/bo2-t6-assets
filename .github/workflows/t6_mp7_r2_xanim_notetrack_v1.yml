@@ -11,6 +11,8 @@ on:
       - 'tools/test_t6_mp7_r2_xanim_notetrack_v1.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'manifests/stage18d/xanim_full_inventory_proof.json'
+      - 'manifests/stage18d/xanim_delta_proof.json'
 
 permissions:
   contents: read
@@ -25,6 +27,27 @@ jobs:
       - name: Run fail-closed parser regression
         shell: bash
         run: python3 tools/test_t6_mp7_r2_xanim_notetrack_v1.py
+
+      - name: Verify retained Stage18d stream identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
+          full=json.loads(Path('manifests/stage18d/xanim_full_inventory_proof.json').read_text())
+          delta=json.loads(Path('manifests/stage18d/xanim_delta_proof.json').read_text())
+          assert full['expanded_stream_sha256']==expected
+          assert delta['expanded_stream_sha256']==expected
+          assert full['xasset_xanim_count']==4233
+          assert full['raw_structural_xanim_count']==4233
+          assert full['count_closes_exactly'] is True
+          assert full['pc32_xanimparts_fixed_bytes']==104
+          assert delta['input_complex_delta_records']==466
+          assert delta['successfully_delta_walked']==466
+          assert delta['failures']==[]
+          PY
 
       - name: Build source-closed FastFile expander
         shell: bash
@@ -75,17 +98,17 @@ jobs:
           {
             echo 'expected_bytes=206493911'
             echo "actual_bytes=$actual_bytes"
-            echo 'expected_sha256=fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce'
+            echo 'expected_sha256=fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
             echo "actual_sha256=$actual_sha256"
           } | tee /tmp/proof/common_mp_expand_canary.txt
           sha256sum /tmp/expanded/common_mp.bin | tee /tmp/proof/expanded_sha256.txt
 
-      - name: Assert historical Stage18d expanded-common_mp canary
+      - name: Assert retained Stage18d expanded-common_mp canary
         shell: bash
         run: |
           set -euo pipefail
           test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
-          echo 'fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
 
       - name: Upload expansion diagnostics even on failure
         if: always()
@@ -139,7 +162,7 @@ jobs:
           d=json.loads(p.read_text())
           assert d['format']=='t6-mp7-r2-xanim-notetrack-v1'
           assert d['source']['expandedCommonMp']['bytes']==206493911
-          assert d['source']['expandedCommonMp']['sha256']=='fbd91d0e82e2ee7a9611cf37186510926632313fc7d903c72330ab61622170ce'
+          assert d['source']['expandedCommonMp']['sha256']=='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
           assert d['front']['scriptStringCount']==54040
           assert d['front']['xanimAssetCount']==4233
           assert d['fullInventory']['structuralRecordCount']==4233
