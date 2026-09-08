@@ -1,0 +1,239 @@
+name: T6 SndAlias zero-asset all-FastFile census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_sndalias_zero_asset_census_v1.py'
+      - 'tools/test_t6_sndalias_zero_asset_census_v1.py'
+      - 'tools/t6_sndalias_expanded_census_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_sndalias_zero_asset_all_fastfile_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test zero-only and mixed alias families
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_sndalias_zero_asset_census_v1.py
+
+  scan-shard:
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/t6_expand_sha256.txt
+
+      - name: Characterize zero-asset aliases in shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_sndalias_zero_asset_census_v1 import census_zero
+
+          shard=int(os.environ['SHARD']); shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-assets-sndalias-zero/{shard}')
+          entries,meta=rz.central_directory()
+          ff=sorted([e for e in entries if e['name'].lower().endswith('.ff')],key=lambda e:e['name'].lower())
+          bank_entries=[e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))]
+          banks=sorted({pathlib.PurePosixPath(e['name']).name.rsplit('.',1)[0] for e in bank_entries})
+          if len(ff)!=215: raise SystemExit(f'archive FastFile population changed: {len(ff)} != 215')
+          if len(bank_entries)!=116: raise SystemExit(f'archive bank population changed: {len(bank_entries)} != 116')
+          selected=[(i,e) for i,e in enumerate(ff) if i % shard_count == shard]
+
+          rows=[]; zero_rows=[]; alias_class={}; zero_counts=collections.Counter(); semantic=collections.Counter()
+          names={}; rejected=collections.Counter(); totals=collections.Counter()
+
+          def merge_alias_class(incoming):
+              for aid,c in incoming.items():
+                  dst=alias_class.setdefault(aid,{'zeroOccurrenceCount':0,'nonzeroOccurrenceCount':0})
+                  dst['zeroOccurrenceCount']+=int(c['zeroOccurrenceCount'])
+                  dst['nonzeroOccurrenceCount']+=int(c['nonzeroOccurrenceCount'])
+
+          for global_index,e in selected:
+              name=e['name']; zone=pathlib.PurePosixPath(name).name[:-3]
+              ff_path=pathlib.Path('/tmp/work')/f'{global_index:03d}.ff'
+              expanded=pathlib.Path('/tmp/work')/f'{global_index:03d}.expanded.bin'
+              raw=rz.extract(e,verify_crc=True); ff_sha=hashlib.sha256(raw).hexdigest(); ff_path.write_bytes(raw)
+              proc=subprocess.run(['/tmp/t6_expand',str(ff_path),str(expanded),zone],stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
+              if proc.returncode!=0 or not expanded.is_file(): raise SystemExit(f'FastFile expansion failed rc={proc.returncode}: {name}')
+              blob=expanded.read_bytes(); expanded_sha=hashlib.sha256(blob).hexdigest()
+              d=census_zero(blob,banks,source=name); s=d['summary']
+              merge_alias_class(d['aliasAssetClassCounts'])
+              for k,v in d['zeroAliasIdCounts'].items(): zero_counts[k]+=int(v)
+              for k,v in d['zeroSemanticVariantCounts'].items(): semantic[k]+=int(v)
+              for k,v in d['validatedInlineZeroAliasNames'].items():
+                  old=names.get(k)
+                  if old is not None and old!=v: raise SystemExit(f'validated zero-alias name conflict {k}: {old!r} vs {v!r}')
+                  names[k]=v
+              for k,v in d['rejectedCandidateKinds'].items(): rejected[k]+=int(v)
+              for key in ('candidateBankStringCount','validatedSndBankSectionCount','aliasDefinitionOccurrenceCount','zeroAssetIdOccurrenceCount','nonzeroAssetIdOccurrenceCount','rejectedCandidateCount'):
+                  totals[key]+=int(s[key])
+              zero_rows.extend(d['zeroRows'])
+              rows.append({
+                  'globalIndex':global_index,'zipPath':name,'zoneName':zone,
+                  'zipCrc32':f"{int(e['crc32']):08x}",'fastFileBytes':len(raw),'fastFileSha256':ff_sha,
+                  'expandedBytes':len(blob),'expandedSha256':expanded_sha,'summary':s,
+              })
+              print(global_index,f"zero={s['zeroAssetIdOccurrenceCount']}",f"zeroAliases={s['uniqueAliasIdsWithZeroAssetCount']}",name,flush=True)
+              ff_path.unlink(missing_ok=True); expanded.unlink(missing_ok=True)
+
+          result={
+              'format':'t6-sndalias-zero-asset-all-fastfile-shard-v1',
+              'shard':shard,'shardCount':shard_count,'remoteZip':meta,'allFastFileCount':215,'physicalSoundBankEntryCount':116,
+              'physicalBankBases':banks,'rows':rows,'aliasAssetClassCounts':dict(sorted(alias_class.items())),
+              'zeroAliasIdCounts':dict(sorted(zero_counts.items())),'zeroSemanticVariantCounts':dict(sorted(semantic.items())),
+              'validatedInlineZeroAliasNames':dict(sorted(names.items())),'rejectedCandidateKinds':dict(sorted(rejected.items())),
+              'zeroRows':zero_rows,
+              'summary':{'selectedFastFileCount':len(rows),**dict(totals),'uniqueAliasIdCount':len(alias_class),'uniqueAliasIdsWithZeroAssetCount':len(zero_counts),'uniqueZeroSemanticVariantCount':len(semantic),'validatedInlineNameForZeroAliasIdCount':len(names)},
+              'proofBoundary':'Exact zero-asset SndAlias characterization for one deterministic FastFile shard. Every FastFile is ZIP-CRC verified, SHA-256 pinned and source-closed decrypted/inflated. The existing fail-closed SndBank/SndAlias structural gates are reused. Zero is preserved without assigning runtime meaning.'
+          }
+          pathlib.Path(f'/tmp/proof/T6_SNDALIAS_ZERO_ASSET_SHARD_{shard}_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload zero-asset shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SNDALIAS_ZERO_ASSET_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof/T6_SNDALIAS_ZERO_ASSET_SHARD_${{ matrix.shard }}_V1.json
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: scan-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_SNDALIAS_ZERO_ASSET_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Aggregate and require parity with complete SndAlias census
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import collections,glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_SNDALIAS_ZERO_ASSET_SHARD_*_V1.json'))
+          if len(files)!=8: raise SystemExit(f'expected 8 shard manifests, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          rows=[]; zero_rows=[]; alias_class={}; zero_counts=collections.Counter(); semantic=collections.Counter(); names={}; rejected=collections.Counter(); totals=collections.Counter()
+          bank_bases=None
+          for d in docs:
+              if d.get('format')!='t6-sndalias-zero-asset-all-fastfile-shard-v1': raise SystemExit('unexpected shard format')
+              if d.get('allFastFileCount')!=215 or d.get('physicalSoundBankEntryCount')!=116: raise SystemExit('source universe mismatch')
+              if bank_bases is None: bank_bases=d['physicalBankBases']
+              elif bank_bases!=d['physicalBankBases']: raise SystemExit('bank-base universe differs across shards')
+              rows.extend(d['rows']); zero_rows.extend(d['zeroRows'])
+              for aid,c in d['aliasAssetClassCounts'].items():
+                  dst=alias_class.setdefault(aid,{'zeroOccurrenceCount':0,'nonzeroOccurrenceCount':0})
+                  dst['zeroOccurrenceCount']+=int(c['zeroOccurrenceCount']); dst['nonzeroOccurrenceCount']+=int(c['nonzeroOccurrenceCount'])
+              for k,v in d['zeroAliasIdCounts'].items(): zero_counts[k]+=int(v)
+              for k,v in d['zeroSemanticVariantCounts'].items(): semantic[k]+=int(v)
+              for k,v in d['validatedInlineZeroAliasNames'].items():
+                  old=names.get(k)
+                  if old is not None and old!=v: raise SystemExit(f'validated zero-alias name conflict {k}: {old!r} vs {v!r}')
+                  names[k]=v
+              for k,v in d['rejectedCandidateKinds'].items(): rejected[k]+=int(v)
+              for key in ('candidateBankStringCount','validatedSndBankSectionCount','aliasDefinitionOccurrenceCount','zeroAssetIdOccurrenceCount','nonzeroAssetIdOccurrenceCount','rejectedCandidateCount'):
+                  totals[key]+=int(d['summary'][key])
+
+          rows.sort(key=lambda r:r['globalIndex'])
+          if len(rows)!=215 or [r['globalIndex'] for r in rows]!=list(range(215)): raise SystemExit('shards do not provide exact 0..214 FastFile coverage')
+          expected={'candidateBankStringCount':72,'validatedSndBankSectionCount':63,'aliasDefinitionOccurrenceCount':445664,'zeroAssetIdOccurrenceCount':4094,'nonzeroAssetIdOccurrenceCount':441570,'rejectedCandidateCount':9}
+          for k,v in expected.items():
+              if totals[k]!=v: raise SystemExit(f'zero census parity gate failed {k}: {totals[k]} != {v}')
+          if len(alias_class)!=18103: raise SystemExit(f'unique alias population changed: {len(alias_class)} != 18103')
+          if dict(rejected)!={'no_alias_lists':9}: raise SystemExit(f'rejection population changed: {dict(rejected)}')
+          if len(zero_rows)!=4094: raise SystemExit(f'zero row population changed: {len(zero_rows)} != 4094')
+
+          zero_ids=set(zero_counts)
+          zero_only=sorted(aid for aid in zero_ids if alias_class[aid]['nonzeroOccurrenceCount']==0)
+          mixed=sorted(aid for aid in zero_ids if alias_class[aid]['nonzeroOccurrenceCount']>0)
+          by_alias=collections.defaultdict(list); by_fastfile=collections.Counter(); by_bank=collections.Counter()
+          pointer_states={k:collections.Counter() for k in ('name_ptr','subtitle_ptr','secondary_ptr','file_ptr')}
+          inline_nonempty=collections.Counter()
+          for row in zero_rows:
+              aid=row['aliasListIdHex']; by_alias[aid].append(row); by_fastfile[row['source']]+=1; by_bank[row['bankName']]+=1
+              for k in pointer_states: pointer_states[k][row['pointers'][k]['state']]+=1
+              for k,v in row['inlineStrings'].items(): inline_nonempty[k]+=int(bool(v))
+
+          families=[]
+          for aid in sorted(zero_ids):
+              zrows=by_alias[aid]
+              families.append({
+                  'aliasIdHex':aid,
+                  'classification':'mixed_zero_and_nonzero' if alias_class[aid]['nonzeroOccurrenceCount'] else 'zero_only',
+                  'zeroOccurrenceCount':alias_class[aid]['zeroOccurrenceCount'],
+                  'nonzeroOccurrenceCount':alias_class[aid]['nonzeroOccurrenceCount'],
+                  'validatedInlineName':names.get(aid,''),
+                  'uniqueZeroSemanticVariantCount':len({r['semanticDigestSha256'] for r in zrows}),
+                  'fastFileCount':len({r['source'] for r in zrows}),
+                  'sndBankNameCount':len({r['bankName'] for r in zrows}),
+                  'fastFiles':sorted({r['source'] for r in zrows}),
+                  'sndBankNames':sorted({r['bankName'] for r in zrows}),
+              })
+
+          result={
+              'format':'t6-sndalias-zero-asset-all-fastfile-v1',
+              'remoteZip':docs[0]['remoteZip'],'physicalSoundBankEntryCount':116,'physicalBankBases':bank_bases,'rows':rows,
+              'summary':{
+                  'fastFileCount':215,'greenFastFileCount':215,**dict(totals),'uniqueAliasIdCount':len(alias_class),
+                  'uniqueAliasIdsWithZeroAssetCount':len(zero_ids),'zeroOnlyAliasIdCount':len(zero_only),'mixedZeroAndNonzeroAliasIdCount':len(mixed),
+                  'uniqueZeroSemanticVariantCount':len(semantic),'validatedInlineNameForZeroAliasIdCount':len(names),
+                  'fastFilesWithZeroAssetAliases':len(by_fastfile),'sndBankSectionsWithZeroAssetAliases':len(by_bank),
+                  'zeroPointerStateCounts':{k:dict(sorted(v.items())) for k,v in pointer_states.items()},
+                  'zeroRowsWithNonemptyInlineStrings':dict(sorted(inline_nonempty.items())),
+              },
+              'zeroOnlyAliasIds':zero_only,'mixedZeroAndNonzeroAliasIds':mixed,
+              'zeroAliasFamilies':families,'zeroAliasIdCounts':dict(sorted(zero_counts.items())),
+              'zeroSemanticVariantCounts':dict(sorted(semantic.items())),'validatedInlineZeroAliasNames':dict(sorted(names.items())),
+              'zeroOccurrencesByFastFile':dict(sorted(by_fastfile.items())),'zeroOccurrencesBySndBankName':dict(sorted(by_bank.items())),
+              'rejectedCandidateKinds':dict(sorted(rejected.items())),'zeroRows':zero_rows,
+              'shardManifestSha256':[{'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()} for p in files],
+              'proofBoundary':'Complete fail-closed structural characterization of all 4,094 serialized assetId==0 SndAlias occurrences in the exact green 215-FastFile archive census. The result is parity-gated to the previously closed complete SndAlias population. Zero-only vs mixed families, raw fields, pointer states, inline strings and source zones are evidence only; no runtime meaning is assigned to assetId==0.'
+          }
+          pathlib.Path('/tmp/proof/T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          print('TOP ZERO-ASSET ALIAS FAMILIES')
+          for f in sorted(families,key=lambda x:(-x['zeroOccurrenceCount'],x['aliasIdHex']))[:40]: print(f['zeroOccurrenceCount'],f['classification'],f['aliasIdHex'],f['validatedInlineName'])
+          PY
+
+      - name: Upload complete zero-asset census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SNDALIAS_ZERO_ASSET_ALL_FASTFILE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9

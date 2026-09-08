@@ -1,0 +1,285 @@
+name: T6 SndAlias all-FastFile census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_sndalias_expanded_census_v1.py'
+      - 'tools/test_t6_sndalias_expanded_census_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_sndalias_all_fastfile_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fail-closed SndAlias structural parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/test_t6_sndalias_expanded_census_v1.py
+
+  scan-shard:
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: '8'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          sha256sum /tmp/t6_expand | tee /tmp/t6_expand_sha256.txt
+
+      - name: Census exact SndAlias structures in shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          PYTHONPATH=tools python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          from t6_remote_zip_range_v1 import RemoteZip
+          from t6_sndalias_expanded_census_v1 import census
+
+          url=os.environ['ZIP_URL']
+          shard=int(os.environ['SHARD'])
+          shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(url,f'bo2-t6-assets-sndalias-census/{shard}')
+          entries,meta=rz.central_directory()
+
+          ff=sorted(
+              [e for e in entries if e['name'].lower().endswith('.ff')],
+              key=lambda e:e['name'].lower(),
+          )
+          banks=sorted({
+              pathlib.PurePosixPath(e['name']).name.rsplit('.',1)[0]
+              for e in entries
+              if e['name'].lower().endswith(('.sabs','.sabl'))
+          })
+          if len(ff)!=215:
+              raise SystemExit(f'archive FastFile population changed: {len(ff)} != 215')
+          if len([e for e in entries if e['name'].lower().endswith(('.sabs','.sabl'))])!=116:
+              raise SystemExit('archive sound-bank population changed from 116')
+          if not banks:
+              raise SystemExit('no physical sound-bank bases found')
+
+          selected=[(i,e) for i,e in enumerate(ff) if i % shard_count == shard]
+          alias_ids=collections.Counter()
+          asset_ids=collections.Counter()
+          semantic=collections.Counter()
+          inline_names={}
+          rejected=collections.Counter()
+          rows=[]
+          totals=collections.Counter()
+
+          for local_index,(global_index,e) in enumerate(selected):
+              name=e['name']
+              zone=pathlib.PurePosixPath(name).name[:-3]
+              ff_path=pathlib.Path('/tmp/work')/f'{global_index:03d}.ff'
+              expanded=pathlib.Path('/tmp/work')/f'{global_index:03d}.expanded.bin'
+              log=pathlib.Path('/tmp/proof')/f'expand_{global_index:03d}.log'
+              raw=rz.extract(e,verify_crc=True)
+              ff_sha=hashlib.sha256(raw).hexdigest()
+              ff_path.write_bytes(raw)
+              with log.open('wb') as lf:
+                  proc=subprocess.run(
+                      ['/tmp/t6_expand',str(ff_path),str(expanded),zone],
+                      stdout=lf,stderr=subprocess.STDOUT,
+                  )
+              if proc.returncode!=0 or not expanded.is_file():
+                  raise SystemExit(f'FastFile expansion failed rc={proc.returncode}: {name}')
+              blob=expanded.read_bytes()
+              expanded_sha=hashlib.sha256(blob).hexdigest()
+              d=census(blob,banks,source=name)
+              s=d['summary']
+              for k,v in d['aliasIdCounts'].items(): alias_ids[k]+=int(v)
+              for k,v in d['assetIdCounts'].items(): asset_ids[k]+=int(v)
+              for k,v in d['semanticVariantCounts'].items(): semantic[k]+=int(v)
+              for k,v in d['rejectedCandidateKinds'].items(): rejected[k]+=int(v)
+              for k,v in d['validatedInlineAliasNames'].items():
+                  old=inline_names.get(k)
+                  if old is not None and old!=v:
+                      raise SystemExit(f'validated inline alias-name conflict {k}: {old!r} vs {v!r}')
+                  inline_names[k]=v
+              for key in (
+                  'candidateBankStringCount','validatedSndBankSectionCount',
+                  'aliasDefinitionOccurrenceCount','zeroAssetIdOccurrenceCount',
+                  'nonzeroAssetIdOccurrenceCount','rejectedCandidateCount',
+              ):
+                  totals[key]+=int(s[key])
+              rows.append({
+                  'globalIndex':global_index,
+                  'zipPath':name,
+                  'zoneName':zone,
+                  'zipCrc32':f"{int(e['crc32']):08x}",
+                  'fastFileBytes':len(raw),
+                  'fastFileSha256':ff_sha,
+                  'expandedBytes':len(blob),
+                  'expandedSha256':expanded_sha,
+                  'summary':s,
+              })
+              print(
+                  global_index,
+                  f"sections={s['validatedSndBankSectionCount']}",
+                  f"aliases={s['aliasDefinitionOccurrenceCount']}",
+                  f"assetIds={s['uniqueNonzeroAssetIdCount']}",
+                  name,
+                  flush=True,
+              )
+              ff_path.unlink(missing_ok=True)
+              expanded.unlink(missing_ok=True)
+
+          result={
+              'format':'t6-sndalias-all-fastfile-census-shard-v1',
+              'shard':shard,
+              'shardCount':shard_count,
+              'remoteZip':meta,
+              'allFastFileCount':len(ff),
+              'physicalSoundBankEntryCount':116,
+              'uniquePhysicalBankBaseCount':len(banks),
+              'physicalBankBases':banks,
+              'rows':rows,
+              'aliasIdCounts':dict(sorted(alias_ids.items())),
+              'assetIdCounts':dict(sorted(asset_ids.items())),
+              'semanticVariantCounts':dict(sorted(semantic.items())),
+              'validatedInlineAliasNames':dict(sorted(inline_names.items())),
+              'rejectedCandidateKinds':dict(sorted(rejected.items())),
+              'summary':{
+                  'selectedFastFileCount':len(rows),
+                  **dict(totals),
+                  'uniqueAliasIdCount':len(alias_ids),
+                  'uniqueNonzeroAssetIdCount':len(asset_ids),
+                  'uniqueSemanticVariantCount':len(semantic),
+                  'validatedInlineAliasNameCount':len(inline_names),
+              },
+              'proofBoundary':'Exact structural SndAlias census for one deterministic shard of the 215-FastFile archive. Each FastFile is ZIP-CRC verified, SHA-256 pinned, source-closed decrypted/inflated, then parsed with fail-closed SndBank/SndAliasList/SndAlias structural gates. This stage does not infer runtime alias selection or physical SABS/SABL asset matching.',
+          }
+          out=pathlib.Path('/tmp/proof')/f'T6_SNDALIAS_ALL_FASTFILE_CENSUS_SHARD_{shard}_V1.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload shard proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SNDALIAS_ALL_FASTFILE_CENSUS_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof/T6_SNDALIAS_ALL_FASTFILE_CENSUS_SHARD_${{ matrix.shard }}_V1.json
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    needs: scan-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_SNDALIAS_ALL_FASTFILE_CENSUS_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Require exact 215-FastFile coverage and aggregate aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import collections,glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_SNDALIAS_ALL_FASTFILE_CENSUS_SHARD_*_V1.json'))
+          if len(files)!=8:
+              raise SystemExit(f'expected 8 shard manifests, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          for d in docs:
+              if d.get('format')!='t6-sndalias-all-fastfile-census-shard-v1':
+                  raise SystemExit('unexpected shard format')
+              if d.get('allFastFileCount')!=215:
+                  raise SystemExit('FastFile population mismatch')
+              if d.get('physicalSoundBankEntryCount')!=116:
+                  raise SystemExit('sound-bank population mismatch')
+
+          rows=[]
+          alias_ids=collections.Counter(); asset_ids=collections.Counter(); semantic=collections.Counter()
+          rejected=collections.Counter(); inline_names={}; totals=collections.Counter()
+          bank_bases=None
+          for d in docs:
+              if bank_bases is None: bank_bases=d['physicalBankBases']
+              elif bank_bases!=d['physicalBankBases']:
+                  raise SystemExit('physical bank-base universe differs across shards')
+              rows.extend(d['rows'])
+              for k,v in d['aliasIdCounts'].items(): alias_ids[k]+=int(v)
+              for k,v in d['assetIdCounts'].items(): asset_ids[k]+=int(v)
+              for k,v in d['semanticVariantCounts'].items(): semantic[k]+=int(v)
+              for k,v in d['rejectedCandidateKinds'].items(): rejected[k]+=int(v)
+              for k,v in d['validatedInlineAliasNames'].items():
+                  old=inline_names.get(k)
+                  if old is not None and old!=v:
+                      raise SystemExit(f'validated inline alias-name conflict {k}: {old!r} vs {v!r}')
+                  inline_names[k]=v
+              for key in (
+                  'candidateBankStringCount','validatedSndBankSectionCount',
+                  'aliasDefinitionOccurrenceCount','zeroAssetIdOccurrenceCount',
+                  'nonzeroAssetIdOccurrenceCount','rejectedCandidateCount',
+              ):
+                  totals[key]+=int(d['summary'][key])
+
+          rows.sort(key=lambda r:r['globalIndex'])
+          if len(rows)!=215 or [r['globalIndex'] for r in rows]!=list(range(215)):
+              raise SystemExit('shards do not provide exact 0..214 FastFile coverage')
+          result={
+              'format':'t6-sndalias-all-fastfile-census-v1',
+              'remoteZip':docs[0]['remoteZip'],
+              'rows':rows,
+              'physicalSoundBankEntryCount':116,
+              'uniquePhysicalBankBaseCount':len(bank_bases),
+              'physicalBankBases':bank_bases,
+              'aliasIdCounts':dict(sorted(alias_ids.items())),
+              'assetIdCounts':dict(sorted(asset_ids.items())),
+              'semanticVariantCounts':dict(sorted(semantic.items())),
+              'validatedInlineAliasNames':dict(sorted(inline_names.items())),
+              'rejectedCandidateKinds':dict(sorted(rejected.items())),
+              'summary':{
+                  'fastFileCount':215,
+                  'greenFastFileCount':215,
+                  **dict(totals),
+                  'uniqueAliasIdCount':len(alias_ids),
+                  'uniqueNonzeroAssetIdCount':len(asset_ids),
+                  'uniqueSemanticVariantCount':len(semantic),
+                  'validatedInlineAliasNameCount':len(inline_names),
+                  'fastFilesWithValidatedSndBankSections':sum(r['summary']['validatedSndBankSectionCount']>0 for r in rows),
+              },
+              'shardManifestSha256':[
+                  {'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()}
+                  for p in files
+              ],
+              'proofBoundary':'Complete structural SndAlias census over all 215 FastFiles in the referenced ZIP64 archive. Every FastFile passed ZIP CRC verification and source-closed T6 decrypt/inflate before parsing. Exact known physical bank-base strings only nominate candidate sections; accepted SndBank/SndAliasList/SndAlias records pass structural gates. assetId==0 is retained separately. This artifact does not yet assert whether nonzero asset IDs exist in physical SABS/SABL banks, nor runtime alias/variant selection semantics.',
+          }
+          pathlib.Path('/tmp/proof/T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          print('TOP FASTFILES BY ALIAS OCCURRENCES')
+          for r in sorted(rows,key=lambda x:(-x['summary']['aliasDefinitionOccurrenceCount'],x['zipPath']))[:30]:
+              if r['summary']['aliasDefinitionOccurrenceCount']:
+                  print(r['summary']['aliasDefinitionOccurrenceCount'],r['summary']['validatedSndBankSectionCount'],r['zipPath'])
+          PY
+
+      - name: Upload complete alias census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9

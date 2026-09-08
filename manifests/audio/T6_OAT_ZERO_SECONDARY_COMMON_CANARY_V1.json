@@ -1,0 +1,57 @@
+{
+  "format": "t6-oat-zero-secondary-common-canary-v1",
+  "recordedDate": "2026-09-07",
+  "workflowRun": 34180865874,
+  "artifact": {
+    "id": 10038852047,
+    "name": "T6_OAT_ZERO_SECONDARY_COMMON_CANARY_V1",
+    "artifactDigestSha256": "1deb0ed23c1d8ec7da1db55d459249c15bd70e6d15b84b5fc927b3b2ee265508",
+    "resolverJsonSha256": "a0695448e6f3cc1052ded91c05c1f1a9916d37b6f0ac008d1efb3c8757400ead"
+  },
+  "source": {
+    "fastFile": "common_mp.ff",
+    "fastFileSha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+    "sndBankName": "mpl_common.all",
+    "nativeAliasCsvSha256": "eddfc76ef735e77bc6f81b8274f6da3e23ee571c44958df2ea8b5d6bb9afe9e0",
+    "nativeAliasCsvLineCount": 3833,
+    "oatCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "compatPatchSha256": "d89a075033d596c07944254b13564d38b5e81d8731cc15d119eca8c615e50c5a",
+    "unlinkerSha256": "657b51129a268601f149f0399d80b7e755262b7be42e5d37679b611309352330",
+    "nativeDumpReturnCode": 0
+  },
+  "summary": {
+    "coveredZeroAssetOccurrenceCount": 25,
+    "rawSecondaryPointerStateCounts": {
+      "inline_serialized": 3,
+      "null": 19,
+      "other_u32": 3
+    },
+    "nonInlineSecondaryPointerOccurrenceCount": 3,
+    "nonInlineSecondaryResolvedNonemptyCount": 3,
+    "nonInlineSecondaryResolvedEmptyCount": 0
+  },
+  "nonInlineResolutions": [
+    {
+      "aliasIdHex": "1D7EC3A1",
+      "aliasName": "chr_launch_exert_npc",
+      "rawSecondaryPointerValueHex": "A4E0E27D",
+      "resolvedSecondaryName": "fly_prone_n_mantle_npc",
+      "resolvedSecondaryAliasIdHex": "45817B92"
+    },
+    {
+      "aliasIdHex": "1E76E1B6",
+      "aliasName": "chr_launch_exert_plr",
+      "rawSecondaryPointerValueHex": "A4E0E309",
+      "resolvedSecondaryName": "fly_prone_n_mantle_plr",
+      "resolvedSecondaryAliasIdHex": "467999A7"
+    },
+    {
+      "aliasIdHex": "52E220C5",
+      "aliasName": "wpn_metalstormsnp_bass_swt_silencer",
+      "rawSecondaryPointerValueHex": "A4E131B1",
+      "resolvedSecondaryName": "fly_sniper_shell_out_plr",
+      "resolvedSecondaryAliasIdHex": "554C4DB7"
+    }
+  ],
+  "proofBoundary": "All 25 raw assetId==0 rows in mpl_common.all are joined to pinned native OAT loaded-SndBank CSV rows by exact T6 alias hash plus variant ordinal. Every inline Secondary reproduces exactly, every raw null Secondary remains empty, and all three non-inline serialized Secondary pointers resolve to non-empty post-loader alias.secondaryName strings. Raw pointer values are retained only as source evidence and are not interpreted. This proves post-loader string identity, not retail playback, fallback, recursion, variant selection, or zone precedence."
+}

@@ -1,0 +1,64 @@
+{
+  "format": "t6-audio-physical-only-classification-v1",
+  "date": "2026-09-07",
+  "sourceClosureManifest": "manifests/audio/T6_AUDIO_ALIAS_PHYSICAL_CLOSURE_V1.json",
+  "sourceJoin": {
+    "runId": 34178324098,
+    "artifactId": 10038007398,
+    "artifactDigest": "sha256:3ab090b1b4518bd34c5d6808c95b80ca1da540010036188dc82f90a59bda28b5",
+    "joinManifestSha256": "e7bd3a6cb3cc2e9060d540b5abc2e37085c106beaab4379a167431b7d1a1a6c4"
+  },
+  "sourcePhysicalManifest": {
+    "runId": 34177204458,
+    "artifactId": 10037689364,
+    "artifactDigest": "sha256:da4e9a19922b283d111a23af7064c5e3d7afc40a4d1e063c8dddebb1050a6caa",
+    "manifestSha256": "d2a7f4f64db7f2dcd346b6d9e1b28eb72efa0e7e7ae98ef35b00e3ad582e7357"
+  },
+  "summary": {
+    "physicalOnlyUniqueIdentifierCount": 161,
+    "physicalOnlyEntryOccurrenceCount": 174,
+    "duplicatedPhysicalOnlyIdentifierCount": 13,
+    "maxPhysicalOnlyIdentifierMultiplicity": 2,
+    "sampleRateHzCounts": {"48000": 174},
+    "formatCounts": {"FLAC": 45, "PCMS16": 129},
+    "channelCounts": {"1": 106, "2": 68},
+    "loopRawCounts": {"0": 132, "1": 42},
+    "bankExtensionCounts": {".sabl": 129, ".sabs": 45},
+    "distinctContainingBankCount": 10
+  },
+  "bankOccurrenceCounts": {
+    "sound/cmn_root.all.sabl": 67,
+    "sound/cmn_root.all.sabs": 42,
+    "sound/mpl_standoff.all.sabl": 18,
+    "sound/zmb_nuked.english.sabl": 13,
+    "sound/zmb_returned_tranzit.english.sabl": 13,
+    "sound/wpn_slingshot.all.sabl": 12,
+    "sound/mpl_standoff.all.sabs": 3,
+    "sound/wpn_gaz_single.all.sabl": 3,
+    "sound/wpn_gaz_quad.all.sabl": 2,
+    "sound/mpl_cruise.all.sabl": 1
+  },
+  "duplicatedPhysicalOnlyIdentifiers": [
+    "08F94748",
+    "09235E02",
+    "15560871",
+    "342D5161",
+    "3DB00001",
+    "68FCA35B",
+    "776C471F",
+    "7B5FB114",
+    "8BFFA72B",
+    "8E85BCF9",
+    "BF8136EC",
+    "ED9B9E5F",
+    "EDE94991"
+  ],
+  "duplicateLocation": {
+    "occurrencesPerDuplicatedIdentifier": 2,
+    "bankPair": [
+      "sound/zmb_nuked.english.sabl",
+      "sound/zmb_returned_tranzit.english.sabl"
+    ]
+  },
+  "proofBoundary": "This is a classification of the 161 physical 32-bit audio identifiers that are not reached by any nonzero SndAlias.assetId in the complete green 215-FastFile census. Counts are derived from the exact green 116-bank physical manifest and exact alias/physical join. 'Physical-only' means only 'not referenced by this SndAlias.assetId population'. It does not mean unused, orphaned, dead, directly playable, or unreachable at runtime. No semantic meaning is inferred from bank filenames, SABS/SABL extension, codec, channel count, loop byte, or shared Zombies bank placement. Other reference classes, direct runtime references, loading systems, localization, scripted consumers, and special audio paths remain possible until separately excluded."
+}

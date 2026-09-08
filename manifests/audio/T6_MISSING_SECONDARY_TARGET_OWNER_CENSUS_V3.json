@@ -1,0 +1,39 @@
+{
+  "format": "t6-missing-secondary-target-owner-census-v3-summary",
+  "source": {
+    "workflowRun": 34183229807,
+    "workflowCommit": "03bc66050ebbd66207ba00fe9e0b84f6598d994e",
+    "artifactId": 10039633709,
+    "artifactName": "T6_MISSING_SECONDARY_TARGET_OWNER_CENSUS_V3",
+    "artifactDigest": "sha256:26d08e0d96eb4b3eb4c26176ca802c8424d492a1cb6f0e9f1720b89e8faa7395",
+    "fullResultJsonSha256": "d733ec593a82f69f9dcee723c83c6931eb1bedd79c2b43a676aa47dc53a04682",
+    "structuralCensusRun": 34177086929,
+    "structuralCensusArtifact": "T6_SNDALIAS_ALL_FASTFILE_CENSUS_V1",
+    "structuralCensusJsonSha256": "5da7ed9c5cd5ea4c2cd69213438103883f6c804db678db6496f781ed86713f5d"
+  },
+  "summary": {
+    "archiveFastFileCount": 215,
+    "structuralNoSoundBankFastFileCount": 152,
+    "structuralSoundBankFastFileCount": 63,
+    "greenNativeSoundBankFastFileCount": 63,
+    "nativeSoundBankCsvCount": 65,
+    "nativeAliasRowCount": 445664,
+    "targetMatchCount": 0,
+    "targetsWithOwnerCount": 0,
+    "targetsWithoutOwnerCount": 2
+  },
+  "targets": {
+    "wpn_wa2000_bass_swt_silencer": {
+      "sndHashHex": "646B2B38",
+      "nativeNameOwnerCount": 0,
+      "knownSecondarySource": "wpn_metalstormsnp_silencer_fire_plr in common_mp.ff / mpl_common.all"
+    },
+    "zmb_tomahawk_sparks": {
+      "sndHashHex": "39797FA4",
+      "nativeNameOwnerCount": 0,
+      "knownSecondarySource": "prj_blade_impact_water in zm_prison.ff / zmb_alcatraz.all"
+    }
+  },
+  "result": "Both exact Secondary target names have zero native SndAlias Name-row owners within the complete SoundBank universe of this exact 215-FastFile archive. The 63 SoundBank-bearing FastFiles were all materialized under their exact retail basenames, CRC/SHA verified and dumped by pinned OAT; the remaining 152 are covered by the retained fail-closed structural proof of zero validated SndBank sections.",
+  "proofBoundary": "Authoritative only for owner absence inside this exact archive SoundBank universe. It does not prove the names are unreachable, dead, runtime-generated, supplied by a different install/DLC/language corpus, or ignored by retail playback. A Secondary reference to either name remains a real serialized dependency edge whose runtime behavior is unresolved."
+}

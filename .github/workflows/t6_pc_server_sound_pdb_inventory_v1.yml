@@ -1,0 +1,163 @@
+name: T6 PC server sound PDB inventory v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_pc_server_sound_pdb_inventory_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_REPO: lizardpeter/bo2-pc-server-decompile
+      SOURCE_COMMIT: ddc05ec55cb7e5487f3ea7a68f16b74ddc6e998f
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      PDB_SHA256: 7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact pinned PDB-derived inventories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          base="https://api.github.com/repos/$SOURCE_REPO/contents/analysis/generated"
+          for f in CoDMPServer_PC.procedures.csv.gz CoDMPServer_PC.members.csv.gz CoDMPServer_PC.locals.csv.gz CoDMPServer_PC.data_symbols.csv.gz; do
+            curl -fL --retry 4 \
+              -H 'Accept: application/vnd.github.raw' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$base/$f?ref=$SOURCE_COMMIT" -o "/tmp/source/$f"
+            gzip -t "/tmp/source/$f"
+          done
+          sha256sum /tmp/source/*.gz | sort | tee /tmp/proof/source_inventory_gzip_sha256.txt
+          cat > /tmp/proof/source_identity.txt <<EOF
+          source_repo=$SOURCE_REPO
+          source_commit=$SOURCE_COMMIT
+          pc_server_exe_sha256=$EXE_SHA256
+          pc_server_pdb_sha256=$PDB_SHA256
+          EOF
+
+      - name: Extract complete sound procedure and layout search map
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,gzip,hashlib,json,pathlib,re
+          src=pathlib.Path('/tmp/source'); out=pathlib.Path('/tmp/proof')
+
+          def read(name):
+              p=src/name
+              with gzip.open(p,'rt',encoding='utf-8-sig',newline='') as f:
+                  rows=list(csv.DictReader(f))
+              if not rows:
+                  raise SystemExit(f'{name}: empty inventory')
+              return rows
+
+          procedures=read('CoDMPServer_PC.procedures.csv.gz')
+          members=read('CoDMPServer_PC.members.csv.gz')
+          locals_=read('CoDMPServer_PC.locals.csv.gz')
+          data=read('CoDMPServer_PC.data_symbols.csv.gz')
+
+          def values(row): return ' '.join(str(v or '') for v in row.values())
+          def is_sound_proc(r):
+              t=values(r).lower()
+              return ('\\sound\\' in t or '/sound/' in t or re.search(r'\b(?:snd|sd)_',t) is not None)
+          sound=[r for r in procedures if is_sound_proc(r)]
+          if not sound: raise SystemExit('no sound procedures found')
+
+          proc_names=set()
+          for r in sound:
+              for k,v in r.items():
+                  if k and 'name' in k.lower() and v:
+                      proc_names.add(v)
+          search_terms=('alias','play','voice','secondary','asset','start','random','probab','context','stop','sequence','limit')
+          candidates=[]
+          for r in sound:
+              t=values(r).lower()
+              hits=[x for x in search_terms if x in t]
+              if hits:
+                  rr=dict(r); rr['_searchHits']=' '.join(hits); candidates.append(rr)
+
+          type_terms=('sndalias','sndvoice','sndbank','sndstart','sndasset','sndplay','sndspeaker','sndduck','sndlocal')
+          type_members=[]
+          for r in members:
+              t=values(r).lower()
+              if any(x in t for x in type_terms): type_members.append(r)
+
+          sound_locals=[]
+          lowered_names=[n.lower() for n in proc_names if len(n)>4]
+          for r in locals_:
+              t=values(r).lower()
+              if ('\\sound\\' in t or '/sound/' in t or any(n in t for n in lowered_names)):
+                  sound_locals.append(r)
+
+          sound_data=[]
+          for r in data:
+              t=values(r).lower()
+              if ('\\sound\\' in t or '/sound/' in t or 'g_snd' in t or 'snd_' in t):
+                  sound_data.append(r)
+
+          def write_csv(path,rows):
+              if not rows:
+                  path.write_text('',encoding='utf-8'); return
+              keys=[]
+              for r in rows:
+                  for k in r:
+                      if k not in keys: keys.append(k)
+              with path.open('w',encoding='utf-8',newline='') as f:
+                  w=csv.DictWriter(f,fieldnames=keys); w.writeheader(); w.writerows(rows)
+
+          write_csv(out/'sound_procedures.csv',sound)
+          write_csv(out/'sound_playback_candidates.csv',candidates)
+          write_csv(out/'sound_type_members.csv',type_members)
+          write_csv(out/'sound_locals.csv',sound_locals)
+          write_csv(out/'sound_data_symbols.csv',sound_data)
+
+          def first_name(r):
+              preferred=('name','procedure_name','symbol_name','function_name')
+              for want in preferred:
+                  for k,v in r.items():
+                      if k and k.lower()==want and v: return v
+              for k,v in r.items():
+                  if k and 'name' in k.lower() and v: return v
+              return ''
+          names=sorted({first_name(r) for r in sound if first_name(r)})
+          candidate_names=sorted({first_name(r) for r in candidates if first_name(r)})
+          summary={
+              'format':'t6-pc-server-sound-pdb-inventory-v2',
+              'sourceCommit':'ddc05ec55cb7e5487f3ea7a68f16b74ddc6e998f',
+              'pcServerExeSha256':'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d',
+              'pcServerPdbSha256':'7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc',
+              'summary':{
+                  'allProcedureRows':len(procedures),
+                  'soundProcedureRows':len(sound),
+                  'uniqueSoundProcedureNames':len(names),
+                  'playbackCandidateRows':len(candidates),
+                  'uniquePlaybackCandidateNames':len(candidate_names),
+                  'soundTypeMemberRows':len(type_members),
+                  'soundLocalRows':len(sound_locals),
+                  'soundDataSymbolRows':len(sound_data),
+              },
+              'soundProcedureNames':names,
+              'playbackCandidateNames':candidate_names,
+              'proofBoundary':'PDB-derived PC dedicated-server search map only. Procedure names, prototypes, source paths, type members, locals and data symbols come from the SHA-pinned PDB inventory at the pinned reconstruction commit. This identifies exact server analysis targets but does not by itself prove function implementation semantics, retail-client equivalence, or playback behavior.'
+          }
+          (out/'T6_PC_SERVER_SOUND_PDB_INVENTORY_V2.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(summary['summary'],indent=2,sort_keys=True))
+          print('PLAYBACK CANDIDATES')
+          for n in candidate_names: print(n)
+          PY
+          sha256sum /tmp/proof/*.csv /tmp/proof/T6_PC_SERVER_SOUND_PDB_INVENTORY_V2.json | sort | tee /tmp/proof/output_sha256.txt
+
+      - name: Upload exact PC-server sound search map
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_PC_SERVER_SOUND_PDB_INVENTORY_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
