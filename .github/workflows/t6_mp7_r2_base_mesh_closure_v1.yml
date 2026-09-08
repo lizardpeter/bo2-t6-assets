@@ -1,0 +1,86 @@
+name: T6 MP7 R2 base first-person mesh closure v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_mp7_r2_base_mesh_closure_v1.yml'
+      - 'tools/t6_mp7_r2_base_mesh_closure_v1.py'
+      - 'tools/t6_mp7_r2_xmodel_target_probe_v1.py'
+      - 'tools/t6_xmodel_mesh_normalize_v1.py'
+      - 'tools/t6_xmodel_serialized_walker.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v1.py'
+      - 'tools/t6_xmodel_skeleton_normalize_v2.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile-check mesh closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_mp7_r2_base_mesh_closure_v1.py \
+            tools/t6_mp7_r2_xmodel_target_probe_v1.py \
+            tools/t6_xmodel_mesh_normalize_v1.py \
+            tools/t6_xmodel_serialized_walker.py \
+            tools/t6_xmodel_skeleton_normalize_v2.py
+
+      - name: Build source-closed FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          mkdir -p /tmp/game/zone/all /tmp/expanded /tmp/proof
+
+      - name: Download and expand exact current R2 common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff -o /tmp/game/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/game/zone/all/common_mp.ff /tmp/expanded/common_mp.bin common_mp > /tmp/proof/common_mp_expand.log 2>&1
+          test "$(stat -c%s /tmp/expanded/common_mp.bin)" = '206493911'
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/expanded/common_mp.bin' | sha256sum -c -
+
+      - name: Close raw base first-person meshes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp7_r2_base_mesh_closure_v1.py \
+            --stream /tmp/expanded/common_mp.bin \
+            --out /tmp/proof/T6_MP7_R2_BASE_MESH_CLOSURE_V1.json \
+            | tee /tmp/proof/base_mesh_closure.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/proof/T6_MP7_R2_BASE_MESH_CLOSURE_V1.json').read_text())
+          assert d['format']=='t6-mp7-r2-base-mesh-closure-v1'
+          assert d['summary']['modelCount']==3
+          assert d['summary']['allVerticesWeighted'] is True
+          assert [m['name'] for m in d['models']]==[
+              'viewmodel_hands_no_model',
+              't6_wpn_smg_mp7_view',
+              't6_attach_mag_mp7_view',
+          ]
+          PY
+          sha256sum /tmp/proof/T6_MP7_R2_BASE_MESH_CLOSURE_V1.json | tee /tmp/proof/manifest_sha256.txt
+
+      - name: Upload MP7 base mesh closure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_R2_BASE_MESH_CLOSURE_V1
+          path: /tmp/proof
+          if-no-files-found: warn
+          compression-level: 9
