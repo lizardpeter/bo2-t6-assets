@@ -1,0 +1,104 @@
+name: T6 SEAL6 runtime-global shader ABI v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/seal6-material-closure
+    paths:
+      - 'tools/t6_seal6_runtime_global_contract_v1.py'
+      - 'manifests/render/T6_RETAIL_SEAL6_LIT_SEMANTICS_V1.json'
+      - '.github/workflows/t6_seal6_runtime_global_contract_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact validated SEAL6 shader IR/RDEF
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/input /tmp/proof
+          curl -fL --retry 4 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o /tmp/input/ir.zip \
+            https://api.github.com/repos/lizardpeter/bo2-t6-assets/actions/artifacts/10038442629/zip
+          echo '1cb9304d7b4471e215a5fe3d4b6ee211c074914e7512ed1b62878c3bcc153976  /tmp/input/ir.zip' | sha256sum -c -
+          unzip -q /tmp/input/ir.zip -d /tmp/input/ir
+          test -f /tmp/input/ir/T6_SEAL6_EXACT_LIT_SHADER_IR_V1.json
+          test -f /tmp/input/ir/T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json
+          test "$(find /tmp/input/ir/rdef -name '*.json' | wc -l)" -eq 5
+
+      - name: Build fail-closed runtime-global ABI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_seal6_runtime_global_contract_v1.py
+          PYTHONPATH=tools python3 tools/t6_seal6_runtime_global_contract_v1.py \
+            --ir-manifest /tmp/input/ir/T6_SEAL6_EXACT_LIT_SHADER_IR_V1.json \
+            --abi-manifest /tmp/input/ir/T6_SEAL6_LIT_SHADER_ABI_MANIFEST_V1.json \
+            --semantics manifests/render/T6_RETAIL_SEAL6_LIT_SEMANTICS_V1.json \
+            --rdef-dir /tmp/input/ir/rdef \
+            --out /tmp/proof/T6_SEAL6_RUNTIME_GLOBAL_CONTRACT_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_SEAL6_RUNTIME_GLOBAL_CONTRACT_V1.json'))
+          assert d['summary']=={
+              'exactPrograms':5,
+              'shaderFamilies':3,
+              'uniqueRuntimeConstantVariables':24,
+              'uniqueRuntimeTextures':2,
+              'uniqueRuntimeSamplers':2,
+              'runtimeValuesBound':False,
+              'exactBakeAccepted':True,
+              'completeRetailPixelOutputInBlender':False,
+          }, d['summary']
+          assert d['uniqueRuntimeTextureNames']==['modelLightingSampler','reflectionProbeSampler']
+          assert d['uniqueRuntimeSamplerNames']==['modelLightingSampler','reflectionProbeSampler']
+          constants=set(d['uniqueRuntimeConstantNames'])
+          for name in (
+              'fogColor','fogConsts','fogConsts2','sunFogDir','sunFogColor','sunFog',
+              'viewProjectionMatrix','inverseViewMatrix','worldMatrix','gridLightingCoordsAndVis',
+              'gridLightingSH0','gridLightingSH1','gridLightingSH2',
+              'reflectionLightingSH0','reflectionLightingSH1','reflectionLightingSH2',
+              'sunPosition','sunDiffuse','hdrControl0','lightingLookupScale',
+              'heroLightingR','heroLightingG','heroLightingB','scriptVector0'):
+              assert name in constants, name
+          assert len(constants)==24
+          fam={r['shaderFamilyId']:r for r in d['families']}
+          cornea=fam['seal6-char-eye-cornea-lit-v1']
+          c_names={r['name'] for r in cornea['requiredRuntimeGlobals']}
+          assert 'modelLightingSampler' in c_names
+          assert 'inverseViewMatrix' in c_names
+          assert 'reflectionProbeSampler' not in c_names
+          assert 'heroLightingR' not in c_names
+          assert 'scriptVector0' not in c_names
+          hero=fam['seal6-char-skin-hero-lit-v1']
+          h_names={r['name'] for r in hero['requiredRuntimeGlobals']}
+          assert 'reflectionProbeSampler' in h_names
+          assert 'heroLightingR' in h_names
+          assert 'scriptVector0' in h_names
+          assert 'inverseViewMatrix' not in h_names
+          forbidden=' '.join(d['providerPolicy']['forbidden']).lower()
+          assert 'invent sh' in forbidden
+          assert 'blender camera/world matrices' in forbidden
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_SEAL6_RUNTIME_GLOBAL_CONTRACT_V1.json | tee /tmp/proof/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SEAL6_RUNTIME_GLOBAL_CONTRACT_V1
+          path: /tmp/proof
+          if-no-files-found: error
