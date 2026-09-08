@@ -3,6 +3,8 @@ name: T6 R2 exact retail EXE probe v1
 on:
   workflow_dispatch:
   push:
+    branches:
+      - reversal/firstperson-weapons-closure
     paths:
       - '.github/workflows/t6_r2_retail_exe_exact_probe_v1.yml'
 
@@ -15,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Probe candidate R2 paths and hash any executable response
+      - name: Require exact authoritative R2 retail executable
         shell: bash
         env:
           EXPECTED_SHA256: 11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1
@@ -37,13 +39,13 @@ jobs:
           ]
           names=['t6mp.exe','t6mp(1)(1).exe','t6mpv43.exe']
           urls=[f'{b}/{n}' for b in bases for n in names]
-          rows=[]; winner=None
-          for i,url in enumerate(urls):
+          rows=[]; winner=None; winner_bytes=None
+          for url in urls:
               row={'url':url}
               try:
-                  req=urllib.request.Request(url,headers={'Range':'bytes=0-0','User-Agent':'bo2-t6-assets-r2-exe-probe/1'})
+                  req=urllib.request.Request(url,headers={'Range':'bytes=0-0','User-Agent':'bo2-t6-assets-r2-retail-authority/1'})
                   with urllib.request.urlopen(req,timeout=30) as r:
-                      hdr=dict(r.headers); body=r.read()
+                      hdr=dict(r.headers); r.read()
                       row.update(status=r.status,contentRange=hdr.get('Content-Range') or hdr.get('content-range'),contentLength=hdr.get('Content-Length') or hdr.get('content-length'),etag=hdr.get('ETag') or hdr.get('etag'))
                   total=None
                   cr=row.get('contentRange')
@@ -51,14 +53,15 @@ jobs:
                   elif row.get('contentLength'): total=int(row['contentLength'])
                   row['reportedBytes']=total
                   if total==expected_bytes:
-                      with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-r2-exe-probe/1'}),timeout=60) as r:
+                      with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-r2-retail-authority/1'}),timeout=60) as r:
                           raw=r.read()
                       digest=hashlib.sha256(raw).hexdigest()
                       row['actualBytes']=len(raw); row['actualSha256']=digest
                       row['identity']='exact_match' if len(raw)==expected_bytes and digest==expected_sha else 'identity_mismatch'
                       if row['identity']=='exact_match':
-                          if winner is not None: raise SystemExit('multiple exact R2 executable matches')
-                          winner=row
+                          if winner is not None:
+                              raise SystemExit('multiple exact R2 executable matches; authority path is ambiguous')
+                          winner=row.copy(); winner_bytes=raw
                   else:
                       row['identity']='not_expected_size'
               except urllib.error.HTTPError as exc:
@@ -67,22 +70,29 @@ jobs:
                   row.update(identity='probe_error',error=repr(exc))
               rows.append(row)
           result={
-              'format':'t6-r2-retail-exe-exact-probe-v1',
+              'format':'t6-r2-retail-exe-exact-probe-v2',
+              'authority':'R2 retail file identity is authoritative for retail-client reversal; legacy dedicated-server EXE/PDB/MAP are guidance only.',
               'expectedBytes':expected_bytes,
               'expectedSha256':expected_sha,
               'candidates':rows,
               'exactMatch':winner,
               'summary':{'candidateCount':len(rows),'reachableCount':sum('status' in r and r['status'] in (200,206) for r in rows),'exactMatchCount':sum(r.get('identity')=='exact_match' for r in rows)},
-              'proofBoundary':'Exact HTTP-path probe only. A match requires both expected byte count and SHA-256. A negative excludes only these explicit R2 paths and does not prove the executable is absent elsewhere.'
+              'proofBoundary':'Authoritative only if exactly one explicit R2 path matches both expected byte count and SHA-256. Legacy server artifacts cannot substitute for this retail-client identity.',
           }
-          Path('/tmp/proof/T6_R2_RETAIL_EXE_EXACT_PROBE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          Path('/tmp/proof/T6_R2_RETAIL_EXE_EXACT_PROBE_V2.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
           print(json.dumps(result,indent=2,sort_keys=True))
+          if winner is None or winner_bytes is None:
+              raise SystemExit('no exact authoritative R2 retail t6mp.exe match')
+          # Retain exact retail bytes only ephemerally for downstream steps in this job.
+          Path('/tmp/t6mp.exe').write_bytes(winner_bytes)
           PY
-      - name: Upload path probe
+          echo "$EXPECTED_SHA256  /tmp/t6mp.exe" | sha256sum -c -
+          test "$(stat -c '%s' /tmp/t6mp.exe)" = "$EXPECTED_BYTES"
+      - name: Upload identity proof only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: T6_R2_RETAIL_EXE_EXACT_PROBE_V1
+          name: T6_R2_RETAIL_EXE_EXACT_PROBE_V2
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 9
