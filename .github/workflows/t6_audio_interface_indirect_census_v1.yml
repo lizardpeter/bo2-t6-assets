@@ -1,0 +1,233 @@
+name: T6 audio interface indirect census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_interface_indirect_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install exact disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Inventory sound data symbols and decoder-interface operands
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, hashlib, json, re, struct
+          from collections import defaultdict
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+
+          EXE_SHA='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          MAP_SHA='34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          BASE=0x00400000
+          DECODER_REGION_START=0x00DE2500
+          DECODER_REGION_END=0x00DE2700
+          TARGET_ORIGINS={'sd_decode.obj','sd_stream.obj','sd_output_xa2.obj','sd_voice.obj','sd_api.obj'}
+
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mp=Path('/tmp/ref/CoDMPServer_PC.map').read_bytes()
+          assert hashlib.sha256(exe).hexdigest()==EXE_SHA
+          assert hashlib.sha256(mp).hexdigest()==MAP_SHA
+          map_text=mp.decode('ascii',errors='strict')
+
+          peoff=struct.unpack_from('<I',exe,0x3c)[0]
+          assert exe[:2]==b'MZ' and exe[peoff:peoff+4]==b'PE\0\0'
+          coff=peoff+4
+          _,nsects,_,_,_,opt_size,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          table=opt+opt_size
+          sects=[]
+          for i in range(nsects):
+              o=table+i*40
+              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8)
+              sects.append({'name':name,'va':BASE+rva,'vs':vs,'rs':rs,'ro':ro})
+          tsec=next(s for s in sects if s['name']=='.text')
+          text_raw=exe[tsec['ro']:tsec['ro']+tsec['rs']]
+          text_va=tsec['va']
+          text_end=text_va+len(text_raw)
+
+          # Accept only the three exact MAP tail forms already proven by the
+          # downstream symbol census: no flags, f, or f i.
+          row_re=re.compile(r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+(f)(?:\s+(i))?)?\s+(\S+\.obj)\s*$')
+          rows=[]
+          for ln,line in enumerate(map_text.splitlines(),1):
+              m=row_re.match(line)
+              if not m:
+                  continue
+              rows.append({'line':ln,'symbol':m.group(1),'va':int(m.group(2),16),'function':m.group(3)=='f','inline':m.group(4)=='i','origin':m.group(5),'raw':line.strip()})
+          if not rows:
+              raise SystemExit('MAP parser found zero public rows')
+
+          by_va=defaultdict(list)
+          for r in rows:
+              by_va[r['va']].append(r)
+          fvas=sorted(set(r['va'] for r in rows if r['function'] and text_va <= r['va'] < text_end))
+          if len(fvas)<2:
+              raise SystemExit('insufficient public function VAs')
+
+          selected_rows=[r for r in rows if r['origin'] in TARGET_ORIGINS]
+          selected_rows.sort(key=lambda r:(r['origin'],r['va'],r['symbol']))
+          selected_by_origin={origin:[{**r,'va':f'0x{r["va"]:08X}'} for r in selected_rows if r['origin']==origin] for origin in sorted(TARGET_ORIGINS)}
+
+          print('=== EXACT SELECTED SOUND MAP ROWS ===')
+          for origin in sorted(TARGET_ORIGINS):
+              rs=[r for r in selected_rows if r['origin']==origin]
+              print(f'-- {origin}: {len(rs)} rows --')
+              for r in rs:
+                  flags=(' f' if r['function'] else '')+(' i' if r['inline'] else '')
+                  print(f'0x{r["va"]:08X}{flags} {r["symbol"]}')
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+
+          def containing_interval(hit_va):
+              i=bisect.bisect_right(fvas,hit_va)-1
+              if i<0 or i+1>=len(fvas): return None
+              return fvas[i],fvas[i+1]
+
+          def decode_interval(start,end):
+              raw=text_raw[start-text_va:end-text_va]
+              ins=list(md.disasm(raw,start))
+              if not ins or ins[0].address!=start:
+                  raise SystemExit(f'disassembly cannot start at 0x{start:08X}')
+              dec_end=ins[-1].address+ins[-1].size
+              if dec_end!=end:
+                  raise SystemExit(f'instruction accounting failed 0x{start:08X}..0x{end:08X}; got 0x{dec_end:08X}')
+              return raw,ins
+
+          # Raw-census every aligned dword address in the exact decoder-table
+          # region. Each raw occurrence must be proven to be an immediate or
+          # memory displacement of the decoded owning instruction before it is
+          # admitted as an xref.
+          candidate_hits=[]
+          seen_raw=set()
+          for value in range(DECODER_REGION_START,DECODER_REGION_END,4):
+              needle=struct.pack('<I',value)
+              pos=0
+              while True:
+                  j=text_raw.find(needle,pos)
+                  if j<0: break
+                  hit_va=text_va+j
+                  key=(hit_va,value)
+                  if key not in seen_raw:
+                      seen_raw.add(key)
+                      candidate_hits.append((hit_va,value))
+                  pos=j+1
+          candidate_hits.sort()
+
+          admitted=[]
+          rejected=[]
+          interval_cache={}
+          for hit_va,value in candidate_hits:
+              interval=containing_interval(hit_va)
+              if not interval:
+                  rejected.append({'rawHitVa':f'0x{hit_va:08X}','value':f'0x{value:08X}','reason':'outside_public_function_interval'})
+                  continue
+              if interval not in interval_cache:
+                  interval_cache[interval]=decode_interval(*interval)
+              raw,ins=interval_cache[interval]
+              owner=None
+              for insn in ins:
+                  if insn.address <= hit_va < insn.address+insn.size:
+                      owner=insn; break
+              if owner is None:
+                  raise SystemExit(f'raw hit not covered by instruction at 0x{hit_va:08X}')
+              matches=[]
+              for oi,op in enumerate(owner.operands):
+                  if op.type==X86_OP_IMM and (int(op.imm)&0xffffffff)==value:
+                      matches.append({'operandIndex':oi,'kind':'immediate'})
+                  elif op.type==X86_OP_MEM and (int(op.mem.disp)&0xffffffff)==value:
+                      matches.append({'operandIndex':oi,'kind':'memoryDisplacement','baseReg':owner.reg_name(op.mem.base) if op.mem.base else None,'indexReg':owner.reg_name(op.mem.index) if op.mem.index else None,'scale':op.mem.scale})
+              if not matches:
+                  rejected.append({'rawHitVa':f'0x{hit_va:08X}','value':f'0x{value:08X}','reason':'raw_bytes_not_exact_operand','instruction':{'va':f'0x{owner.address:08X}','bytes':owner.bytes.hex(),'mnemonic':owner.mnemonic,'opStr':owner.op_str}})
+                  continue
+              start,end=interval
+              idx=ins.index(owner)
+              context=ins[max(0,idx-6):min(len(ins),idx+9)]
+              nearby_indirect=[]
+              for ci in context:
+                  if ci.mnemonic=='call' and len(ci.operands)==1 and ci.operands[0].type!=X86_OP_IMM:
+                      nearby_indirect.append({'va':f'0x{ci.address:08X}','bytes':ci.bytes.hex(),'mnemonic':ci.mnemonic,'opStr':ci.op_str})
+              admitted.append({
+                  'rawHitVa':f'0x{hit_va:08X}',
+                  'value':f'0x{value:08X}',
+                  'functionInterval':{
+                      'startVa':f'0x{start:08X}','endVaExclusive':f'0x{end:08X}',
+                      'sha256':hashlib.sha256(raw).hexdigest(),
+                      'mapSymbols':[r['symbol'] for r in by_va.get(start,[])],
+                      'mapOrigins':[r['origin'] for r in by_va.get(start,[])],
+                  },
+                  'instruction':{'va':f'0x{owner.address:08X}','bytes':owner.bytes.hex(),'mnemonic':owner.mnemonic,'opStr':owner.op_str,'matches':matches},
+                  'nearbyContext':[{'va':f'0x{x.address:08X}','bytes':x.bytes.hex(),'mnemonic':x.mnemonic,'opStr':x.op_str} for x in context],
+                  'nearbyIndirectCalls':nearby_indirect,
+              })
+
+          # Rejections are retained rather than silently discarded. Raw hits
+          # that land inside an instruction but are not exact operands are
+          # expected possible false positives from opcode/immediate byte spans.
+          by_value=defaultdict(list)
+          for r in admitted: by_value[r['value']].append(r)
+          print('=== DECODER-REGION ADMITTED OPERAND XREFS ===')
+          for value in sorted(by_value):
+              print(value, 'count=',len(by_value[value]))
+              for r in by_value[value]:
+                  print(' ',r['instruction']['va'],r['instruction']['mnemonic'],r['instruction']['opStr'],'owners=',r['functionInterval']['mapSymbols'])
+                  for c in r['nearbyIndirectCalls']:
+                      print('   nearby-indirect',c['va'],c['opStr'])
+          print('RAW_CANDIDATES',len(candidate_hits),'ADMITTED',len(admitted),'REJECTED',len(rejected))
+
+          report={
+              'format':'t6-audio-interface-indirect-census-v1',
+              'status':'EXACT_MAP_DATA_SYMBOL_AND_DECODER_REGION_OPERAND_CENSUS',
+              'authority':{'exeBytes':len(exe),'exeSha256':EXE_SHA,'mapBytes':len(mp),'mapSha256':MAP_SHA},
+              'acceptedMapTailForms':['<VA> <obj>','<VA> f <obj>','<VA> f i <obj>'],
+              'selectedOrigins':sorted(TARGET_ORIGINS),
+              'selectedRowsByOrigin':selected_by_origin,
+              'decoderRegion':{'startVa':f'0x{DECODER_REGION_START:08X}','endVaExclusive':f'0x{DECODER_REGION_END:08X}','strideHypothesisNotUsedForAdmission':'0x2C'},
+              'rawCandidateCount':len(candidate_hits),
+              'admittedOperandXrefCount':len(admitted),
+              'rejectedRawCandidateCount':len(rejected),
+              'admittedOperandXrefs':admitted,
+              'rejectedRawCandidates':rejected,
+          }
+          out=Path('/tmp/probe/T6_AUDIO_INTERFACE_INDIRECT_CENSUS_V1.json')
+          out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('JSON_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+
+      - name: Upload exact interface census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_INTERFACE_INDIRECT_CENSUS_V1
+          path: /tmp/probe/T6_AUDIO_INTERFACE_INDIRECT_CENSUS_V1.json
+          if-no-files-found: error
+          compression-level: 9
