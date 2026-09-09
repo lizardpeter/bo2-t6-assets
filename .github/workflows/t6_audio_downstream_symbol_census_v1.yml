@@ -1,0 +1,169 @@
+name: T6 audio downstream symbol census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_downstream_symbol_census_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact active references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Build exact sound-object function census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, re
+          from collections import Counter, defaultdict
+          from pathlib import Path
+
+          exe = Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mp = Path('/tmp/ref/CoDMPServer_PC.map').read_bytes()
+          assert hashlib.sha256(exe).hexdigest() == 'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          assert hashlib.sha256(mp).hexdigest() == '34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          text = mp.decode('ascii', errors='strict')
+
+          targets = {
+              'sd_api.obj',
+              'sd_decode.obj',
+              'sd_mix_master.obj',
+              'sd_mix_radverb.obj',
+              'sd_mix_voice.obj',
+              'sd_mixer.obj',
+              'sd_output_la2.obj',
+              'sd_output_xa2.obj',
+              'sd_source.obj',
+              'sd_stream.obj',
+              'sd_voice.obj',
+          }
+          # Match the exact linear VA immediately before the optional MAP function
+          # flag and final object origin. This deliberately avoids treating the
+          # segment:offset field at the beginning of a MAP line as a VA.
+          tail_re = re.compile(r'\b([0-9A-Fa-f]{8})\b(\s+f)?\s+([^\s]+\.obj)\s*$')
+          rows = []
+          rejected_target_lines = []
+          for line_no, line in enumerate(text.splitlines(), 1):
+              stripped = line.strip()
+              if not any(stripped.endswith(t) for t in targets):
+                  continue
+              m = tail_re.search(line)
+              if not m:
+                  rejected_target_lines.append({'line': line_no, 'text': stripped})
+                  continue
+              va = int(m.group(1), 16)
+              origin = m.group(3)
+              if origin not in targets:
+                  continue
+              prefix = line[:m.start(1)].rstrip().split()
+              if not prefix:
+                  raise SystemExit(f'cannot extract symbol at line {line_no}: {line!r}')
+              symbol = prefix[-1]
+              rows.append({
+                  'line': line_no,
+                  'va': f'0x{va:08X}',
+                  'vaInt': va,
+                  'isFunctionFlag': bool(m.group(2)),
+                  'symbol': symbol,
+                  'origin': origin,
+                  'raw': stripped,
+              })
+
+          if rejected_target_lines:
+              raise SystemExit(f'target MAP lines failed exact parser: {len(rejected_target_lines)}')
+          if not rows:
+              raise SystemExit('no target sound-object MAP rows found')
+
+          rows.sort(key=lambda r: (r['vaInt'], r['origin'], r['symbol']))
+          duplicates = defaultdict(list)
+          for r in rows:
+              duplicates[r['vaInt']].append(r)
+          duplicate_vas = {
+              f'0x{va:08X}': vals for va, vals in duplicates.items() if len(vals) > 1
+          }
+          by_origin = Counter(r['origin'] for r in rows)
+          functions_by_origin = Counter(r['origin'] for r in rows if r['isFunctionFlag'])
+
+          # Known anchors must be present exactly in the census. These are only
+          # identity/coverage anchors; no new semantics are inferred from them.
+          anchors = {
+              'SD_VoiceStart': 0x008BA620,
+              'SD_VoiceStarted': 0x008BA6C0,
+              'SD_SourceInitStream': 0x008B9D10,
+              'SD_StreamAllocate': 0x008B9E20,
+              'SD_OutputForceWakeup': 0x008BA8B0,
+          }
+          anchor_hits = {}
+          for name, va in anchors.items():
+              hits = [r for r in rows if r['vaInt'] == va]
+              if not hits:
+                  raise SystemExit(f'missing known anchor {name} at 0x{va:08X}')
+              anchor_hits[name] = hits
+
+          out_rows = []
+          for r in rows:
+              q = dict(r)
+              q.pop('vaInt')
+              out_rows.append(q)
+          report = {
+              'format': 't6-audio-downstream-symbol-census-v1',
+              'authority': {
+                  'exeBytes': len(exe),
+                  'exeSha256': hashlib.sha256(exe).hexdigest(),
+                  'mapBytes': len(mp),
+                  'mapSha256': hashlib.sha256(mp).hexdigest(),
+              },
+              'targetOrigins': sorted(targets),
+              'rowCount': len(rows),
+              'functionFlagRowCount': sum(1 for r in rows if r['isFunctionFlag']),
+              'rowsByOrigin': dict(sorted(by_origin.items())),
+              'functionRowsByOrigin': dict(sorted(functions_by_origin.items())),
+              'anchorHits': anchor_hits,
+              'duplicateVaCount': len(duplicate_vas),
+              'duplicateVas': duplicate_vas,
+              'rows': out_rows,
+          }
+          Path('/tmp/probe/T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True) + '\n'
+          )
+
+          print('=== EXACT SOUND OBJECT COUNTS ===')
+          for origin in sorted(targets):
+              print(f'{origin}: rows={by_origin[origin]} functionFlagRows={functions_by_origin[origin]}')
+          print(f'TOTAL rows={len(rows)} functionFlagRows={report["functionFlagRowCount"]} duplicateVAs={len(duplicate_vas)}')
+          print('=== FUNCTION-FLAG SYMBOLS ===')
+          for r in rows:
+              if r['isFunctionFlag']:
+                  print(f'{r["va"]} {r["origin"]} {r["symbol"]}')
+          PY
+          sha256sum /tmp/probe/T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1.json
+
+      - name: Upload exact downstream symbol census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1
+          path: /tmp/probe/T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1.json
+          if-no-files-found: error
+          compression-level: 9
