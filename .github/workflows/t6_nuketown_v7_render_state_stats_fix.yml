@@ -1,4 +1,4 @@
-name: T6 Nuketown v7 render-state stats fix
+name: T6 Nuketown v7 production proof dispatch
 
 on:
   push:
@@ -8,31 +8,18 @@ on:
       - '.github/workflows/t6_nuketown_v7_render_state_stats_fix.yml'
 
 permissions:
-  contents: write
+  actions: write
+  contents: read
 
 jobs:
-  patch:
+  dispatch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: nuketown-layered-runtime-projection-v2
-          fetch-depth: 0
-
-      - name: Apply fail-closed v7 stats patch
+      - name: Dispatch exact production manifest v7
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 tools/_oneoff_patch_v7_render_state_stats.py
-          python3 -m py_compile tools/t6_oat_material_manifest_v7.py
-          git diff --check
-          git diff -- tools/t6_oat_material_manifest_v7.py
-
-      - name: Commit exact v7 stats-accounting correction
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tools/t6_oat_material_manifest_v7.py
-          git diff --cached --quiet && { echo 'expected v7 source change was not produced' >&2; exit 1; }
-          git commit -m 'Fix v7 render-state component accounting'
-          git push origin HEAD:nuketown-layered-runtime-projection-v2
+          gh workflow run t6_nuketown_production_material_manifest_v7.yml \
+            --repo lizardpeter/bo2-t6-assets \
+            --ref nuketown-layered-runtime-projection-v2
