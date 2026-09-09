@@ -2,9 +2,9 @@
 """Classify exact retail T6 layered Material texture-table ordering.
 
 The generated OAT Material JSON is the authority. This census does not reorder or
-recover anything. It proves the existing direct-concatenation family when all
-standalone components exist, and independently records whether each generated
-runtime table is nondecreasing by Treyarch's 32-bit material-name hash recurrence.
+recover anything. It measures direct-concatenation equality and independently
+records whether each generated runtime table is nondecreasing by Treyarch's
+32-bit material-name hash recurrence.
 """
 from __future__ import annotations
 
@@ -54,6 +54,31 @@ def textures(identity: str, source: dict) -> list[dict]:
     return rows
 
 
+def first_diff(expected: object, actual: object, path: str = "$") -> dict | None:
+    if type(expected) is not type(actual):
+        return {"path": path, "kind": "type", "expected": expected, "actual": actual}
+    if isinstance(expected, dict):
+        ek, ak = set(expected), set(actual)
+        if ek != ak:
+            return {"path": path, "kind": "keys", "expectedOnly": sorted(ek-ak), "actualOnly": sorted(ak-ek)}
+        for key in sorted(ek):
+            d = first_diff(expected[key], actual[key], f"{path}.{key}")
+            if d is not None:
+                return d
+        return None
+    if isinstance(expected, list):
+        if len(expected) != len(actual):
+            return {"path": path, "kind": "length", "expectedLength": len(expected), "actualLength": len(actual)}
+        for i, (e, g) in enumerate(zip(expected, actual)):
+            d = first_diff(e, g, f"{path}[{i}]")
+            if d is not None:
+                return d
+        return None
+    if expected != actual:
+        return {"path": path, "kind": "value", "expected": expected, "actual": actual}
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("material_root", type=Path)
@@ -71,6 +96,7 @@ def main() -> int:
     all_available_sorted = 0
     texture_total = 0
     hash_source_counts = Counter()
+    first_direct_mismatch = None
 
     for cat in catalog.get("materials", []):
         material = str(cat.get("name") or "")
@@ -109,6 +135,7 @@ def main() -> int:
         all_available = not missing
         direct_exact = None
         direct_sha = None
+        direct_diff = None
         if all_available:
             all_available_count += 1
             concat = []
@@ -119,7 +146,9 @@ def main() -> int:
             direct_count += int(direct_exact)
             all_available_sorted += int(nondecreasing)
             if not direct_exact:
-                raise RuntimeError(f"{material!r}: all-standalone exact direct-concatenation invariant failed")
+                direct_diff = first_diff(concat, generated)
+                if first_direct_mismatch is None:
+                    first_direct_mismatch = {"material": material, "firstDifference": direct_diff}
         else:
             missing_family_count += 1
             missing_family_sorted += int(nondecreasing)
@@ -135,6 +164,7 @@ def main() -> int:
             "generatedTextureTableSha256": sha(generated),
             "directConcatenationExact": direct_exact,
             "directConcatenationSha256": direct_sha,
+            "directConcatenationFirstDifference": direct_diff,
             "effectiveNameHashesNondecreasing": nondecreasing,
             "textureOrder": compact,
         })
@@ -148,6 +178,7 @@ def main() -> int:
         "generatedTextureRowCount": texture_total,
         "allStandaloneComponentsAvailableCount": all_available_count,
         "exactDirectConcatenationCount": direct_count,
+        "directConcatenationMismatchCount": all_available_count - direct_count,
         "missingStandaloneFamilyCount": missing_family_count,
         "hashNondecreasingGeneratedCount": sorted_count,
         "hashNondecreasingAllStandaloneCount": all_available_sorted,
@@ -164,13 +195,14 @@ def main() -> int:
         "standaloneMissingComponents": observed_missing,
         "hashRecurrence": "h0=0; h[n+1]=(ASCII(char) XOR 33*h[n]) mod 2^32",
         "summary": summary,
+        "firstDirectConcatenationMismatch": first_direct_mismatch,
         "materials": rows,
-        "proofBoundary": "Exact generated/standalone OAT JSON census only. Hash ordering is observed and classified; no missing component recovery, ownership inference, or shader/blend semantics are promoted here."
+        "proofBoundary": "Exact generated/standalone OAT JSON census only. Direct concatenation and hash ordering are measured, not assumed; no missing component recovery, ownership inference, or shader/blend semantics are promoted here."
     }
     payload = (json.dumps(out, indent=2, sort_keys=True) + "\n").encode("utf-8")
     a.output_json.parent.mkdir(parents=True, exist_ok=True)
     a.output_json.write_bytes(payload)
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    print(json.dumps({"summary": summary, "firstDirectConcatenationMismatch": first_direct_mismatch}, indent=2, sort_keys=True))
     return 0
 
 
