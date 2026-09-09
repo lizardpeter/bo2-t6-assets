@@ -1,0 +1,141 @@
+{
+  "format": "t6-pc-server-sound-worker-output-runtime-v1",
+  "status": "EXACT_SERVER_RUNTIME_BOUNDARY",
+  "authority": {
+    "exe": {
+      "name": "CoDMPServer_PC.exe",
+      "bytes": 13711872,
+      "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+      "imageBase": "0x00400000"
+    },
+    "map": {
+      "name": "CoDMPServer_PC.map",
+      "bytes": 9213148,
+      "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+    },
+    "serverDecompileCommit": "ecdd85023274e49675a00458b210c22b4b4849e7"
+  },
+  "evidence": {
+    "workerOutputProbe": {
+      "workflow": ".github/workflows/t6_audio_worker_output_probe_v1.yml",
+      "sourceCommit": "afcae9a02059ee815f45942330039b351ec0db05",
+      "runId": 34362855678,
+      "jobId": 102503988526,
+      "artifactId": 10108562967,
+      "artifactZipSha256": "dcb7c476a6919b77cb7f9c8f378f38d862efa3049766c7b5a9ff6608d05e074a",
+      "jsonSha256": "6e1b6109bb4ad92a2dc29d5ebfe12f596f1b0a30ed7a3daeff0ef09174148fd5"
+    },
+    "globalXrefProbe": {
+      "workflow": ".github/workflows/t6_audio_worker_global_xref_probe_v1.yml",
+      "sourceCommit": "1f33d1e05fc1c8f6bcaa732583a950b690f61c9d",
+      "runId": 34363145360,
+      "jobId": 102504990578,
+      "artifactId": 10108684709,
+      "artifactZipSha256": "a6936614f24027ebbeb62cf3df80fb84dfac4916e748e4c18f4cf3375d9adff1",
+      "jsonSha256": "1afc9ff797006530a435964fcecc91e7edf4fd1743c33736bd6bbc71dccff048"
+    },
+    "interfaceIndirectCensus": {
+      "workflow": ".github/workflows/t6_audio_interface_indirect_census_v1.yml",
+      "sourceCommit": "884c9ef76f3015f575ad24091a013c65bea94008",
+      "runId": 34363665010,
+      "jobId": 102506769899,
+      "artifactId": 10108898252,
+      "artifactZipSha256": "8aa516cda0cc8eb69f6bc293d6df717b573c1f54699308bd4626f3a7c0e05f43",
+      "jsonSha256": "0df1ae61a95575764e803e0ec13af816cfcf19464932524a4e337311bc37fca0"
+    }
+  },
+  "exactRuntimeFindings": {
+    "SD_VoiceStart": {
+      "va": "0x008BA620",
+      "role": "installs the active voice parameter pointer after null-slot assertions; it is not the decoder or hardware start routine"
+    },
+    "SD_VoiceStarted": {
+      "va": "0x008BA6C0",
+      "role": "voice-state plus active-parameter-pointer predicate"
+    },
+    "SD_PreUpdate": {
+      "va": "0x008B90E0",
+      "role": "API-side voice handoff and telemetry; starts voices only after SD_VoiceHasData"
+    },
+    "SD_UpdateVoice": {
+      "va": "0x008B9860",
+      "role": "reads the voice position, records it at the higher-level voice, and hands off a replacement voice parameter; no decoder processing is present in this function"
+    },
+    "SD_VoiceSetParam": {
+      "va": "0x008BA560",
+      "role": "atomic voice-parameter handoff"
+    },
+    "SD_StreamDevhost": {
+      "va": "0x008BA010",
+      "role": "telemetry reader for pending I/O, used/free buffers, used streams, and starvation counters"
+    },
+    "sd_xa2_callback_OnBufferEnd": {
+      "va": "0x008BA800",
+      "role": "atomically decrements flyingBuffers and signals bufferReadyEvent"
+    },
+    "SD_OutputForceWakeup": {
+      "va": "0x008BA8B0",
+      "role": "signals bufferReadyEvent"
+    },
+    "SD_OutputInit": {
+      "va": "0x008BAE90",
+      "role": "initializes the XAudio/output side, initializes bufferReadyEvent, zeroes flyingBuffers, and zeroes g_sd syncCounter"
+    }
+  },
+  "exactGlobals": {
+    "g_sd": "0x00DE2500",
+    "g_sd_syncFlag": "0x00DE2508",
+    "g_sd_syncCounter": "0x00DE250C",
+    "decoderInterfaceShutdownBase": "0x00DE2514",
+    "decoderInterfaceCreateBase": "0x00DE2538",
+    "decoderInterfaceCensusEnd": "0x00DE2700",
+    "decoderWaitUsec": "0x00E4A898",
+    "decoderProcessUsec": "0x00E4A89C",
+    "bufferReadyEvent": "0x01087A88",
+    "flyingBuffers": "0x01087A8C",
+    "g_sd_stream_globals": "0x07F1A420"
+  },
+  "decoderInterfaceOperandCensus": {
+    "region": "[0x00DE2500,0x00DE2700)",
+    "rawCandidates": 10,
+    "admittedExactOperands": 9,
+    "rejectedRawFalsePositives": 1,
+    "functionPointerFieldsObserved": [
+      {
+        "fieldBase": "0x00DE2514",
+        "semantic": "Shutdown",
+        "use": "SD_DecoderShutdown iterates and indirect-calls entries"
+      },
+      {
+        "fieldBase": "0x00DE2538",
+        "semantic": "Create",
+        "use": "lower SD_DecoderAllocate checks and indirect-calls indexed entries"
+      }
+    ],
+    "boundary": "No other direct immediate or memory-displacement operand into this decoder-interface region exists in the exact dedicated-server .text census. This does not exclude a callback reached through a pointer copied into another object or a computed/base-relative access."
+  },
+  "sourceAssertionEvidence": {
+    "sd_stream": [
+      "stream->buffersSubmitted[1] == 0",
+      "stream->buffersSubmitted[0] == 0",
+      "stream->buffers[1] == 0",
+      "stream->buffers[0] == 0",
+      "stream->ioBuffer == 0"
+    ],
+    "sd_voice": [
+      "voice->decoder->framesDecoded",
+      "voice->decoder->lastBuffer",
+      "voice->decoder->eos",
+      "voice->source.stream == 0"
+    ]
+  },
+  "notProven": [
+    "where or whether the dedicated-server build advances decoder Process state",
+    "decoded sample representation and frame-count ABI",
+    "stream refill state machine and buffer ownership transitions",
+    "XAudio2 source-buffer submission contract",
+    "mixer/resampler equations",
+    "retail t6mp.exe decoder/output equivalence",
+    "retail decoder Create/Process targets"
+  ]
+}
