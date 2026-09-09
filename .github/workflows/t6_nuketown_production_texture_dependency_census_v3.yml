@@ -1,0 +1,106 @@
+name: T6 Nuketown production texture dependency census v3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - nuketown-layered-runtime-projection-v2
+    paths:
+      - 'tools/t6_nuketown_production_texture_dependency_census_v3.py'
+      - 'tools/t6_nuketown_production_texture_dependency_census_v2.py'
+      - 'tools/t6_nuketown_production_texture_dependency_census_v1.py'
+      - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
+      - 'tools/t6_nuketown_shared_ipak_alias_census_v1.py'
+      - 'tools/t6_ipak_http_range_v2.py'
+      - 'tools/t6_iwi27_mip_layout_probe_v1.py'
+      - 'tools/t6_iwi27_mip_layout_proof_v2.py'
+      - 'tools/t6_iwi27_dds_bridge_v1.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+      - '.github/workflows/t6_nuketown_production_texture_dependency_census_v3.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import exact green v7 Material proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/material-proof
+          gh run download 34401899404 \
+            --repo lizardpeter/bo2-t6-assets \
+            --name T6_NUKETOWN_PRODUCTION_MATERIAL_MANIFEST_V7 \
+            --dir /tmp/material-proof
+          cp /tmp/material-proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json /tmp/proof/
+          echo '14c4b7098df32de0e0238197b5c8103b1ea5b29c84a2ed8b240917caa25b9b47  /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json' | sha256sum -c -
+
+      - name: Materialize exact 81 pointer-proven retail IWI payloads
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/staged/payloads /tmp/dds81
+          python3 tools/t6_nuketown_shared_ipak_stage_v1.py \
+            --census manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64 \
+            --out-dir /tmp/staged/payloads \
+            --manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python3 tools/t6_iwi27_mip_layout_proof_v2.py \
+            --root /tmp/staged/payloads \
+            --out /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json
+          python3 tools/t6_iwi27_dds_bridge_v1.py \
+            --staged-manifest /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json \
+            --payload-root /tmp/staged/payloads \
+            --layout-proof /tmp/proof/T6_NUKETOWN_IWI27_MIP_LAYOUT_PROOF_V2.json \
+            --out-root /tmp/dds81 \
+            --manifest /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json
+
+      - name: Count v7-admitted production Material image coverage
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_production_texture_dependency_census_v3.py \
+            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json \
+            --dds-bridge /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V3.json \
+            2>&1 | tee /tmp/proof/dependency_census_v3.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V3.json'
+          d=json.load(open(p)); s=d['summary']
+          assert d['format']=='t6-nuketown-production-texture-dependency-census-v3',d.get('format')
+          assert s['materialUniqueImageCount']==423,s
+          assert s['exact81BridgeImageCount']==81,s
+          assert s['productionUniqueImageCount']==423,s
+          assert s['productionCoveredByExact81Count']+s['productionMissingFromExact81Count']==423,s
+          print('GREEN V7-GATED MATERIAL TEXTURE CENSUS V3',json.dumps(s,sort_keys=True))
+          print('MISSING_MATERIAL_IMAGES',len(d['missingProductionImages']))
+          for row in d['missingProductionImages'][:160]:
+              print('MISSING',row['image'],'USES',len(row['materialUses']))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_V3
+          path: |
+            /tmp/proof
+            /tmp/staged/T6_NUKETOWN_DLC0_IPAK_STAGED_PAYLOADS_V2.json
+          if-no-files-found: error
+          compression-level: 0
