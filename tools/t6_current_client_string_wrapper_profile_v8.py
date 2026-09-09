@@ -104,7 +104,6 @@ def main() -> int:
         raw = data[sec["rawOff"]:sec["rawOff"] + sec["rawSize"]]
         insns.extend(md.disasm(raw, sec["va"]))
     insns.sort(key=lambda x: x.address)
-    by_va = {x.address: i for i, x in enumerate(insns)}
 
     sites = [(i, x) for i, x in enumerate(insns) if is_direct_call(x) and target(x) == TARGET]
     require(len(sites) == 10, f"target direct-callsite count changed: {len(sites)}")
@@ -136,23 +135,26 @@ def main() -> int:
             "postInstructions": [fmt_insn(x) for x in insns[i + 1:i + 5]],
         })
 
-    ti = by_va.get(TARGET)
-    require(ti is not None, f"target 0x{TARGET:08X} is not an instruction boundary")
-    body_window = insns[ti:min(len(insns), ti + 180)]
+    # Do not depend on a section-wide linear Capstone sweep reaching TARGET.
+    # Some executable sections contain undecodable/padding bytes before valid
+    # direct-call targets.  Translate the VA through the PE and disassemble a
+    # bounded byte window directly from that exact target instead.
+    target_off = pe.va_to_off(TARGET)
+    target_raw = data[target_off:target_off + 0x800]
+    body_window = list(md.disasm(target_raw, TARGET))
+    require(body_window and body_window[0].address == TARGET, f"direct target 0x{TARGET:08X} did not decode")
+
     # Stop display at the first RET only for a compact view.  This is not asserted
     # to be a complete function boundary.
     compact_body = []
-    for x in body_window:
+    for x in body_window[:180]:
         compact_body.append(x)
         if x.mnemonic in ("ret", "retn"):
             break
+    require(compact_body, "empty target disassembly")
     body_start = compact_body[0].address
     body_end = compact_body[-1].address + compact_body[-1].size
-    try:
-        off = pe.va_to_off(body_start)
-        body_sha = sha256(data[off:off + (body_end - body_start)])
-    except ProbeError:
-        body_sha = None
+    body_sha = sha256(data[target_off:target_off + (body_end - body_start)])
 
     target_calls = [x for x in compact_body if is_direct_call(x)]
     doc = {
@@ -174,6 +176,11 @@ def main() -> int:
             "directCallTargetsHex": [f"0x{target(x):08X}" for x in target_calls],
             "instructions": [fmt_insn(x) for x in compact_body],
             "completeFunctionBoundaryClaimed": False,
+            "disassemblyMethod": "direct PE VA-to-file-offset bounded decode; independent of section-wide linear sweep",
+        },
+        "toolingCorrection": {
+            "sectionWideLinearSweepMayStopBeforeValidDirectTarget": True,
+            "targetDirectDecodeRequired": True,
         },
         "proofBoundary": (
             "Pinned current-client profile only. A consistent two-argument enum-like call shape can strengthen a locator "
