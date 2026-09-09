@@ -1,0 +1,252 @@
+name: T6 current Plutonium XAudio2 RTTI probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_xaudio2_rtti_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PE/disassembly helpers
+        run: python3 -m pip install --disable-pip-version-check 'pefile==2024.8.26' 'capstone==5.0.6'
+      - name: Resolve current-client XAudio2 imports and RTTI chains
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib, json, struct, urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_GRP_CALL, CS_GRP_JUMP
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_REG_INVALID
+
+          EXPECTED_REVISION=5346
+          EXPECTED_BYTES=13263640
+          EXPECTED_SHA1='f101e28c3a18ce1ffe37a40d23cd04f7f57925d3'
+          EXPECTED_SHA256='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          INFO_URL='https://cdn.plutoniummod.com/updater/prod/info.json'
+          TARGET='games/t6mp.exe'
+          RTTI_NAMES=[
+            '.?AVSD_XAudio2Callbacks@@',
+            '.?AUIXAudio2VoiceCallback@@',
+            '.?AUIXAudio2EngineCallback@@',
+          ]
+
+          def require(c,m):
+            if not c: raise RuntimeError(m)
+          def get(url,timeout=180):
+            req=urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-current-xaudio2-rtti/1'})
+            with urllib.request.urlopen(req,timeout=timeout) as r:
+              require(r.status==200,f'HTTP {r.status}: {url}')
+              return r.read()
+          def u32(raw,o): return struct.unpack_from('<I',raw,o)[0]
+
+          info=json.loads(get(INFO_URL,60).decode('utf-8'))
+          require(info.get('revision')==EXPECTED_REVISION,f'CDN revision changed: {info.get("revision")} != {EXPECTED_REVISION}')
+          files=info.get('files'); require(isinstance(files,list),'files not list')
+          recs=[x for x in files if isinstance(x,dict) and str(x.get('name','')).replace('\\','/').lower()==TARGET]
+          require(len(recs)==1,f'expected one {TARGET}, got {len(recs)}')
+          rec=recs[0]
+          require(int(rec.get('size'))==EXPECTED_BYTES,'current client size changed')
+          require(str(rec.get('hash','')).lower()==EXPECTED_SHA1,'current client manifest SHA1 changed')
+          raw=get(info['baseUrl']+EXPECTED_SHA1,180)
+          require(len(raw)==EXPECTED_BYTES,'download size mismatch')
+          require(hashlib.sha1(raw).hexdigest()==EXPECTED_SHA1,'download SHA1 mismatch')
+          require(hashlib.sha256(raw).hexdigest()==EXPECTED_SHA256,'download SHA256 mismatch')
+
+          pe=pefile.PE(data=raw,fast_load=False)
+          image_base=pe.OPTIONAL_HEADER.ImageBase
+          size_image=pe.OPTIONAL_HEADER.SizeOfImage
+          image_lo=image_base; image_hi=image_base+size_image
+          sections=[]
+          for s in pe.sections:
+            name=s.Name.rstrip(b'\0').decode('ascii','replace')
+            sections.append({
+              'name':name,'rawOffset':s.PointerToRawData,'rawSize':s.SizeOfRawData,
+              'rva':s.VirtualAddress,'va':image_base+s.VirtualAddress,'virtualSize':s.Misc_VirtualSize,
+              'characteristics':s.Characteristics,
+              'sha256':hashlib.sha256(raw[s.PointerToRawData:s.PointerToRawData+s.SizeOfRawData]).hexdigest(),
+            })
+          def off_loc(off):
+            for s in sections:
+              if s['rawOffset'] <= off < s['rawOffset']+s['rawSize']:
+                return {'fileOffset':off,'section':s['name'],'rva':s['rva']+(off-s['rawOffset']),'va':s['va']+(off-s['rawOffset'])}
+            return {'fileOffset':off}
+          def va_off(va):
+            for s in sections:
+              if s['va'] <= va < s['va']+s['rawSize']:
+                return s['rawOffset']+(va-s['va'])
+            return None
+          def is_exec_va(va):
+            for s in sections:
+              if s['va'] <= va < s['va']+max(s['rawSize'],s['virtualSize']):
+                return bool(s['characteristics'] & 0x20000000)
+            return False
+          def ptr_refs(value):
+            needle=struct.pack('<I',value & 0xffffffff); out=[]; st=0
+            while True:
+              p=raw.find(needle,st)
+              if p<0: break
+              out.append(off_loc(p)); st=p+1
+            return out
+
+          imports=[]
+          if hasattr(pe,'DIRECTORY_ENTRY_IMPORT'):
+            for d in pe.DIRECTORY_ENTRY_IMPORT:
+              dll=d.dll.decode('ascii','replace') if d.dll else ''
+              funcs=[]
+              for imp in d.imports:
+                funcs.append({'name':imp.name.decode('ascii','replace') if imp.name else None,'ordinal':imp.ordinal,'iatVa':imp.address})
+              imports.append({'dll':dll,'functions':funcs})
+          xaudio_imports=[]
+          for d in imports:
+            dll_l=d['dll'].lower()
+            hit=[f for f in d['functions'] if (f['name'] and any(k in f['name'].lower() for k in ['xaudio','x3daudio','audio']))]
+            if 'xaudio' in dll_l or 'x3daudio' in dll_l or hit:
+              xaudio_imports.append({'dll':d['dll'],'functions':hit if hit else d['functions']})
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          exec_sections=[s for s in sections if s['characteristics'] & 0x20000000 and s['rawSize']]
+
+          def direct_code_refs(targets):
+            targets=set(targets); found={t:[] for t in targets}
+            for s in exec_sections:
+              code=raw[s['rawOffset']:s['rawOffset']+s['rawSize']]
+              for ins in md.disasm(code,s['va']):
+                matched=set()
+                for op in ins.operands:
+                  if op.type==X86_OP_IMM:
+                    v=op.imm & 0xffffffff
+                    if v in targets: matched.add(v)
+                  elif op.type==X86_OP_MEM and op.mem.base==X86_REG_INVALID and op.mem.index==X86_REG_INVALID:
+                    v=op.mem.disp & 0xffffffff
+                    if v in targets: matched.add(v)
+                for v in matched:
+                  found[v].append({'instructionVa':ins.address,'mnemonic':ins.mnemonic,'opStr':ins.op_str,'bytes':bytes(ins.bytes).hex()})
+            return found
+
+          def direct_rel_callers(targets):
+            targets=set(targets); found={t:[] for t in targets}
+            for s in exec_sections:
+              code=raw[s['rawOffset']:s['rawOffset']+s['rawSize']]
+              for ins in md.disasm(code,s['va']):
+                if not (ins.group(CS_GRP_CALL) or ins.group(CS_GRP_JUMP)): continue
+                for op in ins.operands:
+                  if op.type==X86_OP_IMM:
+                    v=op.imm & 0xffffffff
+                    if v in targets:
+                      found[v].append({'instructionVa':ins.address,'mnemonic':ins.mnemonic,'opStr':ins.op_str,'bytes':bytes(ins.bytes).hex()})
+            return found
+
+          rtti=[]; all_vtable_vas=[]; all_method_vas=[]
+          for name in RTTI_NAMES:
+            b=name.encode('ascii')+b'\0'; occ=[]; st=0
+            while True:
+              p=raw.find(b,st)
+              if p<0: break
+              occ.append(p); st=p+1
+            require(len(occ)==1,f'RTTI name {name} occurrences={len(occ)}')
+            name_off=occ[0]; require(name_off>=8,'RTTI name before type descriptor prefix')
+            td_off=name_off-8; td=off_loc(td_off); td_va=td.get('va'); require(isinstance(td_va,int),'type descriptor not raw-backed')
+            td_vftable=u32(raw,td_off); td_spare=u32(raw,td_off+4)
+            td_refs=ptr_refs(td_va)
+            cols=[]
+            for ref in td_refs:
+              ro=ref['fileOffset']
+              if ro<12: continue
+              co=ro-12
+              loc=off_loc(co); cva=loc.get('va')
+              if not isinstance(cva,int) or co+20>len(raw): continue
+              sig,off,cd,ptd,pchd=struct.unpack_from('<IIIII',raw,co)
+              if ptd!=td_va: continue
+              if sig not in (0,1): continue
+              if not (image_lo <= pchd < image_hi): continue
+              col_refs=ptr_refs(cva)
+              vtables=[]
+              for cr in col_refs:
+                vo=cr['fileOffset']+4
+                vl=off_loc(vo); vva=vl.get('va')
+                if not isinstance(vva,int): continue
+                entries=[]
+                for i in range(32):
+                  eo=vo+i*4
+                  if eo+4>len(raw): break
+                  fva=u32(raw,eo)
+                  if not is_exec_va(fva): break
+                  entries.append({'slot':i,'functionVa':fva,'pointerFileOffset':eo})
+                  all_method_vas.append(fva)
+                if entries:
+                  vtables.append({'vtable':vl,'completeObjectLocatorPointer':cr,'entries':entries})
+                  all_vtable_vas.append(vva)
+              cols.append({'completeObjectLocator':loc,'signature':sig,'offset':off,'cdOffset':cd,'typeDescriptorVa':ptd,'classHierarchyDescriptorVa':pchd,'refs':col_refs,'vtables':vtables})
+            rtti.append({'name':name,'nameLocation':off_loc(name_off),'typeDescriptor':td,'typeDescriptorVftableVa':td_vftable,'typeDescriptorSpare':td_spare,'typeDescriptorRefs':td_refs,'completeObjectLocators':cols})
+
+          vtable_refs=direct_code_refs(all_vtable_vas) if all_vtable_vas else {}
+          method_callers=direct_rel_callers(all_method_vas) if all_method_vas else {}
+          for typ in rtti:
+            for col in typ['completeObjectLocators']:
+              for vt in col['vtables']:
+                vva=vt['vtable']['va']; vt['directCodeRefs']=vtable_refs.get(vva,[])
+                for e in vt['entries']:
+                  e['directCallOrJumpRefs']=method_callers.get(e['functionVa'],[])
+                  fo=va_off(e['functionVa'])
+                  if fo is not None:
+                    prefix=raw[fo:fo+64]
+                    e['first64Sha256']=hashlib.sha256(prefix).hexdigest()
+                    e['first64Hex']=prefix.hex()
+
+          # Keep renderer resample strings separate unless an executable xref proves ownership.
+          resample_names=['r_resampleScene','resample_matrix','resample_shift','resample_cubic_final','resample_hdr','resample_final']
+          resamples=[]
+          res_targets=[]
+          for name in resample_names:
+            b=name.encode()+b'\0'; occ=[]; st=0
+            while True:
+              p=raw.find(b,st)
+              if p<0: break
+              occ.append(off_loc(p)); st=p+1
+            for o in occ:
+              if isinstance(o.get('va'),int): res_targets.append(o['va'])
+            resamples.append({'name':name,'occurrences':occ})
+          res_refs=direct_code_refs(res_targets) if res_targets else {}
+          for x in resamples:
+            for o in x['occurrences']:
+              if isinstance(o.get('va'),int): o['directCodeRefs']=res_refs.get(o['va'],[])
+
+          result={
+            'format':'t6-current-plutonium-xaudio2-rtti-probe-v1',
+            'authority':'exact current Plutonium revision 5346 client only; not historical retail-equivalent',
+            'client':{'revision':EXPECTED_REVISION,'bytes':EXPECTED_BYTES,'sha1':EXPECTED_SHA1,'sha256':EXPECTED_SHA256,'imageBase':image_base,'sizeOfImage':size_image,'sections':sections},
+            'imports':{'matchingAudioOrXAudio':xaudio_imports,'allDllNames':[d['dll'] for d in imports]},
+            'rtti':rtti,
+            'rendererResampleStringControl':resamples,
+            'summary':{
+              'rttiTypes':len(rtti),
+              'completeObjectLocators':sum(len(x['completeObjectLocators']) for x in rtti),
+              'vtableCandidates':sum(len(c['vtables']) for x in rtti for c in x['completeObjectLocators']),
+              'vtableMethodPointers':sum(len(v['entries']) for x in rtti for c in x['completeObjectLocators'] for v in c['vtables']),
+              'audioImportDllGroups':len(xaudio_imports),
+            },
+            'proofBoundary':'RTTI/type-descriptor/COL/vtable chains are promoted only when exact in-image pointer structure closes. Vtable slot semantic names and retail equivalence are not inferred. resample_* strings are retained as a separate ownership control and are not called audio merely by spelling.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_RTTI_PROBE_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'summary':result['summary'],'audioImports':xaudio_imports,'rtti':[{ 'name':x['name'],'tdVa':x['typeDescriptor']['va'],'cols':[{'va':c['completeObjectLocator']['va'],'vtables':[v['vtable']['va'] for v in c['vtables']]} for c in x['completeObjectLocators']]} for x in rtti]},indent=2,sort_keys=True))
+          print('result_sha256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_XAUDIO2_RTTI_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_RTTI_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
