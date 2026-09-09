@@ -1,0 +1,342 @@
+name: T6 Nuketown layered texture transform census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_layered_texture_transform_census_v1.yml'
+      - 'manifests/maps/mp_nuketown_2020/layered_material_fixture_proof_v1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch exact Nuketown FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Dump exact map-owned Materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          success=0
+          : >/tmp/proof/oat_material_dump_map.log
+          for attempt in 1 2 3; do
+            rm -rf /tmp/oat_map
+            mkdir -p /tmp/oat_map
+            echo "OAT_DUMP_ATTEMPT attempt=$attempt" | tee -a /tmp/proof/oat_material_dump_map.log
+            if "$BIN" --no-color --include-assets material --output-folder /tmp/oat_map \
+              /tmp/source/mp_nuketown_2020.ff 2>&1 | tee -a /tmp/proof/oat_material_dump_map.log; then
+              success=1
+              break
+            fi
+          done
+          test "$success" = 1
+          matroot=$(find /tmp/oat_map -type d -name materials -print -quit)
+          test -n "$matroot" -a -d "$matroot"
+          echo "$matroot" >/tmp/proof/material_root.txt
+
+      - name: Census exact generated texture transform
+        shell: bash
+        run: |
+          set -euo pipefail
+          MATROOT=$(cat /tmp/proof/material_root.txt)
+          export MATROOT
+          python3 - <<'PY'
+          import collections
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["MATROOT"])
+          fixture_path = Path("manifests/maps/mp_nuketown_2020/layered_material_fixture_proof_v1.json")
+          fixture_raw = fixture_path.read_bytes()
+          fixture = json.loads(fixture_raw)
+          token_map = fixture["layerTokenToComponentMaterial"]
+          token_re = re.compile(r"^[0-9]+[nx]?$")
+          missing_expected = {
+              "wpc/asphalt_road_dark_dec",
+              "wpc/decal_concrete_clean_line",
+              "wpc/decal_damage_asphalt_crack01",
+              "wpc/decal_grunge_glue",
+              "wpc/decal_grunge_mold01",
+              "wpc/decal_signage_const_marking01",
+              "wpc/decal_signage_const_marking02",
+          }
+
+          def canon(v):
+              return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+          def raw_sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def load_textures(path):
+              doc = json.loads(path.read_text(encoding="utf-8"))
+              rows = doc.get("textures")
+              assert isinstance(rows, list) and all(isinstance(x, dict) for x in rows), path
+              return doc, rows
+
+          component_cache = {}
+          def component(identity):
+              if identity in component_cache:
+                  return component_cache[identity]
+              p = root / f"{identity}.json"
+              if not p.is_file():
+                  component_cache[identity] = None
+                  return None
+              doc, rows = load_textures(p)
+              component_cache[identity] = (p, doc, rows)
+              return component_cache[identity]
+
+          generated = []
+          for p in sorted((root / "generated").glob("*.json")):
+              stem = p.stem
+              if not stem.startswith("_"):
+                  continue
+              tokens = stem[1:].split("_")
+              if not tokens or any(not token_re.fullmatch(t) for t in tokens):
+                  continue
+              if any(t not in token_map for t in tokens):
+                  continue
+              generated.append((p, tokens, [token_map[t] for t in tokens]))
+
+          assert len(generated) == 120, len(generated)
+          referenced = {c for _, _, cs in generated for c in cs}
+          missing = {c for c in referenced if component(c) is None}
+          assert len(referenced) == 83, len(referenced)
+          assert missing == missing_expected, (sorted(missing), sorted(missing_expected))
+
+          known_occurrences = 0
+          known_texture_occurrences = 0
+          exact_after_name_rewrite = 0
+          field_mismatch_count = 0
+          name_binding_failures = []
+          row_field_differences = []
+          difference_key_hist = collections.Counter()
+          sampler_rewrites = collections.Counter()
+          generated_reports = []
+          all_known_generated = 0
+          all_known_fully_accounted = 0
+          target_bearing_generated = 0
+          target_unaccounted_rows = collections.defaultdict(list)
+          observed_target_rows = collections.defaultdict(list)
+
+          for p, tokens, components in generated:
+              _, gen_rows = load_textures(p)
+              by_name = collections.defaultdict(list)
+              for gi, row in enumerate(gen_rows):
+                  by_name[row.get("name")].append((gi, row))
+
+              consumed = set()
+              local_failures = []
+              for layer_index, identity in enumerate(components):
+                  source = component(identity)
+                  if source is None:
+                      continue
+                  known_occurrences += 1
+                  _, _, src_rows = source
+                  known_texture_occurrences += len(src_rows)
+                  suffix = "" if layer_index == 0 else str(layer_index)
+                  for si, src in enumerate(src_rows):
+                      src_name = src.get("name")
+                      expected_name = f"{src_name}{suffix}"
+                      matches = by_name.get(expected_name, [])
+                      if len(matches) != 1:
+                          local_failures.append({
+                              "component": identity,
+                              "layerIndex": layer_index,
+                              "sourceTextureIndex": si,
+                              "sourceName": src_name,
+                              "expectedGeneratedName": expected_name,
+                              "matchCount": len(matches),
+                          })
+                          continue
+                      gi, actual = matches[0]
+                      if gi in consumed:
+                          local_failures.append({
+                              "component": identity,
+                              "layerIndex": layer_index,
+                              "sourceTextureIndex": si,
+                              "expectedGeneratedName": expected_name,
+                              "duplicateConsumption": gi,
+                          })
+                          continue
+                      consumed.add(gi)
+                      expected = dict(src)
+                      expected["name"] = expected_name
+                      if canon(expected) == canon(actual):
+                          exact_after_name_rewrite += 1
+                      else:
+                          field_mismatch_count += 1
+                          keys = sorted(set(expected) | set(actual))
+                          diff_keys = [k for k in keys if expected.get(k) != actual.get(k)]
+                          difference_key_hist.update(diff_keys)
+                          if diff_keys == ["samplerState"]:
+                              sampler_rewrites[(canon(src.get("samplerState")).decode(),
+                                                canon(actual.get("samplerState")).decode(),
+                                                str(src.get("semantic")))] += 1
+                          row_field_differences.append({
+                              "generated": p.stem,
+                              "component": identity,
+                              "layerIndex": layer_index,
+                              "sourceTextureIndex": si,
+                              "source": src,
+                              "expectedAfterNameRewrite": expected,
+                              "actual": actual,
+                              "differingKeys": diff_keys,
+                          })
+
+              if local_failures:
+                  name_binding_failures.append({"generated": p.stem, "failures": local_failures})
+
+              unknown_layers = [(i, c) for i, c in enumerate(components) if c in missing]
+              if unknown_layers:
+                  target_bearing_generated += 1
+              else:
+                  all_known_generated += 1
+
+              unaccounted = [(i, row) for i, row in enumerate(gen_rows) if i not in consumed]
+              if not unknown_layers and not local_failures and not unaccounted:
+                  all_known_fully_accounted += 1
+
+              for layer_index, identity in unknown_layers:
+                  suffix = "" if layer_index == 0 else str(layer_index)
+                  if layer_index == 0:
+                      candidates = unaccounted
+                  else:
+                      candidates = [(i, row) for i, row in unaccounted
+                                    if str(row.get("name", "")).endswith(suffix)]
+                  observed_target_rows[identity].append({
+                      "generated": p.stem,
+                      "tokens": tokens,
+                      "components": components,
+                      "layerIndex": layer_index,
+                      "rows": [{"generatedIndex": i, **row} for i, row in candidates],
+                  })
+              if unaccounted:
+                  target_unaccounted_rows[p.stem] = [{"generatedIndex": i, **row} for i, row in unaccounted]
+
+              generated_reports.append({
+                  "storageIdentity": f"generated/{p.stem}",
+                  "rawBytes": p.stat().st_size,
+                  "rawSha256": raw_sha(p),
+                  "tokens": tokens,
+                  "components": components,
+                  "textureCount": len(gen_rows),
+                  "knownConsumedTextureCount": len(consumed),
+                  "unknownLayerCount": len(unknown_layers),
+                  "unaccountedTextureCount": len(unaccounted),
+                  "nameBindingFailureCount": len(local_failures),
+              })
+
+          assert not name_binding_failures, name_binding_failures[:3]
+          assert all_known_generated > 0
+          assert all_known_fully_accounted == all_known_generated, (
+              all_known_fully_accounted, all_known_generated
+          )
+
+          out = {
+              "format": "t6-nuketown-layered-texture-transform-census-v1",
+              "authority": {
+                  "fastFile": "mp_nuketown_2020.ff",
+                  "fastFileSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+                  "oatCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+                  "fixture": str(fixture_path),
+                  "fixtureSha256": hashlib.sha256(fixture_raw).hexdigest(),
+              },
+              "summary": {
+                  "generatedMaterialCount": len(generated),
+                  "referencedComponentCount": len(referenced),
+                  "standaloneKnownComponentCount": len(referenced - missing),
+                  "standaloneMissingComponentCount": len(missing),
+                  "knownComponentOccurrenceCount": known_occurrences,
+                  "knownTextureOccurrenceCount": known_texture_occurrences,
+                  "exactAfterNameRewriteCount": exact_after_name_rewrite,
+                  "fieldMismatchCountAfterNameRewrite": field_mismatch_count,
+                  "nameBindingFailureCount": len(name_binding_failures),
+                  "allKnownGeneratedMaterialCount": all_known_generated,
+                  "allKnownFullyAccountedCount": all_known_fully_accounted,
+                  "targetBearingGeneratedMaterialCount": target_bearing_generated,
+                  "targetOccurrenceCount": sum(len(x) for x in observed_target_rows.values()),
+              },
+              "differenceKeyHistogram": dict(sorted(difference_key_hist.items())),
+              "samplerRewriteHistogram": [
+                  {
+                      "sourceSamplerStateCanonical": src,
+                      "generatedSamplerStateCanonical": dst,
+                      "semantic": semantic,
+                      "count": count,
+                  }
+                  for (src, dst, semantic), count in sorted(sampler_rewrites.items())
+              ],
+              "rowFieldDifferences": row_field_differences,
+              "missingComponents": sorted(missing),
+              "targetOccurrences": dict(sorted(observed_target_rows.items())),
+              "targetBearingUnaccountedRows": dict(sorted(target_unaccounted_rows.items())),
+              "generatedMaterials": generated_reports,
+              "proofBoundary": (
+                  "This is a serialized-texture transform census. It proves exact name-key "
+                  "binding and field agreement for standalone-known component occurrences, "
+                  "and reports target-bearing residual rows. It does not yet promote the "
+                  "seven missing standalone texture tables or infer shader blend math."
+              ),
+          }
+          out_path = Path("/tmp/proof/T6_NUKETOWN_LAYERED_TEXTURE_TRANSFORM_CENSUS_V1.json")
+          payload = json.dumps(out, indent=2, sort_keys=True) + "\n"
+          out_path.write_text(payload)
+          print("GREEN LAYERED TEXTURE TRANSFORM CENSUS", json.dumps(out["summary"], sort_keys=True))
+          print("DIFFERENCE_KEYS", json.dumps(out["differenceKeyHistogram"], sort_keys=True))
+          print("SAMPLER_REWRITES", json.dumps(out["samplerRewriteHistogram"], sort_keys=True))
+          for identity, occ in sorted(observed_target_rows.items()):
+              print("TARGET", identity, "occurrences", len(occ),
+                    "candidate_counts", [len(x["rows"]) for x in occ])
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_LAYERED_TEXTURE_TRANSFORM_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
