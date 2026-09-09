@@ -1,4 +1,4 @@
-name: T6 Nuketown layered component texture recovery v1
+name: T6 Nuketown layered component texture recovery v3
 
 on:
   workflow_dispatch:
@@ -6,6 +6,8 @@ on:
     paths:
       - 'tools/t6_oat_layered_component_texture_recovery_v1.py'
       - 'tools/test_t6_oat_layered_component_texture_recovery_v1.py'
+      - 'tools/t6_oat_layered_component_texture_recovery_v3.py'
+      - 'tools/test_t6_oat_layered_component_texture_recovery_v3.py'
       - 'tools/t6_oat_layered_known_prefix_probe_v1.py'
       - 'tools/t6_oat_layered_texture_order_census_v1.py'
       - 'tools/t6_oat_layered_t6_projection_census_v1.py'
@@ -29,12 +31,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run fail-closed synthetic regression
+      - name: Run fail-closed synthetic regressions
         env:
           PYTHONPATH: tools
         run: |
           set -euo pipefail
           python3 tools/test_t6_oat_layered_component_texture_recovery_v1.py
+          python3 tools/test_t6_oat_layered_component_texture_recovery_v3.py
 
       - name: Install runtime dependency
         run: |
@@ -166,8 +169,19 @@ jobs:
             --expected-missing wpc/decal_signage_const_marking01 \
             --expected-missing wpc/decal_signage_const_marking02 \
             2>&1 | tee /tmp/proof/layered_t6_projection_census.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_LAYERED_T6_PROJECTION_CENSUS_V1.json'))
+          s=d['summary']
+          assert s['generatedMaterialCount']==120,s
+          assert s['allStandaloneComponentsAvailableCount']==106,s
+          assert s['missingStandaloneFamilyCount']==14,s
+          assert s['standaloneMissingComponentCount']==7,s
+          assert s['suffixPreserveExactAllStandaloneCount']==106,s
+          assert s['suffixPreserveKnownSubtractExactMissingFamilyCount']==14,s
+          PY
 
-      - name: Probe exact historical known-prefix blocker
+      - name: Preserve historical v1 blocker evidence
         env:
           PYTHONPATH: tools
         run: |
@@ -180,27 +194,47 @@ jobs:
             --known-prefix wpc/asphalt_smooth01_dark \
             --unknown wpc/asphalt_road_dark_dec 2>&1 | tee /tmp/proof/known_prefix_probe.log
 
-      - name: Recover exact copy-elided layered component texture tables
+      - name: Recover exact copy-elided layered component texture tables v3
         env:
           PYTHONPATH: tools
         run: |
           set -euo pipefail
-          python3 tools/t6_oat_layered_component_texture_recovery_v1.py \
+          python3 tools/t6_oat_layered_component_texture_recovery_v3.py \
             /tmp/oat_material_union \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
-            /tmp/proof/T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V1.json \
+            /tmp/proof/T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V3.json \
             --target wpc/asphalt_road_dark_dec \
             --target wpc/decal_concrete_clean_line \
             --target wpc/decal_damage_asphalt_crack01 \
             --target wpc/decal_grunge_glue \
             --target wpc/decal_grunge_mold01 \
             --target wpc/decal_signage_const_marking01 \
-            --target wpc/decal_signage_const_marking02 2>&1 | tee /tmp/proof/component_texture_recovery.log
+            --target wpc/decal_signage_const_marking02 \
+            2>&1 | tee /tmp/proof/component_texture_recovery_v3.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V3.json'))
+          s=d['summary']
+          assert s['targetCount']==7,s
+          assert s['recoveredTargetCount']==7,s
+          assert s['standaloneMissingComponentCount']==7,s
+          assert s['generatedCatalogMaterialCount']==120,s
+          assert s['sourceCompleteProjectionProofCount']==106,s
+          assert s['targetBearingGeneratedMaterialCount']==14,s
+          assert s['targetGeneratedLayerOccurrenceCount']==15,s
+          assert s['allGeneratedExactReconstructionCount']==120,s
+          rows={r['identity']:r for r in d['components']}
+          assert len(rows)==7,rows.keys()
+          assert all(r['textureCount']>0 for r in rows.values())
+          assert all(r['recoveryEvidence'] for r in rows.values())
+          assert all(all(e['exactKnownRowSubtraction'] and e['exactLayerSuffixReversal'] for e in r['recoveryEvidence']) for r in rows.values())
+          print('GREEN EXACT T6 LAYERED COMPONENT TEXTURE RECOVERY V3',json.dumps(s,sort_keys=True))
+          PY
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V1
+          name: T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V3
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 0
