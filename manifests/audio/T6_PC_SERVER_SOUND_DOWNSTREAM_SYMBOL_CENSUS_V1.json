@@ -1,0 +1,88 @@
+{
+  "format": "t6-pc-server-sound-downstream-symbol-census-v1",
+  "status": "EXACT_MAP_SYMBOL_INVENTORY_ONLY",
+  "authority": {
+    "exe": {
+      "name": "CoDMPServer_PC.exe",
+      "bytes": 13711872,
+      "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+      "imageBase": "0x00400000"
+    },
+    "map": {
+      "name": "CoDMPServer_PC.map",
+      "bytes": 9213148,
+      "sha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
+    },
+    "serverDecompileCommit": "ecdd85023274e49675a00458b210c22b4b4849e7"
+  },
+  "workflow": {
+    "path": ".github/workflows/t6_audio_downstream_symbol_census_v1.yml",
+    "sourceCommit": "2ba098a028cab0a6e33b03577f812d6d88281c1b",
+    "runId": 34362389500,
+    "jobId": 102502393597,
+    "artifact": {
+      "name": "T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1",
+      "id": 10108367742,
+      "bytes": 9107,
+      "zipSha256": "e6edaf829d3183963ab921580928fa0fe4efeb21c60159a217afc49bf81a89a9",
+      "jsonSha256": "36c46f3239eccd7d0df704803111f355bb073eb00fdc20b06595ec5c89e55ea8"
+    }
+  },
+  "parserBoundary": {
+    "acceptedExactMapTailForms": [
+      "<VA> <obj>",
+      "<VA> f <obj>",
+      "<VA> f i <obj>"
+    ],
+    "note": "The f-i form was added only after the first fail-closed run exposed exactly 12 such rows. Arbitrary MAP flags remain rejected."
+  },
+  "census": {
+    "rows": 217,
+    "functionFlagRows": 65,
+    "inlineFlagRows": 12,
+    "duplicateVAs": 3,
+    "byOrigin": {
+      "sd_api.obj": {"rows": 95, "functionFlagRows": 22, "inlineFlagRows": 5},
+      "sd_decode.obj": {"rows": 9, "functionFlagRows": 3, "inlineFlagRows": 0},
+      "sd_mix_master.obj": {"rows": 2, "functionFlagRows": 1, "inlineFlagRows": 1},
+      "sd_mix_radverb.obj": {"rows": 0, "functionFlagRows": 0, "inlineFlagRows": 0},
+      "sd_mix_voice.obj": {"rows": 1, "functionFlagRows": 0, "inlineFlagRows": 0},
+      "sd_mixer.obj": {"rows": 8, "functionFlagRows": 4, "inlineFlagRows": 0},
+      "sd_output_la2.obj": {"rows": 0, "functionFlagRows": 0, "inlineFlagRows": 0},
+      "sd_output_xa2.obj": {"rows": 49, "functionFlagRows": 18, "inlineFlagRows": 6},
+      "sd_source.obj": {"rows": 4, "functionFlagRows": 1, "inlineFlagRows": 0},
+      "sd_stream.obj": {"rows": 19, "functionFlagRows": 4, "inlineFlagRows": 0},
+      "sd_voice.obj": {"rows": 30, "functionFlagRows": 12, "inlineFlagRows": 0}
+    }
+  },
+  "priorityFunctionAddresses": {
+    "SD_PreUpdate": "0x008B90E0",
+    "SD_UpdateVoice": "0x008B9860",
+    "SD_Sync": "0x008B98F0",
+    "SD_StreamDevhost": "0x008BA010",
+    "SD_VoiceSetParam": "0x008BA560",
+    "SD_VoiceStart": "0x008BA620",
+    "SD_VoiceStarted": "0x008BA6C0",
+    "sd_xa2_callback_OnBufferEnd": "0x008BA800",
+    "SD_OutputShutdown": "0x008BA820",
+    "SD_OutputForceWakeup": "0x008BA8B0",
+    "SD_SwitchDevice": "0x008BA9C0",
+    "SD_XAudio2Callbacks_sharedNoop": "0x008BAAB0",
+    "SD_OutputInit": "0x008BAE90",
+    "SD_Reset": "0x008BB100"
+  },
+  "observations": [
+    "SD_VoiceStart is a parameter-pointer handoff, not evidence of decoding or hardware playback.",
+    "Multiple public names alias 0x008B3F40, so that address must be byte-probed before any per-name semantics are assigned.",
+    "Multiple XAudio2 callback names alias 0x008BAAB0, so aliasing is retained rather than resolved by naming preference.",
+    "sd_mix_voice.obj has no function-flag row in this dedicated-server MAP; sd_mix_radverb.obj and sd_output_la2.obj have no selected rows. This is not proof that corresponding retail functionality is absent."
+  ],
+  "notProven": [
+    "encoded-bitstream-to-PCM processing behavior",
+    "stream refill and decoded-frame layout",
+    "mixer and resampler equations",
+    "XAudio2 buffer submission contract",
+    "retail t6mp.exe equivalence",
+    "retail decoder Create targets"
+  ]
+}
