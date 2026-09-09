@@ -3,7 +3,8 @@
 
 This tool does not recover, transform, normalize, or promote anything. It compares
 one generated Material's leading known component textures[] against the exact
-standalone OAT Material textures[] and records the first structural difference.
+standalone OAT Material textures[] and records the complete tables plus first
+structural difference.
 """
 from __future__ import annotations
 
@@ -94,6 +95,12 @@ def main() -> int:
     actual = generated[:len(expected)]
     diff = first_diff(expected, actual)
 
+    exact_row_prefix_count = 0
+    for e, g in zip(expected, generated):
+        if canon(e) != canon(g):
+            break
+        exact_row_prefix_count += 1
+
     row_index = None
     expected_row = actual_row = None
     if diff is not None and diff["path"].startswith("$["):
@@ -111,26 +118,34 @@ def main() -> int:
         "generatedMaterial": a.generated,
         "generatedStorageIdentity": storage,
         "components": components,
+        "parsedLayers": parsed["layers"],
         "knownPrefix": a.known_prefix,
         "unknownStandaloneMissing": a.unknown,
         "indexedOatMaterialCount": len(indexed),
         "skippedNonT6MaterialJsonCount": len(skipped),
         "knownTextureCount": len(expected),
         "generatedTextureCount": len(generated),
+        "exactRowPrefixCount": exact_row_prefix_count,
         "knownPrefixExact": diff is None,
         "knownTextureTableSha256": sha(expected),
         "generatedPrefixSha256": sha(actual),
+        "generatedTextureTableSha256": sha(generated),
         "firstDifference": diff,
         "firstDifferenceTextureIndex": row_index,
         "expectedStandaloneTextureRow": expected_row,
         "actualGeneratedTextureRow": actual_row,
+        "expectedStandaloneTextureTable": expected,
+        "actualGeneratedTextureTable": generated,
+        "generatedTextureRoles": [
+            {"index": i, "name": x.get("name"), "nameHash": x.get("nameHash"), "semantic": x.get("semantic"), "image": x.get("image")}
+            for i, x in enumerate(generated)
+        ],
         "proofBoundary": "Exact OAT JSON observation only; no transform, normalization, ownership inference, recovery, or promotion."
     }
     payload = (json.dumps(out, indent=2, sort_keys=True) + "\n").encode("utf-8")
     a.output_json.parent.mkdir(parents=True, exist_ok=True)
     a.output_json.write_bytes(payload)
     print(payload.decode("utf-8"))
-    # The expected diagnostic condition is a real mismatch. Fail if it disappears.
     if diff is None:
         raise RuntimeError("known prefix unexpectedly became exact; historical v1 blocker not reproduced")
     return 0
