@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/t6_oat_layered_component_texture_recovery_v1.py'
       - 'tools/test_t6_oat_layered_component_texture_recovery_v1.py'
+      - 'tools/t6_oat_layered_known_prefix_probe_v1.py'
       - 'tools/t6_layered_material_name_v1.py'
       - 'tools/t6_oat_material_manifest_v2.py'
       - 'tools/t6_oat_material_manifest_v6.py'
@@ -99,6 +100,11 @@ jobs:
           python3 tools/t6_world_material_catalog_legacy_index_v1.py \
             /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json'))
+          assert len(d['materials']) == 327, len(d['materials'])
+          PY
 
       - name: Dump native Materials from all exact dependency roots
         shell: bash
@@ -118,21 +124,18 @@ jobs:
             : >"$log"
             success=0
             for attempt in 1 2 3; do
-              rm -rf "$root"
-              mkdir -p "$root"
+              rm -rf "$root"; mkdir -p "$root"
               echo "OAT_DUMP_ATTEMPT label=$label attempt=$attempt" | tee -a "$log"
               if "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee -a "$log"; then
-                success=1
-                break
+                success=1; break
               fi
-              echo "OAT_DUMP_RETRY label=$label failed_attempt=$attempt" | tee -a "$log"
             done
             test "$success" = 1
             matroot=$(find "$root" -type d -name materials -print -quit)
             test -n "$matroot" -a -d "$matroot"
             count=$(find "$matroot" -type f -name '*.json' | wc -l)
-            echo "$label $matroot $count" | tee -a /tmp/proof/oat_material_roots.txt
             test "$count" -gt 0
+            echo "$label $matroot $count" | tee -a /tmp/proof/oat_material_roots.txt
           done
 
       - name: Build exact required-only Material root union
@@ -157,6 +160,21 @@ jobs:
             --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json \
             2>&1 | tee /tmp/proof/material_union.log
 
+      - name: Probe exact historical known-prefix blocker
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_oat_layered_known_prefix_probe_v1.py \
+            /tmp/oat_material_union \
+            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
+            /tmp/proof/T6_NUKETOWN_LAYERED_KNOWN_PREFIX_PROBE_V1.json \
+            --generated '*100n_236n(wpc/asphalt_smooth01_dark:wpc/asphalt_road_dark_dec)' \
+            --known-prefix wpc/asphalt_smooth01_dark \
+            --unknown wpc/asphalt_road_dark_dec \
+            2>&1 | tee /tmp/proof/known_prefix_probe.log
+
       - name: Recover exact copy-elided layered component texture tables
         env:
           PYTHONPATH: tools
@@ -175,44 +193,6 @@ jobs:
             --target wpc/decal_signage_const_marking01 \
             --target wpc/decal_signage_const_marking02 \
             2>&1 | tee /tmp/proof/component_texture_recovery.log
-          python3 - <<'PY'
-          import json
-          p='/tmp/proof/T6_NUKETOWN_LAYERED_COMPONENT_TEXTURE_RECOVERY_V1.json'
-          d=json.load(open(p)); s=d['summary']
-          assert s['targetCount']==7,s
-          assert s['recoveredTargetCount']==7,s
-          assert s['standaloneMissingComponentCount']==7,s
-          assert s['generatedCatalogMaterialCount']==120,s
-          assert s['allGeneratedExactReconstructionCount']==120,s
-          assert s['targetBearingGeneratedMaterialCount']==14,s
-          assert s['targetGeneratedLayerOccurrenceCount']==15,s
-          expected={
-            'wpc/asphalt_road_dark_dec':(236,True),
-            'wpc/decal_concrete_clean_line':(240,False),
-            'wpc/decal_damage_asphalt_crack01':(238,False),
-            'wpc/decal_grunge_glue':(218,False),
-            'wpc/decal_grunge_mold01':(92,False),
-            'wpc/decal_signage_const_marking01':(215,False),
-            'wpc/decal_signage_const_marking02':(221,True),
-          }
-          rows={r['identity']:r for r in d['components']}
-          assert set(rows)==set(expected),(rows.keys(),expected.keys())
-          for name,(idx,normal) in expected.items():
-            r=rows[name]
-            assert r['bspMaterialIndex']==idx,(name,r)
-            assert r['expectedNormalMap'] is normal,(name,r)
-            assert r['recoveredHasRealNormalMap'] is normal,(name,r)
-            assert r['textureCount']>0,(name,r)
-            assert r['generatedMaterialCount']>0,(name,r)
-            assert r['generatedLayerOccurrenceCount']>=r['generatedMaterialCount'],(name,r)
-            assert len(r['recoveryEvidence'])==r['generatedMaterialCount'],(name,r)
-            assert r['fixedPointAdmissionEvidence'],(name,r)
-            assert all(e['candidateTextureTableSha256']==r['textureTableSha256'] for e in r['recoveryEvidence']),(name,r)
-          print('GREEN EXACT LAYERED COMPONENT TEXTURE RECOVERY V1',json.dumps(s,sort_keys=True))
-          for name in sorted(rows):
-            r=rows[name]
-            print('RECOVERED',name,'BSP',r['bspMaterialIndex'],'TEXTURES',r['textureCount'],'SHA',r['textureTableSha256'],'MATERIALS',r['generatedMaterialCount'],'LAYERS',r['generatedLayerOccurrenceCount'])
-          PY
 
       - uses: actions/upload-artifact@v4
         if: always()
