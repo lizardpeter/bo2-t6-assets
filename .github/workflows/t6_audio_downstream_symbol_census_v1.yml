@@ -92,6 +92,9 @@ jobs:
               })
 
           if rejected_target_lines:
+              print('=== REJECTED TARGET MAP LINES ===')
+              for r in rejected_target_lines:
+                  print(f'{r["line"]}: {r["text"]}')
               raise SystemExit(f'target MAP lines failed exact parser: {len(rejected_target_lines)}')
           if not rows:
               raise SystemExit('no target sound-object MAP rows found')
