@@ -59,10 +59,13 @@ jobs:
               'sd_stream.obj',
               'sd_voice.obj',
           }
-          # Match the exact linear VA immediately before the optional MAP function
-          # flag and final object origin. This deliberately avoids treating the
-          # segment:offset field at the beginning of a MAP line as a VA.
-          tail_re = re.compile(r'\b([0-9A-Fa-f]{8})\b(\s+f)?\s+([^\s]+\.obj)\s*$')
+          # Exact observed Microsoft MAP tails for these objects are:
+          #   <linearVA> <object>
+          #   <linearVA> f <object>
+          #   <linearVA> f i <object>
+          # where f marks a function and i marks an inline/COMDAT function.
+          # Do not accept arbitrary flag tokens here.
+          tail_re = re.compile(r'\b([0-9A-Fa-f]{8})\b(?:\s+(f)(?:\s+(i))?)?\s+([^\s]+\.obj)\s*$')
           rows = []
           rejected_target_lines = []
           for line_no, line in enumerate(text.splitlines(), 1):
@@ -74,7 +77,7 @@ jobs:
                   rejected_target_lines.append({'line': line_no, 'text': stripped})
                   continue
               va = int(m.group(1), 16)
-              origin = m.group(3)
+              origin = m.group(4)
               if origin not in targets:
                   continue
               prefix = line[:m.start(1)].rstrip().split()
@@ -85,7 +88,8 @@ jobs:
                   'line': line_no,
                   'va': f'0x{va:08X}',
                   'vaInt': va,
-                  'isFunctionFlag': bool(m.group(2)),
+                  'isFunctionFlag': m.group(2) == 'f',
+                  'isInlineFlag': m.group(3) == 'i',
                   'symbol': symbol,
                   'origin': origin,
                   'raw': stripped,
@@ -108,9 +112,8 @@ jobs:
           }
           by_origin = Counter(r['origin'] for r in rows)
           functions_by_origin = Counter(r['origin'] for r in rows if r['isFunctionFlag'])
+          inlines_by_origin = Counter(r['origin'] for r in rows if r['isInlineFlag'])
 
-          # Known anchors must be present exactly in the census. These are only
-          # identity/coverage anchors; no new semantics are inferred from them.
           anchors = {
               'SD_VoiceStart': 0x008BA620,
               'SD_VoiceStarted': 0x008BA6C0,
@@ -138,11 +141,14 @@ jobs:
                   'mapBytes': len(mp),
                   'mapSha256': hashlib.sha256(mp).hexdigest(),
               },
+              'acceptedMapTailForms': ['<VA> <obj>', '<VA> f <obj>', '<VA> f i <obj>'],
               'targetOrigins': sorted(targets),
               'rowCount': len(rows),
               'functionFlagRowCount': sum(1 for r in rows if r['isFunctionFlag']),
+              'inlineFlagRowCount': sum(1 for r in rows if r['isInlineFlag']),
               'rowsByOrigin': dict(sorted(by_origin.items())),
               'functionRowsByOrigin': dict(sorted(functions_by_origin.items())),
+              'inlineRowsByOrigin': dict(sorted(inlines_by_origin.items())),
               'anchorHits': anchor_hits,
               'duplicateVaCount': len(duplicate_vas),
               'duplicateVas': duplicate_vas,
@@ -154,12 +160,13 @@ jobs:
 
           print('=== EXACT SOUND OBJECT COUNTS ===')
           for origin in sorted(targets):
-              print(f'{origin}: rows={by_origin[origin]} functionFlagRows={functions_by_origin[origin]}')
-          print(f'TOTAL rows={len(rows)} functionFlagRows={report["functionFlagRowCount"]} duplicateVAs={len(duplicate_vas)}')
+              print(f'{origin}: rows={by_origin[origin]} functionFlagRows={functions_by_origin[origin]} inlineRows={inlines_by_origin[origin]}')
+          print(f'TOTAL rows={len(rows)} functionFlagRows={report["functionFlagRowCount"]} inlineRows={report["inlineFlagRowCount"]} duplicateVAs={len(duplicate_vas)}')
           print('=== FUNCTION-FLAG SYMBOLS ===')
           for r in rows:
               if r['isFunctionFlag']:
-                  print(f'{r["va"]} {r["origin"]} {r["symbol"]}')
+                  suffix = ' [inline]' if r['isInlineFlag'] else ''
+                  print(f'{r["va"]} {r["origin"]} {r["symbol"]}{suffix}')
           PY
           sha256sum /tmp/probe/T6_AUDIO_DOWNSTREAM_SYMBOL_CENSUS_V1.json
 
