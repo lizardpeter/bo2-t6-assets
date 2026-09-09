@@ -1,0 +1,192 @@
+name: T6 current Plutonium sound homology probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_sound_homology_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SERVER_EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check 'capstone==5.0.6'
+      - name: Compare relocation-aware machine-code structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/ref
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$SERVER_EXE_ID&export=download&confirm=t"
+          python3 - <<'PY'
+          import hashlib, json, struct, urllib.request
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_REG_INVALID
+
+          SERVER_SHA256='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          RETAIL_BYTES=12850328
+          RETAIL_SHA256='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'
+          ENDPOINTS=['https://cdn.plutoniummod.com/updater/prod/info.json','https://cdn.plutonium.pw/updater/prod/info.json']
+          FUNCS={
+            'SD_PreUpdate':(0x008B90E0,992),
+            'SD_UpdateVoice':(0x008B9860,144),
+            'SD_MixSetParam':(0x008B9C80,144),
+            'SD_DecoderAllocate_generic':(0x008B9A10,272),
+            'SD_DecoderAllocate_wrapper':(0x008B9B20,80),
+            'SD_SourceInitStream':(0x008B9D10,144),
+            'SD_StreamBufferPreload':(0x008B9DC0,96),
+            'SD_StreamAllocate':(0x008B9E20,496),
+            'SD_VoiceSetParam':(0x008BA560,176),
+            'SD_VoiceStart':(0x008BA620,159),
+          }
+
+          def get(url,timeout=180):
+            req=urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-sound-homology/1'})
+            with urllib.request.urlopen(req,timeout=timeout) as r:
+              if r.status != 200: raise RuntimeError(f'HTTP {r.status}: {url}')
+              return r.read()
+
+          def pe(raw):
+            if raw[:2] != b'MZ': raise RuntimeError('not MZ')
+            peoff=struct.unpack_from('<I',raw,0x3c)[0]
+            if raw[peoff:peoff+4] != b'PE\0\0': raise RuntimeError('not PE')
+            coff=peoff+4
+            machine,nsects,_,_,_,optsz,_=struct.unpack_from('<HHIIIHH',raw,coff)
+            opt=coff+20
+            magic=struct.unpack_from('<H',raw,opt)[0]
+            if magic != 0x10b: raise RuntimeError(f'expected PE32, got {magic:#x}')
+            imagebase=struct.unpack_from('<I',raw,opt+28)[0]
+            size_image=struct.unpack_from('<I',raw,opt+56)[0]
+            st=opt+optsz; sections=[]
+            for i in range(nsects):
+              o=st+i*40
+              name=raw[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',raw,o+8)
+              sections.append({'name':name,'rva':rva,'va':imagebase+rva,'virtualSize':vs,'rawSize':rs,'rawOffset':ro})
+            return {'machine':machine,'imageBase':imagebase,'sizeOfImage':size_image,'sections':sections}
+
+          def va_off(meta,va):
+            for s in meta['sections']:
+              if s['va'] <= va < s['va']+s['rawSize']:
+                return s['rawOffset']+(va-s['va'])
+            raise RuntimeError(f'VA not raw-backed: {va:#x}')
+
+          def off_loc(meta,off):
+            for s in meta['sections']:
+              if s['rawOffset'] <= off < s['rawOffset']+s['rawSize']:
+                return {'fileOffset':off,'section':s['name'],'rva':s['rva']+(off-s['rawOffset']),'va':meta['imageBase']+s['rva']+(off-s['rawOffset'])}
+            return {'fileOffset':off}
+
+          server=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          if hashlib.sha256(server).hexdigest()!=SERVER_SHA256: raise RuntimeError('server identity mismatch')
+          smeta=pe(server)
+
+          info=None; used=None; errors=[]
+          for u in ENDPOINTS:
+            try:
+              info=json.loads(get(u,60).decode('utf-8')); used=u; break
+            except Exception as e: errors.append({'url':u,'error':repr(e)})
+          if info is None: raise RuntimeError(f'no live CDN manifest: {errors}')
+          files=info.get('files')
+          matches=[x for x in files if isinstance(x,dict) and str(x.get('name','')).replace('\\','/').lower()=='games/t6mp.exe']
+          if len(matches)!=1: raise RuntimeError(f'expected one games/t6mp.exe, got {len(matches)}')
+          rec=matches[0]; sha1=str(rec['hash']).lower(); size=int(rec['size']); base=info['baseUrl']
+          client=get(base+sha1,180)
+          if len(client)!=size or hashlib.sha1(client).hexdigest()!=sha1: raise RuntimeError('client manifest identity mismatch')
+          csha=hashlib.sha256(client).hexdigest(); cmeta=pe(client)
+          text=[s for s in cmeta['sections'] if s['name']=='.text']
+          if len(text)!=1: raise RuntimeError('expected one .text section')
+          text=text[0]; text_bytes=client[text['rawOffset']:text['rawOffset']+text['rawSize']]
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+
+          def make_mask(code,va,meta):
+            mask=bytearray(b'\xff'*len(code))
+            insns=list(md.disasm(code,va))
+            if not insns or sum(i.size for i in insns)!=len(code):
+              raise RuntimeError(f'disassembly does not exactly account for {va:#x} length {len(code)}')
+            image_lo=meta['imageBase']; image_hi=image_lo+meta['sizeOfImage']
+            reasons=[]
+            for ins in insns:
+              rel=ins.address-va
+              # Relative branch/call immediates are always location-sensitive.
+              if ins.group(2) or ins.group(1):  # CS_GRP_JUMP / CS_GRP_CALL numeric ids in capstone
+                if ins.imm_size:
+                  for j in range(ins.imm_offset,ins.imm_offset+ins.imm_size): mask[rel+j]=0
+                  reasons.append({'instructionVa':ins.address,'kind':'relative-control-immediate','offset':rel+ins.imm_offset,'bytes':ins.imm_size})
+              # Absolute image pointers encoded as immediates are relocation-sensitive.
+              for op in ins.operands:
+                if op.type==X86_OP_IMM and ins.imm_size and image_lo <= (op.imm & 0xffffffff) < image_hi:
+                  for j in range(ins.imm_offset,ins.imm_offset+ins.imm_size): mask[rel+j]=0
+                  reasons.append({'instructionVa':ins.address,'kind':'image-pointer-immediate','offset':rel+ins.imm_offset,'bytes':ins.imm_size})
+                if op.type==X86_OP_MEM and ins.disp_size and op.mem.base==X86_REG_INVALID and op.mem.index==X86_REG_INVALID:
+                  for j in range(ins.disp_offset,ins.disp_offset+ins.disp_size): mask[rel+j]=0
+                  reasons.append({'instructionVa':ins.address,'kind':'absolute-memory-displacement','offset':rel+ins.disp_offset,'bytes':ins.disp_size})
+            return bytes(mask),insns,reasons
+
+          def longest_fixed(mask):
+            best=(0,0); i=0
+            while i<len(mask):
+              if mask[i]==0: i+=1; continue
+              j=i
+              while j<len(mask) and mask[j]: j+=1
+              if j-i>best[1]: best=(i,j-i)
+              i=j
+            return best
+
+          def masked_matches(hay,pat,mask):
+            ao,al=longest_fixed(mask)
+            if al<8: raise RuntimeError(f'unsafe fixed anchor only {al} bytes')
+            anchor=pat[ao:ao+al]; out=[]; start=0
+            while True:
+              p=hay.find(anchor,start)
+              if p<0: break
+              cand=p-ao
+              if 0<=cand<=len(hay)-len(pat):
+                chunk=hay[cand:cand+len(pat)]
+                if all((not mask[i]) or chunk[i]==pat[i] for i in range(len(pat))): out.append(cand)
+              start=p+1
+            return out,(ao,al,anchor.hex())
+
+          results=[]
+          for name,(va,n) in FUNCS.items():
+            off=va_off(smeta,va); code=server[off:off+n]
+            mask,insns,reasons=make_mask(code,va,smeta)
+            mm,anchor=masked_matches(text_bytes,code,mask)
+            locs=[off_loc(cmeta,text['rawOffset']+x) for x in mm]
+            results.append({
+              'name':name,'serverVa':va,'bytes':n,'serverSha256':hashlib.sha256(code).hexdigest(),
+              'instructionCount':len(insns),'fixedBytes':sum(1 for x in mask if x),'wildcardBytes':sum(1 for x in mask if not x),
+              'longestFixedAnchor':{'offset':anchor[0],'bytes':anchor[1],'hex':anchor[2]},
+              'wildcardReasons':reasons,'currentClientMatches':locs,'uniqueCurrentClientMatch':len(locs)==1
+            })
+
+          result={
+            'format':'t6-current-plutonium-sound-homology-probe-v1',
+            'method':'mask only relative control immediates, absolute image-pointer immediates, and absolute no-base/no-index memory displacements from exact server function bodies; require all remaining bytes exact',
+            'server':{'bytes':len(server),'sha256':SERVER_SHA256},
+            'client':{'cdnRevision':info.get('revision'),'bytes':len(client),'sha1':sha1,'sha256':csha,'exactPinnedRetail':len(client)==RETAIL_BYTES and csha==RETAIL_SHA256},
+            'functions':results,
+            'summary':{'uniqueMatches':sum(1 for x in results if x['uniqueCurrentClientMatch']),'zeroMatches':sum(1 for x in results if not x['currentClientMatches']),'ambiguousMatches':sum(1 for x in results if len(x['currentClientMatches'])>1)},
+            'proofBoundary':'A unique masked match establishes exact relocation-insensitive machine-code homology for this separately identified current Plutonium client only. It does not establish historical retail identity or address equivalence.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_PLUTONIUM_SOUND_HOMOLOGY_PROBE_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'revision':info.get('revision'),'clientSha256':csha,'summary':result['summary'],'matches':{x['name']:[m.get('va') for m in x['currentClientMatches']] for x in results}},indent=2,sort_keys=True))
+          print('result_sha256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_SOUND_HOMOLOGY_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_SOUND_HOMOLOGY_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
