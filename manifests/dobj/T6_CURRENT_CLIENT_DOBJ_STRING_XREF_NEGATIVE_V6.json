@@ -1,0 +1,44 @@
+{
+  "format": "t6-current-client-dobj-string-xref-negative-v6",
+  "authority": "NON_AUTHORITATIVE_CURRENT_CLIENT_NEGATIVE_LOCATOR_EVIDENCE",
+  "comparisonExecutable": {
+    "bytes": 13263640,
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "retailAuthorityTarget": {
+    "bytes": 12850328,
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1",
+    "presentInProbe": false
+  },
+  "probe": {
+    "script": "tools/t6_current_client_dobj_string_xref_probe_v6.py",
+    "workflow": ".github/workflows/t6_current_client_dobj_string_xref_probe_v6.yml",
+    "workflowRunId": 34381705805,
+    "workflowJobId": 102567893136,
+    "workflowHeadSha": "6cb2a111ed7cedde9e641e40a4dbeffe16d47bba",
+    "artifactId": 10116104351,
+    "artifactDigestSha256": "d2a1cb14abef45e67bdeb05f4022ec41e2b98b841f3e98f1a9db9e925326c644",
+    "generatedManifestSha256": "f69c5ca162a1f4ff375c6e44ff875f56736be3c552de80e7cffe4738b23b840b"
+  },
+  "referenceFormsTested": [
+    "instruction immediate operand equals diagnostic string VA",
+    "instruction absolute-memory disp32 equals diagnostic string VA",
+    "file-backed little-endian pointer slot contains diagnostic string VA, then instruction immediate operand equals slot VA",
+    "file-backed little-endian pointer slot contains diagnostic string VA, then instruction absolute-memory disp32 equals slot VA"
+  ],
+  "result": {
+    "xrefCount": 0,
+    "clusterCount": 0,
+    "xrefCountByLabel": {
+      "dobjSourcePath": 0,
+      "numModelsAssert": 0,
+      "partNotFound": 0,
+      "rootMeldNotFound": 0,
+      "tooManyBones": 0
+    },
+    "xrefCountByReferenceForm": {}
+  },
+  "conclusion": "The exact current comparison executable contains no instruction-aligned reference to any retained DObj diagnostic through the direct or one-hop absolute reference forms enumerated by v6. This closes those locator routes only; it does not establish absence of the DObj constructor or any retail semantic fact.",
+  "nextBoundary": "Locate DObjCreateDuplicateParts structurally in the comparison executable, retaining every candidate, then require independently retail-authoritative bytes or runtime evidence before promoting model order, duplicate ScriptString precedence, modelParent assignment, or effective hierarchy.",
+  "proofBoundary": "A green workflow and zero xrefs are valid negative locator evidence only. String absence/reference absence, current-client structure, older-engine lineage, OpenT6 symbol names, proximity, or candidate ranking cannot substitute for exact retail T6 authority."
+}
