@@ -1,0 +1,241 @@
+name: T6 audio decoder state output-neighbor probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_decoder_state_output_neighbor_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install exact disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Probe assertion xrefs and output-neighbor globals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, hashlib, json, re, struct
+          from collections import defaultdict
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+
+          EXE_SHA='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          MAP_SHA='34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          BASE=0x00400000
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mp=Path('/tmp/ref/CoDMPServer_PC.map').read_bytes()
+          assert hashlib.sha256(exe).hexdigest()==EXE_SHA
+          assert hashlib.sha256(mp).hexdigest()==MAP_SHA
+          map_text=mp.decode('ascii',errors='strict')
+
+          peoff=struct.unpack_from('<I',exe,0x3c)[0]
+          assert exe[:2]==b'MZ' and exe[peoff:peoff+4]==b'PE\0\0'
+          coff=peoff+4
+          _,nsects,_,_,_,opt_size,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          table=opt+opt_size
+          sects=[]
+          for i in range(nsects):
+              o=table+i*40
+              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8)
+              sects.append({'name':name,'va':BASE+rva,'vs':vs,'rs':rs,'ro':ro})
+          tsec=next(s for s in sects if s['name']=='.text')
+          text_raw=exe[tsec['ro']:tsec['ro']+tsec['rs']]
+          text_va=tsec['va']; text_end=text_va+len(text_raw)
+
+          def va_off(va):
+              for s in sects:
+                  if s['va'] <= va < s['va']+s['rs']:
+                      return s['ro'] + va-s['va']
+              raise ValueError(f'unmapped VA 0x{va:08X}')
+
+          def cstr(va,limit=256):
+              o=va_off(va)
+              b=exe[o:o+limit]
+              if b'\0' not in b: return None
+              b=b.split(b'\0',1)[0]
+              if not b or not all(32<=x<127 for x in b): return None
+              return b.decode('ascii')
+
+          row_re=re.compile(r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+(f)(?:\s+(i))?)?\s+(\S+\.obj)\s*$')
+          rows=[]
+          for ln,line in enumerate(map_text.splitlines(),1):
+              m=row_re.match(line)
+              if m:
+                  rows.append({'line':ln,'symbol':m.group(1),'va':int(m.group(2),16),'function':m.group(3)=='f','inline':m.group(4)=='i','origin':m.group(5),'raw':line.strip()})
+          by_va=defaultdict(list)
+          for r in rows: by_va[r['va']].append(r)
+          fvas=sorted(set(r['va'] for r in rows if r['function'] and text_va<=r['va']<text_end))
+          if len(fvas)<2: raise SystemExit('insufficient MAP function census')
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          interval_cache={}
+          def interval_for(va):
+              i=bisect.bisect_right(fvas,va)-1
+              if i<0 or i+1>=len(fvas): return None
+              return fvas[i],fvas[i+1]
+          def decode_interval(start,end):
+              key=(start,end)
+              if key in interval_cache: return interval_cache[key]
+              rb=text_raw[start-text_va:end-text_va]
+              ins=list(md.disasm(rb,start))
+              if not ins or ins[0].address!=start or ins[-1].address+ins[-1].size!=end:
+                  raise SystemExit(f'failed full instruction accounting 0x{start:08X}..0x{end:08X}')
+              interval_cache[key]=(rb,ins)
+              return rb,ins
+          def instruction_covering(ins,va):
+              for x in ins:
+                  if x.address<=va<x.address+x.size: return x
+              return None
+          def exact_operand_matches(insn,value):
+              out=[]
+              for oi,op in enumerate(insn.operands):
+                  if op.type==X86_OP_IMM and (int(op.imm)&0xffffffff)==value:
+                      out.append({'operandIndex':oi,'kind':'immediate'})
+                  elif op.type==X86_OP_MEM and (int(op.mem.disp)&0xffffffff)==value:
+                      out.append({'operandIndex':oi,'kind':'memoryDisplacement','baseReg':insn.reg_name(op.mem.base) if op.mem.base else None,'indexReg':insn.reg_name(op.mem.index) if op.mem.index else None,'scale':op.mem.scale})
+              return out
+          def scan_value(value):
+              needle=struct.pack('<I',value)
+              pos=0; admitted=[]; rejected=[]
+              while True:
+                  j=text_raw.find(needle,pos)
+                  if j<0: break
+                  hit_va=text_va+j
+                  interval=interval_for(hit_va)
+                  if interval is None:
+                      rejected.append({'rawHitVa':f'0x{hit_va:08X}','reason':'outside_public_function_interval'})
+                      pos=j+1; continue
+                  rb,ins=decode_interval(*interval)
+                  owner=instruction_covering(ins,hit_va)
+                  if owner is None: raise SystemExit(f'raw hit 0x{hit_va:08X} not covered')
+                  matches=exact_operand_matches(owner,value)
+                  if not matches:
+                      rejected.append({'rawHitVa':f'0x{hit_va:08X}','reason':'raw_bytes_not_exact_operand','instruction':{'va':f'0x{owner.address:08X}','bytes':owner.bytes.hex(),'mnemonic':owner.mnemonic,'opStr':owner.op_str}})
+                      pos=j+1; continue
+                  start,end=interval
+                  idx=ins.index(owner)
+                  ctx=ins[max(0,idx-10):min(len(ins),idx+15)]
+                  admitted.append({
+                      'rawHitVa':f'0x{hit_va:08X}',
+                      'functionInterval':{
+                          'startVa':f'0x{start:08X}','endVaExclusive':f'0x{end:08X}',
+                          'sha256':hashlib.sha256(rb).hexdigest(),
+                          'mapSymbols':[r['symbol'] for r in by_va.get(start,[])],
+                          'mapOrigins':[r['origin'] for r in by_va.get(start,[])]
+                      },
+                      'instruction':{'va':f'0x{owner.address:08X}','bytes':owner.bytes.hex(),'mnemonic':owner.mnemonic,'opStr':owner.op_str,'matches':matches},
+                      'context':[{'va':f'0x{x.address:08X}','bytes':x.bytes.hex(),'mnemonic':x.mnemonic,'opStr':x.op_str} for x in ctx]
+                  })
+                  pos=j+1
+              return admitted,rejected
+
+          assertion_targets={
+              'stream_buffersSubmitted_1_zero':0x00CA1F80,
+              'stream_buffersSubmitted_0_zero':0x00CA1FA4,
+              'stream_buffers_1_zero':0x00CA1FC8,
+              'stream_buffers_0_zero':0x00CA1FE4,
+              'stream_ioBuffer_zero':0x00CA2000,
+              'voice_decoder_framesDecoded':0x00CA21EC,
+              'voice_decoder_lastBuffer':0x00CA2210,
+              'voice_decoder_eos':0x00CA2244,
+              'voice_source_stream_zero':0x00CA225C
+          }
+          assertion_results={}
+          print('=== ASSERTION STRING XREFS ===')
+          for name,va in assertion_targets.items():
+              s=cstr(va)
+              admitted,rejected=scan_value(va)
+              assertion_results[name]={'stringVa':f'0x{va:08X}','string':s,'admittedXrefs':admitted,'rejectedRawHits':rejected}
+              print(name,hex(va),repr(s),'admitted=',len(admitted),'rejected=',len(rejected))
+              for x in admitted:
+                  print(' ',x['instruction']['va'],x['instruction']['mnemonic'],x['instruction']['opStr'],'owners=',x['functionInterval']['mapSymbols'])
+                  for c in x['context']:
+                      print('   ',c['va'],c['mnemonic'],c['opStr'])
+
+          # Exact aligned dword census around the anonymous/static output state
+          # neighborhood that contains bufferReadyEvent and flyingBuffers.
+          neighbor_start=0x01087A40
+          neighbor_end=0x01087B00
+          neighbor={}
+          print('=== OUTPUT-NEIGHBOR EXACT OPERAND XREFS ===')
+          for va in range(neighbor_start,neighbor_end,4):
+              admitted,rejected=scan_value(va)
+              if admitted or rejected:
+                  neighbor[f'0x{va:08X}']={'admittedXrefs':admitted,'rejectedRawHits':rejected}
+              if admitted:
+                  print(f'0x{va:08X} admitted={len(admitted)} rejected={len(rejected)}')
+                  for x in admitted:
+                      print(' ',x['instruction']['va'],x['instruction']['mnemonic'],x['instruction']['opStr'],'owners=',x['functionInterval']['mapSymbols'])
+
+          # Compiler init/teardown for the output submission mutex are exact MAP
+          # symbols. Capture their public-function windows without assigning an
+          # anonymous global address unless the machine bytes demonstrate it.
+          init_targets={
+              'bufferSubmitMutex_initializer':0x00B885B0,
+              'bufferSubmitMutex_teardown':0x00B8AED0
+          }
+          init_results={}
+          print('=== BUFFER SUBMIT MUTEX COMPILER FUNCTIONS ===')
+          for name,start in init_targets.items():
+              interval=interval_for(start)
+              if not interval or interval[0]!=start:
+                  raise SystemExit(f'{name}: no exact public-function interval at 0x{start:08X}')
+              rb,ins=decode_interval(*interval)
+              init_results[name]={
+                  'startVa':f'0x{start:08X}','endVaExclusive':f'0x{interval[1]:08X}',
+                  'sha256':hashlib.sha256(rb).hexdigest(),
+                  'mapRows':[{**r,'va':f'0x{r["va"]:08X}'} for r in by_va[start]],
+                  'instructions':[{'va':f'0x{x.address:08X}','bytes':x.bytes.hex(),'mnemonic':x.mnemonic,'opStr':x.op_str} for x in ins]
+              }
+              print(name, f'[0x{start:08X},0x{interval[1]:08X})', hashlib.sha256(rb).hexdigest())
+              for x in ins: print(' ',f'{x.address:08X}',x.mnemonic,x.op_str)
+
+          report={
+              'format':'t6-audio-decoder-state-output-neighbor-probe-v1',
+              'status':'EXACT_STRING_XREF_AND_OUTPUT_NEIGHBOR_OPERAND_PROBE',
+              'authority':{'exeBytes':len(exe),'exeSha256':EXE_SHA,'mapBytes':len(mp),'mapSha256':MAP_SHA},
+              'assertionStringXrefs':assertion_results,
+              'outputNeighbor':{'startVa':f'0x{neighbor_start:08X}','endVaExclusive':f'0x{neighbor_end:08X}','alignedStepBytes':4,'valuesWithRawOrAdmittedHits':neighbor},
+              'bufferSubmitMutexCompilerFunctions':init_results
+          }
+          out=Path('/tmp/probe/T6_AUDIO_DECODER_STATE_OUTPUT_NEIGHBOR_PROBE_V1.json')
+          out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('JSON_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+
+      - name: Upload exact probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_DECODER_STATE_OUTPUT_NEIGHBOR_PROBE_V1
+          path: /tmp/probe/T6_AUDIO_DECODER_STATE_OUTPUT_NEIGHBOR_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
