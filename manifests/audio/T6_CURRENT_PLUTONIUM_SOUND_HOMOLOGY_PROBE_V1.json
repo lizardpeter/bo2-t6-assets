@@ -1,0 +1,40 @@
+{
+  "format": "t6-current-plutonium-sound-homology-probe-v1",
+  "server": {
+    "bytes": 13711872,
+    "sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d"
+  },
+  "client": {
+    "cdnRevision": 5346,
+    "bytes": 13263640,
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
+    "exactPinnedRetail": false
+  },
+  "method": "Capstone-disassemble exact server bodies and mask only relative control immediates, absolute image-pointer immediates, and absolute no-base/no-index memory displacements; every remaining byte must match exactly.",
+  "testedFunctions": [
+    "SD_PreUpdate",
+    "SD_UpdateVoice",
+    "SD_MixSetParam",
+    "SD_DecoderAllocate_generic",
+    "SD_DecoderAllocate_wrapper",
+    "SD_SourceInitStream",
+    "SD_StreamBufferPreload",
+    "SD_StreamAllocate",
+    "SD_VoiceSetParam",
+    "SD_VoiceStart"
+  ],
+  "summary": {
+    "tested": 10,
+    "uniqueMatches": 0,
+    "ambiguousMatches": 0,
+    "zeroMatches": 10
+  },
+  "run": {
+    "workflowRunId": 34306152554,
+    "jobId": 102323153145,
+    "artifactId": 10086706813,
+    "artifactZipSha256": "2b616a0858017bcba9a6d7c5852cdf770a99ec5b8a70ef04412359f94b0293f3",
+    "resultJsonSha256": "025a390138ded2342c8631835a7452ac381c81cc31bd5394c20f774251e09f9a"
+  },
+  "proofBoundary": "The exact current Plutonium client does not contain any of these ten server functions under this narrowly relocation-aware equivalence rule. This is not evidence that analogous sound functionality is absent, and it does not establish historical retail identity or equivalence."
+}
