@@ -1,0 +1,218 @@
+name: T6 current Plutonium XAudio2 callback runtime probe v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_xaudio2_callback_runtime_probe_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PE/disassembly helpers
+        run: python3 -m pip install --disable-pip-version-check 'pefile==2024.8.26' 'capstone==5.0.6'
+      - name: Resolve callback hierarchy, methods, and COM creation anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+          from capstone.x86 import X86_OP_IMM,X86_OP_MEM,X86_REG_INVALID
+
+          REV=5346
+          SIZE=13263640
+          SHA1='f101e28c3a18ce1ffe37a40d23cd04f7f57925d3'
+          SHA256='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          CLASS_NAME='.?AVSD_XAudio2Callbacks@@'
+
+          def req(c,m):
+            if not c: raise RuntimeError(m)
+          def get(url,timeout=180):
+            r=urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-xaudio2-callback-v2/1'})
+            with urllib.request.urlopen(r,timeout=timeout) as f:
+              req(f.status==200,f'HTTP {f.status}: {url}')
+              return f.read()
+          def u32(b,o): return struct.unpack_from('<I',b,o)[0]
+          def i32(b,o): return struct.unpack_from('<i',b,o)[0]
+
+          info=json.loads(get(INFO,60).decode())
+          req(info.get('revision')==REV,f'revision changed: {info.get("revision")}')
+          fs=[x for x in info.get('files',[]) if isinstance(x,dict) and str(x.get('name','')).replace('\\','/').lower()=='games/t6mp.exe']
+          req(len(fs)==1,'games/t6mp.exe count changed')
+          rec=fs[0]; req(int(rec['size'])==SIZE and str(rec['hash']).lower()==SHA1,'client manifest identity changed')
+          raw=get(info['baseUrl']+SHA1)
+          req(len(raw)==SIZE and hashlib.sha1(raw).hexdigest()==SHA1 and hashlib.sha256(raw).hexdigest()==SHA256,'client bytes changed')
+
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase; image_hi=base+pe.OPTIONAL_HEADER.SizeOfImage
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'rawOffset':s.PointerToRawData,'rawSize':s.SizeOfRawData,'rva':s.VirtualAddress,'va':base+s.VirtualAddress,'virtualSize':s.Misc_VirtualSize,'characteristics':s.Characteristics})
+          def offloc(o):
+            for s in secs:
+              if s['rawOffset']<=o<s['rawOffset']+s['rawSize']:
+                return {'fileOffset':o,'section':s['name'],'rva':s['rva']+o-s['rawOffset'],'va':s['va']+o-s['rawOffset']}
+            return {'fileOffset':o}
+          def vaoff(v):
+            for s in secs:
+              if s['va']<=v<s['va']+s['rawSize']: return s['rawOffset']+v-s['va']
+            return None
+          def isexec(v):
+            for s in secs:
+              if s['va']<=v<s['va']+max(s['rawSize'],s['virtualSize']): return bool(s['characteristics']&0x20000000)
+            return False
+          def refs(v):
+            n=struct.pack('<I',v&0xffffffff); out=[]; p=0
+            while True:
+              p=raw.find(n,p)
+              if p<0: break
+              out.append(offloc(p)); p+=1
+            return out
+          def cstr_at_va(v,maxn=256):
+            o=vaoff(v)
+            if o is None or o+8>=len(raw): return None
+            start=o+8; end=raw.find(b'\0',start,min(len(raw),start+maxn))
+            if end<0: return None
+            try: return raw[start:end].decode('ascii')
+            except: return None
+
+          # Exact class TypeDescriptor from unique decorated RTTI name.
+          nb=CLASS_NAME.encode()+b'\0'; pos=[]; p=0
+          while True:
+            p=raw.find(nb,p)
+            if p<0: break
+            pos.append(p); p+=1
+          req(len(pos)==1,f'class RTTI occurrences={len(pos)}')
+          td_o=pos[0]-8; td=offloc(td_o); td_va=td['va']
+
+          # Enumerate every structurally valid CompleteObjectLocator for this class TD.
+          cols=[]
+          for r in refs(td_va):
+            ro=r['fileOffset']; co=ro-12
+            if co<0 or co+20>len(raw): continue
+            sig,suboff,cd,ptd,pchd=struct.unpack_from('<IIIII',raw,co)
+            if ptd!=td_va or sig not in (0,1) or not(base<=pchd<image_hi): continue
+            clo=offloc(co); cva=clo.get('va')
+            if not isinstance(cva,int): continue
+            # Parse CHD: signature, attributes, numBaseClasses, pBaseClassArray.
+            cho=vaoff(pchd); chd=None
+            if cho is not None and cho+16<=len(raw):
+              csig,cattr,nbase,pba=struct.unpack_from('<IIII',raw,cho)
+              bases=[]
+              bao=vaoff(pba)
+              if bao is not None and 0<nbase<=32 and bao+4*nbase<=len(raw):
+                for i in range(nbase):
+                  bcdva=u32(raw,bao+4*i); bcdo=vaoff(bcdva)
+                  item={'index':i,'baseClassDescriptorVa':bcdva}
+                  if bcdo is not None and bcdo+24<=len(raw):
+                    btd=u32(raw,bcdo); contained=u32(raw,bcdo+4)
+                    mdisp=i32(raw,bcdo+8); pdisp=i32(raw,bcdo+12); vdisp=i32(raw,bcdo+16); attr=u32(raw,bcdo+20)
+                    item.update({'typeDescriptorVa':btd,'typeName':cstr_at_va(btd),'numContainedBases':contained,'pmd':{'mdisp':mdisp,'pdisp':pdisp,'vdisp':vdisp},'attributes':attr})
+                  bases.append(item)
+              chd={'va':pchd,'signature':csig,'attributes':cattr,'numBaseClasses':nbase,'baseClassArrayVa':pba,'bases':bases}
+            # Every ref to COL in data can be vtable[-1]. Accept only if following entries are executable pointers.
+            vts=[]
+            for cr in refs(cva):
+              vo=cr['fileOffset']+4; vl=offloc(vo)
+              if not isinstance(vl.get('va'),int): continue
+              ents=[]
+              for i in range(16):
+                eo=vo+4*i
+                if eo+4>len(raw): break
+                fv=u32(raw,eo)
+                if not isexec(fv): break
+                ents.append({'slot':i,'functionVa':fv,'pointerLocation':offloc(eo)})
+              if ents:
+                vts.append({'vtable':vl,'completeObjectLocatorPointer':cr,'entries':ents})
+            cols.append({'completeObjectLocator':clo,'signature':sig,'subobjectOffset':suboff,'cdOffset':cd,'classHierarchy':chd,'vtables':vts})
+          req(cols,'no valid class COL')
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          def disasm_linear_to_ret(v,maxbytes=128):
+            o=vaoff(v)
+            if o is None: return None
+            code=raw[o:o+maxbytes]; rows=[]; total=0; hit=False
+            for ins in md.disasm(code,v):
+              rows.append({'va':ins.address,'bytes':bytes(ins.bytes).hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+              total += ins.size
+              if ins.mnemonic.startswith('ret'):
+                hit=True; break
+            return {'firstRetObserved':hit,'linearBytesThroughFirstRet':total if hit else None,'linearSha256ThroughFirstRet':hashlib.sha256(raw[o:o+total]).hexdigest() if hit else None,'instructions':rows}
+
+          all_vt=[]; all_methods=[]
+          for c in cols:
+            for vt in c['vtables']:
+              all_vt.append(vt['vtable']['va'])
+              for e in vt['entries']:
+                all_methods.append(e['functionVa']); e['linearDiagnostic']=disasm_linear_to_ret(e['functionVa'])
+          for c in cols:
+            for vt in c['vtables']:
+              vva=vt['vtable']['va']; vt['allPointerRefs']=[x for x in refs(vva) if x['fileOffset']!=vt['completeObjectLocatorPointer']['fileOffset']+4]
+              for e in vt['entries']:
+                e['allPointerRefs']=[x for x in refs(e['functionVa']) if x['fileOffset']!=e['pointerLocation']['fileOffset']]
+
+          # Imports and exact code references to OLE32 creation/lifecycle IAT slots.
+          imports=[]; focus=[]
+          if hasattr(pe,'DIRECTORY_ENTRY_IMPORT'):
+            for d in pe.DIRECTORY_ENTRY_IMPORT:
+              dll=d.dll.decode('ascii','replace') if d.dll else ''
+              for imp in d.imports:
+                name=imp.name.decode('ascii','replace') if imp.name else None
+                row={'dll':dll,'name':name,'ordinal':imp.ordinal,'iatVa':imp.address}
+                imports.append(row)
+                if dll.lower()=='ole32.dll' and name in ('CoCreateInstance','CoInitialize','CoInitializeEx','CoUninitialize'):
+                  focus.append(row)
+          targets={x['iatVa']:x for x in focus}; iat_refs={v:[] for v in targets}
+          for s in secs:
+            if not(s['characteristics']&0x20000000) or not s['rawSize']: continue
+            code=raw[s['rawOffset']:s['rawOffset']+s['rawSize']]
+            for ins in md.disasm(code,s['va']):
+              hits=set()
+              for op in ins.operands:
+                if op.type==X86_OP_IMM and (op.imm&0xffffffff) in targets: hits.add(op.imm&0xffffffff)
+                elif op.type==X86_OP_MEM and op.mem.base==X86_REG_INVALID and op.mem.index==X86_REG_INVALID and (op.mem.disp&0xffffffff) in targets: hits.add(op.mem.disp&0xffffffff)
+              for t in hits:
+                io=vaoff(ins.address)
+                before=max(0,io-48) if io is not None else None
+                after=min(len(raw),io+ins.size+48) if io is not None else None
+                iat_refs[t].append({'instructionVa':ins.address,'mnemonic':ins.mnemonic,'opStr':ins.op_str,'bytes':bytes(ins.bytes).hex(),'rawWindowStartVa':ins.address-48 if io is not None else None,'rawWindowHex':raw[before:after].hex() if io is not None else None})
+          for x in focus: x['codeRefs']=iat_refs[x['iatVa']]
+
+          result={
+            'format':'t6-current-plutonium-xaudio2-callback-runtime-probe-v2',
+            'authority':'exact current Plutonium revision 5346 client only; not historical retail-equivalent',
+            'client':{'revision':REV,'bytes':SIZE,'sha1':SHA1,'sha256':SHA256},
+            'class':{'name':CLASS_NAME,'typeDescriptor':td,'typeDescriptorRefs':refs(td_va),'completeObjectLocators':cols},
+            'ole32FocusImports':focus,
+            'summary':{
+              'completeObjectLocators':len(cols),
+              'vtableCount':sum(len(c['vtables']) for c in cols),
+              'methodPointerCount':sum(len(v['entries']) for c in cols for v in c['vtables']),
+              'baseTypeNames':sorted({b.get('typeName') for c in cols if c.get('classHierarchy') for b in c['classHierarchy']['bases'] if b.get('typeName')}),
+              'ole32FocusImports':len(focus),
+              'ole32FocusCodeRefs':sum(len(x['codeRefs']) for x in focus),
+            },
+            'proofBoundary':'Class hierarchy, COLs, vtables, method pointers, pointer references and imported OLE32 callsites are exact for this client identity. Interface slot names are not assigned merely from slot count. Linear disassembly-to-first-ret records are diagnostic and are not promoted as function boundaries when control flow may branch.'
+          }
+          out=Path('/tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_CALLBACK_RUNTIME_PROBE_V2.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'summary':result['summary'],'cols':[{'va':c['completeObjectLocator']['va'],'subobjectOffset':c['subobjectOffset'],'bases':c['classHierarchy']['bases'] if c['classHierarchy'] else None,'vtables':[{'va':v['vtable']['va'],'methods':[hex(e['functionVa']) for e in v['entries']]} for v in c['vtables']]} for c in cols],'ole32':focus},indent=2,sort_keys=True))
+          print('result_sha256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_XAUDIO2_CALLBACK_RUNTIME_PROBE_V2
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_CALLBACK_RUNTIME_PROBE_V2.json
+          if-no-files-found: error
+          compression-level: 9
