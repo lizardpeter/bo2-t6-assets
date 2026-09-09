@@ -1,6 +1,7 @@
 {
   "format": "t6-current-client-dobj-string-xref-negative-v6",
-  "authority": "NON_AUTHORITATIVE_CURRENT_CLIENT_NEGATIVE_LOCATOR_EVIDENCE",
+  "status": "SUPERSEDED_NON_EXHAUSTIVE",
+  "authority": "NON_AUTHORITATIVE_CURRENT_CLIENT_LOCATOR_EVIDENCE_ONLY",
   "comparisonExecutable": {
     "bytes": 13263640,
     "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
@@ -20,13 +21,7 @@
     "artifactDigestSha256": "d2a1cb14abef45e67bdeb05f4022ec41e2b98b841f3e98f1a9db9e925326c644",
     "generatedManifestSha256": "f69c5ca162a1f4ff375c6e44ff875f56736be3c552de80e7cffe4738b23b840b"
   },
-  "referenceFormsTested": [
-    "instruction immediate operand equals diagnostic string VA",
-    "instruction absolute-memory disp32 equals diagnostic string VA",
-    "file-backed little-endian pointer slot contains diagnostic string VA, then instruction immediate operand equals slot VA",
-    "file-backed little-endian pointer slot contains diagnostic string VA, then instruction absolute-memory disp32 equals slot VA"
-  ],
-  "result": {
+  "historicalObservedResult": {
     "xrefCount": 0,
     "clusterCount": 0,
     "xrefCountByLabel": {
@@ -35,10 +30,14 @@
       "partNotFound": 0,
       "rootMeldNotFound": 0,
       "tooManyBones": 0
-    },
-    "xrefCountByReferenceForm": {}
+    }
   },
-  "conclusion": "The exact current comparison executable contains no instruction-aligned reference to any retained DObj diagnostic through the direct or one-hop absolute reference forms enumerated by v6. This closes those locator routes only; it does not establish absence of the DObj constructor or any retail semantic fact.",
-  "nextBoundary": "Locate DObjCreateDuplicateParts structurally in the comparison executable, retaining every candidate, then require independently retail-authoritative bytes or runtime evidence before promoting model order, duplicate ScriptString precedence, modelParent assignment, or effective hierarchy.",
-  "proofBoundary": "A green workflow and zero xrefs are valid negative locator evidence only. String absence/reference absence, current-client structure, older-engine lineage, OpenT6 symbol names, proximity, or candidate ranking cannot substitute for exact retail T6 authority."
+  "supersedingFinding": {
+    "discoveredBy": "T6 current-client DObj structural locator v7 run 34382110750",
+    "defect": "whole executable sections were passed to Capstone without skip-data/full byte accounting; Capstone can stop at the first undecodable byte, so a zero result did not prove that the complete executable section was scanned",
+    "effect": "the v6 zero-xref result must not be used as an exhaustive negative claim",
+    "requiredRepair": "repeat direct/absolute/one-hop reference scanning with skip-data enabled and require decoded-instruction bytes plus explicitly skipped bytes to account for every raw byte of every executable section"
+  },
+  "conclusion": "Retain run 34381705805 as historical probe evidence only. Its zero xrefs are superseded and non-exhaustive until a full-text byte-accounted scan is completed.",
+  "proofBoundary": "This supersession is fail-closed. No absence claim, constructor-location claim, model-order rule, duplicate ScriptString precedence, modelParent assignment, or hierarchy rule may be derived from v6."
 }
