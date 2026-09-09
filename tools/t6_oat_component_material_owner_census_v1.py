@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Census exact standalone OAT Material ownership for layered components.
 
-This tool deliberately does not change the production Material union.  The
+This tool deliberately does not change the production Material union. The
 production union remains restricted to source-derived catalog storage identities.
-Here we answer a narrower secondary question: for component-only identities
-parsed from generated catalog Materials, did any supplied native OAT dump root
-contain a standalone Material JSON?
+Here we answer a narrower secondary question: for component-only identities,
+did any supplied native OAT dump root contain a standalone Material JSON?
 
-For each component-only identity:
+Targets may be derived directly from a required catalog, or supplied explicitly
+when they are already pinned outputs of an earlier fail-closed manifest. The
+latter mode is useful for a small ownership probe without rerunning the entire
+world-catalog pipeline.
+
+For each target identity:
 
 - no physical copy -> record missing evidence;
 - one physical copy -> record its exact owner/hash;
@@ -33,23 +37,61 @@ from t6_oat_material_root_union_v1 import (
 FORMAT = "t6-oat-component-material-owner-census-v1"
 
 
-def build(roots: list[tuple[str, Path]], catalog_path: Path) -> dict:
+def _targets(
+    *,
+    catalog_path: Path | None,
+    explicit_identities: list[str] | None,
+    target_source: str | None,
+) -> tuple[list[str], dict]:
+    if catalog_path is not None:
+        if explicit_identities:
+            raise UnionError("cannot combine --required-catalog with explicit component identities")
+        _required, source = required_from_catalog(catalog_path)
+        component_only = source.get("componentOnlyMaterialIdentities")
+        if not isinstance(component_only, list):
+            raise UnionError("required catalog metadata lacks componentOnlyMaterialIdentities[]")
+        identities = [str(x) for x in component_only]
+        source_doc = {"kind": "required-catalog-derived", "catalog": source}
+    else:
+        identities = [str(x) for x in (explicit_identities or [])]
+        if not identities:
+            raise UnionError("no component identities supplied")
+        if not target_source:
+            raise UnionError("explicit component identities require --target-source")
+        source_doc = {
+            "kind": "explicit-pinned-identities",
+            "description": target_source,
+            "componentOnlyMaterialIdentities": sorted(identities),
+        }
+
+    if any(not identity for identity in identities):
+        raise UnionError("empty component-only identity")
+    if len(identities) != len(set(identities)):
+        raise UnionError("duplicate component-only identity")
+    return sorted(identities), source_doc
+
+
+def build(
+    roots: list[tuple[str, Path]],
+    *,
+    catalog_path: Path | None = None,
+    explicit_identities: list[str] | None = None,
+    target_source: str | None = None,
+) -> dict:
     if not roots:
         raise UnionError("no Material roots supplied")
 
-    _required, source = required_from_catalog(catalog_path)
-    component_only = source.get("componentOnlyMaterialIdentities")
-    if not isinstance(component_only, list):
-        raise UnionError("required catalog metadata lacks componentOnlyMaterialIdentities[]")
-    if len(component_only) != len(set(component_only)):
-        raise UnionError("duplicate component-only identity")
-
+    component_only, source = _targets(
+        catalog_path=catalog_path,
+        explicit_identities=explicit_identities,
+        target_source=target_source,
+    )
     indexed = {label: index_root(label, root) for label, root in roots}
     rows: list[dict] = []
     missing: list[str] = []
     divergent: list[dict] = []
 
-    for identity in sorted(str(x) for x in component_only):
+    for identity in component_only:
         copies = [indexed[label][identity] for label in sorted(indexed) if identity in indexed[label]]
         owners = [row["label"] for row in copies]
         if not copies:
@@ -128,7 +170,7 @@ def build(roots: list[tuple[str, Path]], catalog_path: Path) -> dict:
             "singleOwnerComponentOnlyIdentityCount": sum(1 for row in present if row["ownerCount"] == 1),
             "byteIdenticalMultiOwnerComponentOnlyIdentityCount": sum(1 for row in present if row["ownerCount"] > 1),
         },
-        "catalog": source,
+        "targetSource": source,
         "roots": [
             {"label": label, "path": str(root), "materialJsonCount": len(indexed[label])}
             for label, root in roots
@@ -146,7 +188,10 @@ def build(roots: list[tuple[str, Path]], catalog_path: Path) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", action="append", required=True, help="LABEL=PATH")
-    ap.add_argument("--required-catalog", type=Path, required=True)
+    target = ap.add_mutually_exclusive_group(required=True)
+    target.add_argument("--required-catalog", type=Path)
+    target.add_argument("--component-identity", action="append")
+    ap.add_argument("--target-source")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -161,7 +206,12 @@ def main() -> int:
         labels.add(label)
         roots.append((label, Path(raw_path)))
 
-    doc = build(roots, args.required_catalog)
+    doc = build(
+        roots,
+        catalog_path=args.required_catalog,
+        explicit_identities=args.component_identity,
+        target_source=args.target_source,
+    )
     payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(payload)
