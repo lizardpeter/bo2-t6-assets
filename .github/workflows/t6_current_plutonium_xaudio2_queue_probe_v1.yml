@@ -1,0 +1,56 @@
+name: T6 current Plutonium XAudio2 queue probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_xaudio2_queue_probe_v1.yml'
+      - 'tools/t6_current_plutonium_xaudio2_queue_probe_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact helpers
+        run: python3 -m pip install --disable-pip-version-check 'pefile==2024.8.26' 'capstone==5.0.6'
+      - name: Fetch exact current client and run queue census
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/client
+          python3 - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          REV=5346
+          SIZE=13263640
+          SHA1='f101e28c3a18ce1ffe37a40d23cd04f7f57925d3'
+          SHA256='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          info_url='https://cdn.plutoniummod.com/updater/prod/info.json'
+          def get(u,t=180):
+            q=urllib.request.Request(u,headers={'User-Agent':'bo2-t6-assets-xaudio2-queue/1'})
+            with urllib.request.urlopen(q,timeout=t) as f:
+              if f.status!=200: raise RuntimeError(f'HTTP {f.status}: {u}')
+              return f.read()
+          info=json.loads(get(info_url,60).decode())
+          if info.get('revision')!=REV: raise RuntimeError(f'revision changed: {info.get("revision")}')
+          rs=[x for x in info.get('files',[]) if isinstance(x,dict) and str(x.get('name','')).replace('\\','/').lower()=='games/t6mp.exe']
+          if len(rs)!=1 or int(rs[0]['size'])!=SIZE or str(rs[0]['hash']).lower()!=SHA1: raise RuntimeError('manifest client identity changed')
+          raw=get(info['baseUrl']+SHA1)
+          if len(raw)!=SIZE or hashlib.sha1(raw).hexdigest()!=SHA1 or hashlib.sha256(raw).hexdigest()!=SHA256: raise RuntimeError('current client bytes changed')
+          Path('/tmp/client/t6mp.exe').write_bytes(raw)
+          PY
+          python3 tools/t6_current_plutonium_xaudio2_queue_probe_v1.py \
+            /tmp/client/t6mp.exe \
+            --output /tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_QUEUE_PROBE_V1.json
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_XAUDIO2_QUEUE_PROBE_V1
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_QUEUE_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
