@@ -1,0 +1,189 @@
+name: T6 Material texture sort runtime probe v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_material_texture_sort_runtime_probe_v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact PC dedicated-server references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install exact disassembler dependency
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Classify both exact comparator VA occurrences
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, hashlib, json, re, struct
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM
+
+          EXE_SHA='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          MAP_SHA='34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          BASE=0x00400000
+          CMP=0x00A4D630
+          CMP_SIZE=21
+          CMP_SHA='89c3ef79d0956caceb677fd742d376f28895d8788fd9ad7c1e88a4535d840952'
+
+          exe_path=Path('/tmp/ref/CoDMPServer_PC.exe')
+          map_path=Path('/tmp/ref/CoDMPServer_PC.map')
+          exe=exe_path.read_bytes(); map_bytes=map_path.read_bytes(); mt=map_bytes.decode('ascii','replace')
+          if hashlib.sha256(exe).hexdigest()!=EXE_SHA: raise SystemExit('EXE SHA gate failed')
+          if hashlib.sha256(map_bytes).hexdigest()!=MAP_SHA: raise SystemExit('MAP SHA gate failed')
+
+          pe=struct.unpack_from('<I',exe,0x3c)[0]; coff=pe+4
+          _,ns,_,_,_,osz,_=struct.unpack_from('<HHIIIHH',exe,coff); st=coff+20+osz
+          secs=[]
+          for i in range(ns):
+              o=st+i*40
+              name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8); chars=struct.unpack_from('<I',exe,o+36)[0]
+              secs.append({'name':name,'va':BASE+rva,'virtualSize':vs,'rawSize':rs,'rawOffset':ro,'characteristics':chars})
+
+          def file_off(va):
+              for s in secs:
+                  if s['va']<=va<s['va']+s['rawSize']:
+                      return s['rawOffset']+va-s['va']
+              raise ValueError(hex(va))
+          def va_from_file_offset(off):
+              for s in secs:
+                  if s['rawOffset']<=off<s['rawOffset']+s['rawSize']:
+                      return s['va']+off-s['rawOffset'],s
+              return None,None
+
+          # Parse exact public MAP rows. Symbol names are whitespace-free decorated names.
+          syms=[]
+          line_re=re.compile(r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+f)?\s+(.+?\.obj)\s*$')
+          for line in mt.splitlines():
+              m=line_re.match(line)
+              if m:
+                  syms.append((int(m.group(2),16),m.group(1),m.group(3).strip(),line.strip()))
+          syms.sort(key=lambda r:(r[0],r[1],r[2])); vas=sorted(set(v for v,_,_,_ in syms))
+          by_va={}
+          for row in syms: by_va.setdefault(row[0],[]).append(row)
+          def exact_labels(va): return [r[3] for r in by_va.get(va,[])]
+          def containing(va):
+              p=bisect.bisect_right(vas,va)-1
+              if p<0:return None,None,[]
+              start=vas[p]; q=bisect.bisect_right(vas,start); end=vas[q] if q<len(vas) else None
+              return start,end,exact_labels(start)
+
+          alias_lines=[line.strip() for line in mt.splitlines() if 'CompareHashedMaterialTextures' in line or 'CompareHashedMaterialConstants' in line]
+          if len(alias_lines)!=2 or any(f'{CMP:08x}' not in x.lower() for x in alias_lines):
+              raise SystemExit('expected exactly two comparator aliases at exact VA')
+          cmp_bytes=exe[file_off(CMP):file_off(CMP)+CMP_SIZE]
+          if hashlib.sha256(cmp_bytes).hexdigest()!=CMP_SHA: raise SystemExit('comparator SHA changed')
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          pattern=struct.pack('<I',CMP)
+          raw=[]; p=0
+          while True:
+              q=exe.find(pattern,p)
+              if q<0:break
+              va,sec=va_from_file_offset(q)
+              raw.append((q,va,sec)); p=q+1
+          if len(raw)!=2:
+              raise SystemExit(f'exact comparator VA raw occurrence count changed: {len(raw)}')
+
+          hits=[]
+          owner_ranges={}
+          for off,va,sec in raw:
+              candidates=[]
+              if va is not None:
+                  for start in range(max(sec['va'],va-15),va+1):
+                      try: b=exe[file_off(start):file_off(start)+15]
+                      except Exception: continue
+                      insns=list(md.disasm(b,start,count=1))
+                      if not insns: continue
+                      ins=insns[0]
+                      if not (ins.address<=va<ins.address+ins.size): continue
+                      if any(op.type==X86_OP_IMM and (op.imm & 0xffffffff)==CMP for op in ins.operands):
+                          candidates.append({'address':f'0x{ins.address:08X}','size':ins.size,'bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+              # deduplicate exact decoded instruction candidates
+              uniq=[]; seen=set()
+              for c in candidates:
+                  k=(c['address'],c['bytes'],c['mnemonic'],c['opStr'])
+                  if k not in seen: seen.add(k); uniq.append(c)
+              owner_start,owner_end,owner_labels=containing(va) if va is not None else (None,None,[])
+              if owner_start is not None:
+                  owner_ranges[owner_start]=owner_end
+              context_off=max(0,off-24); context=exe[context_off:off+4+24]
+              hits.append({
+                  'fileOffset':f'0x{off:08X}','va':None if va is None else f'0x{va:08X}',
+                  'section':None if sec is None else sec['name'],'sectionExecutable':None if sec is None else bool(sec['characteristics'] & 0x20000000),
+                  'contextFileOffset':f'0x{context_off:08X}','contextHex':context.hex(),
+                  'immediateInstructionCandidates':uniq,
+                  'containingSymbolVa':None if owner_start is None else f'0x{owner_start:08X}',
+                  'containingSymbolEnd':None if owner_end is None else f'0x{owner_end:08X}',
+                  'containingSymbols':owner_labels,
+              })
+
+          owners=[]
+          for start,end in sorted(owner_ranges.items()):
+              if end is None or end<=start or end-start>0x8000: end=start+0x800
+              rb=exe[file_off(start):file_off(start)+(end-start)]
+              insrows=[]
+              for ins in md.disasm(rb,start):
+                  targets=[]
+                  for op in ins.operands:
+                      if op.type==X86_OP_IMM:
+                          t=op.imm & 0xffffffff
+                          if t in by_va: targets.append({'va':f'0x{t:08X}','mapSymbols':exact_labels(t)})
+                  insrows.append({'address':f'0x{ins.address:08X}','bytes':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str,'exactImmediateTargets':targets})
+              owners.append({'start':f'0x{start:08X}','end':f'0x{end:08X}','sha256':hashlib.sha256(rb).hexdigest(),'mapSymbols':exact_labels(start),'instructions':insrows})
+
+          out={
+              'format':'t6-material-texture-sort-runtime-probe-v2',
+              'authority':{'executable':'CoDMPServer_PC.exe','executableSha256':EXE_SHA,'map':'CoDMPServer_PC.map','mapSha256':MAP_SHA},
+              'comparator':{'va':f'0x{CMP:08X}','size':CMP_SIZE,'sha256':CMP_SHA,'mapAliasLines':alias_lines},
+              'rawOccurrences':hits,
+              'containingSymbols':owners,
+              'summary':{
+                  'rawOccurrenceCount':len(hits),
+                  'executableSectionOccurrenceCount':sum(bool(h['sectionExecutable']) for h in hits),
+                  'decodedImmediateCandidateCount':sum(len(h['immediateInstructionCandidates']) for h in hits),
+                  'containingSymbolCount':len(owners),
+              },
+              'proofBoundary':'Exact dedicated-server byte classification of the two comparator-address occurrences. Semantic promotion requires inspection of the containing call sites; retail-client equivalence remains open.',
+          }
+          payload=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode()
+          Path('/tmp/probe/T6_MATERIAL_TEXTURE_SORT_RUNTIME_PROBE_V2.json').write_bytes(payload)
+          Path('/tmp/probe/result_sha256.txt').write_text(hashlib.sha256(payload).hexdigest()+'  T6_MATERIAL_TEXTURE_SORT_RUNTIME_PROBE_V2.json\n')
+          print(json.dumps(out['summary'],sort_keys=True))
+          for h in hits: print('HIT',h['fileOffset'],h['va'],h['section'],h['immediateInstructionCandidates'],h['containingSymbols'])
+          PY
+
+      - name: Upload exact probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MATERIAL_TEXTURE_SORT_RUNTIME_PROBE_V2
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
