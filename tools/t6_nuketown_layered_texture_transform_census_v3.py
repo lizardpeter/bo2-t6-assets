@@ -5,10 +5,12 @@ The retail corpus disproves stable component-relative ordering for six known
 layer-1 tables. This verifier therefore binds every standalone-known row only by
 its exact layer-renamed texture name, requires every non-name field to match
 exactly, accounts for every generated row, and promotes a missing component only
-when a target-bearing generated Material contains exactly one missing layer and
-all exact occurrences recover the same singleton row.
+when each exact missing-layer occurrence recovers one disjoint singleton row and
+all occurrences of that component agree.
 
-It deliberately does not infer a universal generated texture-array sort rule.
+Repeated missing layers are permitted only when nonzero layer suffixes partition
+the residual rows exactly. It deliberately does not infer a universal generated
+texture-array sort rule.
 """
 from __future__ import annotations
 
@@ -145,6 +147,7 @@ def build(material_root: Path, universe_path: Path) -> dict:
     generated_reports = []
     all_known_count = 0
     target_bearing_count = 0
+    repeated_missing_layer_material_count = 0
 
     for identity, tokens, components, storage in parsed:
         path = material_root / f"{storage}.json"
@@ -204,31 +207,65 @@ def build(material_root: Path, universe_path: Path) -> dict:
                 raise ProofError(f"{identity}: all-known Material leaves {len(residual)} unaccounted rows")
         else:
             target_bearing_count += 1
-            if len(unknown) != 1:
-                raise ProofError(f"{identity}: target-bearing Material has {len(unknown)} missing layers, expected 1")
-            layer, component = unknown[0]
             if not residual:
-                raise ProofError(f"{identity}: target {component} leaves no residual rows")
-            recovered = []
-            indices = []
-            for gi, row in residual:
+                raise ProofError(f"{identity}: missing layers leave no residual rows")
+            if len(unknown) > 1:
+                repeated_missing_layer_material_count += 1
+                if any(layer == 0 for layer, _ in unknown):
+                    raise ProofError(
+                        f"{identity}: multiple missing layers include layer 0; exact suffix partition is not unique"
+                    )
+
+            assignments = []
+            assigned_indices = set()
+            if len(unknown) == 1:
+                layer, component = unknown[0]
+                if len(residual) != 1:
+                    raise ProofError(
+                        f"{identity}: singleton target {component} leaves {len(residual)} rows; ordering inference refused"
+                    )
+                assignments.append((layer, component, residual[0]))
+            else:
+                for layer, component in unknown:
+                    suffix = str(layer)
+                    candidates = [
+                        (gi, row) for gi, row in residual
+                        if isinstance(row.get("name"), str) and row["name"].endswith(suffix)
+                    ]
+                    if len(candidates) != 1:
+                        raise ProofError(
+                            f"{identity}: missing layer {layer} target {component} has {len(candidates)} suffix-matched residual rows, expected 1"
+                        )
+                    assignments.append((layer, component, candidates[0]))
+                if len({gi for _, _, (gi, _) in assignments}) != len(assignments):
+                    raise ProofError(f"{identity}: missing-layer suffix assignments overlap")
+
+            for layer, component, (gi, row) in assignments:
+                if gi in assigned_indices:
+                    raise ProofError(f"{identity}: residual row {gi} assigned twice")
+                assigned_indices.add(gi)
                 generated = row.get("name")
                 if not isinstance(generated, str) or not generated:
                     raise ProofError(f"{identity}: target residual {gi} lacks exact name")
                 restored = dict(row)
                 restored["name"] = source_name(generated, layer)
-                recovered.append(restored)
-                indices.append(gi)
-            sig = sha256(canonical(recovered))
-            target_occurrences[component].append({
-                "generatedMaterial": identity,
-                "storageIdentity": storage,
-                "layerIndex": layer,
-                "token": tokens[layer],
-                "generatedIndices": indices,
-                "recoveredRows": recovered,
-                "recoveredCanonicalSha256": sig,
-            })
+                recovered = [restored]
+                sig = sha256(canonical(recovered))
+                target_occurrences[component].append({
+                    "generatedMaterial": identity,
+                    "storageIdentity": storage,
+                    "layerIndex": layer,
+                    "token": tokens[layer],
+                    "generatedIndices": [gi],
+                    "recoveredRows": recovered,
+                    "recoveredCanonicalSha256": sig,
+                })
+
+            residual_indices = {gi for gi, _ in residual}
+            if assigned_indices != residual_indices:
+                raise ProofError(
+                    f"{identity}: exact suffix partition does not cover residual rows: assigned={sorted(assigned_indices)} residual={sorted(residual_indices)}"
+                )
 
         generated_reports.append({
             "material": identity,
@@ -255,12 +292,10 @@ def build(material_root: Path, universe_path: Path) -> dict:
             raise ProofError(f"{component}: occurrence count mismatch")
         signatures = {o["recoveredCanonicalSha256"] for o in occurrences}
         if len(signatures) != 1:
-            raise ProofError(f"{component}: recovered rows disagree across exact occurrences")
+            raise ProofError(f"{component}: recovered singleton row disagrees across exact occurrences")
         recovered = occurrences[0]["recoveredRows"]
         if len(recovered) != 1:
-            raise ProofError(
-                f"{component}: recovered table has {len(recovered)} rows; singleton-only promotion refuses ordering inference"
-            )
+            raise ProofError(f"{component}: internal singleton invariant failed")
         recovered_targets[component] = {
             "textureCount": 1,
             "canonicalSha256": next(iter(signatures)),
@@ -290,6 +325,7 @@ def build(material_root: Path, universe_path: Path) -> dict:
             "relativeOrderAnomalyCount": len(order_anomalies),
             "allKnownGeneratedMaterialCount": all_known_count,
             "targetBearingGeneratedMaterialCount": target_bearing_count,
+            "repeatedMissingLayerMaterialCount": repeated_missing_layer_material_count,
             "targetOccurrenceCount": sum(target_counts.values()),
             "recoveredSingletonTargetCount": len(recovered_targets),
         },
@@ -307,6 +343,7 @@ def build(material_root: Path, universe_path: Path) -> dict:
         "generatedMaterials": generated_reports,
         "proofBoundary": (
             "This closes only the seven missing serialized texture tables as singleton residuals in the exact Nuketown layered-Material universe. "
+            "Repeated missing nonzero layers are accepted only when exact decimal layer suffixes partition every residual row one-to-one. "
             "It does not infer a universal generated texture-array order and does not close complete standalone Material objects, TechniqueSet selection, shader blend/compositor math, constants, or state bits."
         ),
     }
