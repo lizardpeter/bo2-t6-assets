@@ -100,6 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           BIN=$(cat /tmp/unlinker_path)
+          : >/tmp/proof/oat_material_roots.txt
           for spec in \
             map=mp_nuketown_2020.ff \
             common=common_mp.ff \
@@ -108,8 +109,20 @@ jobs:
             code_post=code_post_gfx_mp.ff; do
             label=${spec%%=*}; file=${spec#*=}
             root="/tmp/oat_$label"
-            mkdir -p "$root"
-            "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee "/tmp/proof/oat_material_dump_${label}.log"
+            log="/tmp/proof/oat_material_dump_${label}.log"
+            : >"$log"
+            success=0
+            for attempt in 1 2 3; do
+              rm -rf "$root"
+              mkdir -p "$root"
+              echo "OAT_DUMP_ATTEMPT label=$label attempt=$attempt" | tee -a "$log"
+              if "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee -a "$log"; then
+                success=1
+                break
+              fi
+              echo "OAT_DUMP_RETRY label=$label failed_attempt=$attempt" | tee -a "$log"
+            done
+            test "$success" = 1
             matroot=$(find "$root" -type d -name materials -print -quit)
             test -n "$matroot" -a -d "$matroot"
             count=$(find "$matroot" -type f -name '*.json' | wc -l)
