@@ -1,0 +1,146 @@
+name: T6 Nuketown native Image metadata census v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - nuketown-layered-runtime-projection-v2
+    paths:
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_oat_9dca_t6_image_metadata_probe_patch_v1.py'
+      - 'tools/t6_nuketown_native_image_metadata_census_v1.py'
+      - '.github/workflows/t6_nuketown_native_image_metadata_census_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import exact green v4 unresolved-image census
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v4 /tmp/proof
+          gh run download 34402822149 --repo "$GITHUB_REPOSITORY" \
+            --name T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_V4 \
+            --dir /tmp/v4
+          V4=/tmp/v4/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V4.json
+          test -f "$V4"
+          echo '0182959d69c375ff8f65f871e1ca9cdf215a12fa374493c9b46980d0330bff4e  /tmp/v4/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V4.json' | sha256sum -c -
+          python3 - <<'PY'
+          import json
+          p='/tmp/v4/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V4.json'
+          d=json.load(open(p)); s=d['summary']
+          assert d['format']=='t6-nuketown-production-texture-dependency-census-v4'
+          assert s['materialUniqueImageCount']==423,s
+          assert s['materialCoveredByKnownExactSourceCount']==76,s
+          assert s['materialMissingFromKnownExactSourceCount']==347,s
+          assert len(d['missingProductionImages'])==347
+          print('PINNED_V4_UNRESOLVED_SET',s)
+          PY
+
+      - name: Build metadata-only pinned OAT diagnostic
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+          test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_9dca_t6_image_metadata_probe_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff > /tmp/proof/oat_metadata_probe.patch
+          COMPAT_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          META_PATCH_SHA=$(sha256sum tools/t6_oat_9dca_t6_image_metadata_probe_patch_v1.py | awk '{print $1}')
+          printf 'oat_commit=%s\ncompat_patch_sha256=%s\nmetadata_probe_patch_sha256=%s\n' \
+            "$EXPECTED_COMMIT" "$COMPAT_SHA" "$META_PATCH_SHA" > /tmp/proof/oat_source_identity.txt
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN" -a -x "$BIN"
+          install -m 0755 "$BIN" /tmp/t6_image_meta_unlinker
+          sha256sum /tmp/t6_image_meta_unlinker | tee /tmp/proof/unlinker_sha256.txt
+
+      - name: Fetch exact five-root MP FastFiles
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/source/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
+
+      - name: Read native GfxImage metadata without payload conversion
+        run: |
+          set -euo pipefail
+          BIN=/tmp/t6_image_meta_unlinker
+          for spec in \
+            map=mp_nuketown_2020.ff \
+            common=common_mp.ff \
+            common_patch=common_patch_mp.ff \
+            patch=patch_mp.ff \
+            code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}
+            mkdir -p "/tmp/noop_$label"
+            OAT_T6_IMAGE_METADATA_V1=1 "$BIN" --no-color --include-assets image \
+              --output-folder "/tmp/noop_$label" "/tmp/source/$file" \
+              2>&1 | tee "/tmp/proof/image_metadata_$label.log"
+            count=$(grep -c 'T6_IMAGE_META_V1|' "/tmp/proof/image_metadata_$label.log")
+            test "$count" -gt 0
+            echo "$label metadata_rows=$count" | tee -a /tmp/proof/image_metadata_counts.txt
+          done
+          test "$(find /tmp/noop_* -type f | wc -l)" = 0
+
+      - name: Close exact 347-target native metadata census
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_native_image_metadata_census_v1.py \
+            --v4-census /tmp/v4/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V4.json \
+            --log map=/tmp/proof/image_metadata_map.log \
+            --log common=/tmp/proof/image_metadata_common.log \
+            --log common_patch=/tmp/proof/image_metadata_common_patch.log \
+            --log patch=/tmp/proof/image_metadata_patch.log \
+            --log code_post=/tmp/proof/image_metadata_code_post.log \
+            --out /tmp/proof/T6_NUKETOWN_NATIVE_IMAGE_METADATA_CENSUS_V1.json \
+            2>&1 | tee /tmp/proof/native_image_metadata_census.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_NATIVE_IMAGE_METADATA_CENSUS_V1.json'
+          d=json.load(open(p)); s=d['summary']; by={r['image']:r for r in d['rows']}
+          assert s['targetCount']==347,s
+          assert s['metadataClosedTargetCount']==347,s
+          assert s['missingTargetCount']==0,s
+          assert s['conflictTargetCount']==0,s
+          assert s['duplicateOwnerTargetCount']==1,s
+          assert s['targetPhysicalOwnerRecordCount']==348,s
+          assert by['pb_concrete_wall_01_trim_nml']['owners']==['map','patch'],by['pb_concrete_wall_01_trim_nml']
+          assert by['shadow']['owners']==['code_post'],by['shadow']
+          assert all(r['owners']==['map'] for n,r in by.items() if n not in {'pb_concrete_wall_01_trim_nml','shadow'})
+          print('GREEN_NATIVE_347_IMAGE_METADATA',json.dumps(s,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_NUKETOWN_NATIVE_IMAGE_METADATA_CENSUS_V1.json | tee /tmp/proof/native_image_metadata_census_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_NATIVE_IMAGE_METADATA_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
