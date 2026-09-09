@@ -214,6 +214,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_V1
           path: |
