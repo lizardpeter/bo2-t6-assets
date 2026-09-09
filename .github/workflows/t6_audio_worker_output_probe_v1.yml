@@ -1,0 +1,264 @@
+name: T6 audio worker output probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_worker_output_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install exact disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Probe exact worker and output boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, re, struct
+          from collections import defaultdict
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+
+          EXE_SHA = 'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          MAP_SHA = '34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          BASE = 0x00400000
+          exe = Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mp = Path('/tmp/ref/CoDMPServer_PC.map').read_bytes()
+          assert hashlib.sha256(exe).hexdigest() == EXE_SHA
+          assert hashlib.sha256(mp).hexdigest() == MAP_SHA
+          map_text = mp.decode('ascii', errors='strict')
+
+          peoff = struct.unpack_from('<I', exe, 0x3c)[0]
+          assert exe[:2] == b'MZ' and exe[peoff:peoff+4] == b'PE\0\0'
+          coff = peoff + 4
+          _, nsects, _, _, _, opt_size, _ = struct.unpack_from('<HHIIIHH', exe, coff)
+          opt = coff + 20
+          assert struct.unpack_from('<I', exe, opt + 28)[0] == BASE
+          sections = []
+          table = opt + opt_size
+          for i in range(nsects):
+              o = table + i * 40
+              name = exe[o:o+8].split(b'\0', 1)[0].decode('ascii', 'replace')
+              virtual_size, rva, raw_size, raw_offset = struct.unpack_from('<IIII', exe, o + 8)
+              sections.append((name, BASE+rva, virtual_size, raw_size, raw_offset))
+
+          def va_off(va):
+              for name, base, vs, rs, ro in sections:
+                  if base <= va < base + rs:
+                      return ro + va - base
+              raise ValueError(f'unmapped VA 0x{va:08X}')
+
+          def raw(a, b):
+              if b <= a:
+                  raise ValueError((hex(a), hex(b)))
+              o = va_off(a)
+              out = exe[o:o+(b-a)]
+              if len(out) != b-a:
+                  raise ValueError(f'short range 0x{a:08X}..0x{b:08X}')
+              return out
+
+          def cstr(va, limit=256):
+              try:
+                  o = va_off(va)
+              except Exception:
+                  return None
+              s = exe[o:o+limit].split(b'\0',1)[0]
+              if not s or len(s) >= limit:
+                  return None
+              if not all((32 <= c < 127) or c in (9,10,13) for c in s):
+                  return None
+              return s.decode('ascii', 'replace')
+
+          # Microsoft MAP public-symbol rows. Only the exact forms already
+          # demonstrated by the green downstream census are accepted.
+          row_re = re.compile(
+              r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+(f)(?:\s+(i))?)?\s+(\S+\.obj)\s*$'
+          )
+          map_rows = []
+          for line_no, line in enumerate(map_text.splitlines(), 1):
+              m = row_re.match(line)
+              if not m:
+                  continue
+              map_rows.append({
+                  'line': line_no,
+                  'symbol': m.group(1),
+                  'va': int(m.group(2), 16),
+                  'function': m.group(3) == 'f',
+                  'inline': m.group(4) == 'i',
+                  'origin': m.group(5),
+                  'raw': line.strip(),
+              })
+          if not map_rows:
+              raise SystemExit('MAP public-symbol parser found zero rows')
+
+          rows_by_va = defaultdict(list)
+          function_vas = set()
+          for r in map_rows:
+              rows_by_va[r['va']].append(r)
+              if r['function']:
+                  function_vas.add(r['va'])
+          function_vas = sorted(function_vas)
+
+          targets = {
+              'shared_api_mix_stub': 0x008B3F40,
+              'SD_PreUpdate': 0x008B90E0,
+              'SD_UpdateVoice': 0x008B9860,
+              'SD_Sync': 0x008B98F0,
+              'SD_StreamDevhost': 0x008BA010,
+              'SD_VoiceSetParam': 0x008BA560,
+              'sd_xa2_callback_OnBufferEnd': 0x008BA800,
+              'SD_OutputShutdown': 0x008BA820,
+              'SD_OutputForceWakeup': 0x008BA8B0,
+              'SD_SwitchDevice': 0x008BA9C0,
+              'shared_xaudio_callback_stub': 0x008BAAB0,
+              'SD_XAudio2Callbacks_OnCriticalError': 0x008BAAC0,
+              'SD_OutputInit': 0x008BAE90,
+              'SD_Reset': 0x008BB100,
+          }
+
+          def next_function_va(start):
+              for va in function_vas:
+                  if va > start:
+                      return va
+              raise SystemExit(f'no following function VA after 0x{start:08X}')
+
+          md = Cs(CS_ARCH_X86, CS_MODE_32)
+          md.detail = True
+          report = {
+              'format': 't6-audio-worker-output-probe-v1',
+              'status': 'EXPLORATORY_MACHINE_BOUNDARY_PROBE',
+              'authority': {
+                  'exeBytes': len(exe), 'exeSha256': EXE_SHA,
+                  'mapBytes': len(mp), 'mapSha256': MAP_SHA,
+              },
+              'rangeRule': 'target VA through next distinct public MAP function-flag VA; boundary is a probe window, not promoted as exact compiler function size',
+              'targets': {},
+          }
+
+          all_call_targets = defaultdict(list)
+          all_abs_mem = defaultdict(list)
+          for label, start in targets.items():
+              matching = rows_by_va.get(start, [])
+              if not matching:
+                  raise SystemExit(f'target 0x{start:08X} has no MAP row')
+              if not any(r['function'] for r in matching):
+                  raise SystemExit(f'target 0x{start:08X} has no function-flag MAP row')
+              end = next_function_va(start)
+              rb = raw(start, end)
+              insns = list(md.disasm(rb, start))
+              if not insns or insns[0].address != start:
+                  raise SystemExit(f'disassembly did not start at {label}')
+              decoded_end = insns[-1].address + insns[-1].size
+              if decoded_end != end:
+                  raise SystemExit(f'{label}: instruction accounting ends 0x{decoded_end:08X}, window ends 0x{end:08X}')
+
+              calls = []
+              strings = []
+              abs_mem = []
+              instructions = []
+              for ins in insns:
+                  instructions.append({
+                      'va': f'0x{ins.address:08X}',
+                      'bytes': ins.bytes.hex(),
+                      'mnemonic': ins.mnemonic,
+                      'opStr': ins.op_str,
+                  })
+                  if ins.mnemonic == 'call' and len(ins.operands) == 1 and ins.operands[0].type == X86_OP_IMM:
+                      dst = int(ins.operands[0].imm) & 0xffffffff
+                      row_names = [r['symbol'] for r in rows_by_va.get(dst, [])]
+                      rec = {'from': f'0x{ins.address:08X}', 'to': f'0x{dst:08X}', 'mapSymbols': row_names}
+                      calls.append(rec)
+                      all_call_targets[dst].append({'target': label, 'from': ins.address})
+                  for op in ins.operands:
+                      if op.type == X86_OP_IMM:
+                          v = int(op.imm) & 0xffffffff
+                          s = cstr(v)
+                          if s is not None:
+                              sr = {'from': f'0x{ins.address:08X}', 'va': f'0x{v:08X}', 'string': s}
+                              if sr not in strings:
+                                  strings.append(sr)
+                      elif op.type == X86_OP_MEM:
+                          mem = op.mem
+                          if mem.base == 0 and mem.index == 0 and mem.disp:
+                              v = int(mem.disp) & 0xffffffff
+                              rec = {'from': f'0x{ins.address:08X}', 'va': f'0x{v:08X}'}
+                              if rec not in abs_mem:
+                                  abs_mem.append(rec)
+                                  all_abs_mem[v].append({'target': label, 'from': ins.address})
+
+              asm_path = Path('/tmp/probe') / f'{start:08X}_{label}.asm'
+              asm_path.write_text('\n'.join(
+                  f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}' for i in insns
+              ) + '\n')
+              report['targets'][label] = {
+                  'startVa': f'0x{start:08X}',
+                  'probeEndVaExclusive': f'0x{end:08X}',
+                  'bytes': len(rb),
+                  'sha256': hashlib.sha256(rb).hexdigest(),
+                  'instructionCount': len(insns),
+                  'mapRowsAtStart': [{k:v for k,v in r.items() if k != 'va'} for r in matching],
+                  'directCalls': calls,
+                  'referencedAscii': strings,
+                  'absoluteMemoryOperands': abs_mem,
+                  'instructions': instructions,
+              }
+              print(f'=== {label} [0x{start:08X},0x{end:08X}) {len(rb)} bytes sha256={hashlib.sha256(rb).hexdigest()} ===')
+              for r in matching:
+                  print('MAP:', r['raw'])
+              for i in insns:
+                  print(f'{i.address:08X}: {i.bytes.hex():<24} {i.mnemonic:<8} {i.op_str}')
+              if calls:
+                  print('CALLS:', json.dumps(calls, sort_keys=True))
+              if strings:
+                  print('STRINGS:', json.dumps(strings, sort_keys=True))
+
+          report['directCallTargetSummary'] = {
+              f'0x{va:08X}': {
+                  'mapSymbols': [r['symbol'] for r in rows_by_va.get(va, [])],
+                  'references': [{'target': x['target'], 'from': f'0x{x["from"]:08X}'} for x in refs],
+              }
+              for va, refs in sorted(all_call_targets.items())
+          }
+          report['absoluteMemorySummary'] = {
+              f'0x{va:08X}': [{'target': x['target'], 'from': f'0x{x["from"]:08X}'} for x in refs]
+              for va, refs in sorted(all_abs_mem.items())
+          }
+
+          out = Path('/tmp/probe/T6_AUDIO_WORKER_OUTPUT_PROBE_V1.json')
+          out.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          print('JSON_SHA256', hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+
+      - name: Upload worker output probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_WORKER_OUTPUT_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
