@@ -16,6 +16,7 @@ on:
       - 'tools/t6_xmodel_skeleton_normalize_v2.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'manifests/weapons/T6_MP7_R2_XANIM_NOTETRACK_CLOSURE_V1.json'
+      - 'manifests/weapons/T6_MP7_R2_MMS_RESIDUAL_PROBE_V1.json'
 
 permissions:
   contents: read
@@ -63,6 +64,10 @@ jobs:
           assert d['residualOwnedByMmsModel'] is True
           assert d['xmodel']['name']=='t6_attach_optic_mms_view'
           PY
+          echo 'b5c1e2f7b91bd7d3d49f94ea86e0dedbfc3f7e6822cdcfebbea12fe7ffc67971  manifests/weapons/T6_MP7_R2_MMS_RESIDUAL_PROBE_V1.json' | sha256sum -c -
+          cmp -s \
+            /tmp/proof/T6_MP7_R2_MMS_RESIDUAL_PROBE_V1.json \
+            manifests/weapons/T6_MP7_R2_MMS_RESIDUAL_PROBE_V1.json
           sha256sum /tmp/proof/T6_MP7_R2_MMS_RESIDUAL_PROBE_V1.json | tee /tmp/proof/manifest_sha256.txt
 
       - name: Upload residual proof
