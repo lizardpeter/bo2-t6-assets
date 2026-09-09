@@ -7,6 +7,7 @@ on:
       - 'tools/t6_oat_layered_component_texture_recovery_v1.py'
       - 'tools/test_t6_oat_layered_component_texture_recovery_v1.py'
       - 'tools/t6_oat_layered_known_prefix_probe_v1.py'
+      - 'tools/t6_oat_layered_texture_order_census_v1.py'
       - 'tools/t6_layered_material_name_v1.py'
       - 'tools/t6_oat_material_manifest_v2.py'
       - 'tools/t6_oat_material_manifest_v6.py'
@@ -30,13 +31,11 @@ jobs:
       - name: Run fail-closed synthetic regression
         env:
           PYTHONPATH: tools
-        shell: bash
         run: |
           set -euo pipefail
           python3 tools/test_t6_oat_layered_component_texture_recovery_v1.py
 
       - name: Install runtime dependency
-        shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -50,7 +49,6 @@ jobs:
           key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
 
       - name: Require exact pinned OAT Unlinker cache
-        shell: bash
         run: |
           set -euo pipefail
           test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
@@ -63,7 +61,6 @@ jobs:
           echo "$BIN" >/tmp/unlinker_path
 
       - name: Fetch exact five-root MP dependency universe and expand Nuketown
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/source /tmp/proof
@@ -83,23 +80,14 @@ jobs:
       - name: Rebuild exact 327-row world Material catalog
         env:
           PYTHONPATH: tools
-        shell: bash
         run: |
           set -euo pipefail
           git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_source
           git -C /tmp/oat_source checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
           test "$(git -C /tmp/oat_source rev-parse HEAD)" = 9dca965366541504b71fa8cfb7ac049cb9b717e1
-          python3 tools/t6_nuketown_material_memory_ownership_v1.py \
-            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
-            --oat-root /tmp/oat_source \
-            --out /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json
-          python3 tools/t6_nuketown_world_source_sidecars_v3.py \
-            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
-            --ownership-proof /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json \
-            --out-dir /tmp/proof/sidecars_v3
-          python3 tools/t6_world_material_catalog_legacy_index_v1.py \
-            /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json \
-            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json
+          python3 tools/t6_nuketown_material_memory_ownership_v1.py --expanded /tmp/source/mp_nuketown_2020.expanded.bin --oat-root /tmp/oat_source --out /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json
+          python3 tools/t6_nuketown_world_source_sidecars_v3.py --expanded /tmp/source/mp_nuketown_2020.expanded.bin --ownership-proof /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json --out-dir /tmp/proof/sidecars_v3
+          python3 tools/t6_world_material_catalog_legacy_index_v1.py /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json'))
@@ -107,28 +95,16 @@ jobs:
           PY
 
       - name: Dump native Materials from all exact dependency roots
-        shell: bash
         run: |
           set -euo pipefail
           BIN=$(cat /tmp/unlinker_path)
           : >/tmp/proof/oat_material_roots.txt
-          for spec in \
-            map=mp_nuketown_2020.ff \
-            common=common_mp.ff \
-            common_patch=common_patch_mp.ff \
-            patch=patch_mp.ff \
-            code_post=code_post_gfx_mp.ff; do
-            label=${spec%%=*}; file=${spec#*=}
-            root="/tmp/oat_$label"
-            log="/tmp/proof/oat_material_dump_${label}.log"
-            : >"$log"
-            success=0
+          for spec in map=mp_nuketown_2020.ff common=common_mp.ff common_patch=common_patch_mp.ff patch=patch_mp.ff code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}; root="/tmp/oat_$label"; log="/tmp/proof/oat_material_dump_${label}.log"; : >"$log"; success=0
             for attempt in 1 2 3; do
               rm -rf "$root"; mkdir -p "$root"
               echo "OAT_DUMP_ATTEMPT label=$label attempt=$attempt" | tee -a "$log"
-              if "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee -a "$log"; then
-                success=1; break
-              fi
+              if "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee -a "$log"; then success=1; break; fi
             done
             test "$success" = 1
             matroot=$(find "$root" -type d -name materials -print -quit)
@@ -141,29 +117,40 @@ jobs:
       - name: Build exact required-only Material root union
         env:
           PYTHONPATH: tools
-        shell: bash
         run: |
           set -euo pipefail
-          map_root=$(awk '$1=="map"{print $2}' /tmp/proof/oat_material_roots.txt)
-          common_root=$(awk '$1=="common"{print $2}' /tmp/proof/oat_material_roots.txt)
-          common_patch_root=$(awk '$1=="common_patch"{print $2}' /tmp/proof/oat_material_roots.txt)
-          patch_root=$(awk '$1=="patch"{print $2}' /tmp/proof/oat_material_roots.txt)
-          code_post_root=$(awk '$1=="code_post"{print $2}' /tmp/proof/oat_material_roots.txt)
+          R=/tmp/proof/oat_material_roots.txt
           python3 tools/t6_oat_material_root_union_v1.py \
-            --root "map=$map_root" \
-            --root "common=$common_root" \
-            --root "common_patch=$common_patch_root" \
-            --root "patch=$patch_root" \
-            --root "code_post=$code_post_root" \
+            --root "map=$(awk '$1=="map"{print $2}' $R)" \
+            --root "common=$(awk '$1=="common"{print $2}' $R)" \
+            --root "common_patch=$(awk '$1=="common_patch"{print $2}' $R)" \
+            --root "patch=$(awk '$1=="patch"{print $2}' $R)" \
+            --root "code_post=$(awk '$1=="code_post"{print $2}' $R)" \
             --required-catalog /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
             --out-root /tmp/oat_material_union \
-            --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json \
-            2>&1 | tee /tmp/proof/material_union.log
+            --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json 2>&1 | tee /tmp/proof/material_union.log
+
+      - name: Census exact retail layered texture ordering
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/t6_oat_layered_texture_order_census_v1.py \
+            /tmp/oat_material_union \
+            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
+            /tmp/proof/T6_NUKETOWN_LAYERED_TEXTURE_ORDER_CENSUS_V1.json \
+            --expected-missing wpc/asphalt_road_dark_dec \
+            --expected-missing wpc/decal_concrete_clean_line \
+            --expected-missing wpc/decal_damage_asphalt_crack01 \
+            --expected-missing wpc/decal_grunge_glue \
+            --expected-missing wpc/decal_grunge_mold01 \
+            --expected-missing wpc/decal_signage_const_marking01 \
+            --expected-missing wpc/decal_signage_const_marking02 \
+            2>&1 | tee /tmp/proof/layered_texture_order_census.log
 
       - name: Probe exact historical known-prefix blocker
         env:
           PYTHONPATH: tools
-        shell: bash
         run: |
           set -euo pipefail
           python3 tools/t6_oat_layered_known_prefix_probe_v1.py \
@@ -172,13 +159,11 @@ jobs:
             /tmp/proof/T6_NUKETOWN_LAYERED_KNOWN_PREFIX_PROBE_V1.json \
             --generated '*100n_236n(wpc/asphalt_smooth01_dark:wpc/asphalt_road_dark_dec)' \
             --known-prefix wpc/asphalt_smooth01_dark \
-            --unknown wpc/asphalt_road_dark_dec \
-            2>&1 | tee /tmp/proof/known_prefix_probe.log
+            --unknown wpc/asphalt_road_dark_dec 2>&1 | tee /tmp/proof/known_prefix_probe.log
 
       - name: Recover exact copy-elided layered component texture tables
         env:
           PYTHONPATH: tools
-        shell: bash
         run: |
           set -euo pipefail
           python3 tools/t6_oat_layered_component_texture_recovery_v1.py \
@@ -191,8 +176,7 @@ jobs:
             --target wpc/decal_grunge_glue \
             --target wpc/decal_grunge_mold01 \
             --target wpc/decal_signage_const_marking01 \
-            --target wpc/decal_signage_const_marking02 \
-            2>&1 | tee /tmp/proof/component_texture_recovery.log
+            --target wpc/decal_signage_const_marking02 2>&1 | tee /tmp/proof/component_texture_recovery.log
 
       - uses: actions/upload-artifact@v4
         if: always()
