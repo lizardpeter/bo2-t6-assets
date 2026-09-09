@@ -33,6 +33,33 @@ def canon(x):
 def sha(x):
     return hashlib.sha256(x).hexdigest()
 
+def first_diff(expected, actual, path="$", depth=0):
+    """Return the first deterministic structural/value disagreement, or None."""
+    if depth > 32:
+        return {"path": path, "kind": "depth-limit"}
+    if type(expected) is not type(actual):
+        return {"path": path, "kind": "type", "expectedType": type(expected).__name__, "actualType": type(actual).__name__, "expected": expected, "actual": actual}
+    if isinstance(expected, dict):
+        ek, ak = set(expected), set(actual)
+        if ek != ak:
+            return {"path": path, "kind": "keys", "expectedOnly": sorted(ek - ak), "actualOnly": sorted(ak - ek)}
+        for key in sorted(ek):
+            d = first_diff(expected[key], actual[key], f"{path}.{key}", depth + 1)
+            if d is not None:
+                return d
+        return None
+    if isinstance(expected, list):
+        if len(expected) != len(actual):
+            return {"path": path, "kind": "length", "expected": len(expected), "actual": len(actual)}
+        for i, (e, a) in enumerate(zip(expected, actual)):
+            d = first_diff(e, a, f"{path}[{i}]", depth + 1)
+            if d is not None:
+                return d
+        return None
+    if expected != actual:
+        return {"path": path, "kind": "value", "expected": expected, "actual": actual}
+    return None
+
 def raw_textures(identity, source):
     rows = source["doc"].get("textures", [])
     if not isinstance(rows, list) or any(not isinstance(x, dict) for x in rows):
@@ -108,17 +135,18 @@ def unsuffix_row(source, layer_index):
     if row.get("nameEnd") != ch:
         raise RecoveryError("generated fallback nameEnd does not match layer")
     row["nameHash"] = ((h ^ ord(ch)) * INV33) & 0xFFFFFFFF
-    row.pop("nameEnd", None)  # overwritten pre-layer byte is not recoverable
+    row.pop("nameEnd", None)
     return row, True
 
 def unsuffix_table(segment, layer_index):
     out, lost = [], False
     for x in segment:
         y, one_lost = unsuffix_row(x, layer_index)
-        out.append(y); lost = lost or one_lost
+        out.append(y)
+        lost = lost or one_lost
     return out, lost
 
-def solve_one(generated, components, tables, unknown):
+def solve_one(generated, components, tables, unknown, material=None):
     positions = [i for i, x in enumerate(components) if x == unknown]
     if not positions:
         return None
@@ -138,15 +166,15 @@ def solve_one(generated, components, tables, unknown):
             if candidate is None:
                 candidate, lost0 = normalized, lost
             elif canon(candidate) != canon(normalized) or lost0 != lost:
-                raise RecoveryError(f"{unknown!r}: generated occurrences disagree after exact canonicalization")
+                d = first_diff(candidate, normalized)
+                raise RecoveryError(f"{material!r}: {unknown!r}: generated occurrences disagree after exact canonicalization firstDiff={json.dumps(d, sort_keys=True)}")
             cursor += width
         else:
             expected = project(tables[component], layer_index)
             actual = generated[cursor:cursor + len(expected)]
             if canon(actual) != canon(expected):
-                raise RecoveryError(
-                    f"generated layer {layer_index} disagrees with exact Material_CreateLayered projection of {component!r}"
-                )
+                d = first_diff(expected, actual)
+                raise RecoveryError(f"{material!r}: known layer {layer_index} component {component!r} exact projection mismatch firstDiff={json.dumps(d, sort_keys=True)}")
             cursor += len(expected)
     if cursor != len(generated) or candidate is None:
         raise RecoveryError(f"{unknown!r}: concatenation accounting failure")
@@ -180,8 +208,11 @@ def build_recovery(*, material_root: Path, catalog_doc: dict, targets: list[str]
         referenced.update(comps)
         for layer in parsed["layers"]:
             c, li = str(layer["componentMaterial"]), int(layer["layerIndex"])
-            tokens[c].add(str(layer["token"])); indices[c].add(int(layer["bspMaterialIndex"]))
-            normals[c].add(bool(layer["expectedNormalMap"])); names[c].append(name); positions[c].append(li)
+            tokens[c].add(str(layer["token"]))
+            indices[c].add(int(layer["bspMaterialIndex"]))
+            normals[c].add(bool(layer["expectedNormalMap"]))
+            names[c].append(name)
+            positions[c].append(li)
         generated_rows.append({"material": name, "storage": storage, "source": source, "textures": raw_textures(name, source), "components": comps})
 
     missing = sorted(x for x in referenced if x not in indexed)
@@ -191,12 +222,14 @@ def build_recovery(*, material_root: Path, catalog_doc: dict, targets: list[str]
     recovered, lost_name_end, admission = {}, {}, defaultdict(list)
 
     while True:
-        candidates = defaultdict(list); combined = {**tables, **recovered}
+        candidates = defaultdict(list)
+        combined = {**tables, **recovered}
         for row in generated_rows:
             unresolved = sorted({x for x in row["components"] if x not in combined})
             if len(unresolved) != 1 or unresolved[0] not in target_set:
                 continue
-            u = unresolved[0]; solved = solve_one(row["textures"], row["components"], combined, u)
+            u = unresolved[0]
+            solved = solve_one(row["textures"], row["components"], combined, u, row["material"])
             if solved is None:
                 continue
             table, pos, lost = solved
@@ -211,7 +244,8 @@ def build_recovery(*, material_root: Path, catalog_doc: dict, targets: list[str]
             if len({sha(canon(x[0])) for x in rows}) != 1 or len({x[1] for x in rows}) != 1:
                 raise RecoveryError(f"{identity!r}: non-unique runtime-canonical candidate")
             recovered[identity], lost_name_end[identity] = rows[0][0], rows[0][1]
-            admission[identity].extend(x[2] for x in rows); promotions += 1
+            admission[identity].extend(x[2] for x in rows)
+            promotions += 1
         if not promotions:
             break
     unresolved = sorted(target_set - set(recovered))
@@ -225,17 +259,19 @@ def build_recovery(*, material_root: Path, catalog_doc: dict, targets: list[str]
         for li, component in enumerate(row["components"]):
             rebuilt.extend(project(combined[component], li))
         if canon(rebuilt) != canon(row["textures"]):
-            raise RecoveryError(f"{row['material']!r}: full exact layered projection mismatch")
+            d = first_diff(rebuilt, row["textures"])
+            raise RecoveryError(f"{row['material']!r}: full exact layered projection mismatch firstDiff={json.dumps(d, sort_keys=True)}")
         exact_count += 1
         row_targets = sorted(set(row["components"]) & target_set)
         target_generated += bool(row_targets)
         for identity in row_targets:
-            solved = solve_one(row["textures"], row["components"], {k:v for k,v in combined.items() if k != identity}, identity)
+            solved = solve_one(row["textures"], row["components"], {k:v for k,v in combined.items() if k != identity}, identity, row["material"])
             if solved is None:
                 raise RecoveryError(f"{row['material']!r}: target {identity!r} did not independently re-solve")
             candidate, pos, lost = solved
             if canon(candidate) != canon(recovered[identity]) or lost != lost_name_end[identity]:
-                raise RecoveryError(f"{row['material']!r}: target {identity!r} independent candidate disagrees")
+                d = first_diff(recovered[identity], candidate)
+                raise RecoveryError(f"{row['material']!r}: target {identity!r} independent candidate disagrees firstDiff={json.dumps(d, sort_keys=True)}")
             final[identity].append({"generatedMaterial": row["material"], "unknownLayerPositions": pos,
                                     "candidateTextureTableSha256": sha(canon(candidate)), "independentFinalResolve": True})
 
@@ -278,10 +314,18 @@ def build_recovery(*, material_root: Path, catalog_doc: dict, targets: list[str]
     }
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("material_root", type=Path); ap.add_argument("catalog_json", type=Path); ap.add_argument("output_json", type=Path); ap.add_argument("--target", action="append", default=[])
-    a = ap.parse_args(); doc = build_recovery(material_root=a.material_root, catalog_doc=json.loads(a.catalog_json.read_text()), targets=a.target)
-    payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode(); a.output_json.parent.mkdir(parents=True, exist_ok=True); a.output_json.write_bytes(payload)
-    print(json.dumps({"out": str(a.output_json), "bytes": len(payload), "sha256": sha(payload), **doc["summary"]}, indent=2, sort_keys=True)); return 0
+    ap = argparse.ArgumentParser()
+    ap.add_argument("material_root", type=Path)
+    ap.add_argument("catalog_json", type=Path)
+    ap.add_argument("output_json", type=Path)
+    ap.add_argument("--target", action="append", default=[])
+    a = ap.parse_args()
+    doc = build_recovery(material_root=a.material_root, catalog_doc=json.loads(a.catalog_json.read_text()), targets=a.target)
+    payload = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
+    a.output_json.parent.mkdir(parents=True, exist_ok=True)
+    a.output_json.write_bytes(payload)
+    print(json.dumps({"out": str(a.output_json), "bytes": len(payload), "sha256": sha(payload), **doc["summary"]}, indent=2, sort_keys=True))
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
