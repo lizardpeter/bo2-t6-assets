@@ -1,0 +1,167 @@
+name: T6 audio worker global xref probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_audio_worker_global_xref_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and verify exact references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install exact disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Census exact global references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import bisect, hashlib, json, re, struct
+          from pathlib import Path
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+
+          EXE_SHA='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          MAP_SHA='34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          BASE=0x00400000
+          exe=Path('/tmp/ref/CoDMPServer_PC.exe').read_bytes()
+          mp=Path('/tmp/ref/CoDMPServer_PC.map').read_bytes()
+          assert hashlib.sha256(exe).hexdigest()==EXE_SHA
+          assert hashlib.sha256(mp).hexdigest()==MAP_SHA
+          text=mp.decode('ascii',errors='strict')
+
+          peoff=struct.unpack_from('<I',exe,0x3c)[0]
+          coff=peoff+4
+          _,nsects,_,_,_,opt_size,_=struct.unpack_from('<HHIIIHH',exe,coff)
+          opt=coff+20
+          assert struct.unpack_from('<I',exe,opt+28)[0]==BASE
+          sects=[]
+          table=opt+opt_size
+          for i in range(nsects):
+            o=table+i*40
+            name=exe[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+            vs,rva,rs,ro=struct.unpack_from('<IIII',exe,o+8)
+            sects.append({'name':name,'va':BASE+rva,'vs':vs,'rs':rs,'ro':ro})
+          tsec=next(s for s in sects if s['name']=='.text')
+          text_raw=exe[tsec['ro']:tsec['ro']+tsec['rs']]
+          text_va=tsec['va']
+
+          row_re=re.compile(r'^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+(f)(?:\s+(i))?)?\s+(\S+\.obj)\s*$')
+          rows=[]
+          for ln,line in enumerate(text.splitlines(),1):
+            m=row_re.match(line)
+            if m:
+              rows.append({'line':ln,'symbol':m.group(1),'va':int(m.group(2),16),'function':m.group(3)=='f','inline':m.group(4)=='i','origin':m.group(5),'raw':line.strip()})
+          fvas=sorted(set(r['va'] for r in rows if r['function'] and text_va <= r['va'] < text_va+len(text_raw)))
+          by_va={}
+          for r in rows: by_va.setdefault(r['va'],[]).append(r)
+
+          targets={
+            'decoder_wait_usec':0x00E4A898,
+            'decoder_process_usec':0x00E4A89C,
+            'g_sd_sync_flag':0x00DE2508,
+            'g_sd_sync_counter':0x00DE250C,
+            'buffer_ready_event':0x01087A88,
+            'flying_buffers':0x01087A8C,
+            'stream_pending_io':0x07F1B0F4,
+            'stream_buffers_used':0x07F1B0F8,
+            'stream_buffers_free':0x07F1B0FC,
+            'stream_used':0x07F1B100,
+            'stream_starvation':0x07F1B104,
+          }
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+
+          def containing_interval(hit_va):
+            i=bisect.bisect_right(fvas,hit_va)-1
+            if i<0 or i+1>=len(fvas): return None
+            return fvas[i],fvas[i+1]
+
+          def decode_interval(start,end):
+            if not (text_va<=start<end<=text_va+len(text_raw)): raise ValueError((hex(start),hex(end)))
+            raw=text_raw[start-text_va:end-text_va]
+            ins=list(md.disasm(raw,start))
+            if not ins or ins[0].address!=start:
+              raise ValueError(f'cannot start disassembly 0x{start:08X}')
+            dec_end=ins[-1].address+ins[-1].size
+            if dec_end!=end:
+              raise ValueError(f'instruction accounting 0x{start:08X}..0x{end:08X} stops 0x{dec_end:08X}')
+            return raw,ins
+
+          report={'format':'t6-audio-worker-global-xref-probe-v1','status':'EXACT_RAW_XREF_PLUS_PUBLIC_FUNCTION_INTERVAL_DISASSEMBLY','authority':{'exeSha256':EXE_SHA,'mapSha256':MAP_SHA},'targets':{}}
+          for name,value in targets.items():
+            needle=struct.pack('<I',value)
+            hits=[]; pos=0
+            while True:
+              j=text_raw.find(needle,pos)
+              if j<0: break
+              hit_va=text_va+j
+              interval=containing_interval(hit_va)
+              rec={'rawHitVa':f'0x{hit_va:08X}','containingPublicFunctionInterval':None,'instruction':None}
+              if interval:
+                start,end=interval
+                raw,ins=decode_interval(start,end)
+                owner_rows=by_va.get(start,[])
+                rec['containingPublicFunctionInterval']={
+                  'startVa':f'0x{start:08X}','endVaExclusive':f'0x{end:08X}',
+                  'sha256':hashlib.sha256(raw).hexdigest(),
+                  'mapSymbols':[r['symbol'] for r in owner_rows],
+                  'mapOrigins':[r['origin'] for r in owner_rows],
+                }
+                owner=None
+                for insn in ins:
+                  if insn.address <= hit_va < insn.address+insn.size:
+                    owner=insn; break
+                if owner is None:
+                  raise SystemExit(f'{name}: raw hit 0x{hit_va:08X} not covered by decoded instruction')
+                vals=[]
+                for op in owner.operands:
+                  if op.type==X86_OP_IMM:
+                    vals.append(int(op.imm)&0xffffffff)
+                  elif op.type==X86_OP_MEM and op.mem.base==0 and op.mem.index==0:
+                    vals.append(int(op.mem.disp)&0xffffffff)
+                if value not in vals:
+                  raise SystemExit(f'{name}: raw hit inside instruction but target is not an exact immediate/absolute-memory operand: 0x{owner.address:08X} {owner.mnemonic} {owner.op_str}')
+                rec['instruction']={'va':f'0x{owner.address:08X}','bytes':owner.bytes.hex(),'mnemonic':owner.mnemonic,'opStr':owner.op_str}
+              hits.append(rec)
+              pos=j+1
+            report['targets'][name]={'va':f'0x{value:08X}','rawTextHitCount':len(hits),'hits':hits}
+            print(f'=== {name} 0x{value:08X}: {len(hits)} .text operand hits ===')
+            for h in hits:
+              print(json.dumps(h,sort_keys=True))
+
+          out=Path('/tmp/probe/T6_AUDIO_WORKER_GLOBAL_XREF_PROBE_V1.json')
+          out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('JSON_SHA256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+
+      - name: Upload exact xref probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_AUDIO_WORKER_GLOBAL_XREF_PROBE_V1
+          path: /tmp/probe/T6_AUDIO_WORKER_GLOBAL_XREF_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
