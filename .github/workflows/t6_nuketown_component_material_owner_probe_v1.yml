@@ -1,0 +1,151 @@
+name: T6 Nuketown component Material owner probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_component_material_owner_census_v1.py'
+      - 'tools/t6_oat_material_root_union_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_nuketown_component_material_owner_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch exact five-root MP dependency universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/source/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
+
+      - name: Dump native Materials from all exact dependency roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          : >/tmp/proof/oat_material_roots.txt
+          for spec in \
+            map=mp_nuketown_2020.ff \
+            common=common_mp.ff \
+            common_patch=common_patch_mp.ff \
+            patch=patch_mp.ff \
+            code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}
+            root="/tmp/oat_$label"
+            log="/tmp/proof/oat_material_dump_${label}.log"
+            : >"$log"
+            success=0
+            for attempt in 1 2 3; do
+              rm -rf "$root"
+              mkdir -p "$root"
+              echo "OAT_DUMP_ATTEMPT label=$label attempt=$attempt" | tee -a "$log"
+              if "$BIN" --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" 2>&1 | tee -a "$log"; then
+                success=1
+                break
+              fi
+              echo "OAT_DUMP_RETRY label=$label failed_attempt=$attempt" | tee -a "$log"
+            done
+            test "$success" = 1
+            matroot=$(find "$root" -type d -name materials -print -quit)
+            test -n "$matroot" -a -d "$matroot"
+            count=$(find "$matroot" -type f -name '*.json' | wc -l)
+            echo "$label $matroot $count" | tee -a /tmp/proof/oat_material_roots.txt
+            test "$count" -gt 0
+          done
+
+      - name: Census exact seven component-only Material identities
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          map_root=$(awk '$1=="map"{print $2}' /tmp/proof/oat_material_roots.txt)
+          common_root=$(awk '$1=="common"{print $2}' /tmp/proof/oat_material_roots.txt)
+          common_patch_root=$(awk '$1=="common_patch"{print $2}' /tmp/proof/oat_material_roots.txt)
+          patch_root=$(awk '$1=="patch"{print $2}' /tmp/proof/oat_material_roots.txt)
+          code_post_root=$(awk '$1=="code_post"{print $2}' /tmp/proof/oat_material_roots.txt)
+          python3 tools/t6_oat_component_material_owner_census_v1.py \
+            --root "map=$map_root" \
+            --root "common=$common_root" \
+            --root "common_patch=$common_patch_root" \
+            --root "patch=$patch_root" \
+            --root "code_post=$code_post_root" \
+            --component-identity wpc/asphalt_road_dark_dec \
+            --component-identity wpc/decal_concrete_clean_line \
+            --component-identity wpc/decal_damage_asphalt_crack01 \
+            --component-identity wpc/decal_grunge_glue \
+            --component-identity wpc/decal_grunge_mold01 \
+            --component-identity wpc/decal_signage_const_marking01 \
+            --component-identity wpc/decal_signage_const_marking02 \
+            --target-source 'Exact componentStandaloneMissingIdentities from T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6 gate introduced by commit 83857b0c0f084a3721ae0fc5abd5261bf4abbca2' \
+            --out /tmp/proof/T6_NUKETOWN_COMPONENT_MATERIAL_OWNER_CENSUS_V1.json \
+            2>&1 | tee /tmp/proof/component_owner_census.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_COMPONENT_MATERIAL_OWNER_CENSUS_V1.json'
+          d=json.load(open(p)); s=d['summary']
+          assert s['rootCount']==5,s
+          assert s['componentOnlyIdentityCount']==7,s
+          assert s['presentComponentOnlyIdentityCount'] + s['missingComponentOnlyIdentityCount'] == 7,s
+          assert s['divergentComponentOnlyIdentityCount']==0,s
+          assert [r['identity'] for r in d['components']] == [
+              'wpc/asphalt_road_dark_dec',
+              'wpc/decal_concrete_clean_line',
+              'wpc/decal_damage_asphalt_crack01',
+              'wpc/decal_grunge_glue',
+              'wpc/decal_grunge_mold01',
+              'wpc/decal_signage_const_marking01',
+              'wpc/decal_signage_const_marking02',
+          ]
+          print('GREEN EXACT COMPONENT OWNER CENSUS',json.dumps(s,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_COMPONENT_MATERIAL_OWNER_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
