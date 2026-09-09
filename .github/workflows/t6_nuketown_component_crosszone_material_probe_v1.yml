@@ -1,0 +1,180 @@
+name: T6 Nuketown component cross-zone Material probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_component_crosszone_material_probe_v1.yml'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch four exact retained retail FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/raw /tmp/oat /tmp/proof
+          declare -A EXPECT=(
+            [mp_raid]='bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888'
+            [mp_hijacked]='2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037'
+            [zm_prison]='ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1'
+            [zm_tomb]='663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5'
+          )
+          : >/tmp/proof/raw_fastfile_sha256.txt
+          for zone in mp_raid mp_hijacked zm_prison zm_tomb; do
+            ff="/tmp/raw/${zone}.ff"
+            curl -fL --retry 4 -o "$ff" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            got=$(sha256sum "$ff" | awk '{print $1}')
+            echo "$got  ${zone}.ff" | tee -a /tmp/proof/raw_fastfile_sha256.txt
+            test "$got" = "${EXPECT[$zone]}"
+          done
+
+      - name: Dump exact Material assets from every pinned zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          for zone in mp_raid mp_hijacked zm_prison zm_tomb; do
+            out="/tmp/oat/${zone}"
+            mkdir -p "$out"
+            success=0
+            : >"/tmp/proof/${zone}_material_dump.log"
+            for attempt in 1 2 3; do
+              echo "OAT_DUMP_ATTEMPT zone=$zone attempt=$attempt" | tee -a "/tmp/proof/${zone}_material_dump.log"
+              if "$BIN" --no-color --include-assets material --output-folder "$out" "/tmp/raw/${zone}.ff" \
+                2>&1 | tee -a "/tmp/proof/${zone}_material_dump.log"; then
+                success=1
+                break
+              fi
+            done
+            test "$success" = 1
+            matroot=$(find "$out" -type d -name materials -print -quit)
+            test -n "$matroot" -a -d "$matroot"
+            echo "$matroot" >"/tmp/proof/${zone}_material_root.txt"
+          done
+
+      - name: Record exact standalone target Materials and source row order
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee /tmp/proof/crosszone_probe.log
+          import hashlib, json
+          from pathlib import Path
+
+          zones = ['mp_raid','mp_hijacked','zm_prison','zm_tomb']
+          sha = {
+            'mp_raid':'bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888',
+            'mp_hijacked':'2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037',
+            'zm_prison':'ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1',
+            'zm_tomb':'663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5',
+          }
+          targets = [
+            'wpc/asphalt_road_dark_dec',
+            'wpc/decal_concrete_clean_line',
+            'wpc/decal_damage_asphalt_crack01',
+            'wpc/decal_grunge_glue',
+            'wpc/decal_grunge_mold01',
+            'wpc/decal_signage_const_marking01',
+            'wpc/decal_signage_const_marking02',
+          ]
+          hits=[]
+          zone_counts={}
+          target_counts={t:0 for t in targets}
+          for zone in zones:
+            root=Path(f'/tmp/proof/{zone}_material_root.txt').read_text().strip()
+            root=Path(root)
+            count=0
+            for target in targets:
+              p=root/(target+'.json')
+              if not p.is_file():
+                continue
+              raw=p.read_bytes()
+              doc=json.loads(raw)
+              textures=doc.get('textures')
+              if not isinstance(textures,list):
+                raise SystemExit(f'{zone}:{target}: textures is not a list')
+              hit={
+                'zone':zone,
+                'fastFile':zone+'.ff',
+                'fastFileSha256':sha[zone],
+                'target':target,
+                'materialJsonBytes':len(raw),
+                'materialJsonSha256':hashlib.sha256(raw).hexdigest(),
+                'textureCount':len(textures),
+                'texturesInSerializedOrder':textures,
+                'semanticSequence':[r.get('semantic') for r in textures],
+                'nameSequence':[r.get('name') for r in textures],
+              }
+              hits.append(hit)
+              count += 1
+              target_counts[target] += 1
+              print('HIT',zone,target,'textures',len(textures),'semantics',hit['semanticSequence'],'names',hit['nameSequence'])
+            zone_counts[zone]=count
+            print('ZONE',zone,'target_hits',count)
+          out={
+            'format':'t6-nuketown-component-crosszone-material-probe-v1',
+            'authority':{
+              'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'fastFiles':[{ 'zone':z, 'sha256':sha[z]} for z in zones],
+            },
+            'targets':targets,
+            'zoneHitCounts':zone_counts,
+            'targetHitCounts':target_counts,
+            'hits':hits,
+            'summary':{
+              'pinnedZoneCount':len(zones),
+              'targetCount':len(targets),
+              'standaloneMaterialHitCount':len(hits),
+              'targetsFoundCount':sum(v>0 for v in target_counts.values()),
+            },
+            'proofBoundary':'Exploratory structural OAT census over exactly four SHA-pinned retail map FastFiles. Absence here is not an all-zone absence claim.',
+          }
+          payload=(json.dumps(out,indent=2,sort_keys=True)+'\n').encode()
+          Path('/tmp/proof/T6_NUKETOWN_COMPONENT_CROSSZONE_MATERIAL_PROBE_V1.json').write_bytes(payload)
+          print('SUMMARY',json.dumps(out['summary'],sort_keys=True))
+          print('output_sha256='+hashlib.sha256(payload).hexdigest())
+          PY
+          sha256sum /tmp/proof/T6_NUKETOWN_COMPONENT_CROSSZONE_MATERIAL_PROBE_V1.json | tee /tmp/proof/result_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_COMPONENT_CROSSZONE_MATERIAL_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
