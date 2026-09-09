@@ -120,12 +120,15 @@ def build_probe(material_root: Path, universe_path: Path) -> dict:
                     raise ProofError(
                         f"{full_name}: {identity} row {si} expected {expected_name!r} match count {len(matches)}"
                     )
+                gi = matches[0]
                 mapping.append(
                     {
                         "sourceTextureIndex": si,
                         "sourceName": source_name,
+                        "sourceRow": row,
                         "expectedGeneratedName": expected_name,
-                        "generatedTextureIndex": matches[0],
+                        "generatedTextureIndex": gi,
+                        "generatedRow": generated_rows[gi],
                     }
                 )
             indices = [row["generatedTextureIndex"] for row in mapping]
@@ -139,6 +142,9 @@ def build_probe(material_root: Path, universe_path: Path) -> dict:
                         "component": identity,
                         "layerIndex": layer_index,
                         "sourceTextureCount": len(rows),
+                        "sourceRows": rows,
+                        "generatedTextureCount": len(generated_rows),
+                        "generatedRows": generated_rows,
                         "generatedIndicesInSourceOrder": indices,
                         "generatedIndicesSorted": sorted(indices),
                         "mapping": mapping,
@@ -166,7 +172,7 @@ def build_probe(material_root: Path, universe_path: Path) -> dict:
         },
         "relativeOrderFailures": failures,
         "proofBoundary": (
-            "Diagnostic only. This records exact source-to-generated row permutations for known component tables. "
+            "Diagnostic only. This records exact source-to-generated row permutations and exact row fields for known component tables. "
             "It does not infer a universal ordering rule and does not promote missing component tables."
         ),
     }
@@ -189,6 +195,14 @@ def main() -> int:
             failure["component"],
             f"layer={failure['layerIndex']}",
             f"indices={failure['generatedIndicesInSourceOrder']}",
+        )
+        print(
+            "  SOURCE",
+            [(r.get("name"), r.get("semantic"), r.get("samplerState")) for r in failure["sourceRows"]],
+        )
+        print(
+            "  GENERATED",
+            [(r.get("name"), r.get("semantic"), r.get("samplerState")) for r in failure["generatedRows"]],
         )
     print(f"output_sha256={sha256_bytes(payload.encode())}")
     return 0
