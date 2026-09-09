@@ -1,0 +1,89 @@
+{
+  "format": "t6-current-plutonium-xaudio2-callback-runtime-v1",
+  "authority": "exact current Plutonium production revision 5346 client only; not historical retail-equivalent",
+  "client": {
+    "path": "games/t6mp.exe",
+    "revision": 5346,
+    "bytes": 13263640,
+    "sha1": "f101e28c3a18ce1ffe37a40d23cd04f7f57925d3",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
+    "imageBase": "0x00400000"
+  },
+  "historicalRetailReference": {
+    "bytes": 12850328,
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1",
+    "exactCurrentClientMatch": false
+  },
+  "rttiCensus": {
+    "validCompleteObjectLocators": 232,
+    "voiceCallbackImplementer": {
+      "classDecoratedName": ".?AVsd_xa2_callback@@",
+      "interfaceDecoratedName": ".?AUIXAudio2VoiceCallback@@",
+      "completeObjectLocatorVa": "0x00D365BC",
+      "vtableVa": "0x00C5E724",
+      "slots": [
+        {"slot": 0, "abiName": "OnVoiceProcessingPassStart", "functionVa": "0x006CD320", "body": "ret 8"},
+        {"slot": 1, "abiName": "OnVoiceProcessingPassEnd", "functionVa": "0x00569CD0", "body": "ret 4"},
+        {"slot": 2, "abiName": "OnStreamEnd", "functionVa": "0x00569CD0", "body": "ret 4"},
+        {"slot": 3, "abiName": "OnBufferStart", "functionVa": "0x006CD320", "body": "ret 8"},
+        {"slot": 4, "abiName": "OnBufferEnd", "functionVa": "0x00479280", "active": true},
+        {"slot": 5, "abiName": "OnLoopEnd", "functionVa": "0x006CD320", "body": "ret 8"},
+        {"slot": 6, "abiName": "OnVoiceError", "functionVa": "0x005069C0", "body": "ret 0xC"}
+      ]
+    },
+    "engineCallbackImplementer": {
+      "classDecoratedName": ".?AVSD_XAudio2Callbacks@@",
+      "interfaceDecoratedName": ".?AUIXAudio2EngineCallback@@",
+      "completeObjectLocatorVa": "0x00D3663C",
+      "vtableVa": "0x00C08148",
+      "slots": [
+        {"slot": 0, "abiName": "OnProcessingPassStart", "functionVa": "0x00569CD0", "body": "ret 4"},
+        {"slot": 1, "abiName": "OnProcessingPassEnd", "functionVa": "0x00569CD0", "body": "ret 4"},
+        {"slot": 2, "abiName": "OnCriticalError", "functionVa": "0x004F0D70", "active": true, "directCalleeVa": "0x00674FD0"}
+      ]
+    }
+  },
+  "bufferEnd": {
+    "functionVa": "0x00479280",
+    "exactStraightLineSemantics": [
+      "load address 0x01016B0C",
+      "atomically decrement dword [0x01016B0C] using lock xadd with -1",
+      "push address 0x01016B08",
+      "call 0x00651C30",
+      "return with 8 argument bytes"
+    ],
+    "signalWrapper": {
+      "va": "0x00651C30",
+      "semantics": "SetEvent(*(HANDLE*)arg0)",
+      "exactImport": {
+        "dll": "KERNEL32.dll",
+        "name": "SetEvent",
+        "iatVa": "0x00B7019C"
+      }
+    }
+  },
+  "callbackState": {
+    "callbackObjectVa": "0x01016B04",
+    "callbackObjectInitialVptr": "0x00C5E724",
+    "signalObjectVa": "0x01016B08",
+    "signalObjectInitialU32": 0,
+    "pendingCountVa": "0x01016B0C",
+    "pendingCountInitialU32": 0
+  },
+  "runs": {
+    "interfaceImplementerProbeV3": {
+      "workflowRunId": 34306855837,
+      "jobId": 102325237781,
+      "artifactId": 10086947297,
+      "artifactZipSha256": "84bc6f865dbf8571566ce5d4af32e73af3dfe148632f5c3ce383c06e7c2183df",
+      "resultJsonSha256": "2a4d37edd84f89ec5e473d81da35885786e0670248fb6da95565dd724543f277"
+    },
+    "bufferEndProbeV4": {
+      "workflowRunId": 34307056633,
+      "artifactId": 10087016533,
+      "artifactZipSha256": "fbe84288e62a06d0970b9353c189756ff2d8eb95ab3e52f160245f7731ac678e",
+      "resultJsonSha256": "68faa65f8c28d6c13bf3cc678c95a646e973e43f2d3cb4a1ac39e8e06005a477"
+    }
+  },
+  "proofBoundary": "The RTTI ownership, vtable addresses, ABI slot order, exact callback bodies, current-client global addresses, atomic decrement and SetEvent wrapper are closed only for the exact current Plutonium revision-5346 executable. This does not establish historical retail identity or retail addresses. The producer/increment side of the pending-buffer counter and the exact XAudio2 source-buffer submission call remain outside this manifest until independently closed."
+}
