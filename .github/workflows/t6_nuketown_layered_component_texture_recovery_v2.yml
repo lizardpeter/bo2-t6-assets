@@ -104,11 +104,11 @@ jobs:
           set -euo pipefail
           R=/tmp/proof/oat_material_roots.txt
           python3 tools/t6_oat_material_root_union_v1.py \
-            --root "map=$(awk '$1==\"map\"{print $2}' $R)" \
-            --root "common=$(awk '$1==\"common\"{print $2}' $R)" \
-            --root "common_patch=$(awk '$1==\"common_patch\"{print $2}' $R)" \
-            --root "patch=$(awk '$1==\"patch\"{print $2}' $R)" \
-            --root "code_post=$(awk '$1==\"code_post\"{print $2}' $R)" \
+            --root "map=$(awk '$1=="map"{print $2}' $R)" \
+            --root "common=$(awk '$1=="common"{print $2}' $R)" \
+            --root "common_patch=$(awk '$1=="common_patch"{print $2}' $R)" \
+            --root "patch=$(awk '$1=="patch"{print $2}' $R)" \
+            --root "code_post=$(awk '$1=="code_post"{print $2}' $R)" \
             --required-catalog /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
             --out-root /tmp/oat_material_union \
             --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json
