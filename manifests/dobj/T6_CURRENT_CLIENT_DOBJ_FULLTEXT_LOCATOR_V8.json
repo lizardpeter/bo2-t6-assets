@@ -1,0 +1,135 @@
+{
+  "format": "t6-current-client-dobj-fulltext-locator-v8",
+  "authority": "NON_AUTHORITATIVE_CURRENT_CLIENT_LOCATOR_ONLY",
+  "comparisonExecutable": {
+    "bytes": 13263640,
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "retailAuthorityTarget": {
+    "bytes": 12850328,
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1",
+    "imageBaseHex": "0x00400000",
+    "presentInProbe": false
+  },
+  "probe": {
+    "script": "tools/t6_current_client_dobj_fulltext_locator_v8.py",
+    "workflow": ".github/workflows/t6_current_client_dobj_fulltext_locator_v8.yml",
+    "workflowRunId": 34382351256,
+    "workflowJobId": 102570050211,
+    "workflowHeadSha": "9e8e95bf8c1075af0fb702d0d14c2c7794f32de8",
+    "artifactId": 10116384580,
+    "artifactDigestSha256": "9df459019443e8234b5f3f08e7acde923b55ebd09a2aae9897c8de2e47371668",
+    "generatedManifestSha256": "4d2a5ff87832b2ce0af5f80be5cb77799a324301059689e78b17c321f58d82fa",
+    "candidateDisassemblySha256": "168d6773da33a336032a776452b14dbdcbd2331280b3914c2a783d22c1211082"
+  },
+  "supersedes": [
+    {
+      "probe": "t6-current-client-dobj-string-xref-probe-v6",
+      "reason": "v6 whole-section Capstone traversal lacked skip-data/full raw-byte accounting and therefore its zero-xref result was non-exhaustive"
+    },
+    {
+      "probe": "t6-current-client-dobj-structural-locator-v7",
+      "reason": "v7 whole-section Capstone traversal lacked skip-data/full raw-byte accounting and therefore its zero-candidate result was non-exhaustive"
+    }
+  ],
+  "executableSectionAccounting": [
+    {
+      "name": ".text",
+      "rawBytes": 7681024,
+      "accountedBytes": 7681024,
+      "realInstructionBytes": 7680631,
+      "realInstructionCount": 2484266,
+      "skipDataBytes": 393,
+      "skipDataRecordCount": 393,
+      "complete": true
+    },
+    {
+      "name": ".conceal",
+      "rawBytes": 81408,
+      "accountedBytes": 81408,
+      "realInstructionBytes": 80441,
+      "realInstructionCount": 32057,
+      "skipDataBytes": 967,
+      "skipDataRecordCount": 967,
+      "complete": true
+    },
+    {
+      "name": ".interpr",
+      "rawBytes": 26624,
+      "accountedBytes": 26624,
+      "realInstructionBytes": 26610,
+      "realInstructionCount": 8363,
+      "skipDataBytes": 14,
+      "skipDataRecordCount": 14,
+      "complete": true
+    }
+  ],
+  "diagnosticReferenceCensus": {
+    "implementedReferenceForms": [
+      "instruction immediate operand equals diagnostic string VA",
+      "instruction absolute-memory disp32 equals diagnostic string VA",
+      "one-hop file-backed pointer slot to string VA then instruction immediate operand equals slot VA",
+      "one-hop file-backed pointer slot to string VA then instruction absolute-memory disp32 equals slot VA"
+    ],
+    "xrefCount": 0,
+    "xrefCountByLabel": {
+      "dobjSourcePath": 0,
+      "numModelsAssert": 0,
+      "partNotFound": 0,
+      "rootMeldNotFound": 0,
+      "tooManyBones": 0
+    },
+    "conclusion": "With every raw byte of every executable PE section accounted, no retained DObj diagnostic is referenced through any implemented direct/absolute/one-hop reference form. This is an exhaustive negative only for those exact reference forms in this comparison executable."
+  },
+  "structuralCensus": {
+    "minimumStackAllocationHex": "0x100",
+    "candidateCount": 1368,
+    "standoutCandidate": {
+      "rank": 0,
+      "currentStartVaHex": "0x008db490",
+      "currentEndVaExclusiveHex": "0x008db877",
+      "decodedBytes": 999,
+      "realInstructionCount": 293,
+      "stackAllocationHex": "0x0ac0",
+      "candidateSha256": "1bfed7c665468dd4f8adc8506d0e248882c08e583ccf89e5af744833bac6b523",
+      "locatorScore": 31,
+      "nextBestLocatorScore": 24,
+      "imm0x20Count": 1,
+      "imm0xA0Count": 2,
+      "imm0xFFCount": 2,
+      "backwardBranchCount": 5,
+      "directCallCount": 14,
+      "dobjHeaderNeighborhoodByteOffsetsObserved": [8, 9, 10]
+    }
+  },
+  "retailNormalizationLocator": {
+    "basis": "Five independently retail-pinned DObj skeleton instruction islands relocate in the exact current comparison client by the same +0x5810 delta. This delta is used here only to generate a retail address to inspect, not to transfer semantics.",
+    "currentRootNoParentVaHex": "0x008db910",
+    "retailRootNoParentVaHex": "0x008d6100",
+    "observedDeltaHex": "0x5810",
+    "candidateCurrentStartVaHex": "0x008db490",
+    "candidateRetailLocatorStartVaHex": "0x008d5c80",
+    "candidateCurrentEndVaExclusiveHex": "0x008db877",
+    "candidateRetailLocatorEndVaExclusiveHex": "0x008d6067",
+    "gapFromCandidateRetailEndToPinnedRetailRootHelperHex": "0x99"
+  },
+  "comparisonCandidateObservedDataflow": {
+    "authority": "CURRENT_CLIENT_ONLY_DO_NOT_PROMOTE",
+    "facts": [
+      "The routine walks its outer model-like input forward and loops while the model index is below the supplied count.",
+      "It accumulates a count and compares it with immediate 0xA0, with a second 0xA0 passed on the overflow path.",
+      "It initializes one byte per model-like iteration to 0xFF.",
+      "A repeated lookup call at current VA 0x00402e60 scans earlier model-like entries by decrementing an index and stops on the first nonzero return.",
+      "It writes byte fields at output-object offsets +0x08, +0x09 and +0x0A and a word at +0x04 before return."
+    ],
+    "notYetRetailFacts": [
+      "identity as retail DObjCreateDuplicateParts",
+      "retail multi-XModel traversal order",
+      "retail duplicate ScriptString precedence",
+      "retail modelParent assignment",
+      "retail effective duplicate-bone hierarchy"
+    ]
+  },
+  "nextBoundary": "Recover independently retail-authoritative bytes or runtime evidence for retail VA interval 0x008d5c80..0x008d6067 and the associated bone/name lookup helper before promoting any constructor semantics.",
+  "proofBoundary": "The exact current-client identity, complete executable-section accounting, structural uniqueness, DObj-like output offsets, proximity to a relocated retail-pinned skeleton helper, and uniform +0x5810 anchor relocation make 0x008db490 a strong locator only. None of those facts establishes retail function identity or semantics."
+}
