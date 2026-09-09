@@ -2,18 +2,25 @@
 """Build a fail-closed union of exact OAT Material JSON roots.
 
 This is intentionally not an XAsset precedence resolver. For every required
-Material identity:
+OAT Material dump identity:
 
 - one physical owner -> admit it;
 - multiple owners with byte-identical JSON -> admit one and record all owners;
 - multiple owners with byte-different JSON -> fail closed;
 - no physical owner -> fail closed.
 
-When a Nuketown world catalog is supplied, required identities are source-derived:
-ordinary catalog Materials plus every component Material encoded by a generated
-``*...(...)`` identity. Exact generated JSON itself is optional because the
-production manifest reconstructs its texture table from those component
-Materials under the already-closed Material_CreateLayered rule.
+When a Nuketown world catalog is supplied, required identities are source-derived
+from every catalog Material. Ordinary asset names map directly to OAT relative
+Material paths. Treyarch generated ``*...(...)`` Materials use the exact pinned
+OpenAssetTools MaterialCommon::GetFileNameForAssetName transform:
+
+- replace ``*`` with ``_``;
+- truncate at the first ``(``;
+- prefix ``generated/``.
+
+Layer component names remain explicit graph metadata, but are not required to be
+standalone XAssets. This matters for component-only BSP Materials whose texture
+tables are already present in the exact synthesized generated Material dump.
 
 Unrelated dependency-zone Material duplicates are deliberately ignored. This
 avoids inventing retail client precedence where no current production dependency
@@ -30,6 +37,8 @@ from pathlib import Path
 from t6_layered_material_name_v1 import LayeredMaterialError, parse_layered_material_name
 
 FORMAT = "t6-oat-material-root-union-v1"
+OAT_COMMIT = "9dca965366541504b71fa8cfb7ac049cb9b717e1"
+OAT_MATERIAL_COMMON_PATH = "src/ObjCommon/Material/MaterialCommon.cpp"
 
 
 class UnionError(RuntimeError):
@@ -47,6 +56,21 @@ def identity_from_relative(rel: str) -> str:
     if path.suffix != ".json":
         raise UnionError(f"Material path is not JSON: {rel!r}")
     return path.with_suffix("").as_posix()
+
+
+def oat_dump_identity(asset_name: str) -> str:
+    """Return the exact Material-root-relative identity used by pinned OAT."""
+    if not asset_name:
+        raise UnionError("empty Material asset name")
+    if not asset_name.startswith("*"):
+        return asset_name
+    sanitized = asset_name.replace("*", "_")
+    parenthesis = sanitized.find("(")
+    if parenthesis >= 0:
+        sanitized = sanitized[:parenthesis]
+    if not sanitized:
+        raise UnionError(f"generated Material {asset_name!r} maps to empty OAT identity")
+    return f"generated/{sanitized}"
 
 
 def index_root(label: str, root: Path) -> dict[str, dict]:
@@ -86,27 +110,47 @@ def required_from_catalog(path: Path) -> tuple[set[str], dict]:
     rows = doc.get("materials")
     if not isinstance(rows, list) or not rows:
         raise UnionError("required catalog lacks materials[]")
+
     required: set[str] = set()
+    catalog_names: set[str] = set()
     ordinary: set[str] = set()
     generated: set[str] = set()
+    generated_storage: set[str] = set()
     components: set[str] = set()
+    component_only: set[str] = set()
+    storage_to_catalog: dict[str, str] = {}
+
     for ordinal, row in enumerate(rows):
         name = str(row.get("name") or "")
         if not name:
             raise UnionError(f"catalog row {ordinal} has empty Material name")
+        if name in catalog_names:
+            raise UnionError(f"duplicate catalog Material identity {name!r}")
+        catalog_names.add(name)
+
+        storage_identity = oat_dump_identity(name)
+        previous = storage_to_catalog.get(storage_identity)
+        if previous is not None and previous != name:
+            raise UnionError(
+                "distinct catalog Materials collide under pinned OAT filename transform: "
+                f"{previous!r}, {name!r} -> {storage_identity!r}"
+            )
+        storage_to_catalog[storage_identity] = name
+        required.add(storage_identity)
+
         if name.startswith("*"):
             generated.add(name)
+            generated_storage.add(storage_identity)
             try:
                 parsed = parse_layered_material_name(name)
             except LayeredMaterialError as exc:
                 raise UnionError(f"catalog generated Material {name!r}: {exc}") from exc
             for layer in parsed["layers"]:
-                component = str(layer["componentMaterial"])
-                components.add(component)
-                required.add(component)
+                components.add(str(layer["componentMaterial"]))
         else:
             ordinary.add(name)
-            required.add(name)
+
+    component_only = components - ordinary
     return required, {
         "path": str(path),
         "bytes": len(raw),
@@ -114,8 +158,17 @@ def required_from_catalog(path: Path) -> tuple[set[str], dict]:
         "catalogMaterialCount": len(rows),
         "ordinaryCatalogMaterialCount": len(ordinary),
         "generatedCatalogMaterialCount": len(generated),
+        "generatedOatStorageIdentityCount": len(generated_storage),
         "generatedComponentMaterialCount": len(components),
+        "componentOnlyMaterialIdentityCount": len(component_only),
+        "componentOnlyMaterialIdentities": sorted(component_only),
         "requiredPhysicalMaterialIdentityCount": len(required),
+        "oatMaterialFilenameReference": {
+            "repository": "Laupetin/OpenAssetTools",
+            "commit": OAT_COMMIT,
+            "path": OAT_MATERIAL_COMMON_PATH,
+            "rule": "ordinary name unchanged; generated '*' -> '_', truncate at '(', prefix generated/",
+        },
     }
 
 
@@ -201,7 +254,7 @@ def build(
         "missing": missing,
         "divergent": divergent,
         "proofBoundary": (
-            "No runtime owner priority is inferred. Only source-derived required identities are considered when a catalog is supplied. A required identity is admitted only when it has one physical owner or every supplied owner is byte-identical. Missing or byte-divergent required identities are hard blockers; unrelated duplicate identities do not participate."
+            "No runtime owner priority is inferred. Only source-derived required OAT storage identities are considered when a catalog is supplied. Ordinary catalog names map directly; generated catalog names map through the exact pinned OpenAssetTools MaterialCommon filename transform. A required identity is admitted only when it has one physical owner or every supplied owner is byte-identical. Missing or byte-divergent required identities are hard blockers; component names are graph metadata and are not assumed to be standalone XAssets."
         ),
     }
     if missing or divergent:
