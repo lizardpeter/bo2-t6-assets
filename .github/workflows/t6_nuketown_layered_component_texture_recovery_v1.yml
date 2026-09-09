@@ -8,6 +8,7 @@ on:
       - 'tools/test_t6_oat_layered_component_texture_recovery_v1.py'
       - 'tools/t6_oat_layered_known_prefix_probe_v1.py'
       - 'tools/t6_oat_layered_texture_order_census_v1.py'
+      - 'tools/t6_oat_layered_t6_projection_census_v1.py'
       - 'tools/t6_layered_material_name_v1.py'
       - 'tools/t6_oat_material_manifest_v2.py'
       - 'tools/t6_oat_material_manifest_v6.py'
@@ -147,6 +148,24 @@ jobs:
             --expected-missing wpc/decal_signage_const_marking01 \
             --expected-missing wpc/decal_signage_const_marking02 \
             2>&1 | tee /tmp/proof/layered_texture_order_census.log
+
+      - name: Census exact T6 layered suffix projection
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          python3 tools/t6_oat_layered_t6_projection_census_v1.py \
+            /tmp/oat_material_union \
+            /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
+            /tmp/proof/T6_NUKETOWN_LAYERED_T6_PROJECTION_CENSUS_V1.json \
+            --expected-missing wpc/asphalt_road_dark_dec \
+            --expected-missing wpc/decal_concrete_clean_line \
+            --expected-missing wpc/decal_damage_asphalt_crack01 \
+            --expected-missing wpc/decal_grunge_glue \
+            --expected-missing wpc/decal_grunge_mold01 \
+            --expected-missing wpc/decal_signage_const_marking01 \
+            --expected-missing wpc/decal_signage_const_marking02 \
+            2>&1 | tee /tmp/proof/layered_t6_projection_census.log
 
       - name: Probe exact historical known-prefix blocker
         env:
