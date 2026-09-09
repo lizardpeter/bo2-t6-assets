@@ -1,0 +1,84 @@
+{
+  "format": "t6-mp7-r2-mms-residual-ownership-v1",
+  "status": "SOURCE_CLOSED_BONE_OWNERSHIP_ONLY",
+  "subject": {
+    "weapon": "mp7_mp",
+    "residualAnimationBone": {
+      "scriptStringId": 340,
+      "name": "j_mms_flip"
+    },
+    "owningOptionalXModel": "t6_attach_optic_mms_view"
+  },
+  "source": {
+    "kind": "exact-current-r2-common-mp-expanded-stream",
+    "fastFile": {
+      "name": "common_mp.ff",
+      "sha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77"
+    },
+    "expandedStream": {
+      "bytes": 206493911,
+      "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+    }
+  },
+  "probeImplementation": {
+    "tool": "tools/t6_mp7_r2_mms_residual_probe_v1.py",
+    "toolGitBlobSha1": "180b68874845fb77c99c2785b1646c88375e9127",
+    "workflow": ".github/workflows/t6_mp7_r2_mms_residual_probe_v1.yml",
+    "workflowGitBlobSha1": "066425b0157d874ab778a5f97780442b11ff016a"
+  },
+  "successfulRun": {
+    "headCommit": "baf41f7ec44f6755154290b188f0d4ac36b6cfce",
+    "runId": 34262271628,
+    "jobId": 102182913188,
+    "artifact": {
+      "id": 10070359851,
+      "name": "T6_MP7_R2_MMS_RESIDUAL_PROBE_V1",
+      "zipSha256": "eb9c508c1a5eb9d072c31f7ddbfdb765e31cd05924c8567511f920a44a64e8f3"
+    },
+    "emittedProofJsonSha256": "b5c1e2f7b91bd7d3d49f94ea86e0dedbfc3f7e6822cdcfebbea12fe7ffc67971"
+  },
+  "rawXModelSkeletonEvidence": {
+    "assetFixedStart": 18967030,
+    "boneNamesRawRange": [
+      18967303,
+      18967309
+    ],
+    "numBones": 3,
+    "numRootBones": 1,
+    "numSurfs": 5,
+    "numLods": 1,
+    "boneScriptStringIds": [
+      373,
+      340,
+      372
+    ],
+    "boneNames": [
+      "tag_mms",
+      "j_mms_flip",
+      "tag_hud"
+    ],
+    "matchedAnimationBones": [
+      {
+        "scriptStringId": 340,
+        "name": "j_mms_flip"
+      }
+    ]
+  },
+  "conclusions": {
+    "baseHandsGunMagazineLeaveExactlyOneResidualAnimationBone": true,
+    "residualIsJmmsFlip": true,
+    "jmmsFlipIsPhysicallyPresentInMmsViewXModelSkeletonPrefix": true,
+    "residualOwnedByMmsViewXModel": true,
+    "mmsIsProvenEquippedByBaseMp7": false,
+    "missingAnimationChannelRuntimeBehaviorProven": false,
+    "mmsWholeXModelSerializationClosed": false,
+    "mmsMaterialTechniqueSetClosureComplete": false
+  },
+  "downstreamBlocker": {
+    "kind": "inline_external_asset_reference_requires_xasset_dispatch",
+    "assetType": "MaterialTechniqueSet",
+    "field": "XModel.materialHandles[0].Material.techniqueSet",
+    "pointerRawHex": "0xFFFFFFFE"
+  },
+  "proofBoundary": "This record preserves the successful source-backed proof that ScriptString 340 (j_mms_flip), the sole animation bone absent from the base SEAL6-hands + MP7-gun + MP7-magazine raw model set, is physically present in the pre-material skeleton prefix of t6_attach_optic_mms_view. The XModel census is only a locator; promotion is based on the exact expanded current-R2 stream, raw XModel fixed record/boneNames prefix, and ScriptString identity. This does not prove that the MMS optic is equipped by base mp7_mp, does not prove how retail DObj/XAnim runtime handles a channel whose attachment model is absent, and does not cross the unresolved Material/TechniqueSet dispatch boundary."
+}
