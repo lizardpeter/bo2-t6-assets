@@ -1,0 +1,92 @@
+{
+  "format": "t6-nuketown-layered-runtime-sort-closure-v1",
+  "authority": {
+    "fastFile": "mp_nuketown_2020.ff",
+    "fastFileSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+    "layeredMaterialUniverse": "manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXACT_LAYERED_MATERIAL_UNIVERSE_V1.json",
+    "layeredMaterialUniverseSha256": "891ddff8e3368086c77ccf896a52d515c618a779e7ddd93dde84bffcf0b1ded4",
+    "missingLayerResidualRowSets": "manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MISSING_LAYER_RESIDUAL_ROWSETS_V1.json",
+    "missingLayerResidualRowSetsSha256": "019d07e55e3a6b5a96be29305b29a4c470f0c7e189e15c6d483503a469f936a1",
+    "serverLayeredSortManifest": "manifests/materials/T6_PC_SERVER_LAYERED_MATERIAL_SORT_V1.json",
+    "serverLayeredSortManifestSha256": "551a0847f956f9048d753bf6700430d18647d420824258e084674f531a6a750f",
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "workflow": ".github/workflows/t6_nuketown_layered_runtime_sort_closure_v1.yml",
+    "workflowRunId": 34416657965,
+    "workflowHeadSha": "580645a1c27449c449b28f1ac5d48cfa563a3750",
+    "artifactId": 10129335774,
+    "artifactName": "T6_NUKETOWN_LAYERED_RUNTIME_SORT_CLOSURE_V1",
+    "artifactZipSha256": "53bbc145018fe0e0a4e8a367bc55c79b6975bf7f49ef96a2ba103455b92a08d8",
+    "resultJsonSha256": "e8515acb17ad7025c7b00786a543446d89b96abe34171096a2bde986ff116fb1"
+  },
+  "runtimeRule": {
+    "producer": "Material_CreateLayered",
+    "producerVa": "0x00A4DA60",
+    "producerSha256": "505da556ae793f0a27a5e393dff0c9c1ff8f0be4a42c2935c5790c9c29535e42",
+    "textureCountFieldOffset": "0x54",
+    "textureTableFieldOffset": "0x60",
+    "textureElementSizeBytes": 16,
+    "qsortCallVa": "0x00A4E0B3",
+    "comparatorVa": "0x00A4D630",
+    "comparatorSha256": "89c3ef79d0956caceb677fd742d376f28895d8788fd9ad7c1e88a4535d840952",
+    "key": "MaterialTextureDef.nameHash",
+    "keyAlgorithm": "T6 R_HashString(name,0) = djb2_xor_nocase(name,0), uint32",
+    "ordering": "strict ascending unsigned uint32 in this exact corpus; all generated tables have unique nameHash keys"
+  },
+  "summary": {
+    "exactLayeredMaterialCount": 120,
+    "multirowGeneratedMaterialCount": 120,
+    "totalGeneratedTextureRowCount": 460,
+    "strictHashSortedGeneratedMaterialCount": 120,
+    "hashCollisionGeneratedMaterialCount": 0,
+    "targetBearingGeneratedMaterialCount": 14,
+    "missingComponentTargetCount": 7,
+    "missingComponentLayerOccurrenceCount": 15,
+    "missingComponentTextureRowOccurrenceCount": 24,
+    "standaloneSourceRowOrderNeededForExactGeneratedRuntime": false
+  },
+  "targetOccurrenceHistogram": {
+    "wpc/asphalt_road_dark_dec": 1,
+    "wpc/decal_concrete_clean_line": 7,
+    "wpc/decal_damage_asphalt_crack01": 1,
+    "wpc/decal_grunge_glue": 2,
+    "wpc/decal_grunge_mold01": 2,
+    "wpc/decal_signage_const_marking01": 1,
+    "wpc/decal_signage_const_marking02": 1
+  },
+  "representativeTargetRuntimeOrders": {
+    "wpc/asphalt_road_dark_dec": {
+      "generatedMaterial": "*100n_236n(wpc/asphalt_smooth01_dark:wpc/asphalt_road_dark_dec)",
+      "layerIndex": 1,
+      "rows": [
+        {"runtimeIndex": 1, "generatedName": "normalMap1", "nameHash": "0x9434AEDE"},
+        {"runtimeIndex": 3, "generatedName": "colorMap1", "nameHash": "0xB60D1850"},
+        {"runtimeIndex": 4, "generatedName": "specularMap1", "nameHash": "0xD2866322"}
+      ]
+    },
+    "twoRowLayer1Pattern": {
+      "rows": [
+        {"generatedName": "normalMap1", "nameHash": "0x9434AEDE"},
+        {"generatedName": "colorMap1", "nameHash": "0xB60D1850"}
+      ],
+      "appliesTo": [
+        "wpc/decal_damage_asphalt_crack01",
+        "wpc/decal_grunge_glue",
+        "wpc/decal_grunge_mold01",
+        "wpc/decal_signage_const_marking01",
+        "wpc/decal_signage_const_marking02"
+      ]
+    },
+    "repeatedSingletonLayer2": {
+      "component": "wpc/decal_concrete_clean_line",
+      "generatedName": "colorMap2",
+      "nameHash": "0xB60D1853"
+    }
+  },
+  "closedConclusion": {
+    "generatedRuntimeTextureOrder": "CLOSED-exact-for-all-120-Nuketown-generated-Materials",
+    "standaloneHistoricalSourceOrder": "OPEN-for-six-multi-row-component-identities",
+    "standaloneHistoricalSourceOrderIsNuketownRuntimeRenderingBlocker": false,
+    "reason": "Material_CreateLayered qsorts the complete generated textureTable after layer-specific row renaming. The exact 120 generated map tables all have unique T6 nameHash keys and all 460 rows are already in that prescribed order, including all 24 row occurrences contributed by the seven missing standalone component identities. Therefore any pre-sort permutation of those component rows produces the same exact generated runtime table."
+  },
+  "proofBoundary": "This closes the textureTable order actually used by all 120 exact Nuketown generated layered Materials. It does not reconstruct the historical serialized row order of the six multi-row standalone component identities, does not synthesize absent standalone Material XAssets, does not close their unknown complete Material objects, and does not claim retail-client executable equivalence. The retail FastFile/OAT output is the exact observed generated-table authority; the dedicated-server machine code independently closes the Material_CreateLayered sort rule that explains it."
+}
