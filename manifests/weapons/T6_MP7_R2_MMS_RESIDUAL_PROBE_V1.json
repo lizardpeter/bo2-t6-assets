@@ -1,0 +1,62 @@
+{
+  "candidateProvenance": {
+    "locator": "complete pinned-OAT current-R2 common_mp XModel census run 34261677938",
+    "locatorIsAuthority": false,
+    "model": "t6_attach_optic_mms_view",
+    "promotionAuthority": "fresh raw serialized XModel fixed record + pre-material boneNames prefix + ScriptString identity"
+  },
+  "format": "t6-mp7-r2-mms-residual-probe-v1",
+  "proofBoundary": "This proves that the sole bone absent from the base hands+MP7-gun+MP7-magazine raw model set is physically present in the pre-material skeleton prefix of the raw current-R2 MMS optic view XModel. The unresolved downstream Material/TechniqueSet dispatch remains a blocker for whole-XModel serialization and is not crossed by this proof. This does not claim MMS is equipped by base mp7_mp; it establishes optional attachment support in the shared MP7 XAnim namespace.",
+  "residual": {
+    "name": "j_mms_flip",
+    "scriptStringId": 340
+  },
+  "residualOwnedByMmsModel": true,
+  "source": {
+    "expandedCommonMp": {
+      "bytes": 206493911,
+      "sha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+    }
+  },
+  "xmodel": {
+    "assetFixedStart": 18967030,
+    "boneNames": [
+      "tag_mms",
+      "j_mms_flip",
+      "tag_hud"
+    ],
+    "boneNamesRawRange": [
+      18967303,
+      18967309
+    ],
+    "boneScriptStringIds": [
+      373,
+      340,
+      372
+    ],
+    "downstreamBlockersPreserved": [
+      {
+        "assetType": "MaterialTechniqueSet",
+        "field": "XModel.materialHandles[0].Material.techniqueSet",
+        "kind": "inline_external_asset_reference_requires_xasset_dispatch",
+        "ownerIndex": null,
+        "pointer": {
+          "kind": "insert",
+          "raw": 4294967294,
+          "rawHex": "0xFFFFFFFE"
+        }
+      }
+    ],
+    "matchedAnimationBones": [
+      {
+        "name": "j_mms_flip",
+        "scriptStringId": 340
+      }
+    ],
+    "name": "t6_attach_optic_mms_view",
+    "numBones": 3,
+    "numLods": 1,
+    "numRootBones": 1,
+    "numSurfs": 5
+  }
+}
