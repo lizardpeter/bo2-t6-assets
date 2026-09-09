@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Apply a metadata-only T6 GfxImage diagnostic to pinned OAT 9dca965.
 
-This patch is intentionally observational.  When OAT_T6_IMAGE_METADATA_V1 is
+This patch is intentionally observational. When OAT_T6_IMAGE_METADATA_V1 is
 set, the generated T6 Image dumper prints fields already present in the loaded
-retail GfxImage and returns before texture conversion or file output.  It does
+retail GfxImage and returns before texture conversion or file output. It does
 not derive hashes from names, resolve IPAK entries, mutate assets, or alter the
 normal dumper path when the environment variable is absent.
 """
@@ -43,21 +43,21 @@ def main() -> int:
 #ifdef FEATURE_T6
         if (std::getenv(\"OAT_T6_IMAGE_METADATA_V1\") != nullptr)
         {
-            const auto part0HashRaw = image->streamedPartCount > 0 ? image->streamedParts[0].hash : 0u;
+            const auto streamedPartCount = static_cast<unsigned int>(static_cast<unsigned char>(image->streamedPartCount));
+            const auto part0HashRaw = streamedPartCount > 0 ? image->streamedParts[0].hash : 0u;
             con::info(
-                \"T6_IMAGE_META_V1|name={}|hash={}|streaming={}|streamedPartCount={}|part0HashRaw={}|part0Hash29={}|width={}|height={}|depth={}|baseSize={}|loadedSize={}|skippedMipLevels={}\",
+                \"T6_IMAGE_META_V1|name={}|hash={}|streaming={}|streamedPartCount={}|part0HashRaw={}|part0Hash29={}|width={}|height={}|depth={}|baseSize={}|loadedSize={}\",
                 image->name,
                 image->hash,
-                image->streaming ? 1 : 0,
-                image->streamedPartCount,
+                static_cast<unsigned int>(static_cast<unsigned char>(image->streaming)),
+                streamedPartCount,
                 part0HashRaw,
                 part0HashRaw & 0x1FFFFFFFu,
                 image->width,
                 image->height,
                 image->depth,
                 image->baseSize,
-                image->loadedSize,
-                image->skippedMipLevels);
+                image->loadedSize);
             return;
         }
 #endif
