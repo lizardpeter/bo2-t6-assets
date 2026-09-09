@@ -1,0 +1,104 @@
+name: T6 Nuketown layered texture transform census v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_layered_texture_transform_census_v2.yml'
+      - 'tools/t6_nuketown_layered_texture_transform_census_v2.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXACT_LAYERED_MATERIAL_UNIVERSE_V1.json'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify exact layered universe
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '891ddff8e3368086c77ccf896a52d515c618a779e7ddd93dde84bffcf0b1ded4  manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXACT_LAYERED_MATERIAL_UNIVERSE_V1.json' | sha256sum -c -
+
+      - name: Install runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch exact Nuketown FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Dump exact map-owned Materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          success=0
+          : >/tmp/proof/oat_material_dump_map.log
+          for attempt in 1 2 3; do
+            rm -rf /tmp/oat_map
+            mkdir -p /tmp/oat_map
+            echo "OAT_DUMP_ATTEMPT attempt=$attempt" | tee -a /tmp/proof/oat_material_dump_map.log
+            if "$BIN" --no-color --include-assets material --output-folder /tmp/oat_map \
+              /tmp/source/mp_nuketown_2020.ff 2>&1 | tee -a /tmp/proof/oat_material_dump_map.log; then
+              success=1
+              break
+            fi
+          done
+          test "$success" = 1
+          matroot=$(find /tmp/oat_map -type d -name materials -print -quit)
+          test -n "$matroot" -a -d "$matroot"
+          echo "$matroot" >/tmp/proof/material_root.txt
+
+      - name: Prove exact transform and recover target tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          MATROOT=$(cat /tmp/proof/material_root.txt)
+          python3 tools/t6_nuketown_layered_texture_transform_census_v2.py \
+            "$MATROOT" \
+            manifests/maps/mp_nuketown_2020/T6_NUKETOWN_EXACT_LAYERED_MATERIAL_UNIVERSE_V1.json \
+            /tmp/proof/T6_NUKETOWN_LAYERED_TEXTURE_TRANSFORM_CENSUS_V2.json \
+            | tee /tmp/proof/transform_census_v2.log
+          sha256sum /tmp/proof/T6_NUKETOWN_LAYERED_TEXTURE_TRANSFORM_CENSUS_V2.json \
+            | tee /tmp/proof/result_sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_LAYERED_TEXTURE_TRANSFORM_CENSUS_V2
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
