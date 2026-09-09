@@ -1,0 +1,152 @@
+name: T6 current Plutonium XAudio2 interface implementer probe v3
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_current_plutonium_xaudio2_interface_implementer_probe_v3.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PE/disassembly helpers
+        run: python3 -m pip install --disable-pip-version-check 'pefile==2024.8.26' 'capstone==5.0.6'
+      - name: Census RTTI classes implementing XAudio2 callback interfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import hashlib,json,struct,urllib.request
+          from pathlib import Path
+          import pefile
+          from capstone import Cs,CS_ARCH_X86,CS_MODE_32
+
+          REV=5346; SIZE=13263640
+          SHA1='f101e28c3a18ce1ffe37a40d23cd04f7f57925d3'
+          SHA256='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          INFO='https://cdn.plutoniummod.com/updater/prod/info.json'
+          TARGETS={'.?AUIXAudio2VoiceCallback@@','.?AUIXAudio2EngineCallback@@'}
+          def req(c,m):
+            if not c: raise RuntimeError(m)
+          def get(url,t=180):
+            q=urllib.request.Request(url,headers={'User-Agent':'bo2-t6-assets-xaudio2-rtti-v3/1'})
+            with urllib.request.urlopen(q,timeout=t) as f:
+              req(f.status==200,f'HTTP {f.status}: {url}'); return f.read()
+          def u32(b,o): return struct.unpack_from('<I',b,o)[0]
+          def i32(b,o): return struct.unpack_from('<i',b,o)[0]
+          info=json.loads(get(INFO,60).decode()); req(info.get('revision')==REV,'revision changed')
+          fs=[x for x in info.get('files',[]) if isinstance(x,dict) and str(x.get('name','')).replace('\\','/').lower()=='games/t6mp.exe']
+          req(len(fs)==1 and int(fs[0]['size'])==SIZE and str(fs[0]['hash']).lower()==SHA1,'client manifest identity changed')
+          raw=get(info['baseUrl']+SHA1); req(len(raw)==SIZE and hashlib.sha1(raw).hexdigest()==SHA1 and hashlib.sha256(raw).hexdigest()==SHA256,'client bytes changed')
+          pe=pefile.PE(data=raw,fast_load=False); base=pe.OPTIONAL_HEADER.ImageBase
+          secs=[]
+          for s in pe.sections:
+            secs.append({'name':s.Name.rstrip(b'\0').decode('ascii','replace'),'rawOffset':s.PointerToRawData,'rawSize':s.SizeOfRawData,'rva':s.VirtualAddress,'va':base+s.VirtualAddress,'virtualSize':s.Misc_VirtualSize,'characteristics':s.Characteristics})
+          def offloc(o):
+            for s in secs:
+              if s['rawOffset']<=o<s['rawOffset']+s['rawSize']: return {'fileOffset':o,'section':s['name'],'rva':s['rva']+o-s['rawOffset'],'va':s['va']+o-s['rawOffset']}
+            return {'fileOffset':o}
+          def vaoff(v):
+            for s in secs:
+              if s['va']<=v<s['va']+s['rawSize']: return s['rawOffset']+v-s['va']
+            return None
+          def isexec(v):
+            for s in secs:
+              if s['va']<=v<s['va']+max(s['rawSize'],s['virtualSize']): return bool(s['characteristics']&0x20000000)
+            return False
+          def typename(tdva):
+            o=vaoff(tdva)
+            if o is None or o+9>=len(raw): return None
+            st=o+8; en=raw.find(b'\0',st,min(len(raw),st+256))
+            if en<0: return None
+            try: s=raw[st:en].decode('ascii')
+            except: return None
+            return s if s.startswith('.?A') else None
+          def refs(v):
+            n=struct.pack('<I',v&0xffffffff); out=[]; p=0
+            while True:
+              p=raw.find(n,p)
+              if p<0: break
+              out.append(offloc(p)); p+=1
+            return out
+
+          rdata=next(s for s in secs if s['name']=='.rdata')
+          cols=[]
+          # Exhaustive aligned structural census of x86 MSVC RTTI CompleteObjectLocator records in .rdata.
+          for co in range(rdata['rawOffset'],rdata['rawOffset']+rdata['rawSize']-20+1,4):
+            sig,suboff,cd,tdva,chdva=struct.unpack_from('<IIIII',raw,co)
+            if sig!=0: continue
+            cname=typename(tdva)
+            if not cname: continue
+            cho=vaoff(chdva)
+            if cho is None or cho+16>len(raw): continue
+            csig,cattr,nbase,ba_va=struct.unpack_from('<IIII',raw,cho)
+            if csig!=0 or not(1<=nbase<=64): continue
+            bao=vaoff(ba_va)
+            if bao is None or bao+4*nbase>len(raw): continue
+            bases=[]; ok=True
+            for i in range(nbase):
+              bcdva=u32(raw,bao+4*i); bcdo=vaoff(bcdva)
+              if bcdo is None or bcdo+24>len(raw): ok=False; break
+              btd=u32(raw,bcdo); bn=typename(btd)
+              if not bn: ok=False; break
+              bases.append({'index':i,'baseClassDescriptorVa':bcdva,'typeDescriptorVa':btd,'typeName':bn,'numContainedBases':u32(raw,bcdo+4),'pmd':{'mdisp':i32(raw,bcdo+8),'pdisp':i32(raw,bcdo+12),'vdisp':i32(raw,bcdo+16)},'attributes':u32(raw,bcdo+20)})
+            if not ok: continue
+            cols.append({'completeObjectLocator':offloc(co),'signature':sig,'subobjectOffset':suboff,'cdOffset':cd,'classTypeDescriptorVa':tdva,'classTypeName':cname,'classHierarchyDescriptorVa':chdva,'classHierarchyAttributes':cattr,'baseClassArrayVa':ba_va,'bases':bases})
+
+          matches=[]
+          for c in cols:
+            hit=sorted(TARGETS.intersection({b['typeName'] for b in c['bases']}))
+            if not hit: continue
+            c=dict(c); c['matchedInterfaces']=hit
+            cva=c['completeObjectLocator']['va']; vts=[]
+            for rr in refs(cva):
+              vo=rr['fileOffset']+4; vl=offloc(vo)
+              if not isinstance(vl.get('va'),int): continue
+              ents=[]
+              for i in range(20):
+                eo=vo+4*i
+                if eo+4>len(raw): break
+                fv=u32(raw,eo)
+                if not isexec(fv): break
+                ents.append({'slot':i,'functionVa':fv,'pointerLocation':offloc(eo)})
+              if ents: vts.append({'vtable':vl,'completeObjectLocatorPointer':rr,'entries':ents})
+            c['vtables']=vts; matches.append(c)
+
+          req(any('.?AUIXAudio2VoiceCallback@@' in c['matchedInterfaces'] for c in matches),'no VoiceCallback implementer found')
+          req(any('.?AUIXAudio2EngineCallback@@' in c['matchedInterfaces'] for c in matches),'no EngineCallback implementer found')
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32); md.detail=True
+          def linear(v,limit=96):
+            o=vaoff(v); rows=[]; total=0; hit=False
+            if o is None: return None
+            for ins in md.disasm(raw[o:o+limit],v):
+              rows.append({'va':ins.address,'bytes':bytes(ins.bytes).hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str}); total+=ins.size
+              if ins.mnemonic.startswith('ret'): hit=True; break
+            return {'firstRetObserved':hit,'bytesThroughFirstRet':total if hit else None,'sha256ThroughFirstRet':hashlib.sha256(raw[o:o+total]).hexdigest() if hit else None,'instructions':rows}
+          for c in matches:
+            for vt in c['vtables']:
+              vt['allPointerRefs']=[x for x in refs(vt['vtable']['va']) if x['fileOffset']!=vt['completeObjectLocatorPointer']['fileOffset']+4]
+              for e in vt['entries']:
+                e['linearDiagnostic']=linear(e['functionVa'])
+                e['allPointerRefs']=[x for x in refs(e['functionVa']) if x['fileOffset']!=e['pointerLocation']['fileOffset']]
+
+          result={'format':'t6-current-plutonium-xaudio2-interface-implementer-probe-v3','authority':'exact current Plutonium revision 5346 client only; not historical retail-equivalent','client':{'revision':REV,'bytes':SIZE,'sha1':SHA1,'sha256':SHA256},'rttiCompleteObjectLocatorCensusCount':len(cols),'targetInterfaces':sorted(TARGETS),'implementers':matches,'summary':{'matchingCompleteObjectLocators':len(matches),'voiceCallbackImplementerClasses':sorted({c['classTypeName'] for c in matches if '.?AUIXAudio2VoiceCallback@@' in c['matchedInterfaces']}),'engineCallbackImplementerClasses':sorted({c['classTypeName'] for c in matches if '.?AUIXAudio2EngineCallback@@' in c['matchedInterfaces']}),'vtableCount':sum(len(c['vtables']) for c in matches),'methodPointerCount':sum(len(v['entries']) for c in matches for v in c['vtables'])},'proofBoundary':'Implementer classes are admitted only through exhaustive aligned x86 MSVC RTTI COL -> class hierarchy -> base descriptor structure. Vtable candidates additionally require a COL pointer immediately before one or more executable function pointers. Interface slot semantic names are not inferred by count alone.'}
+          out=Path('/tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_INTERFACE_IMPLEMENTER_PROBE_V3.json'); out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'summary':result['summary'],'matches':[{'class':c['classTypeName'],'subobjectOffset':c['subobjectOffset'],'interfaces':c['matchedInterfaces'],'bases':[b['typeName'] for b in c['bases']],'vtables':[{'va':v['vtable']['va'],'methods':[hex(e['functionVa']) for e in v['entries']]} for v in c['vtables']]} for c in matches]},indent=2,sort_keys=True))
+          print('result_sha256',hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_PLUTONIUM_XAUDIO2_INTERFACE_IMPLEMENTER_PROBE_V3
+          path: /tmp/proof/T6_CURRENT_PLUTONIUM_XAUDIO2_INTERFACE_IMPLEMENTER_PROBE_V3.json
+          if-no-files-found: error
+          compression-level: 9
