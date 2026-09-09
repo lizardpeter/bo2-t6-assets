@@ -5,12 +5,16 @@ on:
   push:
     paths:
       - 'tools/t6_nuketown_production_texture_dependency_census_v1.py'
+      - 'tools/t6_nuketown_production_texture_dependency_census_v2.py'
       - 'tools/t6_world_material_catalog_legacy_index_v1.py'
       - 'tools/t6_oat_material_root_union_v1.py'
       - 'tools/t6_nuketown_world_source_sidecars_v3.py'
       - 'tools/t6_nuketown_material_memory_ownership_v1.py'
-      - 'tools/t6_oat_material_manifest_v3.py'
       - 'tools/t6_oat_material_manifest_v2.py'
+      - 'tools/t6_oat_material_manifest_v3.py'
+      - 'tools/t6_oat_material_manifest_v4.py'
+      - 'tools/t6_oat_material_manifest_v5.py'
+      - 'tools/t6_oat_material_manifest_v6.py'
       - 'tools/t6_iwi27_mip_layout_proof_v2.py'
       - 'tools/t6_iwi27_dds_bridge_v1.py'
       - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
@@ -158,19 +162,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_oat_material_manifest_v3.py \
+          python3 tools/t6_oat_material_manifest_v6.py \
             /tmp/oat_material_union \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
-            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json \
+            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json \
             --source-texture-extension .dds \
             2>&1 | tee /tmp/proof/material_manifest.log
           python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json'))
-          s=d['stats']
+          p='/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json'
+          d=json.load(open(p)); s=d['stats']
           assert s['missingMaterialCount']==0,s
           assert len(d['materials'])==327,(len(d['materials']),s)
-          print('GREEN EXACT 327-MATERIAL PRODUCTION DEPENDENCY MANIFEST',json.dumps(s,sort_keys=True))
+          assert s['ordinaryMaterialCount']==207,s
+          assert s['compoundMaterialCount']==120,s
+          assert s['exactGeneratedCompoundJsonCount']==120,s
+          assert s['exactFullComponentConcatenationValidationCount']==106,s
+          assert s['generatedMaterialsWithComponentOnlyLayers']==14,s
+          assert s['componentStandaloneMissingIdentityCount']==7,s
+          assert s['componentStandaloneMissingLayerOccurrenceCount']==15,s
+          assert s['componentStandaloneNormalValidationCount']==244,s
+          assert s['renderStateMaterialCount']==327,s
+          assert sum(1 for m in d['materials'] if isinstance(m.get('runtimeTextureTable'),list))==120
+          assert d['componentStandaloneMissingIdentities']==[
+            'wpc/asphalt_road_dark_dec',
+            'wpc/decal_concrete_clean_line',
+            'wpc/decal_damage_asphalt_crack01',
+            'wpc/decal_grunge_glue',
+            'wpc/decal_grunge_mold01',
+            'wpc/decal_signage_const_marking01',
+            'wpc/decal_signage_const_marking02',
+          ],d['componentStandaloneMissingIdentities']
+          print('GREEN EXACT 327-MATERIAL PRODUCTION DEPENDENCY MANIFEST V6',json.dumps(s,sort_keys=True))
           PY
 
       - name: Materialize exact 81 pointer-proven retail IWI payloads
@@ -208,19 +231,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_nuketown_production_texture_dependency_census_v1.py \
-            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V3.json \
+          python3 tools/t6_nuketown_production_texture_dependency_census_v2.py \
+            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json \
             --dds-bridge /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
-            --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V1.json \
+            --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json \
             2>&1 | tee /tmp/proof/dependency_census.log
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V1.json'
+          p='/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json'
           d=json.load(open(p)); s=d['summary']
           assert s['materialUniqueImageCount']>0,s
           assert s['exact81BridgeImageCount']==81,s
           assert s['productionUniqueImageCount']==s['materialUniqueImageCount'],s
-          print('MATERIAL_TEXTURE_COVERAGE',json.dumps(s,sort_keys=True))
+          print('MATERIAL_TEXTURE_COVERAGE_V2',json.dumps(s,sort_keys=True))
           print('MISSING_MATERIAL_IMAGES',len(d['missingProductionImages']))
           for row in d['missingProductionImages'][:120]:
               print('MISSING',row['image'],'USES',len(row['materialUses']))
