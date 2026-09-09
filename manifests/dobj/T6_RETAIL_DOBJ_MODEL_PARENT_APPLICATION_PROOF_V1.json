@@ -1,0 +1,32 @@
+{
+  "format": "t6-retail-dobj-model-parent-application-proof-v1",
+  "notProven": [
+    "DObj multi-XModel assembly order",
+    "how modelParent is assigned during DObj construction",
+    "attachment-model parent selection",
+    "duplicate ScriptString bone precedence",
+    "behavior for animation ScriptStrings absent from the assembled DObj, including j_mms_flip"
+  ],
+  "proofBoundary": "Derived only from the immutable retail root-translation authority above. This closes runtime application of an already-supplied modelParent value; it does not close DObj construction or XAnim-to-DObj name resolution.",
+  "proven": {
+    "modelParentNonSentinel": "In those consumers, non-0xFF modelParent selects the separately pinned root-with-model-parent helper.",
+    "modelParentSentinel": "In two independent primary retail skeleton consumers, modelParent == 0xFF selects the no-model-parent root path.",
+    "rootParentTranslationApplication": "The pinned root-with-model-parent helper adds the supplied parent DObj translation to animated root translation."
+  },
+  "retailExecutable": {
+    "bytes": 12850328,
+    "sha256": "11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1"
+  },
+  "retailWitnesses": {
+    "primarySkeletonConsumerA": "0x00422a6f",
+    "primarySkeletonConsumerB": "0x005c6948",
+    "rootNoParentHelper": "0x008d6100",
+    "rootWithParentHelper": "0x008d6220"
+  },
+  "upstreamAuthority": {
+    "manifest": "manifests/xanim/T6_RETAIL_XANIM_ROOT_TRANSLATION_PROOF_V1.json",
+    "manifestGitBlobSha1": "c30595cf22f98644605513f34cfa404cae30aa4c",
+    "verifier": "tools/t6_retail_xanim_root_translation_proof_v1.py",
+    "verifierGitBlobSha1": "8602765f4c5ea3e6a95037dbb26fe20665441f45"
+  }
+}
