@@ -2,10 +2,10 @@
 """Fail-closed current-Plutonium XAudio2 callback queue probe.
 
 This tool is intentionally pinned to the exact revision-5346 client identity already
-admitted by the audio proof chain.  It does not claim historical retail equivalence.
+admitted by the audio proof chain. It does not claim historical retail equivalence.
 
 It performs a complete executable-section Capstone pass with skip-data enabled and
-also a byte-exact raw pointer census.  The two views are retained separately so an
+also a byte-exact raw pointer census. The two views are retained separately so an
 instruction xref is never invented merely because four pointer bytes occur in code.
 """
 
@@ -121,8 +121,9 @@ def main() -> int:
                     "iatVa": imp.address,
                 }
 
-    # Raw byte-exact pointer census across every raw-backed executable section.
     exec_sections = [s for s in sections if (s["characteristics"] & 0x20000000) and s["rawSize"]]
+
+    # Raw byte-exact pointer census across every raw-backed executable section.
     raw_refs: dict[str, list[dict]] = {k: [] for k in TARGETS}
     for name, value in TARGETS.items():
         needle = struct.pack("<I", value)
@@ -138,7 +139,8 @@ def main() -> int:
                 p += 1
 
     # Complete executable pass. skipdata prevents embedded tables/alignment from
-    # truncating the census. Only decoded operands become instruction xrefs.
+    # truncating the census. Capstone marks skipdata pseudo-rows with id == 0;
+    # those rows are retained but never queried for operand metadata.
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     md.detail = True
     md.skipdata = True
@@ -148,22 +150,24 @@ def main() -> int:
         for ins in md.disasm(blob, s["va"]):
             target_hits: list[str] = []
             import_hits: list[dict] = []
-            for op in getattr(ins, "operands", []):
-                values = []
-                if op.type == X86_OP_IMM:
-                    values.append(op.imm & 0xFFFFFFFF)
-                elif (
-                    op.type == X86_OP_MEM
-                    and op.mem.base == X86_REG_INVALID
-                    and op.mem.index == X86_REG_INVALID
-                ):
-                    values.append(op.mem.disp & 0xFFFFFFFF)
-                for value in values:
-                    for name, target in TARGETS.items():
-                        if value == target:
-                            target_hits.append(name)
-                    if value in imports:
-                        import_hits.append(imports[value])
+            is_skipdata = ins.id == 0
+            if not is_skipdata:
+                for op in ins.operands:
+                    values = []
+                    if op.type == X86_OP_IMM:
+                        values.append(op.imm & 0xFFFFFFFF)
+                    elif (
+                        op.type == X86_OP_MEM
+                        and op.mem.base == X86_REG_INVALID
+                        and op.mem.index == X86_REG_INVALID
+                    ):
+                        values.append(op.mem.disp & 0xFFFFFFFF)
+                    for value in values:
+                        for name, target in TARGETS.items():
+                            if value == target:
+                                target_hits.append(name)
+                        if value in imports:
+                            import_hits.append(imports[value])
             decoded.append(
                 {
                     "va": ins.address,
@@ -171,6 +175,7 @@ def main() -> int:
                     "bytes": bytes(ins.bytes).hex(),
                     "mnemonic": ins.mnemonic,
                     "opStr": ins.op_str,
+                    "skipdata": is_skipdata,
                     "targetHits": sorted(set(target_hits)),
                     "importHits": import_hits,
                 }
@@ -217,7 +222,7 @@ def main() -> int:
         "format": "t6-current-plutonium-xaudio2-queue-probe-v1",
         "authority": "exact current Plutonium revision 5346 client only; not historical retail-equivalent",
         "client": {"bytes": len(raw), "sha256": sha256, "imageBase": base},
-        "targets": {k: v for k, v in TARGETS.items()},
+        "targets": dict(TARGETS),
         "voiceVtableEntries": actual_vtable,
         "rawExecutablePointerRefs": raw_refs,
         "instructionPointerRefs": insn_refs,
@@ -226,10 +231,12 @@ def main() -> int:
             "rawRefCounts": {k: len(v) for k, v in raw_refs.items()},
             "instructionRefCounts": {k: len(v) for k, v in insn_refs.items()},
             "decodedExecutableRows": len(decoded),
+            "skipdataRows": sum(1 for row in decoded if row["skipdata"]),
         },
         "proofBoundary": (
             "Instruction xrefs require both an exact decoded absolute immediate/displacement and the same "
             "four-byte target literal inside that instruction. Raw pointer occurrences remain a separate census. "
+            "Capstone skipdata rows are retained only as accounting records and cannot become xrefs. "
             "Windows do not establish function boundaries or semantics beyond their exact instructions."
         ),
     }
