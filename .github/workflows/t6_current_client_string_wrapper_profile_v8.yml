@@ -1,0 +1,58 @@
+name: T6 current-client string wrapper profile v8
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - reversal/firstperson-weapons-closure
+    paths:
+      - '.github/workflows/t6_current_client_string_wrapper_profile_v8.yml'
+      - 'tools/t6_current_client_string_wrapper_profile_v8.py'
+      - 'tools/t6_current_client_dobj_diff_probe_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Capstone
+        run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+
+      - name: Compile-check profiler
+        run: python3 -m py_compile tools/t6_current_client_string_wrapper_profile_v8.py tools/t6_current_client_dobj_diff_probe_v1.py
+
+      - name: Fetch exact comparison client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          curl -fL --retry 4 https://cdn.plutoniummod.com/updater/prod/files/f101e28c3a18ce1ffe37a40d23cd04f7f57925d3 -o /tmp/t6mp_current.exe
+          test "$(stat -c%s /tmp/t6mp_current.exe)" = '13263640'
+          echo '770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf  /tmp/t6mp_current.exe' | sha256sum -c -
+
+      - name: Profile wrapper candidate and all direct callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_string_wrapper_profile_v8.py \
+            /tmp/t6mp_current.exe \
+            --expected-bytes 13263640 \
+            --expected-sha256 770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf \
+            --out /tmp/proof/T6_CURRENT_CLIENT_STRING_WRAPPER_PROFILE_V8.json \
+            --disasm-out /tmp/proof/string_wrapper_disasm.txt \
+            | tee /tmp/proof/probe.log
+          sha256sum /tmp/proof/* | tee /tmp/proof/file_sha256.txt
+
+      - name: Upload profile evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_STRING_WRAPPER_PROFILE_V8
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
