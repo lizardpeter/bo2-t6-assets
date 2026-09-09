@@ -1,0 +1,196 @@
+name: T6 Nuketown layered texture mismatch probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_layered_texture_mismatch_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          echo "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch exact Nuketown FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Dump exact map-owned Materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          success=0
+          : >/tmp/proof/oat_material_dump_map.log
+          for attempt in 1 2 3; do
+            rm -rf /tmp/oat_map
+            mkdir -p /tmp/oat_map
+            echo "OAT_DUMP_ATTEMPT attempt=$attempt" | tee -a /tmp/proof/oat_material_dump_map.log
+            if "$BIN" --no-color --include-assets material --output-folder /tmp/oat_map \
+              /tmp/source/mp_nuketown_2020.ff 2>&1 | tee -a /tmp/proof/oat_material_dump_map.log; then
+              success=1
+              break
+            fi
+          done
+          test "$success" = 1
+          matroot=$(find /tmp/oat_map -type d -name materials -print -quit)
+          test -n "$matroot" -a -d "$matroot"
+          echo "$matroot" >/tmp/proof/material_root.txt
+
+      - name: Compare exact asphalt component against generated prefixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          MATROOT=$(cat /tmp/proof/material_root.txt)
+          export MATROOT
+          echo '338d3944391922e8278fb83bf63f5f0eef716d85290e6ed611f35bca18348474  '"$MATROOT"'/wpc/asphalt_smooth01_dark.json' | sha256sum -c -
+          echo '8c760e1ae3232206b7ef6c481bc8f06213dea267a9c8f42c3351ff207ec8d0e7  '"$MATROOT"'/generated/_100n_101.json' | sha256sum -c -
+          echo 'efd40071c767de26cc86822252e783b79f8f3de3d09ef3199afa847591aeba6e  '"$MATROOT"'/generated/_100n_101_101.json' | sha256sum -c -
+          echo '2d6ba6a83990df6c6c230954044891ac0a58db9dd46575a84f5a0034689e0c5b  '"$MATROOT"'/generated/_100n_236n.json' | sha256sum -c -
+          echo '1f09bcfedc7c658b10e1a6500616db865ddc6ff453c826e5163958531da7fea5  '"$MATROOT"'/generated/_100n_238.json' | sha256sum -c -
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root = Path(os.environ["MATROOT"])
+          expected_sha = {
+              "wpc/asphalt_smooth01_dark": "338d3944391922e8278fb83bf63f5f0eef716d85290e6ed611f35bca18348474",
+              "generated/_100n_101": "8c760e1ae3232206b7ef6c481bc8f06213dea267a9c8f42c3351ff207ec8d0e7",
+              "generated/_100n_101_101": "efd40071c767de26cc86822252e783b79f8f3de3d09ef3199afa847591aeba6e",
+              "generated/_100n_236n": "2d6ba6a83990df6c6c230954044891ac0a58db9dd46575a84f5a0034689e0c5b",
+              "generated/_100n_238": "1f09bcfedc7c658b10e1a6500616db865ddc6ff453c826e5163958531da7fea5",
+          }
+
+          def canon(v):
+              return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+          def sha(v):
+              return hashlib.sha256(canon(v)).hexdigest()
+
+          def load(identity):
+              p = root / f"{identity}.json"
+              raw = p.read_bytes()
+              got = hashlib.sha256(raw).hexdigest()
+              assert got == expected_sha[identity], (identity, got, expected_sha[identity])
+              doc = json.loads(raw)
+              tex = doc.get("textures")
+              assert isinstance(tex, list) and all(isinstance(x, dict) for x in tex), identity
+              return p, raw, doc, tex
+
+          _, comp_raw, comp_doc, comp = load("wpc/asphalt_smooth01_dark")
+          generated_ids = [
+              "generated/_100n_101",
+              "generated/_100n_101_101",
+              "generated/_100n_236n",
+              "generated/_100n_238",
+          ]
+          rows = []
+          for identity in generated_ids:
+              _, raw, doc, tex = load(identity)
+              prefix = tex[:len(comp)]
+              diffs = []
+              for i, (exp, act) in enumerate(zip(comp, prefix)):
+                  if canon(exp) != canon(act):
+                      keys = sorted(set(exp) | set(act))
+                      diffs.append({
+                          "index": i,
+                          "differingKeys": [k for k in keys if exp.get(k) != act.get(k)],
+                          "expected": exp,
+                          "actual": act,
+                      })
+              rows.append({
+                  "identity": identity,
+                  "rawBytes": len(raw),
+                  "rawSha256": hashlib.sha256(raw).hexdigest(),
+                  "textureCount": len(tex),
+                  "textureTableSha256": sha(tex),
+                  "asphaltStandaloneTextureCount": len(comp),
+                  "firstComponentPrefixCount": len(prefix),
+                  "firstComponentPrefixSha256": sha(prefix),
+                  "firstComponentPrefixExact": canon(prefix) == canon(comp),
+                  "prefixDifferenceCount": len(diffs),
+                  "prefixDifferences": diffs,
+                  "textures": tex,
+              })
+
+          out = {
+              "format": "t6-nuketown-layered-texture-mismatch-probe-v1",
+              "authority": {
+                  "oatCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+                  "fastFile": "mp_nuketown_2020.ff",
+                  "fastFileSha256": "6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0",
+                  "rawJsonSha256": expected_sha,
+              },
+              "standalone": {
+                  "identity": "wpc/asphalt_smooth01_dark",
+                  "rawBytes": len(comp_raw),
+                  "rawSha256": hashlib.sha256(comp_raw).hexdigest(),
+                  "textureCount": len(comp),
+                  "textureTableSha256": sha(comp),
+                  "textures": comp,
+              },
+              "generated": rows,
+              "proofBoundary": (
+                  "Diagnostic only. This compares exact OAT JSON texture rows and does not "
+                  "promote any layered concatenation, ownership, or shader-semantic rule."
+              ),
+          }
+          payload = json.dumps(out, indent=2, sort_keys=True) + "\n"
+          Path("/tmp/proof/T6_NUKETOWN_LAYERED_TEXTURE_MISMATCH_PROBE_V1.json").write_text(payload)
+          print("STANDALONE", len(comp), sha(comp))
+          for row in rows:
+              print(
+                  "GENERATED", row["identity"],
+                  "textures", row["textureCount"],
+                  "prefixExact", row["firstComponentPrefixExact"],
+                  "diffs", row["prefixDifferenceCount"],
+                  "tableSha", row["textureTableSha256"],
+              )
+              for diff in row["prefixDifferences"]:
+                  print("DIFF", row["identity"], json.dumps(diff, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_LAYERED_TEXTURE_MISMATCH_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
