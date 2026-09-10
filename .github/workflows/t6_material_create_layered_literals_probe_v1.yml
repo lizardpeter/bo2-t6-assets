@@ -1,0 +1,70 @@
+name: T6 Material_CreateLayered literal probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_material_create_layered_literals_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact server executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/CoDMPServer_PC.exe \
+            "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/CoDMPServer_PC.exe" | sha256sum -c -
+      - name: Read exact short literal bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee /tmp/proof/literals.txt
+          import struct, hashlib, json
+          p='/tmp/CoDMPServer_PC.exe'
+          b=open(p,'rb').read()
+          image_base=0x400000
+          pe=struct.unpack_from('<I',b,0x3c)[0]
+          coff=pe+4
+          nsec=struct.unpack_from('<H',b,coff+2)[0]
+          opt=struct.unpack_from('<H',b,coff+16)[0]
+          st=coff+20+opt
+          sections=[]
+          for i in range(nsec):
+              o=st+i*40
+              name=b[o:o+8].split(b'\0',1)[0].decode('ascii','replace')
+              vsize,rva,rsize,roff=struct.unpack_from('<IIII',b,o+8)
+              sections.append((name,image_base+rva,rsize,roff))
+          def raw(va,n=16):
+              for name,start,size,off in sections:
+                  if start <= va < start+size:
+                      pos=off+(va-start)
+                      return name,b[pos:pos+n]
+              raise SystemExit(f'VA not raw-backed: 0x{va:08X}')
+          result={}
+          for va in [0x00B947B4,0x00B91FC4,0x00B947AC,0x00B8F83F]:
+              sec,x=raw(va,16)
+              c=x.split(b'\0',1)[0]
+              result[f'0x{va:08X}']={'section':sec,'first16':x.hex(),'cstringHex':c.hex(),'cstringLatin1':c.decode('latin-1')}
+          print(json.dumps(result,indent=2,sort_keys=True))
+          out=(json.dumps(result,indent=2,sort_keys=True)+'\n').encode()
+          open('/tmp/proof/T6_PC_SERVER_MATERIAL_CREATE_LAYERED_LITERALS_V1.json','wb').write(out)
+          print('RESULT_SHA256',hashlib.sha256(out).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_PC_SERVER_MATERIAL_CREATE_LAYERED_LITERALS_V1
+          path: /tmp/proof
+          if-no-files-found: error
