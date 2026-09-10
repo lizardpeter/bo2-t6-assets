@@ -1,0 +1,76 @@
+name: T6 Material_CreateLayered semantic probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_material_create_layered_semantics_probe_v1.yml'
+      - 'tools/t6_pc_server_material_create_layered_probe_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXE_ID: 1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n
+      MAP_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+      EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+      MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download exact PC dedicated-server references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ref /tmp/probe
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.exe "https://drive.usercontent.google.com/download?id=$EXE_ID&export=download&confirm=t"
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ref/CoDMPServer_PC.map "https://drive.usercontent.google.com/download?id=$MAP_ID&export=download&confirm=t"
+          echo "$EXE_SHA256  /tmp/ref/CoDMPServer_PC.exe" | sha256sum -c -
+          echo "$MAP_SHA256  /tmp/ref/CoDMPServer_PC.map" | sha256sum -c -
+
+      - name: Install pinned disassembler
+        run: python3 -m pip install --disable-pip-version-check capstone==5.0.6
+
+      - name: Probe exact Material_CreateLayered body
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_pc_server_material_create_layered_probe_v1.py \
+            /tmp/ref/CoDMPServer_PC.exe \
+            /tmp/ref/CoDMPServer_PC.map \
+            /tmp/probe/T6_PC_SERVER_MATERIAL_CREATE_LAYERED_PROBE_V1.json \
+            | tee /tmp/probe/summary.txt
+          sha256sum /tmp/probe/T6_PC_SERVER_MATERIAL_CREATE_LAYERED_PROBE_V1.json \
+            | tee /tmp/probe/result_sha256.txt
+
+      - name: Emit exact call and string census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee /tmp/probe/call_string_census.txt
+          import json
+          p='/tmp/probe/T6_PC_SERVER_MATERIAL_CREATE_LAYERED_PROBE_V1.json'
+          d=json.load(open(p))
+          print('FUNCTION', d['function'])
+          print('CALLS')
+          for row in d['calls']:
+              print(row)
+          print('ASCII_REFS')
+          for row in d['asciiReferences']:
+              print(row)
+          print('ABSOLUTE_REFS')
+          for row in d['absoluteReferences']:
+              print(row)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_PC_SERVER_MATERIAL_CREATE_LAYERED_PROBE_V1
+          path: /tmp/probe
+          if-no-files-found: error
+          compression-level: 9
