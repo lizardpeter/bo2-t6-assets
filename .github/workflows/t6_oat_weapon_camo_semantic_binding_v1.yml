@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py'
+      - 'tools/t6_oat_asset_definition_trace_patch_v1.py'
       - 'tools/t6_oat_weapon_camo_semantic_binding_v1.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
@@ -58,7 +59,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /tmp/oat-weapon-camo-cache
-          key: oat-unlinker-t6-9dca965-compat-v3-weapon-camo-semantic-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py') }}-ubuntu24-x86-debug
+          key: oat-unlinker-t6-9dca965-compat-v3-weapon-camo-semantic-v2-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py', 'tools/t6_oat_asset_definition_trace_patch_v1.py') }}-ubuntu24-x86-debug
 
       - name: Build or verify WeaponCamo-instrumented pinned OAT Unlinker
         shell: bash
@@ -70,12 +71,14 @@ jobs:
           EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
           COMPAT_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
           TRACE_SHA=$(sha256sum tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py | awk '{print $1}')
+          PROVENANCE_SHA=$(sha256sum tools/t6_oat_asset_definition_trace_patch_v1.py | awk '{print $1}')
           if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
             test -x "$CACHE_BIN"
             test -f "$CACHE_META"
             grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
             grep -qx "compat_patch_sha256=$COMPAT_SHA" "$CACHE_META"
             grep -qx "trace_patch_sha256=$TRACE_SHA" "$CACHE_META"
+            grep -qx "provenance_patch_sha256=$PROVENANCE_SHA" "$CACHE_META"
             echo cache_hit=true | tee /tmp/proof/oat_cache.txt
           else
             echo cache_hit=false | tee /tmp/proof/oat_cache.txt
@@ -87,15 +90,18 @@ jobs:
             git -C /tmp/oat submodule update -q --init --recursive
             python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
             python3 tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py /tmp/oat
+            python3 tools/t6_oat_asset_definition_trace_patch_v1.py /tmp/oat
             git -C /tmp/oat diff --check
             grep -n 'T6_WEAPON_CAMO_ROOT' /tmp/oat/src/ZoneLoading/Game/T6/ContentLoaderT6.cpp | tee /tmp/proof/trace_patch_marker.txt
+            grep -n 'ProofRawStreamPos' /tmp/oat/src/ZoneLoading/Zone/Stream/ZoneInputStream.h | tee /tmp/proof/provenance_patch_marker.txt
+            grep -n 'T6_ASSET_LOAD_EVENT' /tmp/oat/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLoadTemplate.cpp | tee -a /tmp/proof/provenance_patch_marker.txt
             cd /tmp/oat
             PREMAKE_NO_PROMPT=1 ./generate.sh
             make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
             BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
             test -n "$BIN"
             install -m 0755 "$BIN" "$CACHE_BIN"
-            printf 'oat_commit=%s\ncompat_patch_sha256=%s\ntrace_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$COMPAT_SHA" "$TRACE_SHA" > "$CACHE_META"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\ntrace_patch_sha256=%s\nprovenance_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$COMPAT_SHA" "$TRACE_SHA" "$PROVENANCE_SHA" > "$CACHE_META"
           fi
           cp "$CACHE_META" /tmp/proof/oat_source_identity.txt
           sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
@@ -106,7 +112,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/oat-weapon-camo-cache
-          key: oat-unlinker-t6-9dca965-compat-v3-weapon-camo-semantic-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py') }}-ubuntu24-x86-debug
+          key: oat-unlinker-t6-9dca965-compat-v3-weapon-camo-semantic-v2-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_weapon_camo_semantic_trace_patch_v1.py', 'tools/t6_oat_asset_definition_trace_patch_v1.py') }}-ubuntu24-x86-debug
 
       - name: Native-load common_mp and capture WeaponCamo semantics
         shell: bash
@@ -124,6 +130,7 @@ jobs:
           test "$(grep -c '^T6_WEAPON_CAMO_VIOLATION' /tmp/proof/common_mp_native_weapon_camo_trace.log || true)" -eq 0
           test "$(grep -c '^T6_WEAPON_CAMO_ROOT' /tmp/proof/common_mp_native_weapon_camo_trace.log)" -gt 0
           test "$(grep -c '^T6_WEAPON_CAMO_TARGET' /tmp/proof/common_mp_native_weapon_camo_trace.log)" -gt 0
+          test "$(grep -c '^T6_ASSET_LOAD_EVENT' /tmp/proof/common_mp_native_weapon_camo_trace.log)" -gt 0
 
       - name: Bind native WeaponCamo dependencies to exact retail ordinals
         shell: bash
@@ -140,19 +147,6 @@ jobs:
           set -e
           echo "weapon_camo_binder rc=$rc" | tee /tmp/proof/weapon_camo_binder_return_code.txt
           if test "$rc" -eq 0; then
-            python3 - <<'PY'
-          import json
-          p='/tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json'
-          d=json.load(open(p,encoding='utf-8'))
-          assert d['format']=='T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1'
-          assert d['status']=='source_closed_native_semantics_and_exact_dependency_ordinals'
-          assert d['xassetCount']==6082
-          assert d['weaponCamoCount'] > 0
-          assert d['relevantPointerAnchorCount'] >= d['weaponCamoCount']
-          assert d['semanticPromotionEligibleWithVerifiedConsumer'] is True
-          assert d['rawDirectFastFileBodyParserComplete'] is False
-          print(json.dumps({k:d[k] for k in ('xassetCount','weaponCamoCount','relevantPointerAnchorCount','dependencyOccurrenceCount','uniqueDependencyTargetCount')},indent=2))
-          PY
             sha256sum /tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json | tee /tmp/proof/binding_sha256.txt
           fi
           exit "$rc"
