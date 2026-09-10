@@ -15,6 +15,7 @@ on:
       - 'tools/t6_oat_material_manifest_v4.py'
       - 'tools/t6_oat_material_manifest_v5.py'
       - 'tools/t6_oat_material_manifest_v6.py'
+      - 'tools/t6_oat_material_manifest_v7.py'
       - 'tools/t6_iwi27_mip_layout_proof_v2.py'
       - 'tools/t6_iwi27_dds_bridge_v1.py'
       - 'tools/t6_nuketown_shared_ipak_stage_v1.py'
@@ -156,28 +157,30 @@ jobs:
             --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json \
             2>&1 | tee /tmp/proof/material_union.log
 
-      - name: Build exact production OAT material dependency manifest
+      - name: Build exact production OAT material dependency manifest v7
         env:
           PYTHONPATH: tools
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_oat_material_manifest_v6.py \
+          python3 tools/t6_oat_material_manifest_v7.py \
             /tmp/oat_material_union \
             /tmp/proof/mp_nuketown_2020.material_catalog_source_v3_legacy_index_v1.json \
-            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json \
+            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json \
             --source-texture-extension .dds \
             2>&1 | tee /tmp/proof/material_manifest.log
           python3 - <<'PY'
           import json
-          p='/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json'
+          p='/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json'
           d=json.load(open(p)); s=d['stats']
           assert s['missingMaterialCount']==0,s
           assert len(d['materials'])==327,(len(d['materials']),s)
           assert s['ordinaryMaterialCount']==207,s
           assert s['compoundMaterialCount']==120,s
           assert s['exactGeneratedCompoundJsonCount']==120,s
-          assert s['exactFullComponentConcatenationValidationCount']==106,s
+          assert s['exactFullComponentConcatenationValidationCount']==0,s
+          assert s['exactComponentTexturePayloadMultisetValidationCount']==106,s
+          assert s['generatedComponentRuntimeBindingRewriteCount']==106,s
           assert s['generatedMaterialsWithComponentOnlyLayers']==14,s
           assert s['componentStandaloneMissingIdentityCount']==7,s
           assert s['componentStandaloneMissingLayerOccurrenceCount']==15,s
@@ -193,7 +196,7 @@ jobs:
             'wpc/decal_signage_const_marking01',
             'wpc/decal_signage_const_marking02',
           ],d['componentStandaloneMissingIdentities']
-          print('GREEN EXACT 327-MATERIAL PRODUCTION DEPENDENCY MANIFEST V6',json.dumps(s,sort_keys=True))
+          print('GREEN EXACT 327-MATERIAL PRODUCTION DEPENDENCY MANIFEST V7',json.dumps(s,sort_keys=True))
           PY
 
       - name: Materialize exact 81 pointer-proven retail IWI payloads
@@ -232,7 +235,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/t6_nuketown_production_texture_dependency_census_v2.py \
-            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V6.json \
+            --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json \
             --dds-bridge /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
             --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json \
             2>&1 | tee /tmp/proof/dependency_census.log
