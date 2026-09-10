@@ -116,7 +116,7 @@ def patch_template(root: Path) -> None:
         '            {\n'
         '                LINE("")\n'
         '                LINEF("std::fprintf(stderr, \\\"T6_ASSET_LOAD_EVENT\\\\t%u\\\\t0x%08llX\\\\t%lld\\\\t%p\\\\n\\\", "\n'
-        '                      "static_cast<unsigned>({0}), "\n'
+        '                      "static_cast<unsigned>({0}::EnumEntry), "\n'
         '                      "static_cast<unsigned long long>(t6ProofRawAssetPointer), "\n'
         '                      "static_cast<long long>(t6ProofSerializedPosition), "\n'
         '                      "static_cast<void*>(*pAsset));",\n'
