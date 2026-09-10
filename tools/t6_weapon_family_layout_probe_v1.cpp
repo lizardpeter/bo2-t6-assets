@@ -8,8 +8,77 @@
 
 #include "Common/Game/T6/T6_Assets.h"
 
+#define ASSERT_SIZE(type, expected) static_assert(sizeof(T6::type) == expected, "unexpected sizeof(" #type ")")
+#define ASSERT_OFF(type, field, expected) static_assert(offsetof(T6::type, field) == expected, "unexpected offsetof(" #type ", " #field ")")
 #define SIZEOF_ROW(type) std::printf("SIZE\t%s\t%zu\n", #type, sizeof(T6::type))
 #define OFF_ROW(type, field) std::printf("OFF\t%s\t%s\t%zu\n", #type, #field, offsetof(T6::type, field))
+
+ASSERT_SIZE(WeaponAttachment, 284);
+ASSERT_OFF(WeaponAttachment, szInternalName, 0);
+ASSERT_OFF(WeaponAttachment, szDisplayName, 4);
+ASSERT_OFF(WeaponAttachment, attachmentType, 8);
+ASSERT_OFF(WeaponAttachment, attachmentPoint, 12);
+
+ASSERT_SIZE(WeaponAttachmentUnique, 424);
+ASSERT_OFF(WeaponAttachmentUnique, szInternalName, 0);
+ASSERT_OFF(WeaponAttachmentUnique, attachmentType, 4);
+ASSERT_OFF(WeaponAttachmentUnique, siblingLink, 8);
+ASSERT_OFF(WeaponAttachmentUnique, childLink, 12);
+ASSERT_OFF(WeaponAttachmentUnique, combinedAttachmentTypeMask, 16);
+ASSERT_OFF(WeaponAttachmentUnique, szAltWeaponName, 20);
+ASSERT_OFF(WeaponAttachmentUnique, altWeaponIndex, 24);
+ASSERT_OFF(WeaponAttachmentUnique, szDualWieldWeaponName, 28);
+ASSERT_OFF(WeaponAttachmentUnique, dualWieldWeaponIndex, 32);
+ASSERT_OFF(WeaponAttachmentUnique, hideTags, 36);
+ASSERT_OFF(WeaponAttachmentUnique, viewModelTag, 60);
+ASSERT_OFF(WeaponAttachmentUnique, worldModelTag, 64);
+ASSERT_OFF(WeaponAttachmentUnique, weaponCamo, 164);
+ASSERT_OFF(WeaponAttachmentUnique, szXAnims, 232);
+ASSERT_OFF(WeaponAttachmentUnique, locationDamageMultipliers, 248);
+ASSERT_OFF(WeaponAttachmentUnique, fireSound, 256);
+ASSERT_OFF(WeaponAttachmentUnique, fireSoundPlayer, 260);
+ASSERT_OFF(WeaponAttachmentUnique, fireLoopSound, 264);
+ASSERT_OFF(WeaponAttachmentUnique, fireLoopSoundPlayer, 268);
+ASSERT_OFF(WeaponAttachmentUnique, fireLoopEndSound, 272);
+ASSERT_OFF(WeaponAttachmentUnique, fireLoopEndSoundPlayer, 276);
+ASSERT_OFF(WeaponAttachmentUnique, fireStartSound, 280);
+ASSERT_OFF(WeaponAttachmentUnique, fireStopSound, 284);
+ASSERT_OFF(WeaponAttachmentUnique, fireStartSoundPlayer, 288);
+ASSERT_OFF(WeaponAttachmentUnique, fireStopSoundPlayer, 292);
+ASSERT_OFF(WeaponAttachmentUnique, fireLastSound, 296);
+ASSERT_OFF(WeaponAttachmentUnique, fireLastSoundPlayer, 300);
+ASSERT_OFF(WeaponAttachmentUnique, fireKillcamSound, 304);
+ASSERT_OFF(WeaponAttachmentUnique, fireKillcamSoundPlayer, 308);
+ASSERT_OFF(WeaponAttachmentUnique, viewFlashEffect, 316);
+ASSERT_OFF(WeaponAttachmentUnique, worldFlashEffect, 320);
+ASSERT_OFF(WeaponAttachmentUnique, tracerType, 324);
+ASSERT_OFF(WeaponAttachmentUnique, enemyTracerType, 328);
+
+ASSERT_SIZE(WeaponCamo, 28);
+ASSERT_OFF(WeaponCamo, name, 0);
+ASSERT_OFF(WeaponCamo, solidBaseImage, 4);
+ASSERT_OFF(WeaponCamo, patternBaseImage, 8);
+ASSERT_OFF(WeaponCamo, camoSets, 12);
+ASSERT_OFF(WeaponCamo, numCamoSets, 16);
+ASSERT_OFF(WeaponCamo, camoMaterials, 20);
+ASSERT_OFF(WeaponCamo, numCamoMaterials, 24);
+
+ASSERT_SIZE(WeaponCamoSet, 20);
+ASSERT_OFF(WeaponCamoSet, solidCamoImage, 0);
+ASSERT_OFF(WeaponCamoSet, patternCamoImage, 4);
+ASSERT_OFF(WeaponCamoSet, patternOffset, 8);
+ASSERT_OFF(WeaponCamoSet, patternScale, 16);
+
+ASSERT_SIZE(WeaponCamoMaterialSet, 8);
+ASSERT_OFF(WeaponCamoMaterialSet, numMaterials, 0);
+ASSERT_OFF(WeaponCamoMaterialSet, materials, 4);
+
+ASSERT_SIZE(WeaponCamoMaterial, 44);
+ASSERT_OFF(WeaponCamoMaterial, replaceFlags, 0);
+ASSERT_OFF(WeaponCamoMaterial, numBaseMaterials, 2);
+ASSERT_OFF(WeaponCamoMaterial, baseMaterials, 4);
+ASSERT_OFF(WeaponCamoMaterial, camoMaterials, 8);
+ASSERT_OFF(WeaponCamoMaterial, shaderConsts, 12);
 
 int main()
 {
