@@ -1,0 +1,120 @@
+{
+  "schema": "t6_weapon_family_x86_layout_v1",
+  "status": "source_closed_layout_only",
+  "semantic_completion": false,
+  "notes": [
+    "This manifest freezes exact 32-bit T6 ABI sizes and selected offsets only.",
+    "It does not by itself prove serialized retail body ownership or semantic completion.",
+    "WeaponCamo nested serialized cardinalities are source-closed by the pinned OAT ZoneCode contract."
+  ],
+  "source": {
+    "oat_repository": "Laupetin/OpenAssetTools",
+    "oat_commit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "asset_header": "src/Common/Game/T6/T6_Assets.h",
+    "weapon_camo_zonecode": "src/ZoneCode/Game/T6/XAssets/WeaponCamo.txt",
+    "arch": "x86",
+    "pointer_bits": 32,
+    "probe": "tools/t6_weapon_family_layout_probe_v1.cpp",
+    "probe_commit": "716bd33044d325424a8592a6da040540eeb3b16b",
+    "probe_sha256": "44f0cf70cf822718967dfddf10304566314e573b8faa1176f350cd4d80a81935",
+    "workflow": ".github/workflows/t6_weapon_family_layout_probe_v1.yml",
+    "green_run_id": 34525535756,
+    "green_job_id": 103033386675,
+    "artifact_id": 10171400853,
+    "artifact_zip_sha256": "9df7b3588fbc5cbb8f8e7c207998018e6176c5c0f6be7c96b58e8627a9465ad5"
+  },
+  "structures": {
+    "WeaponAttachment": {
+      "size": 284,
+      "offsets": {
+        "szInternalName": 0,
+        "szDisplayName": 4,
+        "attachmentType": 8,
+        "attachmentPoint": 12
+      }
+    },
+    "WeaponAttachmentUnique": {
+      "size": 424,
+      "offsets": {
+        "szInternalName": 0,
+        "attachmentType": 4,
+        "siblingLink": 8,
+        "childLink": 12,
+        "combinedAttachmentTypeMask": 16,
+        "szAltWeaponName": 20,
+        "altWeaponIndex": 24,
+        "szDualWieldWeaponName": 28,
+        "dualWieldWeaponIndex": 32,
+        "hideTags": 36,
+        "viewModelTag": 60,
+        "worldModelTag": 64,
+        "weaponCamo": 164,
+        "szXAnims": 232,
+        "locationDamageMultipliers": 248,
+        "fireSound": 256,
+        "fireSoundPlayer": 260,
+        "fireLoopSound": 264,
+        "fireLoopSoundPlayer": 268,
+        "fireLoopEndSound": 272,
+        "fireLoopEndSoundPlayer": 276,
+        "fireStartSound": 280,
+        "fireStopSound": 284,
+        "fireStartSoundPlayer": 288,
+        "fireStopSoundPlayer": 292,
+        "fireLastSound": 296,
+        "fireLastSoundPlayer": 300,
+        "fireKillcamSound": 304,
+        "fireKillcamSoundPlayer": 308,
+        "viewFlashEffect": 316,
+        "worldFlashEffect": 320,
+        "tracerType": 324,
+        "enemyTracerType": 328
+      }
+    },
+    "WeaponCamo": {
+      "size": 28,
+      "offsets": {
+        "name": 0,
+        "solidBaseImage": 4,
+        "patternBaseImage": 8,
+        "camoSets": 12,
+        "numCamoSets": 16,
+        "camoMaterials": 20,
+        "numCamoMaterials": 24
+      }
+    },
+    "WeaponCamoSet": {
+      "size": 20,
+      "offsets": {
+        "solidCamoImage": 0,
+        "patternCamoImage": 4,
+        "patternOffset": 8,
+        "patternScale": 16
+      }
+    },
+    "WeaponCamoMaterialSet": {
+      "size": 8,
+      "offsets": {
+        "numMaterials": 0,
+        "materials": 4
+      }
+    },
+    "WeaponCamoMaterial": {
+      "size": 44,
+      "offsets": {
+        "replaceFlags": 0,
+        "numBaseMaterials": 2,
+        "baseMaterials": 4,
+        "camoMaterials": 8,
+        "shaderConsts": 12
+      }
+    }
+  },
+  "weapon_camo_serialization_cardinality": {
+    "WeaponCamo.camoSets": "numCamoSets",
+    "WeaponCamo.camoMaterials": "numCamoMaterials",
+    "WeaponCamoMaterialSet.materials": "numMaterials",
+    "WeaponCamoMaterial.baseMaterials": "numBaseMaterials",
+    "WeaponCamoMaterial.camoMaterials": "numBaseMaterials"
+  }
+}
