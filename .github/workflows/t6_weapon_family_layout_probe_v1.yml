@@ -27,14 +27,23 @@ jobs:
           git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
           test "$(git -C /tmp/oat rev-parse HEAD)" = '9dca965366541504b71fa8cfb7ac049cb9b717e1'
       - name: Compile and run exact 32-bit layout probe
+        id: compile
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           mkdir -p /tmp/proof
+          set +e
           g++ -m32 -std=c++20 -Wall -Wextra -Werror \
             -I/tmp/oat/src \
             tools/t6_weapon_family_layout_probe_v1.cpp \
-            -o /tmp/t6_weapon_layout_probe
+            -o /tmp/t6_weapon_layout_probe 2>&1 | tee /tmp/proof/compile.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "$rc" > /tmp/proof/compile_rc.txt
+          if test "$rc" -ne 0; then
+            exit "$rc"
+          fi
           file /tmp/t6_weapon_layout_probe | tee /tmp/proof/binary_file.txt
           /tmp/t6_weapon_layout_probe | tee /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
           grep -q $'^SIZE\tWeaponAttachment\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
@@ -45,6 +54,7 @@ jobs:
           sha256sum tools/t6_weapon_family_layout_probe_v1.cpp | tee /tmp/proof/probe_source_sha256.txt
           printf 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1\narch=x86\n' > /tmp/proof/source_identity.txt
       - name: Upload exact weapon family layout proof
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: T6_WEAPON_FAMILY_X86_LAYOUT_V1
@@ -52,3 +62,10 @@ jobs:
           if-no-files-found: error
           compression-level: 9
           retention-days: 30
+      - name: Require successful exact layout probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/proof/compile_rc.txt
+          test "$(cat /tmp/proof/compile_rc.txt)" -eq 0
+          test -s /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
