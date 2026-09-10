@@ -1,0 +1,131 @@
+{
+  "authority": {
+    "executable": "CoDMPServer_PC.exe",
+    "executableSha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "map": "CoDMPServer_PC.map",
+    "mapSha256": "34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf",
+    "materialCreateLayeredEndVaExclusive": "0x00A4E100",
+    "materialCreateLayeredInstructionCount": 494,
+    "materialCreateLayeredSha256": "505da556ae793f0a27a5e393dff0c9c1ff8f0be4a42c2935c5790c9c29535e42",
+    "materialCreateLayeredVa": "0x00A4DA60",
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "openAssetToolsT6AssetsHeaderSha256": "138ab62db70118e11a33f58fdc6c02ed5bd3beab7f589829053dc1a2976fdff9",
+    "sortComparatorSha256": "89c3ef79d0956caceb677fd742d376f28895d8788fd9ad7c1e88a4535d840952",
+    "sortManifestFormat": "t6-pc-server-layered-material-sort-v1"
+  },
+  "constantConstruction": {
+    "colorTint": {
+      "colorWhiteRawLe": "0000803f0000803f0000803f0000803f",
+      "colorWhiteVa": "0x00C67D50",
+      "colorWhiteVec4": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "literal": "colorTint",
+      "literalVa": "0x00D1CB00",
+      "missingSourceBehavior": "append one MaterialConstantDef named colorTint with literal copied from global colorWhite",
+      "nonzeroLayerDefaultRow": "the injected colorTint row is then subjected to the same bounded name suffix and incremental nameHash edit",
+      "sourcePresenceTest": "source constant nameHash equals precomputed R_HashString('colorTint', 0)"
+    },
+    "copy": "all 32 bytes are copied before per-layer edits",
+    "finalCountFormula": "sum(source.constantCount) + one for each source layer whose constant table contains no colorTint nameHash",
+    "nameArrayBytes": 12,
+    "nonzeroLayerHashEdit": "always nameHash = ((oldNameHash << 5) + oldNameHash) XOR sign_extend(layerDigitByte), even when name[12] is full",
+    "nonzeroLayerNameEdit": "scan name[12] for first NUL; if found, replace it with the layer digit and, when one byte remains, write a new NUL; if name[12] is full, no visible name byte is changed",
+    "recordSizeBytes": 32,
+    "sourceCountFieldOffset": "0x55",
+    "sourceTableFieldOffset": "0x64"
+  },
+  "finalization": {
+    "comparatorSha256": "89c3ef79d0956caceb677fd742d376f28895d8788fd9ad7c1e88a4535d840952",
+    "comparatorVa": "0x00A4D630",
+    "constantEntryAccounting": "(newConstEntry - newMtl->constantTable) / 32 == newMtl->constantCount",
+    "constantSort": "qsort 32-byte records by unsigned uint32 nameHash at +0",
+    "textureEntryAccounting": "(newTexEntry - newMtl->textureTable) / 16 == newMtl->textureCount",
+    "textureSort": "qsort 16-byte records by unsigned uint32 nameHash at +0"
+  },
+  "format": "t6-pc-server-layered-material-construction-v1",
+  "generatedMaterialName": {
+    "closeParenVa": "0x00B947AC",
+    "delimiterBytes": {
+      "closeParen": "29",
+      "openParen": "28",
+      "separator": "3a"
+    },
+    "openParenVa": "0x00B947B4",
+    "rule": "baseName + '(' + sourceMaterialName[0] + ':' + ... + sourceMaterialName[layerCount-1] + ')'",
+    "separatorVa": "0x00B91FC4"
+  },
+  "layering": {
+    "assertedLayerCountUpperBoundExclusive": 8,
+    "layerZeroSuffixByte": 0,
+    "nonzeroLayerSuffix": "single ASCII digit byte = layerIndex + 0x30",
+    "supportedAssertedNonzeroLayerIndices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "proofBoundary": "Exact construction semantics of SHA-pinned T6 PC dedicated-server Material_CreateLayered are source-closed by the complete 1696-byte body hash plus exact semantic instruction anchors, SHA-pinned PE literals/data, pinned T6 OpenAssetTools structure declarations, and the already-frozen final qsort proof. This is structural/runtime construction authority for the server. It does not claim the retail client executable is byte/behavior equivalent. For retail Nuketown, generated Material rows must still be independently reconciled against the exact retail FastFile/OAT dump before promotion. Missing standalone component Materials remain historically unresolved where their serialized source XAssets are absent; generated-runtime reconstruction is a separate, testable question.",
+  "structures": {
+    "materialConstantDef": {
+      "fieldOffsets": {
+        "literal": 16,
+        "name": 4,
+        "nameHash": 0
+      },
+      "nameBytes": 12,
+      "pinnedDeclaration": "unsigned int nameHash; char name[12]; vec4_t literal;",
+      "sizeBytesObservedByConstructor": 32
+    },
+    "materialTextureDef": {
+      "fieldOffsets": {
+        "image": 12,
+        "isMatureContent": 8,
+        "nameEnd": 5,
+        "nameHash": 0,
+        "nameStart": 4,
+        "samplerState": 6,
+        "semantic": 7
+      },
+      "pinnedDeclaration": "unsigned int nameHash; char nameStart; char nameEnd; MaterialTextureDefSamplerState samplerState; unsigned char semantic; bool isMatureContent; char pad[3]; GfxImage* image;",
+      "sizeBytesObservedByConstructor": 16
+    },
+    "openAssetToolsCommit": "9dca965366541504b71fa8cfb7ac049cb9b717e1"
+  },
+  "summary": {
+    "constantRecordConstructionClosed": true,
+    "defaultColorTintConstructionClosed": true,
+    "finalConstantSortClosed": true,
+    "finalTextureSortClosed": true,
+    "generatedNameConstructionClosed": true,
+    "historicalStandaloneSerializationRecovered": false,
+    "layerSuffixConstructionClosed": true,
+    "retailClientExecutableEquivalenceClaimed": false,
+    "textureRecordConstructionClosed": true
+  },
+  "textureConstruction": {
+    "copy": "all 16 bytes are copied before per-layer edits",
+    "hashInterpretationForIndices1To7": "exactly one additional T6 R_HashString/djb2_xor_nocase character for the ASCII layer digit",
+    "matureFlagRecompute": {
+      "imageOffsetFieldName": "UNRESOLVED_BY_THIS_PROOF",
+      "imagePointerFieldOffset": "0x0C",
+      "imageStringPointerObservedOffset": "0x48",
+      "isMatureContentFieldOffset": "0x08",
+      "otherwise": "strstr(*(texture.image + 0x48), '_mature') != NULL",
+      "semantic0Or1Result": false,
+      "semanticFieldOffset": "0x07"
+    },
+    "nonzeroLayerHashEdit": "nameHash = ((oldNameHash << 5) + oldNameHash) XOR sign_extend(layerDigitByte)",
+    "nonzeroLayerNameEdit": "overwrite MaterialTextureDef.nameEnd (+0x05) with the one-byte ASCII layer digit",
+    "recordSizeBytes": 16,
+    "sourceCountFieldOffset": "0x54",
+    "sourceTableFieldOffset": "0x60"
+  }
+}
