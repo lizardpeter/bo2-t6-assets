@@ -1,0 +1,141 @@
+name: T6 Nuketown Material manifest v7 proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/t6_oat_material_manifest_v7.py'
+      - '.github/workflows/t6_nuketown_material_manifest_v7_proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Require exact pinned OAT Unlinker cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-unlinker-cache/Unlinker
+
+      - name: Fetch exact five-root universe and expand Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/source/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
+          cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
+          /tmp/t6_expand /tmp/source/mp_nuketown_2020.ff /tmp/source/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/source/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+      - name: Rebuild exact source catalog
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_source
+          git -C /tmp/oat_source checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          python3 tools/t6_nuketown_material_memory_ownership_v1.py \
+            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
+            --oat-root /tmp/oat_source \
+            --out /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json
+          python3 tools/t6_nuketown_world_source_sidecars_v3.py \
+            --expanded /tmp/source/mp_nuketown_2020.expanded.bin \
+            --ownership-proof /tmp/proof/T6_NUKETOWN_MATERIAL_MEMORY_OWNERSHIP_V1.json \
+            --out-dir /tmp/proof/sidecars_v3
+          python3 tools/t6_world_material_catalog_legacy_index_v1.py \
+            /tmp/proof/sidecars_v3/mp_nuketown_2020.material_catalog_source_v3.json \
+            /tmp/proof/catalog_legacy.json
+
+      - name: Dump native Materials and build exact required union
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          : >/tmp/proof/roots.txt
+          for spec in map=mp_nuketown_2020.ff common=common_mp.ff common_patch=common_patch_mp.ff patch=patch_mp.ff code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}; root="/tmp/oat_$label"
+            mkdir -p "$root"
+            /tmp/oat-unlinker-cache/Unlinker --no-color --include-assets material --output-folder "$root" "/tmp/source/$file" >/tmp/proof/oat_$label.log 2>&1
+            matroot=$(find "$root" -type d -name materials -print -quit)
+            test -n "$matroot"
+            echo "$label $matroot" >>/tmp/proof/roots.txt
+          done
+          python3 tools/t6_oat_material_root_union_v1.py \
+            --root "map=$(awk '$1==\"map\"{print $2}' /tmp/proof/roots.txt)" \
+            --root "common=$(awk '$1==\"common\"{print $2}' /tmp/proof/roots.txt)" \
+            --root "common_patch=$(awk '$1==\"common_patch\"{print $2}' /tmp/proof/roots.txt)" \
+            --root "patch=$(awk '$1==\"patch\"{print $2}' /tmp/proof/roots.txt)" \
+            --root "code_post=$(awk '$1==\"code_post\"{print $2}' /tmp/proof/roots.txt)" \
+            --required-catalog /tmp/proof/catalog_legacy.json \
+            --out-root /tmp/oat_material_union \
+            --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json
+
+      - name: Build and prove Material manifest v7
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_oat_material_manifest_v7.py \
+            /tmp/oat_material_union \
+            /tmp/proof/catalog_legacy.json \
+            /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json \
+            --source-texture-extension .dds \
+            2>&1 | tee /tmp/proof/material_manifest_v7.log
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json'))
+          s=d['stats']
+          assert s['materialCount']==327,s
+          assert s['missingMaterialCount']==0,s
+          assert s['ordinaryMaterialCount']==207,s
+          assert s['compoundMaterialCount']==120,s
+          assert s['exactGeneratedCompoundJsonCount']==120,s
+          assert s['exactFullComponentConcatenationValidationCount']==0,s
+          assert s['exactComponentTexturePayloadMultisetValidationCount']==106,s
+          assert s['generatedComponentRuntimeBindingRewriteCount']==106,s
+          assert s['generatedMaterialsWithComponentOnlyLayers']==14,s
+          assert s['componentStandaloneMissingIdentityCount']==7,s
+          assert s['componentStandaloneMissingLayerOccurrenceCount']==15,s
+          assert s['componentStandaloneNormalValidationCount']==244,s
+          assert sum(1 for m in d['materials'] if isinstance(m.get('runtimeTextureTable'),list))==120
+          print('GREEN T6 NUKETOWN MATERIAL MANIFEST V7',json.dumps(s,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_MATERIAL_MANIFEST_V7_PROOF
+          path: /tmp/proof
+          if-no-files-found: error
