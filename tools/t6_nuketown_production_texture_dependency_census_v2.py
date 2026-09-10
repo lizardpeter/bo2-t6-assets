@@ -6,6 +6,10 @@ Material manifest's exact generated ``runtimeTextureTable``. For a generated
 Material that table is the sole production dependency authority; component layer
 metadata is never re-counted and missing standalone component boundaries are not
 inferred.
+
+This census intentionally has no fallback or tolerance path for unresolved image
+identity. A hosted rerun after ownership-union changes is therefore a useful
+fail-closed integration diagnostic for the complete production dependency graph.
 """
 from __future__ import annotations
 
