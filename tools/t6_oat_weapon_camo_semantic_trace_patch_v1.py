@@ -4,6 +4,9 @@
 Diagnostic only. The trace runs after the normal T6 loader has fully loaded the
 current XAsset and before varXAsset advances. It therefore observes native
 resolved pointers without changing stream, registration, or dump semantics.
+Relevant IMAGE, MATERIAL and WEAPON_CAMO XAssets are also emitted as pointer
+anchors so every camo dependency can be joined back to an exact retail ordinal
+without relying on name uniqueness.
 """
 from __future__ import annotations
 
@@ -26,6 +29,31 @@ namespace
         return material && material->info.name ? material->info.name : "<null>";
     }
 
+    void TraceT6WeaponCamoTarget(const size_t ordinal, const XAsset& asset)
+    {
+        const char* name = nullptr;
+        switch (asset.type)
+        {
+        case ASSET_TYPE_IMAGE:
+            name = T6WeaponCamoImageName(asset.header.image);
+            break;
+        case ASSET_TYPE_MATERIAL:
+            name = T6WeaponCamoMaterialName(asset.header.material);
+            break;
+        case ASSET_TYPE_WEAPON_CAMO:
+            name = asset.header.weaponCamo && asset.header.weaponCamo->name ? asset.header.weaponCamo->name : "<null>";
+            break;
+        default:
+            return;
+        }
+        std::fprintf(stderr,
+                     "T6_WEAPON_CAMO_TARGET\t%zu\t%u\t%p\t%s\n",
+                     ordinal,
+                     static_cast<unsigned>(asset.type),
+                     asset.header.data,
+                     name ? name : "<null>");
+    }
+
     void TraceT6WeaponCamo(const size_t ordinal, const XAsset& asset)
     {
         if (asset.type != ASSET_TYPE_WEAPON_CAMO)
@@ -39,12 +67,15 @@ namespace
         }
 
         std::fprintf(stderr,
-                     "T6_WEAPON_CAMO_ROOT\t%zu\t%s\t%u\t%u\t%s\t%s\n",
+                     "T6_WEAPON_CAMO_ROOT\t%zu\t%p\t%s\t%u\t%u\t%p\t%s\t%p\t%s\n",
                      ordinal,
+                     static_cast<const void*>(camo),
                      camo->name ? camo->name : "<null>",
                      camo->numCamoSets,
                      camo->numCamoMaterials,
+                     static_cast<const void*>(camo->solidBaseImage),
                      T6WeaponCamoImageName(camo->solidBaseImage),
+                     static_cast<const void*>(camo->patternBaseImage),
                      T6WeaponCamoImageName(camo->patternBaseImage));
 
         if (camo->numCamoSets && !camo->camoSets)
@@ -62,10 +93,12 @@ namespace
         {
             const auto& set = camo->camoSets[setIndex];
             std::fprintf(stderr,
-                         "T6_WEAPON_CAMO_SET\t%zu\t%u\t%s\t%s\t%a\t%a\t%a\n",
+                         "T6_WEAPON_CAMO_SET\t%zu\t%u\t%p\t%s\t%p\t%s\t%a\t%a\t%a\n",
                          ordinal,
                          setIndex,
+                         static_cast<const void*>(set.solidCamoImage),
                          T6WeaponCamoImageName(set.solidCamoImage),
+                         static_cast<const void*>(set.patternCamoImage),
                          T6WeaponCamoImageName(set.patternCamoImage),
                          static_cast<double>(set.patternOffset.x),
                          static_cast<double>(set.patternOffset.y),
@@ -120,14 +153,18 @@ namespace
 
                 for (unsigned overrideIndex = 0; overrideIndex < material.numBaseMaterials; ++overrideIndex)
                 {
+                    const auto* baseMaterial = material.baseMaterials[overrideIndex];
+                    const auto* camoMaterial = material.camoMaterials[overrideIndex];
                     std::fprintf(stderr,
-                                 "T6_WEAPON_CAMO_OVERRIDE\t%zu\t%u\t%u\t%u\t%s\t%s\n",
+                                 "T6_WEAPON_CAMO_OVERRIDE\t%zu\t%u\t%u\t%u\t%p\t%s\t%p\t%s\n",
                                  ordinal,
                                  materialSetIndex,
                                  materialIndex,
                                  overrideIndex,
-                                 T6WeaponCamoMaterialName(material.baseMaterials[overrideIndex]),
-                                 T6WeaponCamoMaterialName(material.camoMaterials[overrideIndex]));
+                                 static_cast<const void*>(baseMaterial),
+                                 T6WeaponCamoMaterialName(baseMaterial),
+                                 static_cast<const void*>(camoMaterial),
+                                 T6WeaponCamoMaterialName(camoMaterial));
                 }
             }
         }
@@ -160,15 +197,15 @@ def main() -> int:
     text = text.replace(helper_needle, helper_needle + HELPER + '\n', 1)
 
     loop_needle = '''    for (size_t index = 0; index < count; index++)\n    {\n        LoadXAsset(false);\n        varXAsset++;\n'''
-    loop_replacement = '''    for (size_t index = 0; index < count; index++)\n    {\n        LoadXAsset(false);\n        TraceT6WeaponCamo(index, *varXAsset);\n        varXAsset++;\n'''
+    loop_replacement = '''    for (size_t index = 0; index < count; index++)\n    {\n        LoadXAsset(false);\n        TraceT6WeaponCamoTarget(index, *varXAsset);\n        TraceT6WeaponCamo(index, *varXAsset);\n        varXAsset++;\n'''
     if text.count(loop_needle) != 1:
         raise SystemExit("unexpected pinned ContentLoaderT6 XAsset loop layout")
     text = text.replace(loop_needle, loop_replacement, 1)
 
-    if text.count(MARKER) != 1 or text.count('TraceT6WeaponCamo') != 2:
+    if text.count(MARKER) != 1 or text.count('TraceT6WeaponCamo(') != 2 or text.count('TraceT6WeaponCamoTarget(') != 2:
         raise SystemExit("WeaponCamo semantic trace patch did not close exactly")
     path.write_text(text, encoding="utf-8")
-    print(f"patched: {TARGET}: native WeaponCamo semantic trace")
+    print(f"patched: {TARGET}: native WeaponCamo semantic trace with pointer anchors")
     return 0
 
 
