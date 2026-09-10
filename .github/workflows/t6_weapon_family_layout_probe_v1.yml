@@ -1,0 +1,54 @@
+name: T6 weapon family x86 layout probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/t6_weapon_family_layout_probe_v1.cpp'
+      - '.github/workflows/t6_weapon_family_layout_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned OAT source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          test "$(git -C /tmp/oat rev-parse HEAD)" = '9dca965366541504b71fa8cfb7ac049cb9b717e1'
+      - name: Compile and run exact 32-bit layout probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          g++ -m32 -std=c++20 -Wall -Wextra -Werror \
+            -I/tmp/oat/src \
+            tools/t6_weapon_family_layout_probe_v1.cpp \
+            -o /tmp/t6_weapon_layout_probe
+          file /tmp/t6_weapon_layout_probe | tee /tmp/proof/binary_file.txt
+          /tmp/t6_weapon_layout_probe | tee /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          grep -q $'^SIZE\tWeaponAttachment\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          grep -q $'^SIZE\tWeaponAttachmentUnique\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          grep -q $'^SIZE\tWeaponCamo\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          grep -q $'^SIZE\tWeaponCamoMaterialSet\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          grep -q $'^SIZE\tWeaponCamoMaterial\t' /tmp/proof/T6_WEAPON_FAMILY_X86_LAYOUT_V1.tsv
+          sha256sum tools/t6_weapon_family_layout_probe_v1.cpp | tee /tmp/proof/probe_source_sha256.txt
+          printf 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1\narch=x86\n' > /tmp/proof/source_identity.txt
+      - name: Upload exact weapon family layout proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_WEAPON_FAMILY_X86_LAYOUT_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 30
