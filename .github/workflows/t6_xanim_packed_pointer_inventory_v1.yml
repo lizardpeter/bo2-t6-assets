@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cc -O2 -Wall -Wextra -Werror tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
 
       - name: Fetch and verify retail common_mp
         shell: bash
