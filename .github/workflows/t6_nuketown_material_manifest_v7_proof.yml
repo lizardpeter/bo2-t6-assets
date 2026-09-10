@@ -91,12 +91,18 @@ jobs:
             test -n "$matroot"
             echo "$label $matroot" >>/tmp/proof/roots.txt
           done
+          map_root=$(awk '$1=="map"{print $2}' /tmp/proof/roots.txt)
+          common_root=$(awk '$1=="common"{print $2}' /tmp/proof/roots.txt)
+          common_patch_root=$(awk '$1=="common_patch"{print $2}' /tmp/proof/roots.txt)
+          patch_root=$(awk '$1=="patch"{print $2}' /tmp/proof/roots.txt)
+          code_post_root=$(awk '$1=="code_post"{print $2}' /tmp/proof/roots.txt)
+          test -n "$map_root" -a -n "$common_root" -a -n "$common_patch_root" -a -n "$patch_root" -a -n "$code_post_root"
           python3 tools/t6_oat_material_root_union_v1.py \
-            --root "map=$(awk '$1==\"map\"{print $2}' /tmp/proof/roots.txt)" \
-            --root "common=$(awk '$1==\"common\"{print $2}' /tmp/proof/roots.txt)" \
-            --root "common_patch=$(awk '$1==\"common_patch\"{print $2}' /tmp/proof/roots.txt)" \
-            --root "patch=$(awk '$1==\"patch\"{print $2}' /tmp/proof/roots.txt)" \
-            --root "code_post=$(awk '$1==\"code_post\"{print $2}' /tmp/proof/roots.txt)" \
+            --root "map=$map_root" \
+            --root "common=$common_root" \
+            --root "common_patch=$common_patch_root" \
+            --root "patch=$patch_root" \
+            --root "code_post=$code_post_root" \
             --required-catalog /tmp/proof/catalog_legacy.json \
             --out-root /tmp/oat_material_union \
             --manifest /tmp/proof/T6_NUKETOWN_REQUIRED_OAT_MATERIAL_ROOT_UNION_V1.json
