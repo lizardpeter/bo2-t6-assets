@@ -1,0 +1,105 @@
+name: T6 XAnim packed pointer inventory v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/t6_xanim_packed_pointer_inventory_v1.py'
+      - 'tools/stage18d_xanim_full_inventory.py'
+      - 'tools/stage18d_xanim_delta.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_xanim_packed_pointer_inventory_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra -Werror tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+
+      - name: Fetch and verify retail common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6_xanim
+          curl -fL --retry 4 --retry-delay 2 \
+            -o /tmp/t6_xanim/common_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/t6_xanim/common_mp.ff' | sha256sum -c -
+
+      - name: Expand and verify exact common_mp XFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/t6_ff_expand /tmp/t6_xanim/common_mp.ff /tmp/t6_xanim/common_mp.expanded common_mp
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/t6_xanim/common_mp.expanded' | sha256sum -c -
+
+      - name: Regenerate exact 4233-record XAnim inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/stage18d_xanim_full_inventory.py \
+            --stream /tmp/t6_xanim/common_mp.expanded \
+            --delta-parser tools/stage18d_xanim_delta.py \
+            --out /tmp/t6_xanim/common_mp_xanim_full_inventory.json
+
+      - name: Inventory every XAnim pointer occurrence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_xanim_packed_pointer_inventory_v1.py \
+            /tmp/t6_xanim/common_mp.expanded \
+            --full-inventory /tmp/t6_xanim/common_mp_xanim_full_inventory.json \
+            --out /tmp/t6_xanim/common_mp_xanim_packed_pointer_inventory_v1.json
+
+      - name: Fail closed on retained common_mp canaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/t6_xanim/common_mp_xanim_packed_pointer_inventory_v1.json')
+          d=json.loads(p.read_text())
+          assert d['expandedSha256']=='fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce'
+          assert d['xanimCount']==4233, d['xanimCount']
+          assert d['fixedPointerOccurrences']==4233*11, d['fixedPointerOccurrences']
+          packed_names=[r for r in d['occurrences'] if r['field']=='XAnimParts.name' and r['pointer']['kind']=='packed']
+          assert len(packed_names)==1556, len(packed_names)
+          canary=[g for g in d['packedGroups'] if g['rawHex']=='0xA24CB877']
+          assert len(canary)==1, canary
+          assert 'XAnimParts.name' in canary[0]['fields'], canary[0]
+          assert 'direct_xstring' in canary[0]['classes'], canary[0]
+          assert sum(d['pointerKindCounts'].values())==d['pointerOccurrences']
+          print(json.dumps({
+              'status':'T6_XANIM_PACKED_POINTER_INVENTORY_COMMON_MP_EXACT',
+              'xanimCount':d['xanimCount'],
+              'fixedPointerOccurrences':d['fixedPointerOccurrences'],
+              'nestedPointerOccurrences':d['nestedPointerOccurrences'],
+              'pointerKindCounts':d['pointerKindCounts'],
+              'packedClassCounts':d['packedClassCounts'],
+              'packedBlockCounts':d['packedBlockCounts'],
+              'uniquePackedRawPointers':d['uniquePackedRawPointers'],
+              'packedNameCount':len(packed_names),
+              'canary':canary[0],
+          },indent=2))
+          PY
+
+      - name: Retain proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_XANIM_PACKED_POINTER_INVENTORY_V1
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            /tmp/t6_xanim/common_mp_xanim_full_inventory.json
+            /tmp/t6_xanim/common_mp_xanim_packed_pointer_inventory_v1.json
