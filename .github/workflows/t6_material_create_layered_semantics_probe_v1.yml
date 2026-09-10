@@ -67,6 +67,78 @@ jobs:
               print(row)
           PY
 
+      - name: Emit exact semantic instruction windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee /tmp/probe/semantic_windows.txt
+          import json
+          p='/tmp/probe/T6_PC_SERVER_MATERIAL_CREATE_LAYERED_PROBE_V1.json'
+          d=json.load(open(p))
+          rows=d['instructions']
+          interesting_calls={
+              '0x0078DFD0':'I_strncpyz',
+              '0x0078E510':'I_strncat',
+              '0x00A2A710':'R_HashString',
+              '0x00A4D980':'Material_CreateLayeredStateBitsTable',
+              '0x00A4D220':'Material_SetStateBits',
+              '0x00A4C8C0':'Material_SetMaterialDrawRegion',
+              '0x00A4D550':'Material_Validate',
+              '0x00AAE500':'strncpy',
+              '0x00AAFB40':'strstr',
+              '0x00AAD640':'memset',
+              '0x00AAE010':'qsort',
+          }
+          interesting_strings={
+              '0x00D1C9C4':'_mature',
+              '0x00D1C9D0':'constant-count assertion',
+              '0x00D1CA60':'texture-count assertion',
+              '0x00D1CAE4':'layer-count assertion',
+              '0x00D1CB00':'colorTint',
+              '0x00C67D50':'colorWhite',
+              '0x00C67D54':'colorWhite.y',
+              '0x00C67D58':'colorWhite.z',
+              '0x00C67D5C':'colorWhite.w',
+          }
+          hits=[]
+          for i,row in enumerate(rows):
+              labels=[]
+              for t in row.get('directTargets',[]):
+                  if t['va'] in interesting_calls:
+                      labels.append(interesting_calls[t['va']])
+              for op in row.get('operands',[]):
+                  va=op.get('value') if op.get('type')=='imm' else op.get('dispU32') if op.get('type')=='mem' and op.get('absolute') else None
+                  if va in interesting_strings:
+                      labels.append(interesting_strings[va])
+              if labels:
+                  hits.append((i,sorted(set(labels))))
+          if not hits:
+              raise SystemExit('no semantic-window anchors')
+          print('SEMANTIC_ANCHOR_COUNT',len(hits))
+          for ordinal,(i,labels) in enumerate(hits,1):
+              print(f'\n=== WINDOW {ordinal}: {", ".join(labels)} @ {rows[i]["address"]} ===')
+              lo=max(0,i-12); hi=min(len(rows),i+17)
+              for j in range(lo,hi):
+                  r=rows[j]
+                  mark='>>' if j==i else '  '
+                  print(f'{mark} {r["address"]} {r["bytes"]:<30} {r["mnemonic"]:<8} {r["opStr"]}')
+
+          # Also expose accesses to the already-proven generated Material table/count
+          # fields and nearby small structure offsets without assigning semantics.
+          exact_disps={0x54,0x55,0x60,0x64}
+          print('\n=== EXACT MATERIAL FIELD ACCESS CENSUS ===')
+          field_hits=0
+          for r in rows:
+              matched=[]
+              for op in r.get('operands',[]):
+                  if op.get('type')=='mem' and not op.get('absolute') and op.get('dispSigned') in exact_disps:
+                      matched.append(op.get('dispSigned'))
+              if matched:
+                  field_hits+=1
+                  print(r['address'],r['bytes'],r['mnemonic'],r['opStr'],'DISPS',matched)
+          print('EXACT_MATERIAL_FIELD_HIT_COUNT',field_hits)
+          PY
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
