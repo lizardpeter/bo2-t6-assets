@@ -303,11 +303,17 @@ def main() -> int:
     except UnionError as exc:
         if exc.diagnostic is not None:
             payload = write_manifest(args.manifest, exc.diagnostic)
+            summary = exc.diagnostic["summary"]
+            print("MATERIAL_UNION_FAILURE_SUMMARY " + json.dumps(summary, sort_keys=True))
+            for identity in exc.diagnostic["missing"]:
+                print("MATERIAL_UNION_MISSING " + json.dumps({"identity": identity}, sort_keys=True))
+            for row in exc.diagnostic["divergent"]:
+                print("MATERIAL_UNION_DIVERGENT " + json.dumps(row, sort_keys=True))
             failure = {
                 "manifest": str(args.manifest),
                 "bytes": len(payload),
                 "sha256": sha256(payload),
-                **exc.diagnostic["summary"],
+                **summary,
                 "missing": exc.diagnostic["missing"],
                 "divergent": exc.diagnostic["divergent"],
             }
