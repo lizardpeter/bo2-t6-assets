@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Emit an exact, fail-closed disassembly/annotation of T6 Material_CreateLayered.
 
-Authority is the SHA-pinned PC dedicated server executable and linker MAP.  This
+Authority is the SHA-pinned PC dedicated server executable and linker MAP. This
 is a structural probe only: it records the complete function body, direct branch
 and call targets, MAP labels, memory operands, immediates and raw-backed ASCII
-references.  It does not promote retail-client equivalence or infer semantics
+references. It does not promote retail-client equivalence or infer semantics
 from names.
 """
 from __future__ import annotations
@@ -77,7 +77,6 @@ def section_for_va(sections: list[dict], va: int) -> dict | None:
 
 
 def parse_map(text: str) -> tuple[dict[int, list[dict]], list[int]]:
-    # MSVC linker MAP public/static symbol rows. Keep every alias at a VA.
     line_re = re.compile(r"^\s*[0-9A-Fa-f]{4}:[0-9A-Fa-f]{8}\s+(\S+)\s+([0-9A-Fa-f]{8})(?:\s+f)?\s+(.+?\.obj)\s*$")
     by_va: dict[int, list[dict]] = {}
     for line in text.splitlines():
@@ -154,6 +153,8 @@ def build(exe_path: Path, map_path: Path) -> dict:
         if ins.address != cursor:
             raise ProbeError(f"disassembly gap at 0x{cursor:08X}; next 0x{ins.address:08X}")
         cursor += ins.size
+        is_call = ins.mnemonic == "call"
+        is_jump = ins.mnemonic.startswith("j")
         operands = []
         direct_targets = []
         for op in ins.operands:
@@ -170,7 +171,7 @@ def build(exe_path: Path, map_path: Path) -> dict:
                     "mapSymbols": by_va.get(value, []),
                     "ascii": text,
                 })
-                if ins.group(2) or ins.group(1):  # jump/call groups in capstone x86
+                if is_call or is_jump:
                     direct_targets.append(value)
             elif op.type == X86_OP_MEM:
                 mem = op.mem
@@ -199,14 +200,11 @@ def build(exe_path: Path, map_path: Path) -> dict:
             else:
                 operands.append({"type": "reg_or_other"})
 
-        is_call = ins.mnemonic == "call"
-        is_branch = ins.mnemonic.startswith("j") or is_call
-        if is_branch:
-            for t in direct_targets:
-                if is_call:
-                    call_targets[t] += 1
-                else:
-                    direct_branch_targets[t] += 1
+        for t in direct_targets:
+            if is_call:
+                call_targets[t] += 1
+            elif is_jump:
+                direct_branch_targets[t] += 1
 
         rows.append({
             "address": f"0x{ins.address:08X}",
@@ -223,8 +221,6 @@ def build(exe_path: Path, map_path: Path) -> dict:
 
     if cursor != EXPECTED_END_VA:
         raise ProbeError(f"disassembly ended at 0x{cursor:08X}, expected 0x{EXPECTED_END_VA:08X}")
-
-    # Require terminal instruction itself to end exactly at the next MAP symbol.
     if insns[-1].address + insns[-1].size != EXPECTED_END_VA:
         raise ProbeError("terminal instruction does not end on MAP boundary")
 
