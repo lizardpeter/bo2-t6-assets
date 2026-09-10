@@ -1,0 +1,64 @@
+{
+  "format": "t6-common-mp-xanim-packed-pointer-inventory-proof-v1",
+  "status": "T6_XANIM_PACKED_POINTER_INVENTORY_COMMON_MP_EXACT",
+  "recordedDate": "2026-09-10",
+  "source": {
+    "retailFastFile": "common_mp.ff",
+    "retailSha256": "93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77",
+    "expandedBytes": 206493911,
+    "expandedSha256": "fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce"
+  },
+  "workflow": {
+    "runId": 34439480791,
+    "jobId": 102751326612,
+    "commit": "1099debe390c82050c2e6f5d5f7f8c8a1bafe53b",
+    "artifactId": 10137389238,
+    "artifactName": "T6_XANIM_PACKED_POINTER_INVENTORY_V1",
+    "artifactBytes": 473222,
+    "artifactDigest": "sha256:86fe661f31a208668c4ade1fe45119faa33dc9205a36b0e097e67aa75155f87a"
+  },
+  "xassetCount": 6082,
+  "xanimCount": 4233,
+  "structuralInventory": {
+    "inlineRecordCount": 2677,
+    "packedNameRecordCount": 1556,
+    "countClosesExactly": true,
+    "endHitsAnotherRecordStart": 4079,
+    "overlapsNextStructuralRecord": 0
+  },
+  "pointerInventory": {
+    "fixedPointerOccurrences": 46563,
+    "nestedPointerOccurrences": 2334,
+    "pointerOccurrences": 48897,
+    "pointerKindCounts": {
+      "following": 33130,
+      "null": 14211,
+      "packed": 1556
+    },
+    "packedClassCounts": {
+      "direct_xstring": 1556
+    },
+    "packedBlockCounts": {
+      "5": 1556
+    },
+    "uniquePackedRawPointers": 1556,
+    "packedTempMemberPointerCount": 0,
+    "packedNestedPointerCount": 0,
+    "insertPointerCount": 0
+  },
+  "canary": {
+    "rawHex": "0xA24CB877",
+    "block": 5,
+    "offset": 38582390,
+    "occurrenceCount": 1,
+    "xassetIndices": [3366],
+    "fields": ["XAnimParts.name"],
+    "classes": ["direct_xstring"]
+  },
+  "conclusion": {
+    "commonMpPackedXAnimDataDependencyExists": false,
+    "commonMpPackedXAnimNamesRemain": true,
+    "statement": "Across the exact count-closed common_mp XAnim population, every packed pointer occurrence is an XAnimParts.name direct XString pointer in VIRTUAL block 5. No top-level XAnim data pool, deltaPart child, or nested delta pointer is packed, and no INSERT pointer occurs in the inventoried XAnim pointer surface. Therefore reusable-alias resolution is not a common_mp XAnim data blocker; packed-name resolution is the only packed-pointer class demonstrated by this census."
+  },
+  "proofBoundary": "This proves the enumerated pointer surface of the exact SHA-pinned common_mp expanded XFile only. It does not prove that other T6 XFiles lack packed XAnim data pointers, and it does not by itself resolve the 1556 packed name strings. The underlying artifact retains the complete occurrence/group inventory."
+}
