@@ -1,0 +1,177 @@
+name: T6 native OAT XAnim ordinal name binding v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/t6_oat_xanim_ordinal_trace_patch_v1.py'
+      - 'tools/t6_oat_xanim_ordinal_name_binding_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/stage18d_xanim_full_inventory.py'
+      - 'tools/stage18d_xanim_delta.py'
+      - '.github/workflows/t6_oat_xanim_ordinal_name_binding_v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+
+      - name: Fetch and verify exact common_mp retail FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/proof /tmp/xanim
+          curl -fL --retry 4 --retry-delay 2 \
+            -o /tmp/game/zone/all/common_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          sha256sum /tmp/game/zone/all/common_mp.ff | tee /tmp/proof/common_mp_ff_sha256.txt
+
+      - name: Expand and regenerate exact Stage18D XAnim census
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/t6_ff_expand /tmp/game/zone/all/common_mp.ff /tmp/xanim/common_mp.expanded common_mp
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/xanim/common_mp.expanded' | sha256sum -c -
+          python3 tools/stage18d_xanim_full_inventory.py \
+            --stream /tmp/xanim/common_mp.expanded \
+            --delta-parser tools/stage18d_xanim_delta.py \
+            --out /tmp/xanim/common_mp_xanim_full_inventory.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/xanim/common_mp_xanim_full_inventory.json',encoding='utf-8'))
+          assert d['raw_xasset_expected_xanim_count']==4233
+          assert d['structural_record_count']==4233
+          assert d['inline_record_count']==2677
+          assert d['packed_name_record_count']==1556
+          assert d['count_closes_exactly'] is True
+          assert d['overlaps_next_structural_record']==0
+          PY
+
+      - name: Restore instrumented pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-xanim-trace-cache
+          key: oat-unlinker-t6-9dca965-compat-v3-xanim-ordinal-trace-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_xanim_ordinal_trace_patch_v1.py') }}-ubuntu24-x86-debug
+
+      - name: Build or verify instrumented pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/oat-xanim-trace-cache /tmp/proof
+          CACHE_BIN=/tmp/oat-xanim-trace-cache/Unlinker
+          CACHE_META=/tmp/oat-xanim-trace-cache/source_identity.txt
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          COMPAT_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          TRACE_SHA=$(sha256sum tools/t6_oat_xanim_ordinal_trace_patch_v1.py | awk '{print $1}')
+          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
+            test -x "$CACHE_BIN"
+            test -f "$CACHE_META"
+            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
+            grep -qx "compat_patch_sha256=$COMPAT_SHA" "$CACHE_META"
+            grep -qx "trace_patch_sha256=$TRACE_SHA" "$CACHE_META"
+            echo cache_hit=true | tee /tmp/proof/oat_cache.txt
+          else
+            echo cache_hit=false | tee /tmp/proof/oat_cache.txt
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+            test "$(git -C /tmp/oat rev-parse HEAD)" = "$EXPECTED_COMMIT"
+            git -C /tmp/oat submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+            python3 tools/t6_oat_xanim_ordinal_trace_patch_v1.py /tmp/oat
+            git -C /tmp/oat diff --check
+            grep -n 'T6_XANIM_ORDINAL_NAME' /tmp/oat/src/ZoneLoading/Game/T6/ContentLoaderT6.cpp | tee /tmp/proof/trace_patch_marker.txt
+            cd /tmp/oat
+            PREMAKE_NO_PROMPT=1 ./generate.sh
+            make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            install -m 0755 "$BIN" "$CACHE_BIN"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\ntrace_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$COMPAT_SHA" "$TRACE_SHA" > "$CACHE_META"
+          fi
+          cp "$CACHE_META" /tmp/proof/oat_source_identity.txt
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
+
+      - name: Save instrumented pinned OAT Unlinker cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-xanim-trace-cache
+          key: oat-unlinker-t6-9dca965-compat-v3-xanim-ordinal-trace-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_xanim_ordinal_trace_patch_v1.py') }}-ubuntu24-x86-debug
+
+      - name: Native-load common_mp and capture XAnim ordinal trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/oat_out /tmp/proof
+          set +e
+          "$BIN" --no-color --verbose --include-assets soundbank --output-folder /tmp/oat_out /tmp/game/zone/all/common_mp.ff \
+            2>&1 | tee /tmp/proof/common_mp_native_xanim_ordinal_trace.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "common_mp_native_load rc=$rc" | tee /tmp/proof/native_load_return_code.txt
+          test "$rc" -eq 0
+          test "$(grep -c '^T6_XANIM_ORDINAL_NAME' /tmp/proof/common_mp_native_xanim_ordinal_trace.log)" -eq 4233
+
+      - name: Bind native resolved names to retail source ordinals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_oat_xanim_ordinal_name_binding_v1.py \
+            --expanded /tmp/xanim/common_mp.expanded \
+            --inventory /tmp/xanim/common_mp_xanim_full_inventory.json \
+            --native-log /tmp/proof/common_mp_native_xanim_ordinal_trace.log \
+            --oat-commit 9dca965366541504b71fa8cfb7ac049cb9b717e1 \
+            --out /tmp/proof/T6_OAT_XANIM_ORDINAL_NAME_BINDING_V1.json
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_OAT_XANIM_ORDINAL_NAME_BINDING_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['xassetCount']==6082, d['xassetCount']
+          assert d['xanimCount']==4233, d['xanimCount']
+          assert d['inlineNameCount']==2677, d['inlineNameCount']
+          assert d['inlineNativeAgreementCount']==2677, d['inlineNativeAgreementCount']
+          assert d['packedNameCount']==1556, d['packedNameCount']
+          assert d['packedNativeResolvedCount']==1556, d['packedNativeResolvedCount']
+          assert d['unresolvedNameCount']==0, d['unresolvedNameCount']
+          c=d['canary']
+          assert c['xassetIndex']==3366, c
+          assert c['rawNamePointer']=='0xA24CB877', c
+          assert c['nativeResolvedName']=='viewmodel_lsat_grip_reload_empty', c
+          print(json.dumps({k:d[k] for k in (
+              'format','oatCommit','expandedSha256','nativeLogSha256','xassetCount','xanimCount',
+              'inlineNameCount','inlineNativeAgreementCount','packedNameCount','packedNativeResolvedCount',
+              'unresolvedNameCount','uniqueResolvedNameCount','duplicateResolvedNameGroupCount')},indent=2))
+          print('CANARY',json.dumps(c,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_OAT_XANIM_ORDINAL_NAME_BINDING_V1.json | tee /tmp/proof/binding_sha256.txt
+
+      - name: Upload exact native XAnim ordinal/name proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_OAT_XANIM_ORDINAL_NAME_BINDING_V1
+          path: |
+            /tmp/proof
+            /tmp/xanim/common_mp_xanim_full_inventory.json
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 30
