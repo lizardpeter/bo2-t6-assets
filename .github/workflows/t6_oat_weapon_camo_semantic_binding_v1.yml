@@ -129,12 +129,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +e
           python3 tools/t6_oat_weapon_camo_semantic_binding_v1.py \
             --expanded /tmp/xasset/common_mp.expanded \
             --native-log /tmp/proof/common_mp_native_weapon_camo_trace.log \
             --oat-commit 9dca965366541504b71fa8cfb7ac049cb9b717e1 \
-            --out /tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json
-          python3 - <<'PY'
+            --out /tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json \
+            2>&1 | tee /tmp/proof/weapon_camo_binder.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "weapon_camo_binder rc=$rc" | tee /tmp/proof/weapon_camo_binder_return_code.txt
+          if test "$rc" -eq 0; then
+            python3 - <<'PY'
           import json
           p='/tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json'
           d=json.load(open(p,encoding='utf-8'))
@@ -147,9 +153,12 @@ jobs:
           assert d['rawDirectFastFileBodyParserComplete'] is False
           print(json.dumps({k:d[k] for k in ('xassetCount','weaponCamoCount','relevantPointerAnchorCount','dependencyOccurrenceCount','uniqueDependencyTargetCount')},indent=2))
           PY
-          sha256sum /tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json | tee /tmp/proof/binding_sha256.txt
+            sha256sum /tmp/proof/T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1.json | tee /tmp/proof/binding_sha256.txt
+          fi
+          exit "$rc"
 
       - name: Upload native WeaponCamo semantic proof
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: T6_OAT_WEAPON_CAMO_SEMANTIC_BINDING_V1
