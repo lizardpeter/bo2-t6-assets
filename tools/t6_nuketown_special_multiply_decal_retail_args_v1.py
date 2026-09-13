@@ -2,14 +2,13 @@
 """Read exact retained MaterialShaderArgument rows for Nuketown multiply decals.
 
 This proof walks the SHA-pinned expanded mp_nuketown_2020 FastFile directly. It
-selects the exact wpc_unlitdecalblend_multiply_35079164 TechniqueSet and aligns
-serialized argument tables with its unlit/emissive passes in parse order.
+selects the exact wpc_unlitdecalblend_multiply_35079164 TechniqueSet and its
+physically inline unlit slot-2 pass. The emissive slot-3 Technique is retained as
+its exact packed pointer provenance and is not deserialized by resemblance.
 
-The map Technique may legally reference packed/reused shader objects. Shader
-byte identity is therefore deliberately not re-proved here; the separate exact
-OAT/VS proof pins the multiply-decal VS/PS pair. This artifact proves only the
-retail map ownership and exact serialized MaterialShaderArgument rows, without
-inventing an inline shader duplicate or semantic source value.
+Shader byte identity remains a separate already-green OAT/VS proof. This file
+proves the retail map ownership and exact serialized unlit MaterialShaderArgument
+rows without inventing packed-pointer aliases or runtime constant values.
 """
 from __future__ import annotations
 
@@ -123,6 +122,16 @@ def shader_reference(pass_row: dict[str, Any], stage: str, expected_sha: str) ->
     return out
 
 
+def plain_pointer(ref: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "slot": int(ref["slot"]),
+        "pointerRaw": ref.get("raw"),
+        "pointerKind": ref.get("kind"),
+        "block": ref.get("block"),
+        "offset": ref.get("offset"),
+    }
+
+
 def build(expanded: Path, producer: Path) -> dict[str, Any]:
     data = expanded.read_bytes()
     got = hashlib.sha256(data).hexdigest()
@@ -175,39 +184,39 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
     if gi != len(groups):
         raise ProofError(f"captured argument table overflow: consumed {gi} / {len(groups)}")
 
-    selected = {}
-    for label, slot in (("unlit", UNLIT_SLOT), ("emissive", EMISSIVE_SLOT)):
-        refs = [r for r in technique_set["techniqueRefs"] if int(r["slot"]) == slot]
-        if len(refs) != 1 or not refs[0].get("inlineTechnique"):
-            raise ProofError(f"{label} slot {slot} is not one exact inline Technique")
-        technique = refs[0]["inlineTechnique"]
-        passes = technique["passes"]
-        if len(passes) != 1:
-            raise ProofError(f"{label} slot has {len(passes)} passes, expected one")
-        pass_row = passes[0]
-        args = argument_groups.get((slot, int(pass_row["passIndex"])))
-        if args is None:
-            raise ProofError(f"{label} exact pass has no direct captured argument table")
-        if len(args) != int(pass_row["argCount"]):
-            raise ProofError(f"{label} argument count mismatch {len(args)} != {pass_row['argCount']}")
-        selected[label] = {
-            "slot": slot,
-            "technique": technique.get("name"),
-            "passIndex": int(pass_row["passIndex"]),
-            "argCount": int(pass_row["argCount"]),
-            "vertexShaderReference": shader_reference(pass_row, "vertexShader", PINNED_VS_SHA256),
-            "pixelShaderReference": shader_reference(pass_row, "pixelShader", PINNED_PS_SHA256),
-            "arguments": args,
-            "codeVertexConstants": [a for a in args if a["type"] == CODE_VERTEX_CONST],
-        }
+    unlit_refs = [r for r in technique_set["techniqueRefs"] if int(r["slot"]) == UNLIT_SLOT]
+    if len(unlit_refs) != 1 or not unlit_refs[0].get("inlineTechnique"):
+        raise ProofError("unlit slot 2 is not one exact inline Technique")
+    unlit_technique = unlit_refs[0]["inlineTechnique"]
+    if len(unlit_technique["passes"]) != 1:
+        raise ProofError(f"unlit slot has {len(unlit_technique['passes'])} passes, expected one")
+    pass_row = unlit_technique["passes"][0]
+    args = argument_groups.get((UNLIT_SLOT, int(pass_row["passIndex"])))
+    if args is None:
+        raise ProofError("unlit exact pass has no direct captured argument table")
+    if len(args) != int(pass_row["argCount"]):
+        raise ProofError(f"unlit argument count mismatch {len(args)} != {pass_row['argCount']}")
+    code_vs = [a for a in args if a["type"] == CODE_VERTEX_CONST]
+    if not code_vs:
+        raise ProofError("selected exact unlit pass has no code vertex constants")
 
-    if selected["unlit"]["arguments"] != selected["emissive"]["arguments"]:
-        raise ProofError("unlit/emissive exact retail MaterialShaderArgument rows differ")
-    if not selected["unlit"]["codeVertexConstants"]:
-        raise ProofError("selected exact pass has no code vertex constants")
+    emissive_refs = [r for r in technique_set["techniqueRefs"] if int(r["slot"]) == EMISSIVE_SLOT]
+    if len(emissive_refs) != 1:
+        raise ProofError(f"emissive slot 3 occurrence count {len(emissive_refs)}")
+    if emissive_refs[0].get("kind") != "packed" or emissive_refs[0].get("inlineTechnique") is not None:
+        raise ProofError("emissive slot 3 is not the exact packed Technique reference observed in retail Nuketown")
 
-    common_args = selected["unlit"]["arguments"]
-    code_vs = selected["unlit"]["codeVertexConstants"]
+    unlit = {
+        "slot": UNLIT_SLOT,
+        "technique": unlit_technique.get("name"),
+        "passIndex": int(pass_row["passIndex"]),
+        "argCount": int(pass_row["argCount"]),
+        "vertexShaderReference": shader_reference(pass_row, "vertexShader", PINNED_VS_SHA256),
+        "pixelShaderReference": shader_reference(pass_row, "pixelShader", PINNED_PS_SHA256),
+        "arguments": args,
+        "codeVertexConstants": code_vs,
+    }
+
     return {
         "format": FORMAT,
         "producer": "tools/t6_nuketown_special_multiply_decal_retail_args_v1.py",
@@ -225,25 +234,21 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
             "pixelShaderSha256": PINNED_PS_SHA256,
             "note": "Exact shader bytes/DAG are pinned by the separate OAT/VS symbolic proof; packed map references are not aliased to bytes here.",
         },
-        "unlit": selected["unlit"],
-        "emissive": selected["emissive"],
-        "unlitAndEmissiveArgumentRowsIdentical": True,
-        "commonArguments": common_args,
-        "commonCodeVertexConstants": code_vs,
+        "unlit": unlit,
+        "emissiveTechniqueReference": plain_pointer(emissive_refs[0]),
         "summary": {
-            "argumentCount": len(common_args),
+            "argumentCount": len(args),
             "codeVertexConstantCount": len(code_vs),
             "codeVertexConstantIndices": [a["codeIndex"] for a in code_vs],
             "codeVertexConstantRowsSha256": digest(code_vs),
-            "allArgumentRowsSha256": digest(common_args),
-            "unlitVertexShaderPointerKind": selected["unlit"]["vertexShaderReference"]["pointerKind"],
-            "unlitPixelShaderPointerKind": selected["unlit"]["pixelShaderReference"]["pointerKind"],
-            "emissiveVertexShaderPointerKind": selected["emissive"]["vertexShaderReference"]["pointerKind"],
-            "emissivePixelShaderPointerKind": selected["emissive"]["pixelShaderReference"]["pointerKind"],
+            "allArgumentRowsSha256": digest(args),
+            "unlitVertexShaderPointerKind": unlit["vertexShaderReference"]["pointerKind"],
+            "unlitPixelShaderPointerKind": unlit["pixelShaderReference"]["pointerKind"],
+            "emissiveTechniquePointerKind": emissive_refs[0]["kind"],
         },
         "proofBoundary": (
             "Direct retained-byte proof from the SHA-pinned expanded mp_nuketown_2020 FastFile. "
-            "The exact multiply-decal TechniqueSet is selected by serialized name; slots 2/3 must each contain one inline Technique/pass. Their shader references are retained exactly as packed/following/insert pointers; inline shader payloads are SHA-checked when physically present, but packed references are never guessed or aliased. MaterialShaderArgument rows are decoded directly from their 12-byte retail records and must be identical across unlit/emissive. Type 3 is the serialized code-vertex-constant class and its codeIndex/firstRow/rowCount fields are reported exactly. Shader-byte identity remains a separate already-pinned proof. No semantic name or runtime value is inferred from the numeric code source in this artifact."
+            "The exact multiply-decal TechniqueSet is selected by serialized name. Slot 2 must contain one physically inline unlit Technique/pass and its MaterialShaderArgument rows are decoded directly from 12-byte retail records. Slot 3 is required to remain the exact packed emissive Technique reference and is not deserialized by resemblance. Inline shader payloads are SHA-checked when physically present; packed shader references remain opaque and shader-byte identity is supplied only by the separate already-pinned OAT/VS proof. Type 3 is the serialized code-vertex-constant class and its codeIndex/firstRow/rowCount fields are reported exactly. No semantic runtime value is inferred here."
         ),
     }
 
@@ -263,7 +268,7 @@ def main() -> int:
     a.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result["summary"], indent=2, sort_keys=True))
     print("CODE VERTEX CONSTANT ROWS")
-    for row in result["commonCodeVertexConstants"]:
+    for row in result["unlit"]["codeVertexConstants"]:
         print(json.dumps(row, sort_keys=True))
     return 0
 
