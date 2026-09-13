@@ -62,10 +62,12 @@ jobs:
           assert d['map']=='mp_nuketown_2020'
           assert d['techniqueSet']=='wpc_unlitdecalblend_multiply_35079164'
           assert d['unlitAndEmissiveArgumentRowsIdentical'] is True
-          assert d['unlit']['vertexShader']['sha256']=='c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0'
-          assert d['unlit']['pixelShader']['sha256']=='e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b'
-          assert d['emissive']['vertexShader']['sha256']==d['unlit']['vertexShader']['sha256']
-          assert d['emissive']['pixelShader']['sha256']==d['unlit']['pixelShader']['sha256']
+          s=d['separateShaderIdentityProof']
+          assert s['vertexShaderSha256']=='c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0'
+          assert s['pixelShaderSha256']=='e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b'
+          for family in ('unlit','emissive'):
+              for stage in ('vertexShaderReference','pixelShaderReference'):
+                  assert d[family][stage]['pointerKind'] in ('packed','following','insert')
           assert d['summary']['codeVertexConstantCount'] > 0
           print('GREEN EXACT RETAIL MULTIPLY-DECAL ARGUMENT ROWS')
           print(json.dumps(d['commonCodeVertexConstants'],indent=2,sort_keys=True))
