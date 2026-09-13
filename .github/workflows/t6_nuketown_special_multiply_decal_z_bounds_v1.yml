@@ -40,7 +40,7 @@ jobs:
           /tmp/t6_fastfile_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020 2> /tmp/proof/expand.log
           echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
 
-      - name: Prove target surface Z bounds and exponential branch
+      - name: Prove indexed target Z bounds and exponential branch
         shell: bash
         run: |
           set -euo pipefail
@@ -60,12 +60,16 @@ jobs:
           d=json.load(open(p,encoding='utf-8'))
           assert d['format']=='t6-nuketown-special-multiply-decal-z-bounds-v1'
           assert d['cohort']['materialCount']==3
-          assert d['cohort']['surfaceCount'] > 0
-          assert d['fogBranch']['allTargetGeometryXNegative'] is True
-          assert d['fogBranch']['maximumXOverCohortBounds'] < 0.0
+          assert d['cohort']['surfaceCount']==15
+          assert d['fogBranch']['allTargetIndexedGeometryXNegative'] is True
+          assert d['fogBranch']['maximumXOverIndexedCohort'] < 0.0
           assert d['maxDensityCancellation']['maxDensityCancels'] is True
-          assert all(m['allSurfacesExponentialBranch'] for m in d['cohort']['materials'])
-          print('GREEN T6 MULTIPLY-DECAL Z BOUNDS / MAX-DENSITY CANCELLATION')
+          assert all(m['allIndexedVerticesExponentialBranch'] for m in d['cohort']['materials'])
+          assert all(
+              s['allIndexedVerticesXNegative'] and s['uniqueIndexedVertexCount'] > 0
+              for m in d['cohort']['materials'] for s in m['surfaces']
+          )
+          print('GREEN T6 INDEXED MULTIPLY-DECAL Z BOUNDS / MAX-DENSITY CANCELLATION')
           PY
 
       - name: Upload branch proof
