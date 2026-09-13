@@ -3,7 +3,8 @@
 
 The proof stays entirely on retained retail bytes:
   expanded FastFile -> exact GfxSurface rows -> exact MaterialMemory alias slots
-  -> strict serialized Material child order -> three pinned multiply-decal names.
+  -> strict serialized Material child order -> exact surface index slices
+  -> local indices into the exact 36-byte VD0 vertex groups -> float32 POSITION.z.
 
 For the exact multiply-decal VS, after substituting the recovered fog-vector
 construction and an eye-relative native-T6 worldMatrix,
@@ -13,13 +14,14 @@ construction and an eye-relative native-T6 worldMatrix,
         - heightDensity * ln(2) * (sourceVertexZ - baseHeight).
 
 With positive heightDensity, x is monotonically decreasing in sourceVertexZ.
-Therefore the serialized minimum Z of each GfxSurface is sufficient to prove
-whether *all* vertices on that surface remain in the retail shader's x < 0
-exponential branch.  No vertex decode or geometric approximation is needed.
+The proof therefore computes the minimum Z from the *actual indexed retail
+vertices* used by each target surface. Serialized GfxSurface mins/maxs are kept
+only as diagnostics because this decal cohort stores zeros there.
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import math
@@ -38,7 +40,6 @@ TARGETS = (
     "wpc/me_decal_adobe_top_01",
 )
 
-# Authoritative MaterialMemory ownership closure retained by sidecars v3.
 MATERIAL_MEMORY_PHYSICAL_START = 84_463_050
 MATERIAL_MEMORY_PHYSICAL_END = 84_465_666
 MATERIAL_MEMORY_VIRTUAL_BLOCK = 5
@@ -46,11 +47,10 @@ MATERIAL_MEMORY_VIRTUAL_START = 71_642_512
 MATERIAL_MEMORY_VIRTUAL_END = 71_645_128
 MATERIAL_MEMORY_RECORD_BYTES = 8
 
-# SHA-pinned authored GfxWorldFog values, duplicated here only as exact proof
-# constants so this tool does not depend on a generated sidecar artifact.
+VD0_STRIDE = 36
 BASE_HEIGHT = -400.0
 HALF_HEIGHT = 3333.74560546875
-DENSITY_OVER_MAX_DENSITY = 0.01  # 1 / 100 for the lineage-backed conditioning scale.
+DENSITY_OVER_MAX_DENSITY = 0.01
 
 
 class ProofError(RuntimeError):
@@ -59,6 +59,40 @@ class ProofError(RuntimeError):
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def align_up(value: int, alignment: int) -> int:
+    return (value + alignment - 1) & -alignment
+
+
+def group_vertex_counts(surfaces: list[dict], vd0_bytes: int) -> dict[int, int]:
+    grouped: dict[int, list[dict]] = collections.defaultdict(list)
+    for surface in surfaces:
+        grouped[int(surface["vertexDataOffset0"])].append(surface)
+    offsets = sorted(grouped)
+    out: dict[int, int] = {}
+    for ordinal, offset in enumerate(offsets):
+        next_offset = offsets[ordinal + 1] if ordinal + 1 < len(offsets) else vd0_bytes
+        span = next_offset - offset
+        candidates = [
+            n
+            for n in range(max(0, span // VD0_STRIDE - 2), span // VD0_STRIDE + 2)
+            if align_up(VD0_STRIDE * n, 16) == span
+        ]
+        if len(candidates) != 1:
+            raise ProofError(
+                f"VD0 group at {offset} does not have one source-closed vertex count: "
+                f"span={span} candidates={candidates}"
+            )
+        count = candidates[0]
+        stored = sorted({int(s["vertexCount"]) for s in grouped[offset] if int(s["vertexCount"]) > 0})
+        if stored and stored != [count]:
+            raise ProofError(f"VD0 group {offset} stored vertex counts {stored} != span count {count}")
+        first_vertices = {int(s["firstVertex"]) for s in grouped[offset]}
+        if len(first_vertices) != 1:
+            raise ProofError(f"VD0 group {offset} surfaces disagree on firstVertex: {first_vertices}")
+        out[offset] = count
+    return out
 
 
 def build(expanded: Path) -> dict:
@@ -71,6 +105,16 @@ def build(expanded: Path) -> dict:
     surfaces = sidecar._surface_rows(data, world)
     if len(surfaces) != sidecar.SURFACE_COUNT:
         raise ProofError("GfxSurface count drift")
+
+    vd0 = data[sidecar.VD0_START:sidecar.VD0_END]
+    index_bytes = data[sidecar.INDEX_START:sidecar.INDEX_END]
+    if sha(vd0) != sidecar.VD0_SHA256:
+        raise ProofError("canonical VD0 identity drift")
+    if sha(index_bytes) != sidecar.INDEX_SHA256 or len(index_bytes) != sidecar.INDEX_COUNT * 2:
+        raise ProofError("canonical index-buffer identity drift")
+    group_counts = group_vertex_counts(surfaces, len(vd0))
+    if len(group_counts) != sidecar.EXPECTED_GROUP_COUNT:
+        raise ProofError(f"VD0 group count {len(group_counts)} != {sidecar.EXPECTED_GROUP_COUNT}")
 
     # Re-close the v3 MaterialMemory ownership facts locally. The 327 fixed
     # records are FOLLOW-owned children and the 327 packed surface aliases form
@@ -101,49 +145,83 @@ def build(expanded: Path) -> dict:
     materials, _tech_qs = sidecar._material_chain(data, blocks, identity)
     if len(materials) != sidecar.MATERIAL_COUNT:
         raise ProofError("strict serialized Material child count drift")
-    material_by_ptr = {
-        raw: material for raw, material in zip(surface_ptrs, materials)
-    }
+    material_by_ptr = {raw: material for raw, material in zip(surface_ptrs, materials)}
 
     height_density = 1.0 / HALF_HEIGHT
     log_ratio = math.log(DENSITY_OVER_MAX_DENSITY)
-    threshold_z = BASE_HEIGHT + log_ratio / (height_density * math.log(2.0))
+    height_factor = height_density * math.log(2.0)
+    threshold_z = BASE_HEIGHT + log_ratio / height_factor
 
-    grouped: dict[str, list[dict]] = {name: [] for name in TARGETS}
+    target_surfaces: dict[str, list[dict]] = {name: [] for name in TARGETS}
     for surface in surfaces:
         raw = int(surface["materialPointerRaw"], 16)
         material = material_by_ptr[raw]
         name = material["name"]
-        if name not in grouped:
+        if name not in target_surfaces:
             continue
-        min_z = float(surface["mins"][2])
-        max_z = float(surface["maxs"][2])
-        if not (math.isfinite(min_z) and math.isfinite(max_z) and min_z <= max_z):
-            raise ProofError(f"surface {surface['index']} invalid native Z bounds")
-        x_at_min_z = log_ratio - height_density * math.log(2.0) * (min_z - BASE_HEIGHT)
-        x_at_max_z = log_ratio - height_density * math.log(2.0) * (max_z - BASE_HEIGHT)
+
+        group_offset = int(surface["vertexDataOffset0"])
+        group_count = group_counts[group_offset]
+        first_index = int(surface["baseIndex"])
+        index_count = int(surface["triCount"]) * 3
+        end_index = first_index + index_count
+        if not (0 <= first_index <= end_index <= sidecar.INDEX_COUNT):
+            raise ProofError(f"surface {surface['index']} invalid retail index slice {first_index}:{end_index}")
+        local_indices = [
+            struct.unpack_from("<H", index_bytes, 2 * i)[0]
+            for i in range(first_index, end_index)
+        ]
+        if not local_indices:
+            raise ProofError(f"target surface {surface['index']} has no retail indices")
+        if max(local_indices) >= group_count:
+            raise ProofError(
+                f"surface {surface['index']} local index {max(local_indices)} >= VD0 group count {group_count}"
+            )
+
+        unique_indices = sorted(set(local_indices))
+        positions: list[tuple[float, float, float]] = []
+        for local_index in unique_indices:
+            offset = group_offset + local_index * VD0_STRIDE
+            if offset + 12 > len(vd0):
+                raise ProofError(f"surface {surface['index']} indexed POSITION exceeds canonical VD0")
+            position = struct.unpack_from("<3f", vd0, offset)
+            if not all(math.isfinite(value) for value in position):
+                raise ProofError(f"surface {surface['index']} has non-finite indexed POSITION")
+            positions.append(position)
+
+        min_z = min(p[2] for p in positions)
+        max_z = max(p[2] for p in positions)
+        x_at_min_z = log_ratio - height_factor * (min_z - BASE_HEIGHT)
+        x_at_max_z = log_ratio - height_factor * (max_z - BASE_HEIGHT)
         if not x_at_min_z < 0.0:
             raise ProofError(
                 f"{name} surface {surface['index']} reaches non-exponential fog branch: "
-                f"minZ={min_z} x(max)={x_at_min_z} threshold={threshold_z}"
+                f"indexedMinZ={min_z} x(max)={x_at_min_z} threshold={threshold_z}"
             )
-        grouped[name].append(
+
+        target_surfaces[name].append(
             {
                 "surfaceIndex": int(surface["index"]),
                 "materialPointerRaw": surface["materialPointerRaw"],
+                "vd0GroupOffset": group_offset,
+                "vd0GroupVertexCount": group_count,
                 "firstVertex": int(surface["firstVertex"]),
-                "vertexCount": int(surface["vertexCount"]),
-                "baseIndex": int(surface["baseIndex"]),
+                "storedVertexCount": int(surface["vertexCount"]),
+                "baseIndex": first_index,
                 "triCount": int(surface["triCount"]),
-                "nativeMinZ": min_z,
-                "nativeMaxZ": max_z,
-                "xAtMinZ": x_at_min_z,
-                "xAtMaxZ": x_at_max_z,
-                "allVerticesXNegative": True,
+                "indexCount": index_count,
+                "uniqueIndexedVertexCount": len(unique_indices),
+                "indexedNativeMinZ": min_z,
+                "indexedNativeMaxZ": max_z,
+                "serializedMinsZDiagnostic": float(surface["mins"][2]),
+                "serializedMaxsZDiagnostic": float(surface["maxs"][2]),
+                "xAtIndexedMinZ": x_at_min_z,
+                "xAtIndexedMaxZ": x_at_max_z,
+                "allIndexedVerticesXNegative": True,
             }
         )
 
-    missing = [name for name, rows in grouped.items() if not rows]
+    missing = [name for name, rows in target_surfaces.items() if not rows]
     if missing:
         raise ProofError(f"target multiply-decal Materials have no GfxSurface rows: {missing}")
 
@@ -152,14 +230,14 @@ def build(expanded: Path) -> dict:
     all_max_z = -math.inf
     max_x = -math.inf
     surface_count = 0
-    vertex_upper_bound_count = 0
+    unique_vertex_sum = 0
     for name in TARGETS:
-        rows = sorted(grouped[name], key=lambda row: row["surfaceIndex"])
+        rows = sorted(target_surfaces[name], key=lambda row: row["surfaceIndex"])
         surface_count += len(rows)
-        vertex_upper_bound_count += sum(row["vertexCount"] for row in rows)
-        min_z = min(row["nativeMinZ"] for row in rows)
-        max_z = max(row["nativeMaxZ"] for row in rows)
-        material_max_x = max(row["xAtMinZ"] for row in rows)
+        unique_vertex_sum += sum(row["uniqueIndexedVertexCount"] for row in rows)
+        min_z = min(row["indexedNativeMinZ"] for row in rows)
+        max_z = max(row["indexedNativeMaxZ"] for row in rows)
+        material_max_x = max(row["xAtIndexedMinZ"] for row in rows)
         all_min_z = min(all_min_z, min_z)
         all_max_z = max(all_max_z, max_z)
         max_x = max(max_x, material_max_x)
@@ -167,17 +245,14 @@ def build(expanded: Path) -> dict:
             {
                 "material": name,
                 "surfaceCount": len(rows),
-                "nativeMinZ": min_z,
-                "nativeMaxZ": max_z,
-                "maximumXOverSerializedBounds": material_max_x,
-                "allSurfacesExponentialBranch": material_max_x < 0.0,
+                "indexedNativeMinZ": min_z,
+                "indexedNativeMaxZ": max_z,
+                "maximumXOverIndexedVertices": material_max_x,
+                "allIndexedVerticesExponentialBranch": material_max_x < 0.0,
                 "surfaces": rows,
             }
         )
 
-    # In x<0 branch, q and G both carry density/maxDensity while F.y carries
-    # -maxDensity, so the conditioning maxDensity cancels exactly. Seal the
-    # algebra as a machine-readable identity rather than an explanatory note.
     cancellation = {
         "branch": "x < 0",
         "q": "(density/maxDensity) * exp(-heightDensity*ln(2)*(sourceZ-baseHeight))",
@@ -197,26 +272,33 @@ def build(expanded: Path) -> dict:
             "surfaceArrayStart": sidecar.SURFACE_START,
             "surfaceRecordBytes": sidecar.SURFACE_BYTES,
             "surfaceCount": sidecar.SURFACE_COUNT,
+            "vd0Start": sidecar.VD0_START,
+            "vd0End": sidecar.VD0_END,
+            "vd0Sha256": sidecar.VD0_SHA256,
+            "vd0Stride": VD0_STRIDE,
+            "indexStart": sidecar.INDEX_START,
+            "indexEnd": sidecar.INDEX_END,
+            "indexSha256": sidecar.INDEX_SHA256,
         },
         "fogBranch": {
             "baseHeight": BASE_HEIGHT,
             "halfHeight": HALF_HEIGHT,
             "densityOverMaxDensity": DENSITY_OVER_MAX_DENSITY,
             "xZeroNativeZ": threshold_z,
-            "cohortNativeMinZ": all_min_z,
-            "cohortNativeMaxZ": all_max_z,
-            "maximumXOverCohortBounds": max_x,
-            "allTargetGeometryXNegative": max_x < 0.0,
+            "cohortIndexedNativeMinZ": all_min_z,
+            "cohortIndexedNativeMaxZ": all_max_z,
+            "maximumXOverIndexedCohort": max_x,
+            "allTargetIndexedGeometryXNegative": max_x < 0.0,
         },
         "cohort": {
             "materialCount": len(TARGETS),
             "surfaceCount": surface_count,
-            "surfaceVertexCountUpperBound": vertex_upper_bound_count,
+            "sumUniqueIndexedVerticesPerSurface": unique_vertex_sum,
             "materials": material_rows,
         },
         "maxDensityCancellation": cancellation,
         "proofBoundary": (
-            "Exact retained retail GfxSurface native bounds and exact MaterialMemory-to-Material ownership prove every vertex of the three multiply-decal Materials lies in the VS x<0 exponential branch. Within that branch the symbolic T6 equation cancels maxDensity algebraically, so the original CPU choice of maxDensity conditioning scale cannot affect this cohort's shader output. This does not close the independent sunFogPitch/sunFogYaw direction convention."
+            "Exact retained retail GfxSurface index slices, canonical uint16 index buffer, exact 36-byte VD0 POSITION records, and exact MaterialMemory-to-Material ownership prove every indexed vertex of the three multiply-decal Materials lies in the VS x<0 exponential branch. Within that branch the symbolic T6 equation cancels maxDensity algebraically, so the original CPU choice of maxDensity conditioning scale cannot affect this cohort's shader output. Serialized GfxSurface mins/maxs are diagnostic only for this cohort because they are zero. This does not close the independent sunFogPitch/sunFogYaw direction convention."
         ),
     }
     stable = json.dumps(summary, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -236,9 +318,9 @@ def main() -> int:
     print(json.dumps({
         row["material"]: {
             "surfaces": row["surfaceCount"],
-            "minZ": row["nativeMinZ"],
-            "maxZ": row["nativeMaxZ"],
-            "maxX": row["maximumXOverSerializedBounds"],
+            "minZ": row["indexedNativeMinZ"],
+            "maxZ": row["indexedNativeMaxZ"],
+            "maxX": row["maximumXOverIndexedVertices"],
         }
         for row in doc["cohort"]["materials"]
     }, indent=2, sort_keys=True))
