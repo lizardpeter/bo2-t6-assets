@@ -1,0 +1,71 @@
+name: T6 Nuketown sun direction witness v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_sun_direction_witness_v1.py'
+      - 'tools/t6_nuketown_comworld_primary_lights_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_nuketown_sun_direction_witness_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_nuketown_sun_direction_witness_v1.py \
+            tools/t6_nuketown_comworld_primary_lights_v1.py
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lcrypto -lz
+          mkdir -p /tmp/proof
+
+      - name: Download and exactly expand retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          /tmp/t6_fastfile_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020 2> /tmp/proof/expand.log
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+      - name: Prove T6 world-sun angle/sign convention
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_sun_direction_witness_v1.py \
+            --expanded /tmp/mp_nuketown_2020.expanded.bin \
+            --out /tmp/proof/T6_NUKETOWN_SUN_DIRECTION_WITNESS_V1.json \
+            | tee /tmp/proof/sun_direction_witness.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_SUN_DIRECTION_WITNESS_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-nuketown-sun-direction-witness-v1'
+          assert d['map']=='mp_nuketown_2020'
+          assert d['nativeDirectionalPrimaryLight']['type']==1
+          assert d['worldSunDirectionMatch']['forwardConventionMatches'] is True
+          assert d['worldSunDirectionMatch']['forwardError']['maxAbs'] < 2.0e-6
+          assert d['worldSunDirectionMatch']['negatedForwardError']['maxAbs'] > 1.0
+          print('GREEN T6 NUKETOWN SUN DIRECTION WITNESS')
+          print('proofSha256',d['proofSha256'])
+          PY
+
+      - name: Upload T6 sun direction witness
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_SUN_DIRECTION_WITNESS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
