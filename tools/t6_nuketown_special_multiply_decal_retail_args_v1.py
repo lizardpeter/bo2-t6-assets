@@ -2,11 +2,14 @@
 """Read exact retained MaterialShaderArgument rows for Nuketown multiply decals.
 
 This proof walks the SHA-pinned expanded mp_nuketown_2020 FastFile directly. It
-selects the exact wpc_unlitdecalblend_multiply_35079164 TechniqueSet, aligns the
-serialized argument tables with the unlit/emissive passes in parse order, and
-requires the pinned direct VS/PS pair in both slots. No OAT text assignment is
-used to infer source identities here; code-source indices are read directly from
-the retail 12-byte MaterialShaderArgument records.
+selects the exact wpc_unlitdecalblend_multiply_35079164 TechniqueSet and aligns
+serialized argument tables with its unlit/emissive passes in parse order.
+
+The map Technique may legally reference packed/reused shader objects. Shader
+byte identity is therefore deliberately not re-proved here; the separate exact
+OAT/VS proof pins the multiply-decal VS/PS pair. This artifact proves only the
+retail map ownership and exact serialized MaterialShaderArgument rows, without
+inventing an inline shader duplicate or semantic source value.
 """
 from __future__ import annotations
 
@@ -27,8 +30,8 @@ TECH_Q1 = 623
 TECHNIQUE_SET = "wpc_unlitdecalblend_multiply_35079164"
 UNLIT_SLOT = 2
 EMISSIVE_SLOT = 3
-VS_SHA256 = "c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0"
-PS_SHA256 = "e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b"
+PINNED_VS_SHA256 = "c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0"
+PINNED_PS_SHA256 = "e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b"
 CODE_VERTEX_CONST = 3
 
 
@@ -92,15 +95,32 @@ def parse_arg_rows(data: bytes, start: int, count: int, blocks, prod):
     return cursor, rows
 
 
-def direct_shader(pass_row: dict[str, Any], stage: str) -> dict[str, Any]:
+def shader_reference(pass_row: dict[str, Any], stage: str, expected_sha: str) -> dict[str, Any]:
     child = pass_row["children"][stage]
+    kind = str(child.get("kind"))
+    if kind not in ("following", "insert", "packed"):
+        raise ProofError(f"selected {stage} has unsupported pointer kind {kind!r}")
+    out = {
+        "pointerRaw": child.get("raw"),
+        "pointerKind": kind,
+        "block": child.get("block"),
+        "offset": child.get("offset"),
+    }
     inline = child.get("inline")
-    if not inline:
-        raise ProofError(f"selected {stage} is not physically inline")
-    program = inline.get("program") or {}
-    if not program.get("direct"):
-        raise ProofError(f"selected {stage} program is not physically direct")
-    return inline
+    if inline is not None:
+        program = inline.get("program") or {}
+        if not program.get("direct"):
+            raise ProofError(f"selected inline {stage} is not a direct program")
+        got = str(program.get("sha256") or "")
+        if got != expected_sha:
+            raise ProofError(f"selected inline {stage} SHA {got} != pinned {expected_sha}")
+        out["inline"] = {
+            "name": inline.get("name"),
+            "sha256": got,
+            "sourceStart": program.get("start"),
+            "byteCount": program.get("bytes"),
+        }
+    return out
 
 
 def build(expanded: Path, producer: Path) -> dict[str, Any]:
@@ -165,12 +185,6 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
         if len(passes) != 1:
             raise ProofError(f"{label} slot has {len(passes)} passes, expected one")
         pass_row = passes[0]
-        vs = direct_shader(pass_row, "vertexShader")
-        ps = direct_shader(pass_row, "pixelShader")
-        if vs["program"]["sha256"] != VS_SHA256 or ps["program"]["sha256"] != PS_SHA256:
-            raise ProofError(
-                f"{label} exact shader identity {vs['program']['sha256']}/{ps['program']['sha256']} differs"
-            )
         args = argument_groups.get((slot, int(pass_row["passIndex"])))
         if args is None:
             raise ProofError(f"{label} exact pass has no direct captured argument table")
@@ -181,18 +195,8 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
             "technique": technique.get("name"),
             "passIndex": int(pass_row["passIndex"]),
             "argCount": int(pass_row["argCount"]),
-            "vertexShader": {
-                "name": vs.get("name"),
-                "sha256": vs["program"]["sha256"],
-                "sourceStart": vs["program"]["start"],
-                "byteCount": vs["program"]["bytes"],
-            },
-            "pixelShader": {
-                "name": ps.get("name"),
-                "sha256": ps["program"]["sha256"],
-                "sourceStart": ps["program"]["start"],
-                "byteCount": ps["program"]["bytes"],
-            },
+            "vertexShaderReference": shader_reference(pass_row, "vertexShader", PINNED_VS_SHA256),
+            "pixelShaderReference": shader_reference(pass_row, "pixelShader", PINNED_PS_SHA256),
             "arguments": args,
             "codeVertexConstants": [a for a in args if a["type"] == CODE_VERTEX_CONST],
         }
@@ -216,6 +220,11 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
         "techniqueSet": TECHNIQUE_SET,
         "techniqueSetXassetIndex": TECH_Q0 + ordinal,
         "worldVertFormat": technique_set["worldVertFormat"],
+        "separateShaderIdentityProof": {
+            "vertexShaderSha256": PINNED_VS_SHA256,
+            "pixelShaderSha256": PINNED_PS_SHA256,
+            "note": "Exact shader bytes/DAG are pinned by the separate OAT/VS symbolic proof; packed map references are not aliased to bytes here.",
+        },
         "unlit": selected["unlit"],
         "emissive": selected["emissive"],
         "unlitAndEmissiveArgumentRowsIdentical": True,
@@ -227,10 +236,14 @@ def build(expanded: Path, producer: Path) -> dict[str, Any]:
             "codeVertexConstantIndices": [a["codeIndex"] for a in code_vs],
             "codeVertexConstantRowsSha256": digest(code_vs),
             "allArgumentRowsSha256": digest(common_args),
+            "unlitVertexShaderPointerKind": selected["unlit"]["vertexShaderReference"]["pointerKind"],
+            "unlitPixelShaderPointerKind": selected["unlit"]["pixelShaderReference"]["pointerKind"],
+            "emissiveVertexShaderPointerKind": selected["emissive"]["vertexShaderReference"]["pointerKind"],
+            "emissivePixelShaderPointerKind": selected["emissive"]["pixelShaderReference"]["pointerKind"],
         },
         "proofBoundary": (
             "Direct retained-byte proof from the SHA-pinned expanded mp_nuketown_2020 FastFile. "
-            "The exact multiply-decal TechniqueSet is selected by serialized name; slots 2/3 must each contain one inline Technique/pass and the pinned direct VS/PS pair. MaterialShaderArgument rows are decoded directly from their 12-byte retail records and must be identical across unlit/emissive. Type 3 is retained as the serialized code-vertex-constant class and its codeIndex/firstRow/rowCount fields are reported exactly. No semantic name or runtime value is inferred from the numeric code source in this artifact."
+            "The exact multiply-decal TechniqueSet is selected by serialized name; slots 2/3 must each contain one inline Technique/pass. Their shader references are retained exactly as packed/following/insert pointers; inline shader payloads are SHA-checked when physically present, but packed references are never guessed or aliased. MaterialShaderArgument rows are decoded directly from their 12-byte retail records and must be identical across unlit/emissive. Type 3 is the serialized code-vertex-constant class and its codeIndex/firstRow/rowCount fields are reported exactly. Shader-byte identity remains a separate already-pinned proof. No semantic name or runtime value is inferred from the numeric code source in this artifact."
         ),
     }
 
