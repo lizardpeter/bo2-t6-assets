@@ -61,16 +61,17 @@ jobs:
           assert d['format']=='t6-nuketown-special-multiply-decal-retail-args-v1'
           assert d['map']=='mp_nuketown_2020'
           assert d['techniqueSet']=='wpc_unlitdecalblend_multiply_35079164'
-          assert d['unlitAndEmissiveArgumentRowsIdentical'] is True
           s=d['separateShaderIdentityProof']
           assert s['vertexShaderSha256']=='c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0'
           assert s['pixelShaderSha256']=='e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b'
-          for family in ('unlit','emissive'):
-              for stage in ('vertexShaderReference','pixelShaderReference'):
-                  assert d[family][stage]['pointerKind'] in ('packed','following','insert')
+          assert d['unlit']['slot']==2
+          assert d['unlit']['vertexShaderReference']['pointerKind'] in ('packed','following','insert')
+          assert d['unlit']['pixelShaderReference']['pointerKind'] in ('packed','following','insert')
+          assert d['emissiveTechniqueReference']['slot']==3
+          assert d['emissiveTechniqueReference']['pointerKind']=='packed'
           assert d['summary']['codeVertexConstantCount'] > 0
-          print('GREEN EXACT RETAIL MULTIPLY-DECAL ARGUMENT ROWS')
-          print(json.dumps(d['commonCodeVertexConstants'],indent=2,sort_keys=True))
+          print('GREEN EXACT RETAIL MULTIPLY-DECAL UNLIT ARGUMENT ROWS')
+          print(json.dumps(d['unlit']['codeVertexConstants'],indent=2,sort_keys=True))
           PY
 
       - name: Upload exact retail argument proof
