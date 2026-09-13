@@ -1,0 +1,76 @@
+name: T6 camera-relative world contract v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_camera_relative_world_contract_v1.py'
+      - 'tools/t6_nuketown_special_multiply_decal_fade_formula_v1.py'
+      - 'manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json'
+      - '.github/workflows/t6_camera_relative_world_contract_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile verifier
+        run: python3 -m py_compile tools/t6_camera_relative_world_contract_v1.py
+
+      - name: Fetch pinned renderer-lineage sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-camera-proof
+          T6=a64812d21946baf710cec7fa26b98ad0d193903b
+          T5=2a7785269d2f969ecc1ce2931679a8a39536f5dd
+          curl -fL --retry 4 -o /tmp/t6-camera-proof/t6_all_types.h \
+            "https://raw.githubusercontent.com/builtbyxeno/OpenBO2/${T6}/src/code/src_noserver/all_types.h"
+          curl -fL --retry 4 -o /tmp/t6-camera-proof/t6_r_draw_xmodel.cpp \
+            "https://raw.githubusercontent.com/builtbyxeno/OpenBO2/${T6}/src/code/src_noserver/gfx_d3d/r_draw_xmodel.cpp"
+          curl -fL --retry 4 -o /tmp/t6-camera-proof/t5_r_draw_staticmodel.cpp \
+            "https://raw.githubusercontent.com/SwagSoftware/KisakBlack/${T5}/src/gfx_d3d/r_draw_staticmodel.cpp"
+          curl -fL --retry 4 -o /tmp/t6-camera-proof/t5_r_state_utils.cpp \
+            "https://raw.githubusercontent.com/SwagSoftware/KisakBlack/${T5}/src/gfx_d3d/r_state_utils.cpp"
+          sha256sum /tmp/t6-camera-proof/* | tee /tmp/t6-camera-proof/source_sha256.txt
+
+      - name: Prove eye-relative worldMatrix contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_camera_relative_world_contract_v1.py \
+            --lprobe manifests/render/T6_RETAIL_LPROBE_LIT_SEMANTICS_V1.json \
+            --fade-tool tools/t6_nuketown_special_multiply_decal_fade_formula_v1.py \
+            --t6-types /tmp/t6-camera-proof/t6_all_types.h \
+            --t6-xmodel /tmp/t6-camera-proof/t6_r_draw_xmodel.cpp \
+            --t5-static /tmp/t6-camera-proof/t5_r_draw_staticmodel.cpp \
+            --t5-state /tmp/t6-camera-proof/t5_r_state_utils.cpp \
+            --out /tmp/t6-camera-proof/T6_CAMERA_RELATIVE_WORLD_CONTRACT_V1.json \
+            | tee /tmp/t6-camera-proof/proof.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/t6-camera-proof/T6_CAMERA_RELATIVE_WORLD_CONTRACT_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-camera-relative-world-contract-v1'
+          assert d['engineEvidence']=={
+            't5StaticModelSubtractsEyeOffset': True,
+            't5WorldIdentitySubtractsEyeOffset': True,
+            't6HasEyeOffset': True,
+            't6ModelWorldBuilderAcceptsEyeOffset': True,
+          }
+          assert 'eye-relative' in d['conclusion']
+          print('GREEN T6 CAMERA-RELATIVE WORLD CONTRACT')
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CAMERA_RELATIVE_WORLD_CONTRACT_V1
+          path: /tmp/t6-camera-proof
+          if-no-files-found: error
+          compression-level: 0
