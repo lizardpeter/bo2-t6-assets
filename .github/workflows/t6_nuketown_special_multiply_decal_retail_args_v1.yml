@@ -1,0 +1,80 @@
+name: T6 Nuketown multiply-decal retail args v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_special_multiply_decal_retail_args_v1.py'
+      - 'tools/t6_retail_reflection_probe_texcoord5_producer_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_nuketown_special_multiply_decal_retail_args_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lcrypto -lz
+          mkdir -p /tmp/proof
+          sha256sum /tmp/t6_fastfile_expand > /tmp/proof/expander_sha256.txt
+
+      - name: Download and exactly expand retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          /tmp/t6_fastfile_expand \
+            /tmp/mp_nuketown_2020.ff \
+            /tmp/mp_nuketown_2020.expanded.bin \
+            mp_nuketown_2020 \
+            2> /tmp/proof/expand.log
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+          sha256sum /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin > /tmp/proof/source_sha256.txt
+
+      - name: Read exact multiply-decal MaterialShaderArgument rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_nuketown_special_multiply_decal_retail_args_v1.py
+          PYTHONPATH=tools python3 tools/t6_nuketown_special_multiply_decal_retail_args_v1.py \
+            --expanded /tmp/mp_nuketown_2020.expanded.bin \
+            --out /tmp/proof/T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_RETAIL_ARGS_V1.json \
+            | tee /tmp/proof/retail_args.log
+
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_RETAIL_ARGS_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-nuketown-special-multiply-decal-retail-args-v1'
+          assert d['map']=='mp_nuketown_2020'
+          assert d['techniqueSet']=='wpc_unlitdecalblend_multiply_35079164'
+          assert d['unlitAndEmissiveArgumentRowsIdentical'] is True
+          assert d['unlit']['vertexShader']['sha256']=='c3bd9eb7d12a444c63867be2e466ac00c495a5a7f64a8b2c9f73e2558a5e12e0'
+          assert d['unlit']['pixelShader']['sha256']=='e9820077a4df69228fd1626997270d7b31337f82eab6c26c1a14a33257424a0b'
+          assert d['emissive']['vertexShader']['sha256']==d['unlit']['vertexShader']['sha256']
+          assert d['emissive']['pixelShader']['sha256']==d['unlit']['pixelShader']['sha256']
+          assert d['summary']['codeVertexConstantCount'] > 0
+          print('GREEN EXACT RETAIL MULTIPLY-DECAL ARGUMENT ROWS')
+          print(json.dumps(d['commonCodeVertexConstants'],indent=2,sort_keys=True))
+          PY
+
+      - name: Upload exact retail argument proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_RETAIL_ARGS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
