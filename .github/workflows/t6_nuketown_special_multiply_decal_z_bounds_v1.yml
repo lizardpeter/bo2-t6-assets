@@ -1,0 +1,77 @@
+name: T6 Nuketown multiply-decal Z bounds v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_special_multiply_decal_z_bounds_v1.py'
+      - 'tools/t6_nuketown_world_source_sidecars_v1.py'
+      - 'tools/t6_retail_special_material_family_census_v1.py'
+      - 'tools/t6_retail_world_formats_45_proof_v1.py'
+      - 'tools/t6_retail_world_material_state_census_v2.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_nuketown_special_multiply_decal_z_bounds_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lcrypto -lz
+          mkdir -p /tmp/proof
+
+      - name: Download and exactly expand retail Nuketown
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+          /tmp/t6_fastfile_expand /tmp/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded.bin mp_nuketown_2020 2> /tmp/proof/expand.log
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+
+      - name: Prove target surface Z bounds and exponential branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/t6_nuketown_special_multiply_decal_z_bounds_v1.py \
+            tools/t6_nuketown_world_source_sidecars_v1.py \
+            tools/t6_retail_special_material_family_census_v1.py \
+            tools/t6_retail_world_formats_45_proof_v1.py \
+            tools/t6_retail_world_material_state_census_v2.py
+          python3 tools/t6_nuketown_special_multiply_decal_z_bounds_v1.py \
+            --expanded /tmp/mp_nuketown_2020.expanded.bin \
+            --out /tmp/proof/T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_Z_BOUNDS_V1.json \
+            | tee /tmp/proof/z_bounds.log
+          python3 - <<'PY'
+          import json
+          p='/tmp/proof/T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_Z_BOUNDS_V1.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d['format']=='t6-nuketown-special-multiply-decal-z-bounds-v1'
+          assert d['cohort']['materialCount']==3
+          assert d['cohort']['surfaceCount'] > 0
+          assert d['fogBranch']['allTargetGeometryXNegative'] is True
+          assert d['fogBranch']['maximumXOverCohortBounds'] < 0.0
+          assert d['maxDensityCancellation']['maxDensityCancels'] is True
+          assert all(m['allSurfacesExponentialBranch'] for m in d['cohort']['materials'])
+          print('GREEN T6 MULTIPLY-DECAL Z BOUNDS / MAX-DENSITY CANCELLATION')
+          PY
+
+      - name: Upload branch proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_SPECIAL_MULTIPLY_DECAL_Z_BOUNDS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
