@@ -6,15 +6,19 @@ on:
     paths:
       - '.github/workflows/t6_inspect_static_resolver.yml'
 
+permissions:
+  contents: read
+
 jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Decode resolver and retained closure interval
+      - name: Extract retained car02 pointer evidence
         shell: bash
         run: |
+          set -euo pipefail
           python - <<'PY'
           import base64, hashlib, json, pathlib, zlib
 
@@ -22,52 +26,94 @@ jobs:
           src = root/'tools/t6_nuketown_static_material_alias_resolve_v3.py.zlib.b64'
           resolver = zlib.decompress(base64.b64decode(src.read_text().strip()))
           pathlib.Path('/tmp/resolver.py').write_bytes(resolver)
-          print('RESOLVER_BYTES', len(resolver), hashlib.sha256(resolver).hexdigest())
+
+          targets = {12967476, 12967480}
+          report = {
+              'format': 't6-nuketown-car02-retained-pointer-evidence-v1',
+              'resolverBytes': len(resolver),
+              'resolverSha256': hashlib.sha256(resolver).hexdigest(),
+              'targets': sorted(targets),
+              'matches': [],
+              'sources': [],
+          }
 
           paths = [
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V3.json.zlib.b64',
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V2.json.zlib.b64',
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_STATIC_MATERIAL_ALIAS_CLOSURE_V1.json.zlib.b64',
               root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_PLAYABLE_STATIC_MATERIAL_PROOF_V1.json.zlib.b64',
-              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_FICUS_MATERIAL_ALIAS_PROOF_V1.json.zlib.b64',
+              root/'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_CAR_MATERIAL_ALIAS_PROOF_V1.json',
           ]
 
-          def walk(o, path='$'):
-              if isinstance(o, dict):
-                  xa = o.get('xassetIndex')
-                  txt = json.dumps(o, sort_keys=True, default=str)
-                  if isinstance(xa, int) and 274 <= xa <= 299:
-                      print('MATCH', path, txt)
-                  if '26834420' in txt or 'mtl_ac_prs_vehicle_sheet_a' in txt:
-                      print('CAR_MATCH', path, txt)
-                  for k,v in o.items(): walk(v, f'{path}.{k}')
-              elif isinstance(o, list):
-                  for i,v in enumerate(o): walk(v, f'{path}[{i}]')
+          def numeric(value):
+              if isinstance(value, bool): return None
+              if isinstance(value, int): return value
+              if isinstance(value, str):
+                  try: return int(value, 0)
+                  except Exception: return None
+              return None
+
+          def walk(node, source, path='$'):
+              if isinstance(node, dict):
+                  nums = [(k, numeric(v)) for k,v in node.items()]
+                  hit_targets = [(k,v) for k,v in nums if v in targets]
+                  xa = numeric(node.get('xassetIndex'))
+                  name = node.get('name') or node.get('xmodelName') or node.get('modelName') or node.get('material')
+                  if hit_targets or xa == 162 or name == 'nt_2020_car_02':
+                      report['matches'].append({
+                          'source': source,
+                          'jsonPath': path,
+                          'reason': {
+                              'targetFields': [{'field':k,'value':v} for k,v in hit_targets],
+                              'xasset162': xa == 162,
+                              'ownerName': name == 'nt_2020_car_02',
+                          },
+                          'record': node,
+                      })
+                  for k,v in node.items(): walk(v, source, f'{path}.{k}')
+              elif isinstance(node, list):
+                  for i,v in enumerate(node): walk(v, source, f'{path}[{i}]')
 
           for p in paths:
               if not p.exists():
-                  print('MISSING', p); continue
-              text = p.read_text().strip()
-              print('===', p, '===')
-              print('B64_CHARS', len(text), 'MOD4', len(text)%4, 'FILE_SHA', hashlib.sha256(p.read_bytes()).hexdigest())
-              try:
-                  raw = base64.b64decode(text, validate=True)
-              except Exception as e:
-                  print('BASE64_ERROR', repr(e)); continue
-              print('RAW_BYTES', len(raw), 'HEAD', raw[:16].hex(), 'TAIL', raw[-16:].hex(), 'RAW_SHA', hashlib.sha256(raw).hexdigest())
-              b = None
-              for label,wbits in [('zlib', zlib.MAX_WBITS), ('raw', -zlib.MAX_WBITS), ('gzip', zlib.MAX_WBITS|16)]:
-                  try:
-                      b = zlib.decompress(raw, wbits)
-                      print('DECOMP_OK', label, len(b), hashlib.sha256(b).hexdigest())
-                      break
-                  except Exception as e:
-                      print('DECOMP_FAIL', label, repr(e))
-              if b is None: continue
-              try: obj=json.loads(b)
-              except Exception as e:
-                  print('JSON_ERROR', repr(e), 'PREFIX', b[:200]); continue
-              if isinstance(obj, dict): print('TOP_KEYS', sorted(obj.keys()))
-              walk(obj)
+                  continue
+              if p.suffix == '.json':
+                  raw = p.read_bytes()
+              else:
+                  raw = zlib.decompress(base64.b64decode(p.read_bytes().strip()))
+              obj = json.loads(raw)
+              report['sources'].append({
+                  'file': str(p),
+                  'format': obj.get('format') if isinstance(obj, dict) else None,
+                  'rawBytes': len(raw),
+                  'rawSha256': hashlib.sha256(raw).hexdigest(),
+              })
+              walk(obj, str(p))
+
+          # Preserve the exact resolver lines that define material-handle array
+          # and inline-Material cursor treatment. This is evidence only; no
+          # material identity is inferred from nearby source strings.
+          lines = resolver.decode('utf-8').splitlines()
+          report['resolverRelevantLines'] = [
+              {'line': i + 1, 'text': line}
+              for i, line in enumerate(lines)
+              if any(token in line for token in (
+                  'materialHandles', 'handle_base', 'handleBase',
+                  'FOLLOWING', 'INSERT', 'prefix_to_material',
+                  'inline_material', 'inlineMaterial', 'virtual_cursor',
+              ))
+          ]
+
+          pathlib.Path('/tmp/car02_pointer_evidence.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True, default=str) + '\n'
+          )
+          print('MATCH_COUNT', len(report['matches']))
+          for row in report['matches']:
+              print('MATCH', json.dumps(row, sort_keys=True, default=str))
+          print('RESOLVER_RELEVANT', json.dumps(report['resolverRelevantLines'], sort_keys=True))
           PY
-          echo '=== RESOLVER RELEVANT LINES ==='
-          grep -n -E 'FOLLOW|INSERT|prefix_to_material|simple_tail|geometry_events|inline-material|materialHandles' /tmp/resolver.py || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_CAR02_RETAINED_POINTER_EVIDENCE_V1
+          path: /tmp/car02_pointer_evidence.json
+          if-no-files-found: error
