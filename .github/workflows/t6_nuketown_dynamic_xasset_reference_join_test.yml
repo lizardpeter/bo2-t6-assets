@@ -1,0 +1,14 @@
+name: T6 dynamic XAsset reference join v1 test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_dynamic_xasset_reference_closure_v1.py'
+      - 'tools/test_t6_nuketown_dynamic_xasset_reference_closure_v1.py'
+      - '.github/workflows/t6_nuketown_dynamic_xasset_reference_join_test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/test_t6_nuketown_dynamic_xasset_reference_closure_v1.py
