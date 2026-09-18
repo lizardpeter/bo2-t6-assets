@@ -1,0 +1,15 @@
+name: T6 IPAK range reader v2 regression
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_ipak_http_range_v1.py'
+      - 'tools/t6_ipak_http_range_v2.py'
+      - 'tools/test_t6_ipak_http_range_v2.py'
+      - '.github/workflows/t6_ipak_http_range_v2_test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: PYTHONPATH=tools python3 tools/test_t6_ipak_http_range_v2.py
