@@ -45,6 +45,8 @@
         "manifests/world/T6_RETAIL_WORLD_FORMATS_45_PROOF_V1.json",
         "manifests/world/T6_RETAIL_WORLD_FORMAT_7_PROOF_V1.json",
         "manifests/world/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json",
+        "manifests/world/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json",
+        "checkpoints/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.md",
         "tools/t6_world_vertex_format_registry_v2.py"
       ],
       "current": {
@@ -63,9 +65,22 @@
         ],
         "pendingFormat8ExpectedVd1Stride": 20,
         "completeMpStrictInlineFormat8Hits": 0,
-        "completeMpStrictInlineTechniqueSetBodies": 4589
+        "completeMpStrictInlineTechniqueSetBodies": 4589,
+        "completeArchiveFastFilesScanned": 215,
+        "completeArchiveStrictInlineTechniqueSetBodies": 6717,
+        "completeArchiveStrictInlineFormat8Hits": 0,
+        "completeArchiveFormatDistribution": {
+          "0": 4475,
+          "1": 598,
+          "2": 492,
+          "3": 357,
+          "4": 348,
+          "5": 310,
+          "6": 65,
+          "7": 72
+        }
       },
-      "closureRequirement": "Registry reports allFormatsExportEnabled=true from clean direct/raw retail evidence with zero contradictory strides."
+      "closureRequirement": "Registry reports allFormatsExportEnabled=true from clean direct/raw retail evidence with zero contradictory strides. The retained 215-FastFile archive census is a bounded strict-inline absence proof only; it does not auto-enable format 8."
     },
     {
       "id": "static-xmodels",
