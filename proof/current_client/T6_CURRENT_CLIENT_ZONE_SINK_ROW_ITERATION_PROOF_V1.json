@@ -1,0 +1,303 @@
+{
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "exactInstructions": [
+    {
+      "address": "0x00417574",
+      "bytes": "8b842464060000",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "mov",
+      "opStr": "eax, dword ptr [esp + 0x664]",
+      "operands": [
+        {
+          "reg": "eax",
+          "type": "reg"
+        },
+        {
+          "base": "esp",
+          "disp": 1636,
+          "dispHex": "0x00000664",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        }
+      ],
+      "regsRead": [
+        "esp"
+      ],
+      "regsWrite": [
+        "eax"
+      ],
+      "size": 7
+    },
+    {
+      "address": "0x00417583",
+      "bytes": "8b9c2460060000",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "mov",
+      "opStr": "ebx, dword ptr [esp + 0x660]",
+      "operands": [
+        {
+          "reg": "ebx",
+          "type": "reg"
+        },
+        {
+          "base": "esp",
+          "disp": 1632,
+          "dispHex": "0x00000660",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        }
+      ],
+      "regsRead": [
+        "esp"
+      ],
+      "regsWrite": [
+        "ebx"
+      ],
+      "size": 7
+    },
+    {
+      "address": "0x0041758a",
+      "bytes": "83c308",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "add",
+      "opStr": "ebx, 8",
+      "operands": [
+        {
+          "reg": "ebx",
+          "type": "reg"
+        },
+        {
+          "hex": "0x00000008",
+          "type": "imm",
+          "value": 8
+        }
+      ],
+      "regsRead": [
+        "ebx"
+      ],
+      "regsWrite": [
+        "eflags",
+        "ebx"
+      ],
+      "size": 3
+    },
+    {
+      "address": "0x0041758d",
+      "bytes": "89442414",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "mov",
+      "opStr": "dword ptr [esp + 0x14], eax",
+      "operands": [
+        {
+          "base": "esp",
+          "disp": 20,
+          "dispHex": "0x00000014",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        },
+        {
+          "reg": "eax",
+          "type": "reg"
+        }
+      ],
+      "regsRead": [
+        "esp",
+        "eax"
+      ],
+      "regsWrite": [],
+      "size": 4
+    },
+    {
+      "address": "0x00417591",
+      "bytes": "8b43fc",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "mov",
+      "opStr": "eax, dword ptr [ebx - 4]",
+      "operands": [
+        {
+          "reg": "eax",
+          "type": "reg"
+        },
+        {
+          "base": "ebx",
+          "disp": -4,
+          "dispHex": "0xfffffffc",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        }
+      ],
+      "regsRead": [
+        "ebx"
+      ],
+      "regsWrite": [
+        "eax"
+      ],
+      "size": 3
+    },
+    {
+      "address": "0x00417598",
+      "bytes": "f70300000080",
+      "isCall": false,
+      "isJump": false,
+      "isRet": false,
+      "mnemonic": "test",
+      "opStr": "dword ptr [ebx], 0x80000000",
+      "operands": [
+        {
+          "base": "ebx",
+          "disp": 0,
+          "dispHex": "0x00000000",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        },
+        {
+          "hex": "0x80000000",
+          "type": "imm",
+          "value": 2147483648
+        }
+      ],
+      "regsRead": [
+        "ebx"
+      ],
+      "regsWrite": [
+        "eflags"
+      ],
+      "size": 6
+    },
+    {
+      "address": "0x004176d0",
+      "bytes": "83c30c",
+      "mnemonic": "add",
+      "opStr": "ebx, 0xc",
+      "operands": [
+        {
+          "reg": "ebx",
+          "type": "reg"
+        },
+        {
+          "hex": "0x0000000c",
+          "type": "imm",
+          "value": 12
+        }
+      ],
+      "regsRead": [
+        "ebx"
+      ],
+      "regsWrite": [
+        "eflags",
+        "ebx"
+      ],
+      "size": 3
+    },
+    {
+      "address": "0x004176d3",
+      "bytes": "ff4c2414",
+      "mnemonic": "dec",
+      "opStr": "dword ptr [esp + 0x14]",
+      "operands": [
+        {
+          "base": "esp",
+          "disp": 20,
+          "dispHex": "0x00000014",
+          "index": null,
+          "scale": 1,
+          "segment": null,
+          "type": "mem"
+        }
+      ],
+      "regsRead": [
+        "esp"
+      ],
+      "regsWrite": [
+        "eflags"
+      ],
+      "size": 4
+    },
+    {
+      "address": "0x004176d7",
+      "bytes": "0f85b4feffff",
+      "mnemonic": "jne",
+      "opStr": "0x417591",
+      "operands": [
+        {
+          "hex": "0x00417591",
+          "type": "imm",
+          "value": 4289937
+        }
+      ],
+      "regsRead": [
+        "eflags"
+      ],
+      "regsWrite": [],
+      "size": 6
+    }
+  ],
+  "format": "t6-current-client-zone-sink-row-iteration-proof-v1",
+  "proofBoundary": "This proves exact current-client iteration over the incoming 12-byte records using the independently normalized input pointer/count and the decoded loop backedge. Positional +4/+8 fields remain unnamed. It does not name the routine or structure, establish alloc/free semantics or priority, prove historical-retail equivalence, or select any Technique winner.",
+  "proven": {
+    "incomingCountControlsRowIteration": true,
+    "incomingRowsAreContiguous12ByteRecords": true,
+    "rowPlus4IsConsumedPerIteration": true,
+    "rowPlus8IsConsumedPerIteration": true
+  },
+  "rowArray": {
+    "countLocal": "[esp+0x14]",
+    "entryCountStackOffset": 8,
+    "entryPointerStackOffset": 4,
+    "iterationPointerInitialOffsetFromRowBase": 8,
+    "iterationPointerRegister": "ebx",
+    "loopAdvance": "0x004176d0",
+    "loopBackedge": "0x004176d7 -> 0x00417591",
+    "loopCountDecrement": "0x004176d3",
+    "loopStart": "0x00417591",
+    "perIterationPositionalReads": [
+      {
+        "instruction": "0x00417591",
+        "offset": 4
+      },
+      {
+        "instruction": "0x00417598",
+        "offset": 8
+      }
+    ],
+    "rowStrideBytes": 12
+  },
+  "sources": {
+    "entry": {
+      "bytes": 113137,
+      "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_ENTRY_PROBE_V1.json",
+      "sha256": "7685bae87cdc618679ebba25e8e5bb71169057970ccfaf4544a4a1d2ad1a36ba"
+    },
+    "stride": {
+      "bytes": 54861,
+      "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1.json",
+      "sha256": "ba5bc6717cbd60f2895154179d44ba4ea1d302ff744ca63ef256e920d1d78362"
+    }
+  },
+  "status": "exact_current_client_input_row_iteration_only"
+}
