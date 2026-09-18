@@ -1,0 +1,85 @@
+name: T6 Nuketown sprinkler FX script bytes v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_nuketown_sprinkler_fx_script_bytes_v1.yml'
+permissions:
+  contents: write
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exactly pinned OAT
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+      - name: Require exact map and dump ScriptParseTree assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = true
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          test -x "$BIN"
+          mkdir -p /tmp/source /tmp/out /tmp/proof
+          curl -fL --retry 4 --retry-delay 2 -o /tmp/source/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          "$BIN" --no-color --verbose --include-assets script --output-folder /tmp/out /tmp/source/mp_nuketown_2020.ff > /tmp/proof/unlinker.log 2>&1
+          find /tmp/out -type f -printf '%P\n' | sort | tee /tmp/proof/files.txt
+          test -f /tmp/out/maps/mp/mp_nuketown_2020_fx.gsc
+      - name: Persist exact target script byte evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('/tmp/out')
+          target=root/'maps/mp/mp_nuketown_2020_fx.gsc'
+          raw=target.read_bytes()
+          names=[b'fx_water_fire_sprinkler_thin',b'water/fx_water_fire_sprinkler_thin']
+          def offs(n):
+              out=[]; p=0
+              while True:
+                  i=raw.find(n,p)
+                  if i<0:return out
+                  out.append(i);p=i+1
+          rows=[]
+          for p in sorted(root.rglob('*')):
+              if p.is_file():
+                  b=p.read_bytes()
+                  rows.append({'path':p.relative_to(root).as_posix(),'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),
+                    'unqualifiedCount':b.count(names[0]),'qualifiedCount':b.count(names[1])})
+          doc={
+            'format':'t6-nuketown-sprinkler-fx-script-bytes-v1',
+            'authority':'SHA-pinned mp_nuketown_2020.ff + exactly pinned OAT 9dca965 ScriptParseTree dumper',
+            'sourceFastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
+            'targetScript':{'path':'maps/mp/mp_nuketown_2020_fx.gsc','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),
+              'unqualifiedOffsets':offs(names[0]),'qualifiedOffsets':offs(names[1])},
+            'dumpedScripts':rows,
+            'proofBoundary':'This proves exact byte presence inside dumped retail ScriptParseTree buffers only. Co-presence, offsets, or adjacency do not by themselves prove a semantic alias mapping; any mapping promotion requires decompiled/control-flow or runtime loader evidence.'
+          }
+          p=pathlib.Path('proof/T6_NUKETOWN_SPRINKLER_FX_SCRIPT_BYTES_V1.json');p.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(doc['targetScript'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_SPRINKLER_FX_SCRIPT_BYTES_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist sprinkler FX ScriptParseTree byte evidence'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_SPRINKLER_FX_SCRIPT_BYTES_V1
+          path: |
+            proof/T6_NUKETOWN_SPRINKLER_FX_SCRIPT_BYTES_V1.json
+            /tmp/out/maps/mp/mp_nuketown_2020_fx.gsc
+            /tmp/proof/unlinker.log
+          if-no-files-found: error
+          compression-level: 9
