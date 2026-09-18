@@ -21,11 +21,11 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_LOOKUP_SEMANTICS_V1.json'))
-          assert j['functionCount'] >= 2
+          assert j['directLookup']['terminalReturnPayloadDwordOffset'] == 4
           assert j['exactFindings']['payloadDwordOffset'] == 4
           assert j['exactFindings']['collisionLinkWordOffset'] == 10
           assert j['exactFindings']['secondaryLinkWordOffset'] == 12
-          assert j['exactFindings']['lookupReturnsPayloadDword'] is True
+          assert j['exactFindings']['directLookupReturnsPayloadDword'] is True\n          assert j['exactFindings']['independentPayloadConsumerCount'] == 2
           PY
           git diff --check
           git config user.name github-actions[bot]
