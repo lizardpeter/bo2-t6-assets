@@ -1,0 +1,46 @@
+name: T6 Nuketown MapEnt inline model bounds v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_mapents_inline_model_bounds_v1.py'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json'
+      - 'manifests/maps/mp_nuketown_2020/clipmap_normalized_nuketown_v1.json'
+      - '.github/workflows/t6_nuketown_mapents_inline_model_bounds_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate exact inline token numeric bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_mapents_inline_model_bounds_v1.py             --mapents manifests/maps/mp_nuketown_2020/T6_NUKETOWN_MAPENTS_MODEL_ANIMATION_CENSUS_V1.json             --clipmap manifests/maps/mp_nuketown_2020/clipmap_normalized_nuketown_v1.json             --out proof/T6_NUKETOWN_MAPENTS_INLINE_MODEL_BOUNDS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/T6_NUKETOWN_MAPENTS_INLINE_MODEL_BOUNDS_V1.json'));s=d['summary']
+          assert s['clipMapSubmodelCount']==184
+          assert s['uniqueInlineModelTokenCount']==183
+          assert s['minimumInlineNumericIndex']==1
+          assert s['maximumInlineNumericIndex']==183
+          assert s['outOfBoundsTokenCount']==0
+          assert s['coversEveryNonzeroClipMapSubmodelIndex'] is True
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_MAPENTS_INLINE_MODEL_BOUNDS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact inline model numeric bounds proof'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_MAPENTS_INLINE_MODEL_BOUNDS_V1
+          path: proof/T6_NUKETOWN_MAPENTS_INLINE_MODEL_BOUNDS_V1.json
+          if-no-files-found: error
