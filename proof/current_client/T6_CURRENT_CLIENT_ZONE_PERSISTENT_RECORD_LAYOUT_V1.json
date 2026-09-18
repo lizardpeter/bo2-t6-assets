@@ -1,0 +1,79 @@
+{
+  "authority": "SHA-classified current Plutonium client only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "downstream": {
+    "countGlobals": [
+      "0x012c6f1c",
+      "0x014deacc"
+    ],
+    "postPopulationCalls": [
+      "0x005c7d20",
+      "0x00458cc0"
+    ],
+    "tailJump": "0x005b8bf0"
+  },
+  "format": "t6-current-client-zone-persistent-record-layout-proof-v1",
+  "persistentRecord": {
+    "offsets": [
+      {
+        "evidence": [
+          "0x007fde00 loads source +0 pointer",
+          "0x007fde06 pushes exact size 0x40",
+          "0x007fde09 forms destination base as esi-0x40",
+          "0x007fde0d calls exact shared copy target 0x00424f00"
+        ],
+        "offset": 0,
+        "semantic": "bounded_string_storage_region",
+        "widthBytes": 64
+      },
+      {
+        "evidence": [
+          "0x007fde12 loads source +4",
+          "0x007fde18 stores it at current destination dword",
+          "0x007fde1b advances destination cursor by 0x44, so current dword follows the prior 0x40-byte region"
+        ],
+        "offset": 64,
+        "semantic": "copied_input_plus4_classifier",
+        "widthBytes": 4
+      }
+    ],
+    "strideBytes": 68
+  },
+  "proofBoundary": "This projection is forced only by exact persisted current-client instructions. The 68-byte persistent record is described positionally. The +4 dword remains a copied classifier, not source-named allocFlags; input +8 remains semantically unresolved here. Shared copy target 0x00424f00 is not source-named. No historical-retail equivalence, duplicate precedence rule, or Technique winner is inferred.",
+  "proven": {
+    "inputBaseConsumed": true,
+    "inputCountConsumed": true,
+    "inputField0ConditionallyCopiedAs64ByteStringRegion": true,
+    "inputField4CopiedToPersistentRecordOffset64": true,
+    "inputField8ReadByThisConsumer": false,
+    "inputRecordStrideBytes": 12,
+    "persistentRecordStrideBytes": 68,
+    "populatedRecordCountAccumulated": true,
+    "populatedRecordCountStoredToGlobals": [
+      "0x012c6f1c",
+      "0x014deacc"
+    ]
+  },
+  "source": {
+    "bytes": 152622,
+    "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_STAGING_CALLEE_ENTRY_PROBE_V1.json",
+    "sha256": "fea6ff765e9434664242b1ee612ae44a5373f87bf71748eaa6b177cd7c22ba10",
+    "targetAddress": "0x007fddd0"
+  },
+  "sourceIteration": {
+    "countRegister": "ebp",
+    "loop": [
+      "0x007fde1e add edi,0xc",
+      "0x007fde21 dec ebp",
+      "0x007fde22 jne 0x007fde00"
+    ],
+    "populationCounterRegister": "ebx",
+    "sourceCursorRegister": "edi",
+    "sourceStrideBytes": 12
+  }
+}
