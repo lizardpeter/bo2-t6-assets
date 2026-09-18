@@ -6,7 +6,7 @@ on:
       - 'tools/t6_retail_client_xasset_precedence_probe_v1.py'
       - '.github/workflows/t6_retail_client_xasset_precedence_probe_v1.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -19,7 +19,7 @@ jobs:
           ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
         run: |
           set -euo pipefail
-          mkdir -p /tmp/proof
+          mkdir -p /tmp/proof proof/retail_client
           PYTHONPATH=tools python3 - <<'PY'
           import hashlib,os
           from pathlib import Path
@@ -40,16 +40,28 @@ jobs:
       - name: Inventory exact client precedence evidence
         run: |
           set -euo pipefail
-          python3 tools/t6_retail_client_xasset_precedence_probe_v1.py /tmp/t6mp.exe --out /tmp/proof/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json | tee /tmp/proof/probe.log
+          python3 tools/t6_retail_client_xasset_precedence_probe_v1.py /tmp/t6mp.exe --out proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json | tee /tmp/proof/probe.log
           python3 - <<'PY' | tee /tmp/proof/summary.txt
           import json
-          p=json.load(open('/tmp/proof/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json'))
+          p=json.load(open('proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json'))
+          assert p['client']['sha256']=='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'
+          assert p['status']=='discovery_only_no_winner_promoted'
           print('string executable references',len(p['stringExecutableReferences']))
           for r in p['immediateInventory']: print(r['valueHex'],r['executableHitCount'])
           PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact retail client XAsset precedence discovery'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
       - name: Refuse executable archival
         run: |
           set -euo pipefail
+          rm -f /tmp/t6mp.exe
           test ! -e /tmp/proof/t6mp.exe
           ! find /tmp/proof -type f -size +8M | grep -q .
       - uses: actions/upload-artifact@v4
