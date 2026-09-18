@@ -17,6 +17,8 @@ import ctypes.util
 import hashlib
 import json
 import struct
+import time
+import urllib.error
 import urllib.request
 import zlib
 from collections import defaultdict
@@ -45,9 +47,10 @@ def sha256(b: bytes) -> str:
 
 
 class HttpRangeSource:
-    def __init__(self, url: str, timeout: int = 60):
+    def __init__(self, url: str, timeout: int = 60, retries: int = 5):
         self.url = url
         self.timeout = timeout
+        self.retries = max(1, int(retries))
         self.requests = 0
         self.bytes_fetched = 0
         self.total_size: int | None = None
@@ -58,32 +61,40 @@ class HttpRangeSource:
         if size == 0:
             return b""
         end = offset + size - 1
-        req = urllib.request.Request(
-            self.url,
-            headers={"Range": f"bytes={offset}-{end}", "User-Agent": "bo2-t6-assets-range-reader/1"},
-        )
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            status = getattr(r, "status", None)
-            if status != 206:
-                raise ValueError(f"server did not honor Range request: HTTP {status}")
-            cr = r.headers.get("Content-Range")
-            if not cr or not cr.startswith("bytes ") or "/" not in cr:
-                raise ValueError(f"missing/invalid Content-Range: {cr!r}")
-            spec, total = cr[6:].split("/", 1)
-            got_start, got_end = map(int, spec.split("-", 1))
-            if (got_start, got_end) != (offset, end):
-                raise ValueError(f"range mismatch {(got_start, got_end)} != {(offset, end)}")
-            if total != "*":
-                total_i = int(total)
-                if self.total_size is not None and total_i != self.total_size:
-                    raise ValueError("remote object size changed during extraction")
-                self.total_size = total_i
-            data = r.read(size + 1)
-        if len(data) != size:
-            raise ValueError(f"short range read {offset}+{size}: got {len(data)}")
-        self.requests += 1
-        self.bytes_fetched += len(data)
-        return data
+        last_error = None
+        for attempt in range(self.retries):
+            req = urllib.request.Request(
+                self.url,
+                headers={"Range": f"bytes={offset}-{end}", "User-Agent": "bo2-t6-assets-range-reader/2", "Accept-Encoding": "identity"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    status = getattr(r, "status", None)
+                    if status != 206:
+                        raise ValueError(f"server did not honor Range request: HTTP {status}")
+                    cr = r.headers.get("Content-Range")
+                    if not cr or not cr.startswith("bytes ") or "/" not in cr:
+                        raise ValueError(f"missing/invalid Content-Range: {cr!r}")
+                    spec, total = cr[6:].split("/", 1)
+                    got_start, got_end = map(int, spec.split("-", 1))
+                    if (got_start, got_end) != (offset, end):
+                        raise ValueError(f"range mismatch {(got_start, got_end)} != {(offset, end)}")
+                    if total != "*":
+                        total_i = int(total)
+                        if self.total_size is not None and total_i != self.total_size:
+                            raise ValueError("remote object size changed during extraction")
+                        self.total_size = total_i
+                    data = r.read(size + 1)
+                if len(data) != size:
+                    raise ValueError(f"short range read {offset}+{size}: got {len(data)}")
+                self.requests += 1
+                self.bytes_fetched += len(data)
+                return data
+            except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
+                last_error = exc
+                if attempt + 1 < self.retries:
+                    time.sleep(min(2.0, 0.2 * (attempt + 1)))
+        raise RuntimeError(f"range read {offset}+{size} failed after {self.retries} attempts: {last_error}")
 
 
 class T6IPakRange:
