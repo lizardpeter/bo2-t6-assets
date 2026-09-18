@@ -1,0 +1,57 @@
+name: T6 promote GfxWorld v3 into production census v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_promote_gfxworld_v3_into_production_census_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Verify exact persisted v3 ownership before wiring census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_validate_gfxworld_image_ownership_v1.py \
+            manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json \
+            manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json \
+            --output /tmp/gfxworld_v3_validation.json
+          python3 - <<'PY'
+          import json
+          p='/tmp/gfxworld_v3_validation.json'
+          d=json.load(open(p))
+          assert d['lightmapCatalog']['sha256']=='b3a4387b43eb0404b5080effd376bb8c1e018299bee98b415a525706eee7fdeb',d
+          assert d['reflectionCatalog']['sha256']=='5f0951204d7b7f3976787e80c1cf0aa33f9a33c1f0a80dca86dcd8f674d0f947',d
+          assert len(d['gfxWorldImageUnion'])==27,d
+          print('GREEN persisted retail GfxWorld v3 ownership', len(d['gfxWorldImageUnion']))
+          PY
+      - name: Repair production census catalog generation and consumption
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=.github/workflows/t6_nuketown_production_texture_dependency_census_v1.yml
+          test "$(grep -c 'T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json' "$F")" = 2
+          test "$(grep -c 'T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json' "$F")" = 2
+          sed -i 's/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json/g' "$F"
+          sed -i 's/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json/g' "$F"
+          grep -q "T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json" "$F"
+          grep -q "T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json" "$F"
+          ! grep -q "T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json" "$F"
+          ! grep -q "T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json" "$F"
+          git diff --check
+      - name: Commit repaired census wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/t6_nuketown_production_texture_dependency_census_v1.yml
+          git commit -m 'Consume exact GfxWorld v3 ownership in production census'
+          git push origin HEAD:main
