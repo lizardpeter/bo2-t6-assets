@@ -9,7 +9,7 @@ on:
       - '.github/workflows/t6_current_client_zone_construction_probe_v1.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   probe:
@@ -85,6 +85,79 @@ jobs:
           rm -f /tmp/client/t6mp.exe
           test ! -e /tmp/client/t6mp.exe
           sha256sum /tmp/proof/* | sort | tee /tmp/proof/SHA256SUMS
+
+      - name: Persist derived proof and handoff checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/current_client checkpoints
+          cp /tmp/proof/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json \
+             proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json
+          cp /tmp/proof/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json \
+             proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          xp=Path('proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json')
+          zp=Path('proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json')
+          x=json.loads(xp.read_text()); z=json.loads(zp.read_text())
+          def digest(p):
+              b=p.read_bytes(); return len(b),hashlib.sha256(b).hexdigest()
+          xb,xh=digest(xp); zb,zh=digest(zp)
+          lines=[
+              '# T6 current-client decoded zone construction result — 2026-09-18','',
+              '## Authority boundary','',
+              'This is comparative evidence from the SHA-classified current Plutonium client only. It is not historical-retail authority and selects no Technique winner.','',
+              '## Exact client','',
+              f"- revision: \`{x['client']['revision']}\`",
+              f"- bytes: \`{x['client']['bytes']}\`",
+              f"- SHA-256: \`{x['client']['sha256']}\`",'',
+              '## Decoded instruction-operand xrefs','',
+          ]
+          for name,row in x['summary'].items():
+              lines.append(
+                  f"- \`{name}\`: literals={row['literalOccurrenceCount']}, "
+                  f"oldRawPackedHits={row['rawPackedVaExecutableHitCountOldMethod']}, "
+                  f"decodedOperandXrefs={row['decodedOperandXrefCount']}"
+              )
+          lines += [
+              '',
+              '## Structural 12-byte-row comparison','',
+              f"- admitted structural row candidates: **{z['candidateCount']}**",
+          ]
+          for name,count in z['candidateCountByString'].items():
+              if count:
+                  lines.append(f"- \`{name}\`: **{count}**")
+          lines += [
+              '',
+              '## Artifact identities','',
+              f"- decoded xref JSON: {xb:,} bytes, SHA-256 \`{xh}\`",
+              f"- structural row JSON: {zb:,} bytes, SHA-256 \`{zh}\`",'',
+              '## Proof boundary','',
+              x['proofBoundary'],'',
+              z['proofBoundary'],'',
+              '## Next step','',
+              'Use only decoded operand xrefs and admitted same-row +0/+4(/+8) stores as anchors for further current-client data-flow recovery. Raw packed-address hits and proximity-only calls remain excluded. If no exact full-zone row is recovered, trace exact base-string construction into the eventual row pointer without importing dedicated-server flag values. Historical-retail promotion still requires genuine retail executable/runtime evidence.','',
+              '## Existing closure preserved','',
+              '- production GfxImage denominator: **450**',
+              '- exact DDS coverage: **75/450**',
+              '- unresolved shader ownership: **58 divergent child Techniques across nine TechniqueSets affecting 269 ordinary Materials**','',
+          ]
+          Path('checkpoints/T6_CURRENT_CLIENT_DECODED_ZONE_CONSTRUCTION_RESULT_2026-09-18.md').write_text('\n'.join(lines))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json \
+            proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json \
+            checkpoints/T6_CURRENT_CLIENT_DECODED_ZONE_CONSTRUCTION_RESULT_2026-09-18.md
+          if git diff --cached --quiet; then
+            echo "derived proof already current"
+            exit 0
+          fi
+          git commit -m 'Persist decoded current-client zone construction proof'
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - uses: actions/upload-artifact@v4
         with:
