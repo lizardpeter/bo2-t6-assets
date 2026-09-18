@@ -1,0 +1,49 @@
+name: T6 Nuketown unresolved Material IPAK resolution v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_unresolved_material_ipak_resolution_v1.py'
+      - 'proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V1.json'
+      - '.github/workflows/t6_nuketown_unresolved_material_ipak_resolution_v1.yml'
+permissions:
+  contents: write
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require trace and resolve exact retail payloads
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V1.json
+          python3 tools/t6_nuketown_unresolved_material_ipak_resolution_v1.py --payload proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json --trace proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V1.json --out proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak \
+            https://r2.houseofkublai.com/bo2/zone/all/so.ipak \
+            https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json')); s=d['summary']
+          assert s['unresolvedMaterialImageCount']==347
+          assert s['resolved']+s['missing']+s['conflict']==s['tracedPackedTargetCount']
+          assert s['conflict']==0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json
+          git commit -m 'Persist unresolved Material IPAK resolution' || exit 0
+          git pull --rebase origin main; git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1
+          path: proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json
