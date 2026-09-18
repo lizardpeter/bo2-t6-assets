@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   dump:
@@ -149,6 +149,72 @@ jobs:
           Path('/tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHT_REFLECTION_SUMMARY_V2.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
           print('GREEN_LIGHT_REFLECTION_V2 '+json.dumps(summary,sort_keys=True))
           PY
+
+      - name: Persist validated retail ownership catalogs for production census
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DEST=manifests/maps/mp_nuketown_2020
+          mkdir -p "$DEST" checkpoints
+          cp /tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json \
+             "$DEST/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json"
+          cp /tmp/proof/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json \
+             "$DEST/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json"
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('manifests/maps/mp_nuketown_2020')
+          lp=root/'T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json'
+          rp=root/'T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json'
+          sp=Path('/tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHT_REFLECTION_SUMMARY_V2.json')
+          lm=json.loads(lp.read_text()); rr=json.loads(rp.read_text()); sm=json.loads(sp.read_text())
+          def meta(p):
+              b=p.read_bytes()
+              return len(b),hashlib.sha256(b).hexdigest()
+          lb,lh=meta(lp); rb,rh=meta(rp)
+          lines=[
+              '# T6 Nuketown GfxWorld production-image ownership v2',
+              '',
+              'Generated only after the pinned OpenAssetTools retail GfxWorld dump and fail-closed catalog validation succeed.',
+              '',
+              '## Exact source boundary',
+              '',
+              '- OpenAssetTools commit: `7d027e8f89118196713e955b0e11f8404149c54d`',
+              '- Retail FastFiles are SHA-256 verified before the dump.',
+              '- Serialized ownership comes only from `GfxWorld::draw.lightmaps[]` and `GfxWorld::draw.reflectionProbes[]`.',
+              '- Nullable retail GfxImage roles remain null; runtime texture pointers are not treated as archival identities.',
+              '- No filename similarity, dimensions, adjacency, renderer appearance, or inferred role participates.',
+              '',
+              '## Validated result',
+              '',
+              f"- lightmap records: **{lm['lightmapCount']}**",
+              f"- unique non-null lightmap GfxImage identities: **{len(sm['lightmapImages'])}**",
+              f"- reflection-probe records: **{rr['reflectionProbeCount']}**",
+              f"- distinct nullable reflection-image entries: **{sm['distinctNullableReflectionImageCount']}**",
+              '',
+              '## Durable catalogs',
+              '',
+              f'- lightmap catalog: `{lp}` — {lb} bytes — SHA-256 `{lh}`',
+              f'- reflection catalog: `{rp}` — {rb} bytes — SHA-256 `{rh}`',
+              '',
+              'These catalogs are inputs to the production texture dependency census. The final denominator is an identity-deduplicated union with Material GfxImages, not a sum of category counts.',
+              ''
+          ]
+          Path('checkpoints/T6_NUKETOWN_GFXWORLD_PRODUCTION_IMAGE_OWNERSHIP_V2.md').write_text('\n'.join(lines))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json \
+            manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json \
+            checkpoints/T6_NUKETOWN_GFXWORLD_PRODUCTION_IMAGE_OWNERSHIP_V2.md
+          if git diff --cached --quiet; then
+            echo 'Validated catalogs already match main; nothing to commit.'
+          else
+            git commit -m 'Persist exact Nuketown GfxWorld image ownership'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
