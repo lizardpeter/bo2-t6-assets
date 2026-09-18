@@ -1,0 +1,110 @@
+name: T6 MP XAnim delta branch corpus v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_mp_xanim_delta_branch_zone_census_v1.py'
+      - 'tools/t6_mp_xanim_delta_branch_corpus_v1.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v1.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v2.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v3.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json'
+      - '.github/workflows/t6_mp_xanim_delta_branch_corpus_v1.yml'
+permissions:
+  contents: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Build source-closed FastFile expander
+        run: cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+      - name: Scan hash-pinned MP maps transactionally
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6_mp_xanim proof/xanim/mp_corpus
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          python3 - <<'PY' > /tmp/targets.tsv
+          import json
+          d=json.load(open('manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json'))
+          by={m['zone']:m for m in d['maps']}
+          for z in d['scanOrder']:
+              m=by[z]
+              print(z,m['bytes'],m['sha256'],sep='\t')
+          PY
+          while IFS=$'\t' read -r zone bytes sha; do
+            out="proof/xanim/mp_corpus/$zone.json"
+            if test -f "$out"; then
+              if python3 - "$out" "$zone" "$bytes" "$sha" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          ok=(d.get('format')=='t6-mp-xanim-delta-branch-zone-census-v1'
+              and d.get('zone')==sys.argv[2]
+              and d.get('retailFastFile',{}).get('bytes')==int(sys.argv[3])
+              and d.get('retailFastFile',{}).get('sha256')==sys.argv[4])
+          raise SystemExit(0 if ok else 1)
+          PY
+              then
+                echo "SKIP durable exact proof $zone"
+                continue
+              fi
+              echo "STALE proof identity $zone; regenerating"
+            fi
+            ff="/tmp/t6_mp_xanim/$zone.ff"; exp="/tmp/t6_mp_xanim/$zone.expanded"
+            curl -fL --retry 4 --retry-delay 2 -o "$ff" "https://r2.houseofkublai.com/bo2/zone/all/$zone.ff"
+            test "$(stat -c %s "$ff")" -eq "$bytes"
+            echo "$sha  $ff" | sha256sum -c -
+            /tmp/t6_ff_expand "$ff" "$exp" "$zone"
+            python3 tools/t6_mp_xanim_delta_branch_zone_census_v1.py               --expanded "$exp" --zone "$zone" --fastfile-sha256 "$sha" --fastfile-bytes "$bytes" --out "$out"
+            git add "$out"
+            if ! git diff --cached --quiet; then
+              git commit -m "Persist $zone MP XAnim branch census"
+              for attempt in 1 2 3 4; do
+                git pull --rebase origin main && git push origin HEAD:main && break
+                test "$attempt" -lt 4
+                sleep $((attempt*2))
+              done
+            fi
+            rm -f "$ff" "$exp"
+          done < /tmp/targets.tsv
+      - name: Aggregate durable MP corpus proof
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 tools/t6_mp_xanim_delta_branch_corpus_v1.py             --targets manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json             --proof-dir proof/xanim/mp_corpus             --out proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json'))
+          s=d['summary']
+          assert s['targetMapCount']==31
+          assert s['mapsScanned']+s['mapsUnscanned']==31
+          assert s['mapsCountClosed']<=s['mapsScanned']
+          if s['mapsCountClosed']==31:
+              assert s['mapsPartial']==0 and s['mapsUnscanned']==0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git add proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist MP XAnim delta branch corpus'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1
+          path: |
+            proof/xanim/mp_corpus
+            proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json
+          if-no-files-found: error
+          compression-level: 9
