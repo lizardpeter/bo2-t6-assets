@@ -3,7 +3,7 @@
 from __future__ import annotations
 import argparse,hashlib,json,struct
 from pathlib import Path
-from t6_ipak_http_range_v1 import open_ipak
+from t6_ipak_http_range_v2 import open_ipak
 
 EXPECTED={
  "material":"mc/mtl_nt_2020_flags_01",
