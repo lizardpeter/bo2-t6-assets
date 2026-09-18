@@ -21,7 +21,7 @@ import json
 import struct
 from pathlib import Path
 
-from capstone import Cs, CS_ARCH_X86, CS_GRP_JUMP, CS_GRP_RET, CS_MODE_32
+from capstone import Cs, CS_ARCH_X86, CS_GRP_CALL, CS_GRP_JUMP, CS_GRP_RET, CS_MODE_32
 from capstone.x86_const import (
     X86_INS_ADD,
     X86_INS_LEA,
@@ -310,7 +310,7 @@ def main() -> int:
             block.append(snapshot)
             esp_delta = update_state(insn, regs, esp_delta)
             # Basic-block terminators make the +0/+4/+8 relationship conservative.
-            if insn.group(CS_GRP_JUMP) or insn.group(CS_GRP_RET):
+            if insn.group(CS_GRP_CALL) or insn.group(CS_GRP_JUMP) or insn.group(CS_GRP_RET):
                 flush()
         flush()
 
