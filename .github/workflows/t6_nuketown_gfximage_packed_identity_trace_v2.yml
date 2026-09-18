@@ -1,0 +1,117 @@
+name: T6 Nuketown packed GfxImage identity trace v2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_gfximage_packed_identity_trace_patch_v1.py'
+      - 'tools/t6_nuketown_gfximage_packed_identity_trace_join_v2.py'
+      - '.github/workflows/t6_nuketown_gfximage_packed_identity_trace_v2.yml'
+permissions:
+  contents: write
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore instrumented OAT cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-instrumented-cache
+          key: oat-t6-packed-trace-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_gfximage_packed_identity_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Build exactly pinned instrumented OAT
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_gfximage_packed_identity_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-instrumented-cache
+          cp "$BIN" /tmp/oat-instrumented-cache/Unlinker
+          chmod +x /tmp/oat-instrumented-cache/Unlinker
+      - name: Save instrumented OAT cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-instrumented-cache
+          key: oat-t6-packed-trace-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_gfximage_packed_identity_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Fetch exact five roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-instrumented-cache/Unlinker
+          test -x "$BIN"
+          mkdir -p /tmp/source /tmp/proof
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 -o "/tmp/source/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
+          cat > /tmp/proof/manifest.json <<'JSON'
+          {
+            "roots": [
+              {"label":"map","filename":"mp_nuketown_2020.ff","sha256":"6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0"},
+              {"label":"common","filename":"common_mp.ff","sha256":"93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77"},
+              {"label":"common_patch","filename":"common_patch_mp.ff","sha256":"95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9"},
+              {"label":"patch","filename":"patch_mp.ff","sha256":"459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e"},
+              {"label":"code_post","filename":"code_post_gfx_mp.ff","sha256":"b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3"}
+            ]
+          }
+          JSON
+      - name: Trace exact native packed identities per root
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-instrumented-cache/Unlinker
+          : > /tmp/proof/results.txt
+          for spec in map=mp_nuketown_2020.ff common=common_mp.ff common_patch=common_patch_mp.ff patch=patch_mp.ff code_post=code_post_gfx_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}; out=/tmp/out_$label; mkdir -p "$out"
+            set +e
+            "$BIN" --no-color --verbose --include-assets image --output-folder "$out" "/tmp/source/$file" >"/tmp/proof/$label.log" 2>&1
+            rc=$?
+            set -e
+            grep '^T6_GFXIMAGE_PACKED ' "/tmp/proof/$label.log" > "/tmp/proof/${label}_packed.txt" || true
+            count=$(wc -l < "/tmp/proof/${label}_packed.txt")
+            printf '%s rc=%s packed=%s\n' "$label" "$rc" "$count" | tee -a /tmp/proof/results.txt
+          done
+          test "$(cat /tmp/proof/*_packed.txt | wc -l)" -gt 0
+      - name: Persist root-aware packed identity proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_gfximage_packed_identity_trace_join_v2.py --manifest /tmp/proof/manifest.json --input-dir /tmp/proof --out proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2.json'))
+          s=d['summary']
+          assert s['occurrenceCount'] >= s['uniqueNameCount'] >= s['stableTupleNameCount']
+          assert s['stableTupleNameCount'] + s['conflictingTupleNameCount'] == s['uniqueNameCount']
+          assert set(s['rootTraceCounts']) == {'map','common','common_patch','patch','code_post'}
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2.json
+          git commit -m 'Persist five-root packed GfxImage identity trace' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2
+          path: /tmp/proof
