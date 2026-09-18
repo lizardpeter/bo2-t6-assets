@@ -1,0 +1,26 @@
+{
+  "format": "t6-current-client-constructed-zone-rows-v1",
+  "authority": "current Plutonium revision 5346 only; comparative, not historical-retail authority",
+  "client": {
+    "revision": "5346",
+    "bytes": 13263640,
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "consumerTarget": "0x004174b0",
+  "rows": [
+    {"callSite":"0x00459440","count":1,"rowIndex":0,"nameBuffer":"0x018018e8","constructedName":"common_mp","field4":"0x00000080","field8":"0x00000000"},
+    {"callSite":"0x0045940e","count":2,"rowIndex":0,"nameBuffer":"0x01709508","constructedName":"patch_ui_mp","field4":"0x08000000","field8":"0x00000000"},
+    {"callSite":"0x0045940e","count":2,"rowIndex":1,"nameBuffer":"0x01707b4c","constructedName":"ui_mp","field4":"0x02000000","field8":"0x00000000"},
+    {"callSite":"0x00611336","count":2,"rowIndex":0,"nameBuffer":"0x01805c90","constructedName":"patch_mp","field4":"0x00000002","field8":"0x00000000"},
+    {"callSite":"0x00611336","count":2,"rowIndex":1,"nameBuffer":"0x01707b64","constructedName":"code_post_gfx_mp","field4":"0x00000008","field8":"0x00000000"},
+    {"callSite":"0x00922a35","count":1,"rowIndex":0,"nameBuffer":"0x0131bf00","constructedName":"ffotd_mp","field4":"0x20000000","field8":"0x80000000"}
+  ],
+  "evidence": {
+    "common_mp": ["0x00459421 lea ecx,[esp+8]","0x00459425 push 1","0x00459427 push ecx","0x00459428 mov [esp+0x10],0x18018e8","0x00459430 mov [esp+0x14],0x80","0x00459438 mov [esp+0x18],0","0x00459440 call 0x4174b0"],
+    "patch_ui_mp_and_ui_mp": ["0x004593d7 lea eax,[esp+8]","0x004593db push 2","0x004593dd push eax","0x004593de mov [esp+0x10],0x1709508","0x004593e6 mov [esp+0x14],0x8000000","0x004593ee mov [esp+0x18],0","0x004593f6 mov [esp+0x1c],0x1707b4c","0x004593fe mov [esp+0x20],0x2000000","0x00459406 mov [esp+0x24],0","0x0045940e call 0x4174b0"],
+    "patch_mp_and_code_post_gfx_mp": ["0x00611303 xor eax,eax","0x00611305 push eax","0x00611306 push eax","0x00611307 mov [esp+0x10],eax","0x0061130b mov [esp+0x1c],eax","0x0061130f lea eax,[esp+8]","0x00611313 push 2","0x00611315 push eax","0x00611316 mov [esp+0x10],0x1805c90","0x0061131e mov [esp+0x14],2","0x00611326 mov [esp+0x1c],0x1707b64","0x0061132e mov [esp+0x20],8","0x00611336 call 0x4174b0"],
+    "ffotd_mp": ["0x00922a16 lea eax,[esp+8]","0x00922a1a push 1","0x00922a1c push eax","0x00922a1d mov [esp+0x10],0x131bf00","0x00922a25 mov [esp+0x14],0x20000000","0x00922a2d mov [esp+0x18],0x80000000","0x00922a35 call 0x4174b0"]
+  },
+  "derivation": "The committed fastfile-name-construction proof establishes each destination buffer's base string and the exact _mp append operations. At each listed consumer, stack-pointer normalization after the two argument pushes yields 12-byte rows: name pointer at +0, field4 at +4, field8 at +8. The listed call receives the exact row pointer and exact row count.",
+  "proofBoundary": "These rows, constructed names, positional field values, row stride, row count, and common consumer target are exact decoded evidence for the SHA-classified current client only. field4 and field8 are positional labels, not promoted source names. This file does not by itself name 0x004174b0, prove historical-retail XZoneInfo/allocFlags/freeFlags semantics, import server priority behavior, or select any Technique winner."
+}
