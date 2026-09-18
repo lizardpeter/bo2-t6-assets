@@ -30,9 +30,14 @@ jobs:
           assert s['productionUniqueImageCount']==450
           assert s0['productionUniqueImageCount']==450
           assert s['v1ExactPayloadCoveredCount']==s0['exactPayloadCoveredCount']==103
-          assert s['newTracedIpakCoveredCount']==rs['resolved']
-          assert s['exactPayloadCoveredCount']==103+rs['resolved']
-          assert s['exactPayloadMissingCount']==450-s['exactPayloadCoveredCount']
+          assert rs['resolved']==347 and rs['missing']==0 and rs['conflict']==0
+          assert rs['unresolvedNotInPackedTraceCount']==0 and rs['unresolvedTraceConflictCount']==0
+          assert s['newTracedIpakCoveredCount']==347
+          assert s['exactPayloadCoveredCount']==450
+          assert s['exactPayloadMissingCount']==0
+          assert s['exactPayloadCoverageRatio']==1.0
+          assert s['materialExactPayloadCoveredCount']==423
+          assert s['materialExactPayloadMissingCount']==0
           assert len(d['unresolvedProductionImages'])==s['exactPayloadMissingCount']
           assert len(d['newExactProviders'])==rs['resolved']
           assert len({x['image'] for x in d['newExactProviders']})==len(d['newExactProviders'])
