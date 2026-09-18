@@ -1,0 +1,55 @@
+{
+  "authority": "SHA-classified current Plutonium client only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-zone-classifier-semantics-v1",
+  "persistentRuntimeConsumer": {
+    "argument1": "persistent_record_pointer",
+    "argument2": "persistent_trailing_classifier",
+    "classifierBit15IsExtracted": true,
+    "classifierForwardedAsCallArgument": true,
+    "classifierMasksAndThresholds": [
+      "0x04092214",
+      "0x00400000",
+      "0x20000000",
+      "0x00200000",
+      "0x00014000"
+    ],
+    "target": "0x007fdf40"
+  },
+  "proofBoundary": "These semantics are forced by exact persisted current-client instructions. The positional +4 dword may now be called the current-client row ordering/classifier field. It is not source-named allocFlags, and +8 is not source-named freeFlags. No historical-retail identity, duplicate-XAsset precedence policy, or Technique winner is promoted.",
+  "proven": {
+    "plus4IsCurrentClientRecordOrderingKey": true,
+    "plus4PersistsIntoRuntimeFlagTests": true,
+    "plus4Threshold0x00400000ChangesOrderingDirection": true,
+    "plus8DoesNotParticipateInRowComparator": true
+  },
+  "rowOrdering": {
+    "behavior": [
+      {
+        "condition": "first +4 < 0x00400000 AND second +4 < 0x00400000",
+        "predicate": "first +4 < second +4"
+      },
+      {
+        "condition": "otherwise",
+        "predicate": "first +4 > second +4"
+      }
+    ],
+    "callback": "0x007fdf00",
+    "classifierOffset": 4,
+    "firstRecordPointerArgumentOffset": 4,
+    "recordNamePointerOffset": 0,
+    "secondRecordPointerArgumentOffset": 8,
+    "thirdFieldOffset8Read": false,
+    "threshold": "0x00400000"
+  },
+  "source": {
+    "bytes": 277471,
+    "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_CORE_FUNCTION_PROBE_V1.json",
+    "sha256": "a6a538684476df62b4897759f72be8463e195d2f9518819603b638809c7b73b6"
+  }
+}
