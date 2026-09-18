@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/t6_current_client_instruction_operand_xref_probe_v1.py'
       - 'tools/t6_current_client_xzoneinfo_row_probe_v1.py'
+      - 'tools/t6_current_client_fastfile_name_construction_probe_v1.py'
       - '.github/workflows/t6_current_client_zone_construction_probe_v1.yml'
 
 permissions:
@@ -78,6 +79,17 @@ jobs:
           python3 -m py_compile tools/t6_current_client_xzoneinfo_row_probe_v1.py
           python3 tools/t6_current_client_xzoneinfo_row_probe_v1.py             /tmp/client/t6mp.exe             --revision "$(cat /tmp/client/revision)"             --out /tmp/proof/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json             | tee /tmp/proof/xzoneinfo_summary.log
 
+      - name: Run exact fastfile-name constructor and buffer-use probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_current_client_fastfile_name_construction_probe_v1.py
+          python3 tools/t6_current_client_fastfile_name_construction_probe_v1.py \
+            /tmp/client/t6mp.exe \
+            --revision "$(cat /tmp/client/revision)" \
+            --out /tmp/proof/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json \
+            | tee /tmp/proof/fastfile_name_summary.log
+
       - name: Delete executable and hash derived evidence
         shell: bash
         run: |
@@ -95,15 +107,18 @@ jobs:
              proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json
           cp /tmp/proof/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json \
              proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json
+          cp /tmp/proof/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json \
+             proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json
           python3 - <<'PY'
           import hashlib,json
           from pathlib import Path
           xp=Path('proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json')
           zp=Path('proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json')
-          x=json.loads(xp.read_text()); z=json.loads(zp.read_text())
+          fp=Path('proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json')
+          x=json.loads(xp.read_text()); z=json.loads(zp.read_text()); f=json.loads(fp.read_text())
           def digest(p):
               b=p.read_bytes(); return len(b),hashlib.sha256(b).hexdigest()
-          xb,xh=digest(xp); zb,zh=digest(zp)
+          xb,xh=digest(xp); zb,zh=digest(zp); fb,fh=digest(fp)
           lines=[
               '# T6 current-client decoded zone construction result — 2026-09-18','',
               '## Authority boundary','',
@@ -130,12 +145,25 @@ jobs:
                   lines.append(f"- \`{name}\`: **{count}**")
           lines += [
               '',
+              '## Exact fastfile-name constructor','',
+              '- constructor range: `{}`..`{}`'.format(f['constructor']['start'], f['constructor']['endExclusive']),
+              '- decoded constructor instructions: **{}**'.format(f['constructor']['instructionCount']),
+              '- selected helper calls: **{}**'.format(len(f['constructor']['selectedHelperCalls'])),
+              '- exact destination buffers: **{}**'.format(len(f['destinationBuffers'])),'',
+              '### Destination-buffer consumers','',
+          ]
+          for row in f['destinationBuffers']:
+              lines.append('- `{}`: decodedOperandXrefs={}'.format(row['va'], row['decodedOperandXrefCount']))
+          lines += [
+              '',
               '## Artifact identities','',
               f"- decoded xref JSON: {xb:,} bytes, SHA-256 \`{xh}\`",
-              f"- structural row JSON: {zb:,} bytes, SHA-256 \`{zh}\`",'',
+              f"- structural row JSON: {zb:,} bytes, SHA-256 \`{zh}\`",
+              f"- fastfile-name construction JSON: {fb:,} bytes, SHA-256 \`{fh}\`",'',
               '## Proof boundary','',
               x['proofBoundary'],'',
               z['proofBoundary'],'',
+              f['proofBoundary'],'',
               '## Next step','',
               'Use only decoded operand xrefs and admitted same-row +0/+4(/+8) stores as anchors for further current-client data-flow recovery. Raw packed-address hits and proximity-only calls remain excluded. If no exact full-zone row is recovered, trace exact base-string construction into the eventual row pointer without importing dedicated-server flag values. Historical-retail promotion still requires genuine retail executable/runtime evidence.','',
               '## Existing closure preserved','',
@@ -150,6 +178,7 @@ jobs:
           git add \
             proof/current_client/T6_CURRENT_CLIENT_INSTRUCTION_OPERAND_XREF_PROBE_V1.json \
             proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json \
+            proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json \
             checkpoints/T6_CURRENT_CLIENT_DECODED_ZONE_CONSTRUCTION_RESULT_2026-09-18.md
           if git diff --cached --quiet; then
             echo "derived proof already current"
