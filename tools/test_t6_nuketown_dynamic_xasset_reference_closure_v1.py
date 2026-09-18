@@ -26,6 +26,8 @@ def main():
              "pairs":[["model","model_a"],["destructibledef","dest_a"],["fxanim_fx_1","fx_a"],["fxanim_fx_1_tag","tag"]]},
             {"entityIndex":2,"model":"model_b","destructibledef":None,
              "pairs":[["model","model_b"]]},
+            {"entityIndex":3,"model":"*17","destructibledef":None,
+             "pairs":[["model","*17"]]},
           ]
         }
         mp=d/"mapents.json"; mp.write_text(json.dumps(census))
@@ -35,12 +37,16 @@ def main():
         script=Path(__file__).with_name("t6_nuketown_dynamic_xasset_reference_closure_v1.py")
         subprocess.run([sys.executable,str(script),"--mapents",str(mp),"--binding","map",str(b1),"--binding","patch",str(b2),"--out",str(out)],check=True)
         x=json.loads(out.read_text()); s=x["summary"]
-        assert s["referenceIdentityCount"]==4
+        assert s["referenceIdentityCount"]==5
         assert s["resolved"]==3 and s["absentFromSuppliedRoots"]==1
+        assert s["inlineBrushModelTokenCount"]==1
         by={(r["expectedAssetType"],r["name"]):r for r in x["rows"]}
         assert len(by[("XMODEL","model_a")]["matches"])==2
         assert by[("XMODEL","model_b")]["status"]=="absent-from-supplied-roots"
         assert by[("XMODEL","model_b")]["sameNameOtherAssetTypes"]==["FX"]
+        assert by[("XMODEL","*17")]["status"]=="inline-brush-model-token"
+        assert by[("XMODEL","*17")]["inlineBrushModelIndex"]==17
+        assert by[("XMODEL","*17")]["matches"]==[]
         assert by[("FX","fx_a")]["sourceKeys"]==["fxanim_fx_1"]
         assert "fxanim_fx_1_tag" not in by[("FX","fx_a")]["sourceKeys"]
     print("PASS t6_nuketown_dynamic_xasset_reference_closure_v1")
