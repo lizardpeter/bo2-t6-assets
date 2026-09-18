@@ -25,7 +25,8 @@ jobs:
           assert j['exactFindings']['payloadDwordOffset'] == 4
           assert j['exactFindings']['collisionLinkWordOffset'] == 10
           assert j['exactFindings']['secondaryLinkWordOffset'] == 12
-          assert j['exactFindings']['directLookupReturnsPayloadDword'] is True\n          assert j['exactFindings']['independentPayloadConsumerCount'] == 2
+          assert j['exactFindings']['directLookupReturnsPayloadDword'] is True
+          assert j['exactFindings']['independentPayloadConsumerCount'] == 2
           PY
           git diff --check
           git config user.name github-actions[bot]
