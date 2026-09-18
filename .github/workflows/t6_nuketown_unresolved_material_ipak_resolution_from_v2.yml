@@ -24,6 +24,11 @@ jobs:
           python3 tools/t6_nuketown_unresolved_material_ipak_resolution_v1.py             --payload proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json             --trace proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2.json             --out proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json             https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak             https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak             https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/base.ipak             https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/so.ipak             https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
           python3 - <<'PY'
           import json
+          trace=json.load(open('proof/T6_NUKETOWN_GFXIMAGE_PACKED_IDENTITY_TRACE_V2.json'))
+          ts=trace['summary']
+          assert ts['uniqueNameCount']==4561
+          assert ts['stableTupleNameCount']==4515
+          assert ts['conflictingTupleNameCount']==46
           d=json.load(open('proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json'))
           s=d['summary']
           assert d['traceFormat']=='t6-nuketown-gfximage-packed-identity-trace-v2'
