@@ -14,30 +14,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
-      - name: Recover exact SHA-pinned retail t6mp.exe
+      - name: Verify source-universe retail-client availability
         env:
           ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
         run: |
           set -euo pipefail
           mkdir -p /tmp/proof proof/retail_client
           PYTHONPATH=tools python3 - <<'PY'
-          import hashlib,os
+          import hashlib,json,os
           from pathlib import Path
           from t6_remote_zip_range_v1 import RemoteZip
-          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-xasset-client-proof/1')
-          entries,_=rz.central_directory(); want='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'; winner=None
-          for e in entries:
-              if e['uncompressedSize']!=12850328: continue
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-assets-xasset-client-proof/2')
+          entries,meta=rz.central_directory(); want='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'; expected=12850328
+          size_matches=[e for e in entries if int(e['uncompressedSize'])==expected]
+          exact=[]
+          for e in size_matches:
               raw=rz.extract(e,verify_crc=True)
-              if hashlib.sha256(raw).hexdigest()==want:
-                  if winner is not None: raise SystemExit('multiple exact client matches')
-                  winner=raw
-          if winner is None: raise SystemExit('exact retail client not recovered')
-          Path('/tmp/t6mp.exe').write_bytes(winner)
+              if hashlib.sha256(raw).hexdigest()==want: exact.append((e,raw))
+          result={
+            'format':'t6-retail-client-xasset-precedence-source-gate-v1',
+            'expectedRetailIdentity':{'bytes':expected,'sha256':want},
+            'sourceUniverse':{'url':os.environ['ZIP_URL'],'entryCount':len(entries)},
+            'exactSizeCandidateCount':len(size_matches),'exactIdentityMatchCount':len(exact),
+            'status':'exact_retail_client_available' if len(exact)==1 else 'blocked_exact_retail_client_absent_from_source_universe',
+            'proofBoundary':'This is a bounded source-universe gate only. Zero matches proves absence only from this ZIP, not global absence and not retail precedence semantics.'
+          }
+          Path('proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_SOURCE_GATE_V1.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          Path('/tmp/proof/source_gate.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          if len(exact)==1: Path('/tmp/t6mp.exe').write_bytes(exact[0][1])
+          elif len(exact)>1: raise SystemExit('multiple exact retail client matches')
           PY
-          echo '11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1  /tmp/t6mp.exe' | sha256sum -c -
-          test "$(stat -c %s /tmp/t6mp.exe)" = 12850328
+      - name: Persist bounded source gate
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_SOURCE_GATE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist retail precedence source-universe gate'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
       - name: Inventory exact client precedence evidence
+        if: ${{ hashFiles('/tmp/t6mp.exe') != '' }}
         run: |
           set -euo pipefail
           python3 tools/t6_retail_client_xasset_precedence_probe_v1.py /tmp/t6mp.exe --out proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json | tee /tmp/proof/probe.log
@@ -50,8 +70,6 @@ jobs:
           for r in p['immediateInventory']: print(r['valueHex'],r['executableHitCount'])
           PY
           git diff --check
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add proof/retail_client/T6_RETAIL_CLIENT_XASSET_PRECEDENCE_DISCOVERY_V1.json
           if ! git diff --cached --quiet; then
             git commit -m 'Persist exact retail client XAsset precedence discovery'
@@ -59,8 +77,8 @@ jobs:
             git push origin HEAD:main
           fi
       - name: Refuse executable archival
+        if: always()
         run: |
-          set -euo pipefail
           rm -f /tmp/t6mp.exe
           test ! -e /tmp/proof/t6mp.exe
           ! find /tmp/proof -type f -size +8M | grep -q .
