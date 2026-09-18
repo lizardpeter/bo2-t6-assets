@@ -63,12 +63,22 @@ This is comparative evidence from the SHA-classified current Plutonium client on
 - `0x018018e8`: **3**
 - `0x01805c90`: **1**
 
+## Shared 12-byte-row sink
+
+- target: `0x004174b0`
+- inbound exact direct calls: **18**
+- sink CFG instructions: **1020**
+- sink CFG basic blocks: **302**
+- exact 12-byte stride instructions: **8**
+- exact pre-call 0x8000 row candidates: **0**
+
 ## Artifact identities
 
 - decoded xref JSON: 110,394 bytes, SHA-256 \`dde226b48d17220241ca62f132b6b0e6f7cc6304c18894aa9905aa645979b7c3\`
 - structural row JSON: 6,219 bytes, SHA-256 \`ef9c7b524c1b34928c270361cbddd46e2a33bff920930ed4a563f019926125d5\`
 - fastfile-name construction JSON: 373,148 bytes, SHA-256 \`21f69123d49db277afb2ff35d2963bb3510702e4052b746aa2d616ddce848c14\`
 - constructed-name row JSON: 19,503 bytes, SHA-256 \`5b5feb017f49038a99ee68f89cb3416818c1bee82c5639abc5051227a1b18d0e\`
+- shared row sink JSON: 1,355,146 bytes, SHA-256 \`de79ff455cd84a96653f8e3e21b175cebcc99f55974bb66333962d42f82a3a7c\`
 
 ## Proof boundary
 
@@ -79,6 +89,8 @@ A candidate requires decoded straight-line stores tying an exact mapped target s
 The constructor range, direct calls, contiguous push arguments, mapped C strings, destination-buffer VAs, and decoded operand xrefs are exact for the SHA-classified current client. Cdecl argument ordering is recorded only for contiguous PUSH sequences immediately preceding a direct CALL. Helper behavior can be inspected from the included instructions, but no source symbol name is assigned. Buffer construction/use does not prove XZoneInfo semantics, allocFlags, precedence, historical-retail equivalence, or any Technique winner.
 
 A candidate requires a decoded straight-line store of an exact constructor destination-buffer pointer at row +0 and a concrete value at the same effective row +4, with the row-base register stable; +8 is retained when concrete. This tests the server-proven 12-byte shape without importing server flag values or priorities. A shape match does not prove the current-client row is XZoneInfo, does not name its +4/+8 fields, and cannot select a historical-retail winner.
+
+0x004174b0 is selected only as the exact common direct-call target of independently recovered current-client constructed 12-byte rows. CFG instructions, direct-call edges, exact 12-byte arithmetic, and call-site stack stores are byte-derived from the SHA-classified current client. A 0x8000 row candidate requires an explicit ESP-relative name store followed at +4 by immediate 0x8000 and at +8 by immediate zero in the same decoded pre-call context. None of this assigns a source symbol, proves XZoneInfo field semantics, imports server priority rules, establishes historical-retail behavior, or selects any Technique winner.
 
 ## Next step
 
