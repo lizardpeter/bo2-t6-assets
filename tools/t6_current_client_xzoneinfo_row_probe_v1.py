@@ -201,6 +201,31 @@ def same_row(a, b, delta):
     )
 
 
+def writes_register(insn, reg_id):
+    if not reg_id:
+        return False
+    try:
+        _, writes = insn.regs_access()
+    except Exception:
+        return False
+    return reg_id in writes
+
+
+def known_esp_update(insn):
+    ops = getattr(insn, "operands", ())
+    if insn.id in (X86_INS_PUSH, X86_INS_POP):
+        return True
+    if (
+        len(ops) >= 2
+        and ops[0].type == X86_OP_REG
+        and ops[0].reg == X86_REG_ESP
+        and ops[1].type == X86_OP_IMM
+        and insn.id in (X86_INS_ADD, X86_INS_SUB)
+    ):
+        return True
+    return not writes_register(insn, X86_REG_ESP)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
@@ -263,6 +288,14 @@ def main() -> int:
                     for nxt in items[i + 1 : min(len(items), i + LOOKAHEAD + 1)]:
                         ninsn = nxt["insn"]
                         context.append(insn_row(ninsn))
+                        # If a non-ESP row base is rewritten, later +4/+8 stores
+                        # cannot be proven to address the same object.
+                        if (
+                            dest["baseRegId"]
+                            and dest["baseRegId"] != X86_REG_ESP
+                            and writes_register(ninsn, dest["baseRegId"])
+                        ):
+                            break
                         nops = getattr(ninsn, "operands", ())
                         if ninsn.id != X86_INS_MOV or len(nops) < 2 or nops[0].type != X86_OP_MEM:
                             continue
@@ -308,9 +341,16 @@ def main() -> int:
                 continue
             snapshot = {"insn": insn, "regs": dict(regs), "espDelta": esp_delta}
             block.append(snapshot)
+            esp_was_known = known_esp_update(insn)
             esp_delta = update_state(insn, regs, esp_delta)
-            # Basic-block terminators make the +0/+4/+8 relationship conservative.
-            if insn.group(CS_GRP_CALL) or insn.group(CS_GRP_JUMP) or insn.group(CS_GRP_RET):
+            # Basic-block terminators and unmodelled stack-pointer writes make
+            # the +0/+4/+8 relationship conservative.
+            if (
+                not esp_was_known
+                or insn.group(CS_GRP_CALL)
+                or insn.group(CS_GRP_JUMP)
+                or insn.group(CS_GRP_RET)
+            ):
                 flush()
         flush()
 
