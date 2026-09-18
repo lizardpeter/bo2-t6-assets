@@ -42,25 +42,29 @@ jobs:
             count=$(find "$root" -type f | wc -l); printf '%s rc=%s files=%s\n' "$label" "$rc" "$count" | tee -a /tmp/proof/results.txt
             find "$root" -type f -printf '%P\n' | sort >"/tmp/proof/${label}_files.txt"
           done
-          cat /tmp/proof/results.txt
-      - name: Persist bounded probe result
+      - name: Persist complete bounded identity visibility
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,pathlib,hashlib
-          roots={}
+          import json,pathlib,re
+          roots={}; dumped=re.compile(r'^Dumped image "(.*)"$'); missing=re.compile(r'^ERROR: Could not find data for image "(.*)"$')
+          results=pathlib.Path('/tmp/proof/results.txt').read_text().splitlines()
           for label in ['map','common','common_patch','patch','code_post']:
-              log=pathlib.Path('/tmp/proof/'+label+'.log').read_text(errors='replace')
-              files=pathlib.Path('/tmp/proof/'+label+'_files.txt').read_text().splitlines()
-              line=next(x for x in pathlib.Path('/tmp/proof/results.txt').read_text().splitlines() if x.startswith(label+' '))
-              roots[label]={'result':line,'files':files,'logTail':log.splitlines()[-80:]}
-          d={'format':'t6-nuketown-material-gfximage-root-probe-v1','authority':'SHA-pinned five-root FastFiles + pinned OAT diagnostic only','roots':roots,'proofBoundary':'This inventories what pinned OAT emits for explicit image filtering. Filenames or emission alone are not promoted to production identity or payload ownership; any later join must be exact and independently validated.'}
+              lines=pathlib.Path('/tmp/proof/'+label+'.log').read_text(errors='replace').splitlines(); ds=[]; ms=[]
+              for line in lines:
+                  m=dumped.match(line)
+                  if m: ds.append(m.group(1))
+                  m=missing.match(line)
+                  if m: ms.append(m.group(1))
+              roots[label]={'result':next(x for x in results if x.startswith(label+' ')),'files':pathlib.Path('/tmp/proof/'+label+'_files.txt').read_text().splitlines(),'dumpedImageNames':sorted(set(ds)),'missingPayloadImageNames':sorted(set(ms)),'dumpedImageNameCount':len(set(ds)),'missingPayloadImageNameCount':len(set(ms))}
+          d={'format':'t6-nuketown-material-gfximage-root-probe-v1','authority':'SHA-pinned five-root FastFiles + pinned OAT diagnostic only','roots':roots,'proofBoundary':'Complete OAT image names are retained as diagnostic root visibility. Missing-payload messages prove only that this OAT invocation lacked image bytes in its search path; they do not prove retail payload absence. Filenames/emission are not promoted to production identity or payload ownership without an exact join.'}
           p=pathlib.Path('proof/T6_NUKETOWN_MATERIAL_GFXIMAGE_ROOT_PROBE_V1.json'); p.parent.mkdir(exist_ok=True); p.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({k:{'dumped':v['dumpedImageNameCount'],'missingPayload':v['missingPayloadImageNameCount'],'files':len(v['files'])} for k,v in roots.items()},indent=2,sort_keys=True))
           PY
           git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add proof/T6_NUKETOWN_MATERIAL_GFXIMAGE_ROOT_PROBE_V1.json
-          git commit -m 'Persist five-root Material GfxImage probe' || exit 0
+          git commit -m 'Persist complete five-root GfxImage visibility' || exit 0
           git pull --rebase origin main; git push origin HEAD:main
       - uses: actions/upload-artifact@v4
         with:
