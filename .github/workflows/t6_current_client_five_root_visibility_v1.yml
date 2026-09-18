@@ -1,0 +1,49 @@
+name: T6 current client five root visibility v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_five_root_visibility_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_FIVE_ROOT_SCALAR_RELATION_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_CHAIN_ORDER_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_DEFERRED_REPLAY_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_PAYLOAD_EXCHANGE_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_LOOKUP_SEMANTICS_V1.json'
+      - '.github/workflows/t6_current_client_five_root_visibility_v1.yml'
+permissions:
+  contents: write
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project and validate current-client five-root visibility
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_five_root_visibility_v1.py \
+            --scalar proof/current_client/T6_CURRENT_CLIENT_FIVE_ROOT_SCALAR_RELATION_V1.json \
+            --chain proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_CHAIN_ORDER_V1.json \
+            --deferred proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_DEFERRED_REPLAY_V1.json \
+            --exchange proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_PAYLOAD_EXCHANGE_V1.json \
+            --lookup proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_LOOKUP_SEMANTICS_V1.json \
+            --out proof/current_client/T6_CURRENT_CLIENT_FIVE_ROOT_VISIBILITY_V1.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('proof/current_client/T6_CURRENT_CLIENT_FIVE_ROOT_VISIBILITY_V1.json'))
+          s=j['summary']
+          assert s['conflictCount']==58
+          assert s['currentClientWinnerCount']==58
+          assert s['historicalRetailWinnerCount']==0
+          assert s['allCurrentClientWinnersAreLowerScalarOwner'] is True
+          assert all(x['historicalRetailWinner'] is None for x in j['conflicts'])
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_FIVE_ROOT_VISIBILITY_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist current-client five-root visibility closure'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
