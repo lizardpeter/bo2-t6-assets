@@ -1,0 +1,53 @@
+name: T6 Nuketown lightmap inline payload proof v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_lightmap_inline_payload_proof_v1.py'
+      - '.github/workflows/t6_nuketown_lightmap_inline_payload_proof_v1.yml'
+permissions:
+  contents: write
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover exact retail expanded map
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source proof
+          curl -fL --retry 4 -o /tmp/source/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
+          cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
+          /tmp/t6_expand /tmp/source/mp_nuketown_2020.ff /tmp/source/mp_nuketown_2020.expanded.bin mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/source/mp_nuketown_2020.expanded.bin' | sha256sum -c -
+      - name: Hash exact inline lightmap payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_lightmap_inline_payload_proof_v1.py --expanded /tmp/source/mp_nuketown_2020.expanded.bin --role-proof manifests/maps/mp_nuketown_2020/lightmap_role_presence_proof_v1.json --out proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json'))
+          assert j['summary']=={'exactInlinePayloadBytes':9437184,'exactInlinePayloadCount':2}
+          assert [x['image'] for x in j['payloads']]==['*lightmap0_secondary','*lightmap1_secondary']
+          assert all(len(x['payloadSha256'])==64 for x in j['payloads'])
+          PY
+          git diff --check
+      - name: Persist proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json
+          git commit -m 'Persist exact inline Nuketown lightmap payload hashes'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1
+          path: proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json
+          if-no-files-found: error
