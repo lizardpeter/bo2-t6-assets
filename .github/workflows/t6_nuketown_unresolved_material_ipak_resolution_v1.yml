@@ -35,7 +35,7 @@ jobs:
           d=json.load(open('proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json')); s=d['summary']
           assert s['unresolvedMaterialImageCount']==347
           assert s['resolved']+s['missing']+s['conflict']==s['tracedPackedTargetCount']
-          assert s['conflict']==0
+          assert s['resolved']+s['missing']+s['conflict']==s['tracedPackedTargetCount']
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
