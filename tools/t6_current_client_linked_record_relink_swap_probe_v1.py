@@ -9,7 +9,7 @@ CLIENT="770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
 RANGES=[
  ("directLookup",0x00479c40,0x00479cdc),
  ("swapHelper",0x007fd4b0,0x007fd5b0),
- ("insertionPath",0x007fd8c0,0x007fdc43),
+ ("insertionPath",0x007fd8c0,0x007fdd30),
 ]
 
 def sections(raw):
