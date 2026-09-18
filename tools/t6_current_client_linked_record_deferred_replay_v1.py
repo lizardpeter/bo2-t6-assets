@@ -8,7 +8,7 @@ import argparse,json,hashlib
 from pathlib import Path
 
 def findseq(rows, specs):
-    by={r["address"]:r for r in rows}
+    by=rows if isinstance(rows,dict) else {r["address"]:r for r in rows}
     out=[]
     for a,m,o in specs:
         r=by.get(a)
