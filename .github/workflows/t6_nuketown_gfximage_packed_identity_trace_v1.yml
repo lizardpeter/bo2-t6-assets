@@ -25,7 +25,7 @@ jobs:
           python3 tools/t6_oat_gfximage_packed_identity_trace_patch_v1.py /tmp/oat
           git -C /tmp/oat diff --check
           cd /tmp/oat; PREMAKE_NO_PROMPT=1 ./generate.sh; make -C build -j2 config=debug_x86 UnlinkerCli
-          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1); test -n "$BIN"; echo "$BIN" >/tmp/unlinker_path
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1); test -n "$BIN"; realpath "$BIN" >/tmp/unlinker_path; test -x "$(cat /tmp/unlinker_path)"
       - name: Fetch exact Nuketown root and trace images
         shell: bash
         run: |
