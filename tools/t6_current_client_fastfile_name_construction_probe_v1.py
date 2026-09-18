@@ -219,29 +219,50 @@ def helper_call_rows(raw, sections, insns):
     return calls, sorted(destinations)
 
 
+def following_context(raw, sections, va, count):
+    off = va_to_offset(sections, va)
+    sec = section_for_va(sections, va)
+    if off is None or sec is None or not sec["executable"]:
+        return []
+    end = min(off + 0x200, sec["rawOffset"] + sec["rawSize"])
+    out = []
+    for insn in md().disasm(raw[off:end], va):
+        if insn.id == 0:
+            continue
+        out.append(row(insn))
+        if len(out) >= count:
+            break
+    return out
+
+
 def contexts_for_refs(raw, sections, wanted):
     matches = {va: [] for va in wanted}
     for sec in sections:
         if not sec["executable"]:
             continue
         blob = raw[sec["rawOffset"] : sec["rawOffset"] + sec["rawSize"]]
-        all_insns = [x for x in md().disasm(blob, sec["va"]) if x.id != 0]
-        for idx, insn in enumerate(all_insns):
-            refs = [x for x in operand_refs(insn) if x[2] in matches]
-            if not refs:
+        previous = deque(maxlen=PRE_CONTEXT)
+        for insn in md().disasm(blob, sec["va"]):
+            if insn.id == 0:
+                previous.clear()
                 continue
-            for op_index, kind, value in refs:
-                matches[value].append(
-                    {
-                        "section": sec["name"],
-                        "instruction": row(insn),
-                        "operandIndex": op_index,
-                        "operandKind": kind,
-                        "insideConstructor": CONSTRUCTOR_START <= insn.address <= CONSTRUCTOR_START + MAX_CONSTRUCTOR_BYTES,
-                        "before": [row(x) for x in all_insns[max(0, idx - PRE_CONTEXT):idx]],
-                        "after": [row(x) for x in all_insns[idx + 1:idx + 1 + POST_CONTEXT]],
-                    }
-                )
+            refs = [x for x in operand_refs(insn) if x[2] in matches]
+            if refs:
+                after = following_context(raw, sections, insn.address + insn.size, POST_CONTEXT)
+                before = list(previous)
+                for op_index, kind, value in refs:
+                    matches[value].append(
+                        {
+                            "section": sec["name"],
+                            "instruction": row(insn),
+                            "operandIndex": op_index,
+                            "operandKind": kind,
+                            "insideConstructor": CONSTRUCTOR_START <= insn.address <= CONSTRUCTOR_START + MAX_CONSTRUCTOR_BYTES,
+                            "before": before,
+                            "after": after,
+                        }
+                    )
+            previous.append(row(insn))
     return matches
 
 
