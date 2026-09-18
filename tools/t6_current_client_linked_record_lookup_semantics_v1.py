@@ -17,19 +17,22 @@ def main():
     src=json.loads(a.xref.read_text())
     if src.get("format")!="t6-current-client-linked-record-global-xref-probe-v1": raise SystemExit("wrong input")
     rows=[]
+    # The persisted windows need not include each function prologue. Identify the two
+    # independent lookup bodies by exact arena-xref instruction and require their
+    # concrete payload/link operations in the captured byte windows.
+    targets={"0x00479c83":"0x00479c40","0x004f3fb3":"0x004f3f70"}
     for x in src["xrefs"]:
-        m=insmap(x)
-        for start in (0x00479c40,0x004f3f70):
-            need=[start+o for o in ()]
-            if start in m:
-                seq=sorted((v for k,v in m.items() if start<=k<start+0x80),key=lambda z:int(z["address"],16))
-                ops=[z["opStr"] for z in seq]
-                has_payload=any("[esi + 4]" in o for o in ops)
-                has_next=any("[esi + 0xc]" in o for o in ops)
-                if has_payload and has_next:
-                    rows.append({"function":f"0x{start:08x}","xref":x["instruction"]["address"],
-                      "observed":"bucket head -> record; compare dword +0; on accepted record return dword +4; collision traversal uses +0x0a; secondary chain traversal uses +0x0c before returning +4",
-                      "payloadOffset":4,"collisionLinkOffset":10,"secondaryLinkOffset":12})
+        xa=x["instruction"]["address"]
+        if xa not in targets: continue
+        seq=x["contextBefore"]+[x["instruction"]]+x["contextAfter"]
+        ops=[z["opStr"] for z in seq]
+        has_payload=any(("dword ptr [esi + 4]" in o) for o in ops)
+        has_secondary=any(("word ptr [esi + 0xc]" in o) for o in ops)
+        has_collision=any(("word ptr [esi + 0xa]" in o) for o in ops)
+        if has_payload and has_secondary and has_collision:
+            rows.append({"function":targets[xa],"xref":xa,
+              "observed":"bucket head -> record; compare dword +0; accepted record returns dword +4; collision traversal uses +0x0a; secondary chain traversal uses +0x0c before returning +4",
+              "payloadOffset":4,"collisionLinkOffset":10,"secondaryLinkOffset":12})
     uniq={r["function"]:r for r in rows}
     out={"format":"t6-current-client-linked-record-lookup-semantics-v1",
       "authority":"SHA-classified current Plutonium client plus persisted exact xref proof",
