@@ -1,0 +1,93 @@
+name: T6 current client candidate CFG dataflow probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_candidate_cfg_dataflow_probe_v1.py'
+      - '.github/workflows/t6_current_client_candidate_cfg_dataflow_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install disassembler
+        run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+
+      - name: Recover SHA-classified current client and trace candidate CFG/dataflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/client
+          python3 - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+
+          ua='bo2-t6-assets-candidate-cfg-dataflow/1'
+          endpoints=[
+              'https://cdn.plutoniummod.com/updater/prod/info.json',
+              'https://cdn.plutonium.pw/updater/prod/info.json',
+          ]
+
+          def get(url):
+              req=urllib.request.Request(url,headers={'User-Agent':ua})
+              with urllib.request.urlopen(req,timeout=180) as r:
+                  return r.read()
+
+          info=None
+          for endpoint in endpoints:
+              try:
+                  info=json.loads(get(endpoint))
+                  break
+              except Exception:
+                  pass
+          if info is None:
+              raise SystemExit('no current CDN info endpoint')
+
+          rows=[
+              x for x in info['files']
+              if x.get('name','').replace('\\','/').lower()=='games/t6mp.exe'
+          ]
+          if len(rows)!=1:
+              raise SystemExit(f'expected one games/t6mp.exe, got {len(rows)}')
+
+          rec=rows[0]
+          raw=get(info['baseUrl']+rec['hash'])
+          sha1=hashlib.sha1(raw).hexdigest()
+          sha256=hashlib.sha256(raw).hexdigest()
+          if len(raw)!=int(rec['size']) or sha1!=rec['hash'].lower():
+              raise SystemExit('CDN identity mismatch')
+          if str(info.get('revision'))!='5346':
+              raise SystemExit(f'unexpected revision {info.get("revision")}')
+          if sha256!='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf':
+              raise SystemExit(f'current client changed: sha256={sha256}')
+
+          Path('/tmp/client/t6mp.exe').write_bytes(raw)
+          Path('/tmp/client/revision').write_text(str(info.get('revision')))
+          print(json.dumps({
+              'revision':info.get('revision'),
+              'bytes':len(raw),
+              'sha1':sha1,
+              'sha256':sha256,
+          },sort_keys=True))
+          PY
+
+          python3 -m py_compile tools/t6_current_client_candidate_cfg_dataflow_probe_v1.py
+          python3 tools/t6_current_client_candidate_cfg_dataflow_probe_v1.py             /tmp/client/t6mp.exe             --revision "$(cat /tmp/client/revision)"             --out /tmp/proof/T6_CURRENT_CLIENT_CANDIDATE_CFG_DATAFLOW_PROBE_V1.json             | tee /tmp/proof/summary.log
+
+          rm -f /tmp/client/t6mp.exe
+          test ! -e /tmp/client/t6mp.exe
+          sha256sum             /tmp/proof/T6_CURRENT_CLIENT_CANDIDATE_CFG_DATAFLOW_PROBE_V1.json             /tmp/proof/summary.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_CANDIDATE_CFG_DATAFLOW_PROBE_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
