@@ -1,0 +1,336 @@
+name: T6 full archive world format8 census v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_retail_world_format_8_absence_census_v1.py'
+      - '.github/workflows/t6_full_archive_world_format8_census_v1.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: t6-full-archive-world-format8-census-v1
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: archive-shard-${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          test -x /tmp/t6_expand
+          python3 -m py_compile \
+            tools/t6_remote_zip_range_v1.py \
+            tools/t6_retail_world_format_8_absence_census_v1.py
+
+      - name: Scan deterministic archive shard
+        env:
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          SHARD: ${{ matrix.shard }}
+          SHARD_COUNT: '8'
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          python3 - <<'PY'
+          import collections,hashlib,json,os,pathlib,subprocess
+          from t6_remote_zip_range_v1 import RemoteZip
+          import t6_retail_world_format_8_absence_census_v1 as classifier
+
+          url=os.environ['ZIP_URL']
+          shard=int(os.environ['SHARD'])
+          shard_count=int(os.environ['SHARD_COUNT'])
+          rz=RemoteZip(url,f'bo2-t6-assets-format8-archive/{shard}')
+          entries,meta=rz.central_directory()
+          ff=sorted(
+              [e for e in entries if e['name'].lower().endswith('.ff')],
+              key=lambda e:e['name'].lower()
+          )
+          if len(ff)!=215:
+              raise SystemExit(f'archive FastFile population changed: {len(ff)} != 215')
+          selected=[(i,e) for i,e in enumerate(ff) if i % shard_count == shard]
+          rows=[]
+
+          for ordinal,(global_index,e) in enumerate(selected):
+              name=e['name']
+              fname=name.rsplit('/',1)[-1]
+              zone=fname[:-3]
+              row={
+                  'globalIndex':global_index,
+                  'shardIndex':ordinal,
+                  'zipPath':name,
+                  'file':fname,
+                  'zoneName':zone,
+                  'zipCrc32':f"{e['crc32']:08x}",
+                  'zipUncompressedBytes':e['uncompressedSize'],
+              }
+              ff_path=pathlib.Path('/tmp/work')/f'{global_index:03d}.ff'
+              expanded=pathlib.Path('/tmp/work')/f'{global_index:03d}.expanded.bin'
+              log=pathlib.Path('/tmp/proof')/f'expand_{global_index:03d}.log'
+              try:
+                  raw=rz.extract(e,verify_crc=True)
+                  row['fastFileBytes']=len(raw)
+                  row['fastFileSha256']=hashlib.sha256(raw).hexdigest()
+                  ff_path.write_bytes(raw)
+                  del raw
+                  with log.open('wb') as lf:
+                      proc=subprocess.run(
+                          ['/tmp/t6_expand',str(ff_path),str(expanded),zone],
+                          stdout=lf,stderr=subprocess.STDOUT
+                      )
+                  row['expandRc']=proc.returncode
+                  if proc.returncode!=0 or not expanded.is_file():
+                      row['status']='expand_failed'
+                  else:
+                      data=expanded.read_bytes()
+                      row['expandedBytes']=len(data)
+                      row['expandedSha256']=hashlib.sha256(data).hexdigest()
+                      blocks,assets,start=classifier.front(data)
+                      found=classifier.scan(data,blocks,start)
+                      hist=collections.Counter(int(fmt) for _,fmt,_ in found)
+                      hits=[
+                          {'start':int(offset),'name':technique}
+                          for offset,fmt,technique in found if int(fmt)==8
+                      ]
+                      row.update({
+                          'status':'green',
+                          'assetCount':len(assets),
+                          'scanStartAfterXAssetTable':start,
+                          'strongInlineTechniqueSetCount':len(found),
+                          'formatDistribution':{str(k):v for k,v in sorted(hist.items())},
+                          'format8StrongInlineHitCount':len(hits),
+                          'format8StrongInlineHits':hits,
+                      })
+              except Exception as exc:
+                  row['status']='exception'
+                  row['error']=repr(exc)
+              finally:
+                  ff_path.unlink(missing_ok=True)
+                  expanded.unlink(missing_ok=True)
+              rows.append(row)
+              print(
+                  global_index,row['status'],name,row.get('fastFileSha256','-'),
+                  row.get('strongInlineTechniqueSetCount',0),
+                  row.get('format8StrongInlineHitCount',0),
+                  flush=True
+              )
+
+          bad=[r for r in rows if r['status']!='green']
+          result={
+              'format':'t6-full-archive-world-format8-census-shard-v1',
+              'shard':shard,
+              'shardCount':shard_count,
+              'remoteZip':meta,
+              'allFastFileCount':len(ff),
+              'rows':rows,
+              'summary':{
+                  'selectedCount':len(rows),
+                  'greenExpansionCount':sum(r['status']=='green' for r in rows),
+                  'failedExpansionCount':len(bad),
+                  'strongInlineTechniqueSetCount':sum(r.get('strongInlineTechniqueSetCount',0) for r in rows),
+                  'format8StrongInlineHitCount':sum(r.get('format8StrongInlineHitCount',0) for r in rows),
+              },
+              'proofBoundary':(
+                  'Deterministic shard of the referenced public full-game ZIP. Every selected FastFile '
+                  'is ZIP-CRC verified, SHA-256 pinned, source-closed expanded, and scanned only after '
+                  'its XAsset table with the retained strict inline MaterialTechniqueSet classifier. '
+                  'A format-8 hit is a candidate fixture only; zero hits are absence only within the '
+                  'green scanned archive rows and this representation.'
+              ),
+          }
+          out=pathlib.Path('/tmp/proof')/f'T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_SHARD_{shard}_V1.json'
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(result['summary'],indent=2,sort_keys=True))
+          if bad:
+              raise SystemExit(f'non-green rows: {[r["zipPath"] for r in bad]}')
+          PY
+
+      - name: Upload archive shard proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+
+  aggregate:
+    runs-on: ubuntu-latest
+    needs: scan
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all archive shard proofs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+
+      - name: Require exact 215-FastFile coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          python3 - <<'PY'
+          import collections,glob,hashlib,json,pathlib
+          files=sorted(glob.glob('/tmp/shards/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_SHARD_*_V1.json'))
+          if len(files)!=8:
+              raise SystemExit(f'expected 8 shard JSON files, got {len(files)}')
+          docs=[json.load(open(p,encoding='utf-8')) for p in files]
+          rows=[]
+          for d in docs:
+              if d.get('format')!='t6-full-archive-world-format8-census-shard-v1':
+                  raise SystemExit(f'unexpected shard format {d.get("format")!r}')
+              if d.get('allFastFileCount')!=215:
+                  raise SystemExit(f'archive population changed in shard {d.get("shard")}')
+              rows.extend(d['rows'])
+          rows.sort(key=lambda r:r['globalIndex'])
+          if len(rows)!=215 or [r['globalIndex'] for r in rows]!=list(range(215)):
+              raise SystemExit('not exact global FastFile indices 0..214')
+          if len({r['zipPath'] for r in rows})!=215:
+              raise SystemExit('duplicate archive FastFile path')
+          bad=[r for r in rows if r.get('status')!='green']
+          if bad:
+              raise SystemExit(f'{len(bad)} non-green rows')
+
+          hist=collections.Counter()
+          total=0
+          hits=[]
+          for r in rows:
+              local=r.get('formatDistribution',{})
+              local_sum=sum(int(v) for v in local.values())
+              if local_sum!=int(r['strongInlineTechniqueSetCount']):
+                  raise SystemExit(f"{r['zipPath']}: local histogram mismatch")
+              total+=local_sum
+              for k,v in local.items():
+                  fmt=int(k)
+                  if not 0<=fmt<=8:
+                      raise SystemExit(f"{r['zipPath']}: invalid format {fmt}")
+                  hist[fmt]+=int(v)
+              local_hits=r.get('format8StrongInlineHits',[])
+              if len(local_hits)!=int(r['format8StrongInlineHitCount']):
+                  raise SystemExit(f"{r['zipPath']}: hit count mismatch")
+              hits.extend({'zipPath':r['zipPath'],'zoneName':r['zoneName'],**h} for h in local_hits)
+
+          result={
+              'format':'t6-full-archive-world-format8-census-v1',
+              'remoteZip':docs[0]['remoteZip'],
+              'fastFileCount':215,
+              'greenExpansionCount':215,
+              'failedExpansionCount':0,
+              'strongInlineTechniqueSetCount':total,
+              'formatDistribution':{str(k):v for k,v in sorted(hist.items())},
+              'format8StrongInlineHitCount':len(hits),
+              'format8StrongInlineHits':hits,
+              'strictInlineAbsenceAcrossComplete215FastFileArchive':len(hits)==0,
+              'rows':rows,
+              'shardManifestSha256':[
+                  {'file':pathlib.Path(p).name,'sha256':hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()}
+                  for p in files
+              ],
+              'proofBoundary':{
+                  'proven':(
+                      'Every one of the 215 FastFiles in the referenced public full-game ZIP was '
+                      'ZIP-CRC verified, SHA-256 pinned, successfully expanded by the source-closed '
+                      'T6 PC expander, and scanned after its XAsset table with the strict inline '
+                      'MaterialTechniqueSet classifier.'
+                  ),
+                  'ifHit':(
+                      'A format-8 TechniqueSet body is a candidate physical fixture only. Promotion '
+                      'still requires direct material-bound or standalone raw vd1 allocation evidence '
+                      'at the source-closed 20-byte stride with no contradictory clean evidence.'
+                  ),
+                  'ifNoHit':(
+                      'Zero hits proves absence of strict inline worldVertFormat=8 TechniqueSet bodies '
+                      'within this exact 215-FastFile archive representation. It does not prove absence '
+                      'from executables, other retail builds, files absent from this archive, packed or '
+                      'non-inline representations, or runtime-generated data, and it does not by itself '
+                      'enable format 8.'
+                  ),
+              },
+          }
+          out=pathlib.Path('/tmp/proof/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json')
+          out.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({
+              'fastFileCount':215,
+              'strongInlineTechniqueSetCount':total,
+              'formatDistribution':result['formatDistribution'],
+              'format8StrongInlineHitCount':len(hits),
+              'strictInlineAbsenceAcrossComplete215FastFileArchive':result['strictInlineAbsenceAcrossComplete215FastFileArchive'],
+          },indent=2,sort_keys=True))
+          print(hashlib.sha256(out.read_bytes()).hexdigest())
+          PY
+
+      - name: Persist complete archive census without registry promotion
+        env:
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/proof/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json \
+            manifests/world/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          p=Path('manifests/world/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json')
+          raw=p.read_bytes(); d=json.loads(raw); hits=d['format8StrongInlineHitCount']
+          lines=[
+              '# T6 complete 215-FastFile archive format-8 census v1',
+              '',
+              f"- exact green-expanded FastFiles: **{d['greenExpansionCount']} / {d['fastFileCount']}**",
+              f"- strict inline TechniqueSet bodies: **{d['strongInlineTechniqueSetCount']}**",
+              f"- strict worldVertFormat=8 hits: **{hits}**",
+              f"- census SHA-256: `{hashlib.sha256(raw).hexdigest()}`",
+              f"- workflow run: `{os.environ['RUN_ID']}`",
+              '',
+              '## Proof boundary',
+              '',
+              d['proofBoundary']['proven'],
+              '',
+              d['proofBoundary']['ifHit' if hits else 'ifNoHit'],
+              '',
+              '**This census does not modify or auto-promote the world-vertex format registry.**',
+              ''
+          ]
+          Path('checkpoints/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            manifests/world/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.json \
+            checkpoints/T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1.md
+          if git diff --cached --quiet; then
+            echo 'Complete archive format-8 census unchanged.'
+          else
+            git commit -m 'Persist exact 215-FastFile format-8 census'
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+
+      - name: Upload complete archive format-8 proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_FULL_ARCHIVE_WORLD_FORMAT8_CENSUS_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
