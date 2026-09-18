@@ -1,0 +1,166 @@
+{
+  "authority": "Persisted exact SHA-classified current-client proofs only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "directInsertionCallerCount": 2,
+  "exactInstructions": [
+    {
+      "address": "0x007fd8c0",
+      "bytes": "83ec14",
+      "mnemonic": "sub",
+      "opStr": "esp, 0x14"
+    },
+    {
+      "address": "0x007fd8c3",
+      "bytes": "53",
+      "mnemonic": "push",
+      "opStr": "ebx"
+    },
+    {
+      "address": "0x007fd8c4",
+      "bytes": "55",
+      "mnemonic": "push",
+      "opStr": "ebp"
+    },
+    {
+      "address": "0x007fd8c5",
+      "bytes": "56",
+      "mnemonic": "push",
+      "opStr": "esi"
+    },
+    {
+      "address": "0x007fd8c6",
+      "bytes": "8bf0",
+      "mnemonic": "mov",
+      "opStr": "esi, eax"
+    },
+    {
+      "address": "0x007fd8c8",
+      "bytes": "57",
+      "mnemonic": "push",
+      "opStr": "edi"
+    },
+    {
+      "address": "0x007fdbf7",
+      "bytes": "837c242800",
+      "mnemonic": "cmp",
+      "opStr": "dword ptr [esp + 0x28], 0"
+    },
+    {
+      "address": "0x007fdc43",
+      "bytes": "813d3cd73101000c0000",
+      "mnemonic": "cmp",
+      "opStr": "dword ptr [0x131d73c], 0xc00"
+    },
+    {
+      "address": "0x007fdc5c",
+      "bytes": "a13cd73101",
+      "mnemonic": "mov",
+      "opStr": "eax, dword ptr [0x131d73c]"
+    },
+    {
+      "address": "0x007fdc61",
+      "bytes": "893485d0ea4d01",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [eax*4 + 0x14dead0], esi"
+    },
+    {
+      "address": "0x007fdc69",
+      "bytes": "a33cd73101",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [0x131d73c], eax"
+    },
+    {
+      "address": "0x007fdcc7",
+      "bytes": "6a00",
+      "mnemonic": "push",
+      "opStr": "0"
+    },
+    {
+      "address": "0x007fdcc9",
+      "bytes": "8d44240c",
+      "mnemonic": "lea",
+      "opStr": "eax, [esp + 0xc]"
+    },
+    {
+      "address": "0x007fdccd",
+      "bytes": "e8eefbffff",
+      "mnemonic": "call",
+      "opStr": "0x7fd8c0"
+    },
+    {
+      "address": "0x007ff34c",
+      "bytes": "39353cd73101",
+      "mnemonic": "cmp",
+      "opStr": "dword ptr [0x131d73c], esi"
+    },
+    {
+      "address": "0x007ff359",
+      "bytes": "8b04b5d0ea4d01",
+      "mnemonic": "mov",
+      "opStr": "eax, dword ptr [esi*4 + 0x14dead0]"
+    },
+    {
+      "address": "0x007ff360",
+      "bytes": "6a01",
+      "mnemonic": "push",
+      "opStr": "1"
+    },
+    {
+      "address": "0x007ff362",
+      "bytes": "e859e5ffff",
+      "mnemonic": "call",
+      "opStr": "0x7fd8c0"
+    },
+    {
+      "address": "0x007ff36b",
+      "bytes": "3b353cd73101",
+      "mnemonic": "cmp",
+      "opStr": "esi, dword ptr [0x131d73c]"
+    },
+    {
+      "address": "0x007ff375",
+      "bytes": "c7053cd7310100000000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [0x131d73c], 0"
+    }
+  ],
+  "format": "t6-current-client-linked-record-deferred-replay-v1",
+  "frameProof": {
+    "derivation": "sub esp,0x14 plus pushes ebx/ebp/esi/edi = -0x24; current [esp+0x28] therefore equals entry [esp+4], first stack argument",
+    "entryEspDeltaBeforeFlagReadBytes": -36,
+    "entryStackArgumentOffset": 4,
+    "flagReadOperand": "[esp+0x28]"
+  },
+  "phase0": {
+    "call": "0x007fdccd",
+    "caller": "0x007fdcb0",
+    "firstStackArgument": 0,
+    "onHigherOrEqualBranch": "record pointer stored to 0x14dead0[index], count 0x131d73c incremented, then existing record returned"
+  },
+  "phase1": {
+    "call": "0x007ff362",
+    "callerRegion": "0x007ff34c..0x007ff375",
+    "count": "0x0131d73c",
+    "firstStackArgument": 1,
+    "loop": "every queued record is replayed through 0x007fd8c0 with flag 1, then count is reset to zero",
+    "sourceArray": "0x014dead0"
+  },
+  "proofBoundary": "This proves the current-client two-phase queue/replay control flow and first-argument meaning by frame arithmetic. It does not by itself prove payload-exchange semantics or historical-retail equivalence.",
+  "proven": {
+    "deferredQueueArrayIs0x014dead0": true,
+    "deferredQueueCountIs0x0131d73c": true,
+    "flagOperandIsFirstStackArgument": true,
+    "phase0CallerPassesZero": true,
+    "phase1FlushCallsSameInsertionRoutine": true,
+    "phase1FlushLoadsEveryQueuedRecord": true,
+    "phase1FlushPassesOne": true,
+    "phase1ResetsQueueCountToZero": true,
+    "twoPhaseDeferredReplayLifecycleClosed": true,
+    "zeroFlagHigherOrEqualRecordIsQueued": true
+  }
+}
