@@ -1,0 +1,65 @@
+name: T6 current client zone sink stride12 probe v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_zone_sink_stride12_probe_v1.py'
+      - '.github/workflows/t6_current_client_zone_sink_stride12_probe_v1.yml'
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover classified client and project exact 12-byte stride sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          uas='bo2-t6-assets-sink-stride12/1'
+          eps=['https://cdn.plutoniummod.com/updater/prod/info.json','https://cdn.plutonium.pw/updater/prod/info.json']
+          def get(u):
+              q=urllib.request.Request(u,headers={'User-Agent':uas})
+              with urllib.request.urlopen(q,timeout=180) as r:return r.read()
+          info=None
+          for ep in eps:
+              try: info=json.loads(get(ep)); break
+              except Exception: pass
+          if info is None: raise SystemExit('no current CDN info endpoint')
+          m=[x for x in info['files'] if x.get('name','').replace('\\','/').lower()=='games/t6mp.exe']
+          if len(m)!=1: raise SystemExit(f'expected one games/t6mp.exe, got {len(m)}')
+          rec=m[0];raw=get(info['baseUrl']+rec['hash'])
+          sha1=hashlib.sha1(raw).hexdigest();sha256=hashlib.sha256(raw).hexdigest()
+          if len(raw)!=int(rec['size']) or sha1!=rec['hash'].lower(): raise SystemExit('CDN identity mismatch')
+          if str(info.get('revision'))!='5346' or sha256!='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf':
+              raise SystemExit(f'current client changed: revision={info.get("revision")} sha256={sha256}')
+          Path('/tmp/client/t6mp.exe').write_bytes(raw);Path('/tmp/client/revision').write_text(str(info.get('revision')))
+          print(json.dumps({'revision':info.get('revision'),'bytes':len(raw),'sha1':sha1,'sha256':sha256}))
+          PY
+          python3 tools/t6_current_client_zone_sink_stride12_probe_v1.py /tmp/client/t6mp.exe --revision "$(cat /tmp/client/revision)" --out proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1.json | tee /tmp/summary.log
+          rm -f /tmp/client/t6mp.exe
+          test ! -e /tmp/client/t6mp.exe
+          sha256sum proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1.json
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact current-client zone sink stride proof'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1
+          path: |
+            proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_STRIDE12_PROBE_V1.json
+            /tmp/summary.log
+          if-no-files-found: error
+          compression-level: 9
