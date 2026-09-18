@@ -1,0 +1,42 @@
+name: T6 current client linked record deferred replay v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_linked_record_deferred_replay_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_INSERTION_CALLERS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_RELINK_SWAP_PROBE_V1.json'
+      - '.github/workflows/t6_current_client_linked_record_deferred_replay_v1.yml'
+permissions:
+  contents: write
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project and validate deferred replay lifecycle
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_linked_record_deferred_replay_v1.py \
+            --callers proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_INSERTION_CALLERS_V1.json \
+            --relink proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_RELINK_SWAP_PROBE_V1.json \
+            --out proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_DEFERRED_REPLAY_V1.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_DEFERRED_REPLAY_V1.json'))
+          assert j['directInsertionCallerCount']==2
+          assert j['proven']['flagOperandIsFirstStackArgument'] is True
+          assert j['proven']['phase0CallerPassesZero'] is True
+          assert j['proven']['phase1FlushPassesOne'] is True
+          assert j['proven']['twoPhaseDeferredReplayLifecycleClosed'] is True
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_LINKED_RECORD_DEFERRED_REPLAY_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist current-client deferred insertion replay'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
