@@ -7,6 +7,22 @@
       "provider": "retail-inline-gfximage",
       "resourceBytes": 4,
       "sourceExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+    },
+    {
+      "image": "*lightmap0_secondary",
+      "payloadSha256": "3f8ed737b8dedb71b818db56ca37019e051a582cfe60b367a6e8697a1da3042b",
+      "proof": "T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json",
+      "provider": "retail-inline-gfxworld-lightmap",
+      "resourceBytes": 6291456,
+      "sourceExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
+    },
+    {
+      "image": "*lightmap1_secondary",
+      "payloadSha256": "1aab55b6712370066f36c2e7f3f8f51de4af2d0964f5e4fad70f1801f48082a0",
+      "proof": "T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json",
+      "provider": "retail-inline-gfxworld-lightmap",
+      "resourceBytes": 3145728,
+      "sourceExpandedSha256": "7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505"
     }
   ],
   "format": "t6-nuketown-production-texture-payload-coverage-v1",
@@ -16,25 +32,28 @@
     },
     "identityProof": {
       "sha256": "8c8fefd4c326ba15ed7cd1d584e6e8db00e7fd4a910a18b39e5d067fca2c5096"
+    },
+    "lightmapProof": {
+      "sha256": "80c6609eafea9aee0bdc0d3fd9ae8c34262e236d2c6b2cc2fb3cafe14913d920"
     }
   },
   "map": "mp_nuketown_2020",
-  "proofBoundary": "The 450-identity production denominator is unchanged. Coverage means exact retail payload authority, not visual substitution. The 75 IPAK/IWI27 DDS identities remain separately attributed; $identitynormalmap is added only from its independent retail loader replay and byte-validation regression. No other missing identity is inferred from names, dimensions, semantics, adjacency, or expected defaults.",
+  "proofBoundary": "The 450-identity production denominator is unchanged. Coverage means exact retail payload authority, not visual substitution. The 75 IPAK/IWI27 DDS identities remain separately attributed; $identitynormalmap and the two secondary lightmaps are added only from independent inline retail byte proofs. Reflection-probe payloads remain unresolved. No missing identity is inferred from names, dimensions, semantics, adjacency, or expected defaults.",
   "summary": {
     "exact81IpakDdsCoveredCount": 75,
-    "exactPayloadCoverageRatio": 0.1688888888888889,
-    "exactPayloadCoveredCount": 76,
-    "exactPayloadMissingCount": 374,
+    "exactPayloadCoverageRatio": 0.17333333333333334,
+    "exactPayloadCoveredCount": 78,
+    "exactPayloadMissingCount": 372,
+    "lightmapExactPayloadCoveredCount": 2,
     "materialExactPayloadCoverageRatio": 0.17966903073286053,
     "materialExactPayloadCoveredCount": 76,
     "materialExactPayloadMissingCount": 347,
     "materialUniqueImageCount": 423,
     "productionUniqueImageCount": 450,
-    "retailInlineCoveredCount": 1
+    "reflectionExactPayloadCoveredCount": 0,
+    "retailInlineCoveredCount": 3
   },
   "unresolvedProductionImages": [
-    "*lightmap0_secondary",
-    "*lightmap1_secondary",
     "*reflection_probe0",
     "*reflection_probe1",
     "*reflection_probe10",
