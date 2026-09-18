@@ -1,0 +1,14 @@
+name: T6 MP XAnim corpus aggregator test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_mp_xanim_delta_branch_corpus_v1.py'
+      - 'tools/test_t6_mp_xanim_delta_branch_corpus_v1.py'
+      - '.github/workflows/t6_mp_xanim_delta_branch_corpus_test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/test_t6_mp_xanim_delta_branch_corpus_v1.py
