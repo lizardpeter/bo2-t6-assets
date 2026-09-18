@@ -22,6 +22,8 @@ on:
       - 'tools/t6_ipak_http_range_v2.py'
       - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
       - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_DLC0_IPAK_PACKED_IMAGE_ALIAS_CLOSURE_V3.json.zlib.b64'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json'
+      - 'manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json'
       - '.github/workflows/t6_nuketown_production_texture_dependency_census_v1.yml'
 
 permissions:
@@ -228,28 +230,54 @@ jobs:
             --out-root /tmp/dds81 \
             --manifest /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json
 
-      - name: Count exact production Material image coverage
+      - name: Count exact production image coverage with GfxWorld ownership when available
         env:
           PYTHONPATH: tools
         shell: bash
         run: |
           set -euo pipefail
+          LM=manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V2.json
+          RP=manifests/maps/mp_nuketown_2020/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V2.json
+          extra=()
+          OUT=/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json
+          if test -f "$LM" -o -f "$RP"; then
+            test -f "$LM" -a -f "$RP"
+            extra+=(--lightmap-catalog "$LM" --reflection-catalog "$RP")
+            OUT=/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_FULL_V2.json
+          fi
           python3 tools/t6_nuketown_production_texture_dependency_census_v2.py \
             --material-manifest /tmp/proof/T6_NUKETOWN_OAT_MATERIAL_TEXTURE_MANIFEST_V7.json \
             --dds-bridge /tmp/proof/T6_NUKETOWN_IWI27_DDS_BRIDGE_V1.json \
-            --out /tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json \
+            "${extra[@]}" \
+            --out "$OUT" \
             2>&1 | tee /tmp/proof/dependency_census.log
-          python3 - <<'PY'
-          import json
-          p='/tmp/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_MATERIAL_ONLY_V2.json'
+          CENSUS_OUT="$OUT" python3 - <<'PY'
+          import json,os
+          p=os.environ['CENSUS_OUT']
           d=json.load(open(p)); s=d['summary']
-          assert s['materialUniqueImageCount']>0,s
+          assert s['materialUniqueImageCount']==423,s
+          assert s['materialCoveredByExact81Count']==75,s
           assert s['exact81BridgeImageCount']==81,s
-          assert s['productionUniqueImageCount']==s['materialUniqueImageCount'],s
-          print('MATERIAL_TEXTURE_COVERAGE_V2',json.dumps(s,sort_keys=True))
-          print('MISSING_MATERIAL_IMAGES',len(d['missingProductionImages']))
+          full=p.endswith('_FULL_V2.json')
+          if full:
+              assert d['inputs']['lightmapCatalog'] is not None,d['inputs']
+              assert d['inputs']['reflectionCatalog'] is not None,d['inputs']
+              assert s['productionUniqueImageCount']>=s['materialUniqueImageCount'],s
+              assert s['productionCoveredByExact81Count']>=s['materialCoveredByExact81Count'],s
+              print('FULL_PRODUCTION_TEXTURE_COVERAGE_V2',json.dumps(s,sort_keys=True))
+          else:
+              assert s['lightmapUniqueImageCount']==0,s
+              assert s['reflectionUniqueImageCount']==0,s
+              assert s['productionUniqueImageCount']==s['materialUniqueImageCount'],s
+              print('MATERIAL_TEXTURE_COVERAGE_V2',json.dumps(s,sort_keys=True))
+          print('MISSING_PRODUCTION_IMAGES',len(d['missingProductionImages']))
           for row in d['missingProductionImages'][:120]:
-              print('MISSING',row['image'],'USES',len(row['materialUses']))
+              print(
+                  'MISSING',row['image'],
+                  'MATERIAL_USES',len(row['materialUses']),
+                  'LIGHTMAP_USES',len(row['lightmapUses']),
+                  'REFLECTION_USES',len(row['reflectionProbeUses'])
+              )
           PY
 
       - uses: actions/upload-artifact@v4
