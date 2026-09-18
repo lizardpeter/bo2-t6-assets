@@ -1,0 +1,77 @@
+{
+  "authority": "comparative lineage correspondence only; not historical-retail authority",
+  "correspondence": {
+    "offset0NameRoleMatch": true,
+    "offset4ComparatorDirectionExactMatch": true,
+    "offset4ComparatorRoleAndThresholdExactMatch": true,
+    "offset8CurrentClientControlMaskBehaviorIsIndependentlyProven": true,
+    "offset8PositionMatchesSourceFreeFlagsPosition": true,
+    "pc32RecordGeometryExactMatch": true,
+    "strength": "specific structural plus comparator-control-flow correspondence"
+  },
+  "currentClient": {
+    "independentFacts": {
+      "nameOffset": 0,
+      "orderingBelowThreshold": "ascending",
+      "orderingClassifierOffset": 4,
+      "orderingOtherwise": "descending",
+      "orderingThreshold": "0x00400000",
+      "rowStrideBytes": 12,
+      "secondaryControlMaskOffset": 8
+    },
+    "proofs": {
+      "argfield": {
+        "bytes": 13222,
+        "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_ARGFIELD_PROOF_V1.json",
+        "sha256": "1b114b6b4419f4f7d9f4322950735b3bb7969661d8f913d922a8f9b90b1aa4f1"
+      },
+      "classifier": {
+        "bytes": 2023,
+        "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_CLASSIFIER_SEMANTICS_V1.json",
+        "sha256": "befde30d1147bb50c990b1632e5d3a020627d10ea0d69d6c3cc998662401cb0e"
+      },
+      "secondaryMask": {
+        "bytes": 17940,
+        "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_SECONDARY_MASK_SEMANTICS_V1.json",
+        "sha256": "f59dec643030a2ee8644c021e39bfbb1289c7b6a081df11ea18ec3a15083857c"
+      }
+    },
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-openbo2-zoneinfo-lineage-correspondence-v1",
+  "nonPromotions": [
+    "current-client +4 is not promoted to historical-retail allocFlags authority",
+    "current-client +8 is not promoted to historical-retail freeFlags authority",
+    "0x007fdf00 is not asserted to be the historical-retail DB_CompareLoadXZoneInfos function",
+    "OpenBO2 DB_GetZonePriority/DB_OverrideAsset are not imported as current-client or historical-retail winner rules",
+    "no Technique winner is selected"
+  ],
+  "openBO2": {
+    "commit": "a64812d21946baf710cec7fa26b98ad0d193903b",
+    "files": {
+      "src/code/src_noserver/all_types.h": {
+        "bytes": 161461,
+        "gitBlobSha1": "f1f1a4560134175f867d29fa1653231e79937277"
+      },
+      "src/code/src_noserver/database/db_registry.cpp": {
+        "bytes": 89027,
+        "gitBlobSha1": "4232e88270f809d07b5522c9e09ff68376cc1b06"
+      }
+    },
+    "repository": "builtbyxeno/OpenBO2",
+    "sourceFacts": {
+      "DB_CompareLoadXZoneInfos": {
+        "belowThreshold": "zone0.allocFlags < zone1.allocFlags",
+        "otherwise": "zone0.allocFlags > zone1.allocFlags",
+        "threshold": "0x00400000"
+      },
+      "XZoneInfo": {
+        "allocFlagsOffset": 4,
+        "freeFlagsOffset": 8,
+        "nameOffset": 0,
+        "sizeOnPC32Bytes": 12
+      }
+    }
+  },
+  "proofBoundary": "Current-client facts are independently byte-proven; OpenBO2 source is independently pinned by commit and Git blob hashes. Their correspondence is recorded because the 12-byte layout and the complete +4 comparator threshold/direction coincide. Correspondence is not identity proof and cannot substitute for historical-retail executable/runtime ownership evidence."
+}
