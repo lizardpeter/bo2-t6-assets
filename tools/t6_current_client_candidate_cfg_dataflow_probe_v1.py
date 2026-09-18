@@ -29,12 +29,16 @@ from capstone.x86_const import X86_INS_JMP, X86_OP_IMM, X86_OP_MEM, X86_OP_REG
 
 EXPECTED_SHA256 = "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
 TARGETS = {
-    "mask_005225f0": 0x005225F0,
-    "mask_006ad580": 0x006AD580,
-    "mask_005fb2f0": 0x005FB2F0,
-    "mask_00682340": 0x00682340,
-    "shared_00424f00": 0x00424F00,
-    "shared_004c0830": 0x004C0830,
+    # Negative control retained deliberately: the earlier fixed-window probe
+    # falsely associated a later mask with this tiny function after crossing
+    # its RET/INT3 boundary.
+    "negative_control_005225f0": 0x005225F0,
+    # Three surviving mask-bearing call targets from the exact zone-xref run.
+    "candidate_006ad580": 0x006AD580,
+    "candidate_005fb2f0": 0x005FB2F0,
+    "candidate_00682340": 0x00682340,
+    # Exact direct callee shared by two surviving mask-bearing CFGs.
+    "shared_callee_005f1d60": 0x005F1D60,
 }
 MASKS = {0x3FFFFFFF, 0x17FFFFFF}
 MAX_CFG_INSNS = 4096
