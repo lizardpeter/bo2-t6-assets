@@ -115,6 +115,15 @@ jobs:
           assert len(d['bindingRoots'])==5
           assert s['referenceIdentityCount']>0
           assert s['resolved']+s['absentFromSuppliedRoots']+s['inlineBrushModelTokenCount']==s['referenceIdentityCount']
+          assert s['inlineBrushModelTokenCount']==183
+          assert s['absentFromSuppliedRoots']==1
+          assert s['byKind']['model']=={
+            'referenceIdentityCount':241,
+            'resolved':58,
+            'absentFromSuppliedRoots':0,
+            'inlineBrushModelTokenCount':183,
+          }
+          assert s['byKind']['fx']['absentFromSuppliedRoots']==1
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
