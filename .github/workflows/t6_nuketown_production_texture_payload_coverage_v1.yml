@@ -1,0 +1,68 @@
+name: T6 Nuketown production texture payload coverage v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_production_texture_payload_coverage_v1.py'
+      - '.github/workflows/t6_nuketown_production_texture_payload_coverage_v1.yml'
+permissions:
+  actions: read
+  contents: write
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover authoritative production census artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/census /tmp/proof proof
+          gh api repos/${{ github.repository }}/actions/artifacts/10529627853/zip > /tmp/census.zip
+          echo 'ffa2185edcc32d2fa46d07cc7b0c60f7399c9b84e6e458df2c563b7d06e83856  /tmp/census.zip' | sha256sum -c -
+          unzip -q /tmp/census.zip -d /tmp/census
+          test -f /tmp/census/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_FULL_V2.json
+      - name: Project exact payload coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/test_t6_nuketown_identitynormalmap_block5_proof_v1.py
+          python3 tools/t6_nuketown_production_texture_payload_coverage_v1.py \
+            --census /tmp/census/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_FULL_V2.json \
+            --identity-proof manifests/render/T6_NUKETOWN_IDENTITYNORMALMAP_BLOCK5_PROOF_V1.json \
+            --out proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json'));s=j['summary']
+          assert s['productionUniqueImageCount']==450
+          assert s['exact81IpakDdsCoveredCount']==75
+          assert s['retailInlineCoveredCount']==1
+          assert s['exactPayloadCoveredCount']==76
+          assert s['exactPayloadMissingCount']==374
+          assert s['materialUniqueImageCount']==423
+          assert s['materialExactPayloadCoveredCount']==76
+          assert s['materialExactPayloadMissingCount']==347
+          assert j['additionalExactProviders'][0]['image']=='$identitynormalmap'
+          assert '$identitynormalmap' not in j['unresolvedProductionImages']
+          PY
+          git diff --check
+      - name: Persist proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact production texture payload coverage v1'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1
+          path: proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json
+          if-no-files-found: error
