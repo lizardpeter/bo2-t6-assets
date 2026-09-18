@@ -78,7 +78,12 @@ def main():
     kinds={}
     for k in sorted({x["kind"] for x in rows}):
         rs=[x for x in rows if x["kind"]==k]
-        kinds[k]={"referenceIdentityCount":len(rs),"resolved":sum(x["status"]=="resolved" for x in rs),"absent":sum(x["status"]!="resolved" for x in rs)}
+        kinds[k]={
+          "referenceIdentityCount":len(rs),
+          "resolved":sum(x["status"]=="resolved" for x in rs),
+          "absentFromSuppliedRoots":sum(x["status"]=="absent-from-supplied-roots" for x in rs),
+          "inlineBrushModelTokenCount":sum(x["status"]=="inline-brush-model-token" for x in rs),
+        }
     out={
       "format":"t6-nuketown-dynamic-xasset-reference-closure-v1",
       "map":census.get("map"),
