@@ -26,9 +26,9 @@ def main():
         if xa not in targets: continue
         seq=x["contextBefore"]+[x["instruction"]]+x["contextAfter"]
         ops=[z["opStr"] for z in seq]
-        has_payload=any(("dword ptr [esi + 4]" in o) for o in ops)
-        has_secondary=any(("word ptr [esi + 0xc]" in o) for o in ops)
-        has_collision=any(("word ptr [esi + 0xa]" in o) for o in ops)
+        has_payload=any(("+ 4]" in o and "dword ptr" in o) for o in ops)
+        has_secondary=any(("+ 0xc]" in o and "word ptr" in o) for o in ops)
+        has_collision=any(("+ 0xa]" in o and "word ptr" in o) for o in ops)
         if has_payload and has_secondary and has_collision:
             rows.append({"function":targets[xa],"xref":xa,
               "observed":"bucket head -> record; compare dword +0; accepted record returns dword +4; collision traversal uses +0x0a; secondary chain traversal uses +0x0c before returning +4",
