@@ -8,6 +8,7 @@ on:
       - '.github/workflows/t6_nuketown_gfxworld_light_reflection_catalog_v2.yml'
       - 'tools/t6_gfxworld_lightmap_oat_patch/**'
       - 'tools/t6_gfxworld_reflection_probe_oat_patch/**'
+      - 'tools/t6_oat_7d027_gcc_compat_patch_v1.py'
 
 concurrency:
   group: t6-nuketown-gfxworld-light-reflection-catalog-v2
@@ -34,6 +35,17 @@ jobs:
           git -C /tmp/oat submodule update -q --init --recursive
           test "$(git -C /tmp/oat rev-parse HEAD)" = 7d027e8f89118196713e955b0e11f8404149c54d
 
+          mkdir -p /tmp/proof
+          python3 tools/t6_oat_7d027_gcc_compat_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff -- \
+            src/ObjWriting/Game/IW3/Menu/MenuWriterIW3.cpp \
+            src/ObjWriting/Game/IW4/Menu/MenuWriterIW4.cpp \
+            src/ObjWriting/Game/IW5/Menu/MenuWriterIW5.cpp \
+            src/ObjLoading/XAnim/FlatXAnimDataWriter.cpp \
+            src/ObjLoading/Game/T5/XModel/XModelHighMipVolumeT5.cpp \
+            | tee /tmp/proof/oat_7d027_gcc_compat.diff
+
           mkdir -p /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap
           mkdir -p /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe
           cp tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.h /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap/
@@ -58,14 +70,16 @@ jobs:
 
           cd /tmp/oat
           PREMAKE_NO_PROMPT=1 ./generate.sh
-          make -C build -j2 config=release_x86 UnlinkerCli
+          make -C build -j2 config=release_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
           BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
           test -n "$BIN"
           printf '%s\n' "$BIN" >/tmp/unlinker_path.txt
           "$BIN" --version | tee /tmp/unlinker_version.txt
           sha256sum tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.* \
                     tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.* \
+                    tools/t6_oat_7d027_gcc_compat_patch_v1.py \
                     | tee /tmp/patch_sha256.txt
+          sha256sum /tmp/proof/oat_7d027_gcc_compat.diff | tee /tmp/proof/oat_7d027_gcc_compat.diff.sha256
 
       - name: Fetch exact retail zones
         shell: bash
