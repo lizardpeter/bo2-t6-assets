@@ -6,7 +6,7 @@ exact canonical name occurs under the expected T6 XAsset type in one or more
 SHA-pinned root bindings. Multi-root identical typed ownership is retained.
 """
 from __future__ import annotations
-import argparse,collections,hashlib,json
+import argparse,collections,hashlib,json,re
 from pathlib import Path
 
 EXPECTED_BINDING="t6-oat-all-xasset-ordinal-name-binding-v1"
@@ -59,10 +59,12 @@ def main():
     idx,root_meta=typed_index(bindings)
     refs=unique_refs(census)
     rows=[]
+    inline_model=re.compile(r"^\\*[0-9]+$")
     for (_kind,_atype,_name),r in sorted(refs.items()):
-        matches=idx.get((r["expectedAssetType"],r["name"]),[])
-        other_types=sorted({atype for (atype,name) in idx if name==r["name"] and atype!=r["expectedAssetType"]})
-        status="resolved" if matches else "absent-from-supplied-roots"
+        is_inline=(r["kind"]=="model" and inline_model.fullmatch(r["name"]) is not None)
+        matches=[] if is_inline else idx.get((r["expectedAssetType"],r["name"]),[])
+        other_types=[] if is_inline else sorted({atype for (atype,name) in idx if name==r["name"] and atype!=r["expectedAssetType"]})
+        status="inline-brush-model-token" if is_inline else ("resolved" if matches else "absent-from-supplied-roots")
         rows.append({
           **r,
           "entityIndices":sorted(set(r["entityIndices"])),
@@ -70,6 +72,7 @@ def main():
           "status":status,
           "matches":matches,
           "sameNameOtherAssetTypes":other_types,
+          "inlineBrushModelIndex":int(r["name"][1:]) if is_inline else None,
         })
     counts=collections.Counter(x["status"] for x in rows)
     kinds={}
@@ -85,10 +88,11 @@ def main():
         "referenceIdentityCount":len(rows),
         "resolved":counts["resolved"],
         "absentFromSuppliedRoots":counts["absent-from-supplied-roots"],
+        "inlineBrushModelTokenCount":counts["inline-brush-model-token"],
         "byKind":kinds,
       },
       "rows":rows,
-      "proofBoundary":"References are extracted from exact MapEnt key/value pairs and joined only to exact canonical names under their required T6 XAsset type in supplied ordinal/type/name bindings. Same-name assets under another type do not resolve the reference. Absence means absent only from the supplied SHA-pinned root XAsset tables; no global retail absence is inferred."
+      "proofBoundary":"References are extracted from exact MapEnt key/value pairs. External references are joined only to exact canonical names under their required T6 XAsset type in supplied ordinal/type/name bindings. Exact model tokens matching *<decimal> are classified lexically as inline brush-model tokens and are not searched as XMODEL assets; this classification does not yet prove that the referenced BSP submodel index exists or is valid. Same-name assets under another type do not resolve an external reference. Absence means absent only from the supplied SHA-pinned root XAsset tables; no global retail absence is inferred."
     }
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
