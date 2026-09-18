@@ -40,6 +40,12 @@ def main():
         assert s["referenceIdentityCount"]==5
         assert s["resolved"]==3 and s["absentFromSuppliedRoots"]==1
         assert s["inlineBrushModelTokenCount"]==1
+        assert s["byKind"]["model"]=={
+          "referenceIdentityCount":3,
+          "resolved":1,
+          "absentFromSuppliedRoots":1,
+          "inlineBrushModelTokenCount":1,
+        }
         by={(r["expectedAssetType"],r["name"]):r for r in x["rows"]}
         assert len(by[("XMODEL","model_a")]["matches"])==2
         assert by[("XMODEL","model_b")]["status"]=="absent-from-supplied-roots"
