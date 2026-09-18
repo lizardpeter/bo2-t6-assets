@@ -1,0 +1,311 @@
+{
+  "authority": "Persisted exact SHA-classified current-client proofs only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "duplicateGate": {
+    "exactInstructions": [
+      {
+        "address": "0x007fd8eb",
+        "bytes": "8b3e",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esi]"
+      },
+      {
+        "address": "0x007fd930",
+        "bytes": "393b",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [ebx], edi"
+      }
+    ],
+    "existingRecord": "EBX",
+    "incomingRecord": "ESI",
+    "typeDwordEqualBeforeReplayPath": true
+  },
+  "flag1RelinkAndZoneExchange": {
+    "exactInstructions": [
+      {
+        "address": "0x007fdc0f",
+        "bytes": "668b430c",
+        "mnemonic": "mov",
+        "opStr": "ax, word ptr [ebx + 0xc]"
+      },
+      {
+        "address": "0x007fdc1e",
+        "bytes": "6689460c",
+        "mnemonic": "mov",
+        "opStr": "word ptr [esi + 0xc], ax"
+      },
+      {
+        "address": "0x007fdc24",
+        "bytes": "66894b0c",
+        "mnemonic": "mov",
+        "opStr": "word ptr [ebx + 0xc], cx"
+      },
+      {
+        "address": "0x007fdc28",
+        "bytes": "e8f3f8ffff",
+        "mnemonic": "call",
+        "opStr": "0x7fd520"
+      },
+      {
+        "address": "0x007fdc2d",
+        "bytes": "8a4308",
+        "mnemonic": "mov",
+        "opStr": "al, byte ptr [ebx + 8]"
+      },
+      {
+        "address": "0x007fdc30",
+        "bytes": "8a5608",
+        "mnemonic": "mov",
+        "opStr": "dl, byte ptr [esi + 8]"
+      },
+      {
+        "address": "0x007fdc34",
+        "bytes": "885308",
+        "mnemonic": "mov",
+        "opStr": "byte ptr [ebx + 8], dl"
+      },
+      {
+        "address": "0x007fdc37",
+        "bytes": "884608",
+        "mnemonic": "mov",
+        "opStr": "byte ptr [esi + 8], al"
+      }
+    ],
+    "existingSecondaryLinkBecomesIncomingRecord": true,
+    "incomingSecondaryLinkReceivesOldExistingNext": true,
+    "payloadTransferCycleCalled": true,
+    "zoneIndexByte8Exchanged": true
+  },
+  "format": "t6-current-client-linked-record-payload-exchange-v1",
+  "proofBoundary": "The current-client bytes prove directional transfer-helper behavior, the three-transfer cycle, and zone-index exchange. The helper is deliberately not source-named. Tiny-count jump-table internals are not individually source-named; the higher-level exchange statement is grounded in the helper ABI and explicit forward/overlap transfer bodies plus the three calls. Historical-retail equivalence remains separate.",
+  "proven": {
+    "duplicatePathRequiresEqualTypeDword": true,
+    "flag1ReplayExchangesPayloadContentsBetweenExistingAndIncomingStorage": true,
+    "flag1ReplayExchangesZoneIndexByte8": true,
+    "flag1ReplayRunsThreeTransferCycle": true,
+    "incomingLogicalPayloadAndZoneMetadataMoveToExistingHeadStorage": true,
+    "oldHeadLogicalPayloadAndZoneMetadataMoveToIncomingLinkedStorage": true,
+    "transferHelperArg1DestinationArg2SourceArg3Count": true,
+    "transferHelperCopiesForwardViaMovs": true,
+    "transferHelperHasExplicitBackwardOverlapCopyPath": true
+  },
+  "threeTransferCycle": {
+    "exactInstructions": [
+      {
+        "address": "0x007fd55d",
+        "bytes": "e8deb0ebff",
+        "mnemonic": "call",
+        "opStr": "0x6b8640"
+      },
+      {
+        "address": "0x007fd562",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x007fd563",
+        "bytes": "8b4704",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [edi + 4]"
+      },
+      {
+        "address": "0x007fd566",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x007fd567",
+        "bytes": "53",
+        "mnemonic": "push",
+        "opStr": "ebx"
+      },
+      {
+        "address": "0x007fd568",
+        "bytes": "e883562700",
+        "mnemonic": "call",
+        "opStr": "0xa72bf0"
+      },
+      {
+        "address": "0x007fd570",
+        "bytes": "e8cbb0ebff",
+        "mnemonic": "call",
+        "opStr": "0x6b8640"
+      },
+      {
+        "address": "0x007fd575",
+        "bytes": "8b5604",
+        "mnemonic": "mov",
+        "opStr": "edx, dword ptr [esi + 4]"
+      },
+      {
+        "address": "0x007fd578",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x007fd579",
+        "bytes": "8b4704",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [edi + 4]"
+      },
+      {
+        "address": "0x007fd57c",
+        "bytes": "52",
+        "mnemonic": "push",
+        "opStr": "edx"
+      },
+      {
+        "address": "0x007fd57d",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x007fd57e",
+        "bytes": "e86d562700",
+        "mnemonic": "call",
+        "opStr": "0xa72bf0"
+      },
+      {
+        "address": "0x007fd587",
+        "bytes": "e8b4b0ebff",
+        "mnemonic": "call",
+        "opStr": "0x6b8640"
+      },
+      {
+        "address": "0x007fd58c",
+        "bytes": "8b5604",
+        "mnemonic": "mov",
+        "opStr": "edx, dword ptr [esi + 4]"
+      },
+      {
+        "address": "0x007fd58f",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x007fd590",
+        "bytes": "53",
+        "mnemonic": "push",
+        "opStr": "ebx"
+      },
+      {
+        "address": "0x007fd591",
+        "bytes": "52",
+        "mnemonic": "push",
+        "opStr": "edx"
+      },
+      {
+        "address": "0x007fd592",
+        "bytes": "e859562700",
+        "mnemonic": "call",
+        "opStr": "0xa72bf0"
+      }
+    ],
+    "existingPayloadToTemporary": true,
+    "incomingPayloadToExistingStorage": true,
+    "sameTypeGateMeansBothLogicalDuplicatesUseSameTypeSelector": true,
+    "sizeFunction": "0x006b8640",
+    "temporaryOldPayloadToIncomingStorage": true
+  },
+  "transferHelper": {
+    "abi": {
+      "arg1": "destination",
+      "arg2": "source",
+      "arg3": "byte count"
+    },
+    "entry": "0x00a72bf0",
+    "exactInstructions": [
+      {
+        "address": "0x00a72bf5",
+        "bytes": "8b750c",
+        "mnemonic": "mov",
+        "opStr": "esi, dword ptr [ebp + 0xc]"
+      },
+      {
+        "address": "0x00a72bf8",
+        "bytes": "8b4d10",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [ebp + 0x10]"
+      },
+      {
+        "address": "0x00a72bfb",
+        "bytes": "8b7d08",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [ebp + 8]"
+      },
+      {
+        "address": "0x00a72c02",
+        "bytes": "03c6",
+        "mnemonic": "add",
+        "opStr": "eax, esi"
+      },
+      {
+        "address": "0x00a72c04",
+        "bytes": "3bfe",
+        "mnemonic": "cmp",
+        "opStr": "edi, esi"
+      },
+      {
+        "address": "0x00a72c08",
+        "bytes": "3bf8",
+        "mnemonic": "cmp",
+        "opStr": "edi, eax"
+      },
+      {
+        "address": "0x00a72c0a",
+        "bytes": "0f82a0010000",
+        "mnemonic": "jb",
+        "opStr": "0xa72db0"
+      },
+      {
+        "address": "0x00a72c47",
+        "bytes": "f3a5",
+        "mnemonic": "rep movsd",
+        "opStr": "dword ptr es:[edi], dword ptr [esi]"
+      },
+      {
+        "address": "0x00a72db0",
+        "bytes": "8d7431fc",
+        "mnemonic": "lea",
+        "opStr": "esi, [ecx + esi - 4]"
+      },
+      {
+        "address": "0x00a72db4",
+        "bytes": "8d7c39fc",
+        "mnemonic": "lea",
+        "opStr": "edi, [ecx + edi - 4]"
+      },
+      {
+        "address": "0x00a72dcb",
+        "bytes": "fd",
+        "mnemonic": "std",
+        "opStr": ""
+      },
+      {
+        "address": "0x00a72dcc",
+        "bytes": "f3a5",
+        "mnemonic": "rep movsd",
+        "opStr": "dword ptr es:[edi], dword ptr [esi]"
+      },
+      {
+        "address": "0x00a72dce",
+        "bytes": "fc",
+        "mnemonic": "cld",
+        "opStr": ""
+      }
+    ],
+    "forwardEvidence": "arg registers become EDI(destination), ESI(source), ECX(count); body uses rep movsd ESI->EDI",
+    "overlapEvidence": "when destination is inside source..source+count, explicit target 0x00a72db0 adjusts to end and uses std; rep movsd; cld",
+    "sourceSymbolNamePromoted": false
+  }
+}
