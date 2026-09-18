@@ -41,6 +41,7 @@ jobs:
           wget -q https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-linux.tar.gz -O /tmp/premake.tgz
           mkdir -p /tmp/premake
           tar -xzf /tmp/premake.tgz -C /tmp/premake
+          chmod +x /tmp/premake/premake5
           cd /tmp/gsc-tool
           /tmp/premake/premake5 gmake
           CC=clang-18 CXX=clang++-18 make -C build config=release_amd64 -j2
