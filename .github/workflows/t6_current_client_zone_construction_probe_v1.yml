@@ -8,6 +8,7 @@ on:
       - 'tools/t6_current_client_xzoneinfo_row_probe_v1.py'
       - 'tools/t6_current_client_fastfile_name_construction_probe_v1.py'
       - 'tools/t6_current_client_constructed_name_row_probe_v1.py'
+      - 'tools/t6_current_client_zone_row_sink_probe_v1.py'
       - '.github/workflows/t6_current_client_zone_construction_probe_v1.yml'
 
 permissions:
@@ -103,6 +104,17 @@ jobs:
             --out /tmp/proof/T6_CURRENT_CLIENT_CONSTRUCTED_NAME_ROW_PROBE_V1.json \
             | tee /tmp/proof/constructed_name_row_summary.log
 
+      - name: Recover shared row sink CFG and exact 0x8000 map-row candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/t6_current_client_zone_row_sink_probe_v1.py
+          python3 tools/t6_current_client_zone_row_sink_probe_v1.py \
+            /tmp/client/t6mp.exe \
+            --revision "$(cat /tmp/client/revision)" \
+            --out /tmp/proof/T6_CURRENT_CLIENT_ZONE_ROW_SINK_PROBE_V1.json \
+            | tee /tmp/proof/zone_row_sink_summary.log
+
       - name: Delete executable and hash derived evidence
         shell: bash
         run: |
@@ -124,6 +136,8 @@ jobs:
              proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json
           cp /tmp/proof/T6_CURRENT_CLIENT_CONSTRUCTED_NAME_ROW_PROBE_V1.json \
              proof/current_client/T6_CURRENT_CLIENT_CONSTRUCTED_NAME_ROW_PROBE_V1.json
+          cp /tmp/proof/T6_CURRENT_CLIENT_ZONE_ROW_SINK_PROBE_V1.json \
+             proof/current_client/T6_CURRENT_CLIENT_ZONE_ROW_SINK_PROBE_V1.json
           python3 - <<'PY'
           import hashlib,json
           from pathlib import Path
@@ -131,10 +145,11 @@ jobs:
           zp=Path('proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json')
           fp=Path('proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json')
           cp=Path('proof/current_client/T6_CURRENT_CLIENT_CONSTRUCTED_NAME_ROW_PROBE_V1.json')
-          x=json.loads(xp.read_text()); z=json.loads(zp.read_text()); f=json.loads(fp.read_text()); c=json.loads(cp.read_text())
+          sp=Path('proof/current_client/T6_CURRENT_CLIENT_ZONE_ROW_SINK_PROBE_V1.json')
+          x=json.loads(xp.read_text()); z=json.loads(zp.read_text()); f=json.loads(fp.read_text()); c=json.loads(cp.read_text()); s=json.loads(sp.read_text())
           def digest(p):
               b=p.read_bytes(); return len(b),hashlib.sha256(b).hexdigest()
-          xb,xh=digest(xp); zb,zh=digest(zp); fb,fh=digest(fp); cb,ch=digest(cp)
+          xb,xh=digest(xp); zb,zh=digest(zp); fb,fh=digest(fp); cb,ch=digest(cp); sb,sh=digest(sp)
           lines=[
               '# T6 current-client decoded zone construction result — 2026-09-18','',
               '## Authority boundary','',
@@ -180,16 +195,25 @@ jobs:
                   lines.append('- `{}`: **{}**'.format(va,count))
           lines += [
               '',
+              '## Shared 12-byte-row sink','',
+              '- target: `{}`'.format(s['sink']['address']),
+              '- inbound exact direct calls: **{}**'.format(s['summary']['inboundDirectCallCount']),
+              '- sink CFG instructions: **{}**'.format(s['summary']['sinkInstructionCount']),
+              '- sink CFG basic blocks: **{}**'.format(s['summary']['sinkBasicBlockCount']),
+              '- exact 12-byte stride instructions: **{}**'.format(s['summary']['stride12EvidenceCount']),
+              '- exact pre-call 0x8000 row candidates: **{}**'.format(s['summary']['mapFlag8000RowCandidateCount']),'',
               '## Artifact identities','',
               f"- decoded xref JSON: {xb:,} bytes, SHA-256 \`{xh}\`",
               f"- structural row JSON: {zb:,} bytes, SHA-256 \`{zh}\`",
               f"- fastfile-name construction JSON: {fb:,} bytes, SHA-256 \`{fh}\`",
-              f"- constructed-name row JSON: {cb:,} bytes, SHA-256 \`{ch}\`",'',
+              f"- constructed-name row JSON: {cb:,} bytes, SHA-256 \`{ch}\`",
+              f"- shared row sink JSON: {sb:,} bytes, SHA-256 \`{sh}\`",'',
               '## Proof boundary','',
               x['proofBoundary'],'',
               z['proofBoundary'],'',
               f['proofBoundary'],'',
               c['proofBoundary'],'',
+              s['proofBoundary'],'',
               '## Next step','',
               'Use only decoded operand xrefs and admitted same-row +0/+4(/+8) stores as anchors for further current-client data-flow recovery. Raw packed-address hits and proximity-only calls remain excluded. If no exact full-zone row is recovered, trace exact base-string construction into the eventual row pointer without importing dedicated-server flag values. Historical-retail promotion still requires genuine retail executable/runtime evidence.','',
               '## Existing closure preserved','',
@@ -206,6 +230,7 @@ jobs:
             proof/current_client/T6_CURRENT_CLIENT_XZONEINFO_ROW_PROBE_V1.json \
             proof/current_client/T6_CURRENT_CLIENT_FASTFILE_NAME_CONSTRUCTION_PROBE_V1.json \
             proof/current_client/T6_CURRENT_CLIENT_CONSTRUCTED_NAME_ROW_PROBE_V1.json \
+            proof/current_client/T6_CURRENT_CLIENT_ZONE_ROW_SINK_PROBE_V1.json \
             checkpoints/T6_CURRENT_CLIENT_DECODED_ZONE_CONSTRUCTION_RESULT_2026-09-18.md
           if git diff --cached --quiet; then
             echo "derived proof already current"
