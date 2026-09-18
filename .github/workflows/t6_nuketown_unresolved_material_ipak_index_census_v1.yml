@@ -1,0 +1,46 @@
+name: T6 Nuketown unresolved Material IPAK index census v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_unresolved_material_ipak_index_census_v1.py'
+      - 'proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_PACKED_TRACE_JOIN_V1.json'
+      - '.github/workflows/t6_nuketown_unresolved_material_ipak_index_census_v1.yml'
+permissions:
+  contents: write
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Census exact native pairs in retail IPAK indices
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_unresolved_material_ipak_index_census_v1.py             --join proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_PACKED_TRACE_JOIN_V1.json             --out proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_INDEX_CENSUS_V1.json             https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak             https://r2.houseofkublai.com/bo2/zone/all/dlc0.ipak             https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/base.ipak             https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ipak             https://r2.houseofkublai.com/bo2/zone/all/so.ipak             https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_INDEX_CENSUS_V1.json'))
+          s=d['summary']
+          assert s['targetCount']==347
+          assert s['exactPairPresentCount']+s['exactPairAbsentCount']==347
+          assert s['exactPairMatchCount']>=s['exactPairPresentCount']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_INDEX_CENSUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact 347-image IPAK index census'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_INDEX_CENSUS_V1
+          path: proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_INDEX_CENSUS_V1.json
+          if-no-files-found: error
