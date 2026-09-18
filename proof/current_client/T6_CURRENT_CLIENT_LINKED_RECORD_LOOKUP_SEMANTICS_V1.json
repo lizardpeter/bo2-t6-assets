@@ -1,0 +1,148 @@
+{
+  "authority": "SHA-classified current Plutonium client plus persisted exact xref proof",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "directLookup": {
+    "collisionLinkWordOffset": 10,
+    "function": "0x00479c40",
+    "instructions": [
+      {
+        "address": "0x00479c6b",
+        "bytes": "0fb7344d40d73101",
+        "mnemonic": "movzx",
+        "opStr": "esi, word ptr [ecx*2 + 0x131d740]"
+      },
+      {
+        "address": "0x00479c83",
+        "bytes": "81c6e0424301",
+        "mnemonic": "add",
+        "opStr": "esi, 0x14342e0"
+      },
+      {
+        "address": "0x00479ca4",
+        "bytes": "0fb7760a",
+        "mnemonic": "movzx",
+        "opStr": "esi, word ptr [esi + 0xa]"
+      },
+      {
+        "address": "0x00479cb2",
+        "bytes": "0fb7460c",
+        "mnemonic": "movzx",
+        "opStr": "eax, word ptr [esi + 0xc]"
+      },
+      {
+        "address": "0x00479cc6",
+        "bytes": "81c6e0424301",
+        "mnemonic": "add",
+        "opStr": "esi, 0x14342e0"
+      },
+      {
+        "address": "0x00479ccc",
+        "bytes": "0fb7460c",
+        "mnemonic": "movzx",
+        "opStr": "eax, word ptr [esi + 0xc]"
+      },
+      {
+        "address": "0x00479cd5",
+        "bytes": "8b4604",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [esi + 4]"
+      },
+      {
+        "address": "0x00479cdb",
+        "bytes": "c3",
+        "mnemonic": "ret",
+        "opStr": ""
+      }
+    ],
+    "secondaryLinkWordOffset": 12,
+    "terminalReturnPayloadDwordOffset": 4
+  },
+  "exactFindings": {
+    "collisionLinkWordOffset": 10,
+    "directLookupReturnsPayloadDword": true,
+    "independentPayloadConsumerCount": 2,
+    "payloadDwordOffset": 4,
+    "recordStrideBytes": 16,
+    "secondaryLinkWordOffset": 12,
+    "zoneIndexByteOffset": 8
+  },
+  "format": "t6-current-client-linked-record-lookup-semantics-v1",
+  "independentPayloadConsumers": [
+    {
+      "function": "0x004dce80",
+      "instructions": [
+        {
+          "address": "0x004dcec3",
+          "bytes": "05e0424301",
+          "mnemonic": "add",
+          "opStr": "eax, 0x14342e0"
+        },
+        {
+          "address": "0x004dced2",
+          "bytes": "8b4f04",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [edi + 4]"
+        },
+        {
+          "address": "0x004dcef2",
+          "bytes": "0fb7770c",
+          "mnemonic": "movzx",
+          "opStr": "esi, word ptr [edi + 0xc]"
+        },
+        {
+          "address": "0x004dcf1b",
+          "bytes": "0fb7470a",
+          "mnemonic": "movzx",
+          "opStr": "eax, word ptr [edi + 0xa]"
+        },
+        {
+          "address": "0x004dcf09",
+          "bytes": "8b5604",
+          "mnemonic": "mov",
+          "opStr": "edx, dword ptr [esi + 4]"
+        }
+      ]
+    },
+    {
+      "function": "0x005eb580",
+      "instructions": [
+        {
+          "address": "0x005eb5b3",
+          "bytes": "05e0424301",
+          "mnemonic": "add",
+          "opStr": "eax, 0x14342e0"
+        },
+        {
+          "address": "0x005eb5c2",
+          "bytes": "8b4f04",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [edi + 4]"
+        },
+        {
+          "address": "0x005eb5d3",
+          "bytes": "0fb7770c",
+          "mnemonic": "movzx",
+          "opStr": "esi, word ptr [edi + 0xc]"
+        },
+        {
+          "address": "0x005eb5fb",
+          "bytes": "0fb7470a",
+          "mnemonic": "movzx",
+          "opStr": "eax, word ptr [edi + 0xa]"
+        },
+        {
+          "address": "0x005eb5e9",
+          "bytes": "8b5604",
+          "mnemonic": "mov",
+          "opStr": "edx, dword ptr [esi + 4]"
+        }
+      ]
+    }
+  ],
+  "proofBoundary": "Current-client bytes prove the listed lookup/traversal and payload-access shapes. They do not alone establish which duplicate owner occupies the lookup-visible position after scalar relinking, and they do not establish historical-retail equivalence."
+}
