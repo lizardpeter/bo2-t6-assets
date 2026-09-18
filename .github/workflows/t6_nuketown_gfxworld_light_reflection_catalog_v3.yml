@@ -1,0 +1,108 @@
+name: T6 Nuketown GfxWorld lightmap reflection catalog v3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/t6_nuketown_gfxworld_light_reflection_catalog_v3.yml'
+      - 'tools/t6_validate_gfxworld_image_ownership_v1.py'
+      - 'tools/t6_gfxworld_lightmap_oat_patch/**'
+      - 'tools/t6_gfxworld_reflection_probe_oat_patch/**'
+      - 'tools/t6_oat_7d027_gcc_compat_patch_v1.py'
+
+concurrency:
+  group: t6-nuketown-gfxworld-light-reflection-catalog-v3
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OAT with exact ownership dumpers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 7d027e8f89118196713e955b0e11f8404149c54d
+          git -C /tmp/oat submodule update -q --init --recursive
+          test "$(git -C /tmp/oat rev-parse HEAD)" = 7d027e8f89118196713e955b0e11f8404149c54d
+          mkdir -p /tmp/proof
+          python3 tools/t6_oat_7d027_gcc_compat_patch_v1.py /tmp/oat
+          mkdir -p /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe
+          cp tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.* /tmp/oat/src/ObjWriting/Game/T6/GfxWorldLightmap/
+          cp tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.* /tmp/oat/src/ObjWriting/Game/T6/GfxWorldReflectionProbe/
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/oat/src/ObjWriting/Game/T6/ObjWriterT6.cpp'); s=p.read_text()
+          inc='#include "Game/T6/XModel/XModelDumperT6.h"\n'
+          assert s.count(inc)==1
+          s=s.replace(inc,inc+'#include "GfxWorldLightmap/GfxWorldLightmapDumperT6.h"\n#include "GfxWorldReflectionProbe/GfxWorldReflectionProbeDumperT6.h"\n',1)
+          old='    // REGISTER_DUMPER(AssetDumperGfxWorld, m_gfx_world)\n'
+          assert s.count(old)==1
+          s=s.replace(old,'    RegisterAssetDumper(std::make_unique<gfx_world_lightmap::DumperT6>());\n    RegisterAssetDumper(std::make_unique<gfx_world_reflection_probe::DumperT6>());\n',1)
+          p.write_text(s)
+          PY
+          git -C /tmp/oat diff --check
+          git -C /tmp/oat diff | tee /tmp/proof/oat_full_patch.diff
+          (cd /tmp/oat && PREMAKE_NO_PROMPT=1 ./generate.sh && make -C build -j2 config=release_x86 UnlinkerCli) 2>&1 | tee /tmp/proof/oat_build.log
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -n "$BIN"; printf '%s\n' "$BIN" >/tmp/unlinker_path.txt
+          "$BIN" --version | tee /tmp/proof/unlinker_version.txt
+          # v2 failed here because it cd'd to /tmp/oat and then hashed repository-relative paths.
+          sha256sum tools/t6_gfxworld_lightmap_oat_patch/GfxWorldLightmapDumperT6.* tools/t6_gfxworld_reflection_probe_oat_patch/GfxWorldReflectionProbeDumperT6.* tools/t6_oat_7d027_gcc_compat_patch_v1.py tools/t6_validate_gfxworld_image_ownership_v1.py | tee /tmp/proof/repo_input_sha256.txt
+
+      - name: Fetch SHA-256-pinned retail zones
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/game/zone/all
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff; do curl -fL --retry 4 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"; done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+
+      - name: Dump exact retail GfxWorld ownership
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BIN=$(cat /tmp/unlinker_path.txt); mkdir -p /tmp/out
+          "$BIN" --no-color --skip-obj --include-assets gfxworld --output-folder /tmp/out --load /tmp/game/zone/all/common_mp.ff --load /tmp/game/zone/all/common_patch_mp.ff --load /tmp/game/zone/all/patch_mp.ff /tmp/game/zone/all/mp_nuketown_2020.ff 2>&1 | tee /tmp/proof/unlinker_dump.log
+          LM=$(find /tmp/out -type f -path '*/gfxworld_lightmaps/*' | head -1); RP=$(find /tmp/out -type f -path '*/gfxworld_reflection_probes/*' | head -1)
+          test -n "$LM" -a -n "$RP"
+          cp "$LM" /tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json
+          cp "$RP" /tmp/proof/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json
+
+      - name: Validate without expected-count assumptions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 tools/t6_validate_gfxworld_image_ownership_v1.py /tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json /tmp/proof/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json --output /tmp/proof/T6_NUKETOWN_GFXWORLD_IMAGE_OWNERSHIP_VALIDATION_V3.json
+
+      - name: Persist exact catalogs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DEST=manifests/maps/mp_nuketown_2020; mkdir -p "$DEST"
+          cp /tmp/proof/T6_NUKETOWN_GFXWORLD_LIGHTMAP_CATALOG_V3.json "$DEST/"
+          cp /tmp/proof/T6_NUKETOWN_GFXWORLD_REFLECTION_PROBE_CATALOG_V3.json "$DEST/"
+          cp /tmp/proof/T6_NUKETOWN_GFXWORLD_IMAGE_OWNERSHIP_VALIDATION_V3.json "$DEST/"
+          git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$DEST"/T6_NUKETOWN_GFXWORLD_*_V3.json
+          if ! git diff --cached --quiet; then git commit -m 'Persist exact Nuketown GfxWorld ownership v3'; git pull --rebase origin main; git push origin HEAD:main; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_GFXWORLD_LIGHT_REFLECTION_CATALOG_V3
+          path: /tmp/proof
+          if-no-files-found: error
