@@ -1,0 +1,102 @@
+{
+  "authority": "Persisted exact SHA-classified current-client proofs only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "exactInstructions": [
+    {
+      "address": "0x007fdafa",
+      "bytes": "3bf8",
+      "mnemonic": "cmp",
+      "opStr": "edi, eax"
+    },
+    {
+      "address": "0x007fdafc",
+      "bytes": "0f8df5000000",
+      "mnemonic": "jge",
+      "opStr": "0x7fdbf7"
+    },
+    {
+      "address": "0x007fdb02",
+      "bytes": "66837b0c00",
+      "mnemonic": "cmp",
+      "opStr": "word ptr [ebx + 0xc], 0"
+    },
+    {
+      "address": "0x007fdb10",
+      "bytes": "0fb70a",
+      "mnemonic": "movzx",
+      "opStr": "ecx, word ptr [edx]"
+    },
+    {
+      "address": "0x007fdb1c",
+      "bytes": "0fb64108",
+      "mnemonic": "movzx",
+      "opStr": "eax, byte ptr [ecx + 8]"
+    },
+    {
+      "address": "0x007fdb2f",
+      "bytes": "e80c59c9ff",
+      "mnemonic": "call",
+      "opStr": "0x493440"
+    },
+    {
+      "address": "0x007fdb37",
+      "bytes": "3bf8",
+      "mnemonic": "cmp",
+      "opStr": "edi, eax"
+    },
+    {
+      "address": "0x007fdb39",
+      "bytes": "7d0a",
+      "mnemonic": "jge",
+      "opStr": "0x7fdb45"
+    },
+    {
+      "address": "0x007fdb40",
+      "bytes": "8d510c",
+      "mnemonic": "lea",
+      "opStr": "edx, [ecx + 0xc]"
+    },
+    {
+      "address": "0x007fdb45",
+      "bytes": "668b0a",
+      "mnemonic": "mov",
+      "opStr": "cx, word ptr [edx]"
+    },
+    {
+      "address": "0x007fdb48",
+      "bytes": "66894e0c",
+      "mnemonic": "mov",
+      "opStr": "word ptr [esi + 0xc], cx"
+    },
+    {
+      "address": "0x007fdb56",
+      "bytes": "668932",
+      "mnemonic": "mov",
+      "opStr": "word ptr [edx], si"
+    }
+  ],
+  "fiveRootRelation": {
+    "conflictCount": 58,
+    "relation": "owner0 scalar < owner1 scalar for all 58",
+    "winner": null,
+    "winnerAuthority": false
+  },
+  "format": "t6-current-client-linked-record-chain-order-v1",
+  "proofBoundary": "No current-client duplicate winner is selected. Descending scalar link order on the lower-scalar insertion branch plus terminal lookup is exact; the >= branch can transform payload identity and must be closed separately. Historical retail remains a separate promotion gate.",
+  "proven": {
+    "directLookupReturnsTerminalRecordPayloadAtOffset4": true,
+    "directLookupWalksSecondaryLinksToTerminalRecord": true,
+    "fiveRootConflictScalarsAreNonTied": true,
+    "fiveRootOwner0ScalarLowerThanOwner1Count": 58,
+    "lowerScalarCandidateTakesNonJgeInsertionBranch": true,
+    "nonJgeBranchInsertsCandidateBeforeFirstSecondaryRecordWhoseScalarIsLessThanOrEqualToCandidate": true,
+    "nonJgeBranchWalksSecondaryLinksWhileCandidateScalarIsLowerThanCurrentScalar": true,
+    "thereforeNonJgeBranchMaintainsGreaterScalarBeforeLowerScalarOrder": true
+  },
+  "remainingGate": "Resolve the >= branch at 0x007fdbf7, especially helper 0x007fd520 payload-transfer semantics and subsequent zone-byte swap, before mapping scalar order to duplicate payload ownership."
+}
