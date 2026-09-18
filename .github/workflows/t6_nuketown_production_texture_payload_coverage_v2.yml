@@ -1,0 +1,57 @@
+name: T6 Nuketown production texture payload coverage v2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_production_texture_payload_coverage_v2.py'
+      - 'proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json'
+      - 'proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json'
+      - '.github/workflows/t6_nuketown_production_texture_payload_coverage_v2.yml'
+permissions:
+  contents: write
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project exact resolved IPAK providers into production denominator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json
+          python3 tools/t6_nuketown_production_texture_payload_coverage_v2.py             --base proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json             --resolution proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json             --out proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V2.json
+          python3 - <<'PY'
+          import json
+          b=json.load(open('proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json'))
+          r=json.load(open('proof/T6_NUKETOWN_UNRESOLVED_MATERIAL_IPAK_RESOLUTION_V1.json'))
+          d=json.load(open('proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V2.json'))
+          s=d['summary']; s0=b['summary']; rs=r['summary']
+          assert s['productionUniqueImageCount']==450
+          assert s0['productionUniqueImageCount']==450
+          assert s['v1ExactPayloadCoveredCount']==s0['exactPayloadCoveredCount']==103
+          assert s['newTracedIpakCoveredCount']==rs['resolved']
+          assert s['exactPayloadCoveredCount']==103+rs['resolved']
+          assert s['exactPayloadMissingCount']==450-s['exactPayloadCoveredCount']
+          assert len(d['unresolvedProductionImages'])==s['exactPayloadMissingCount']
+          assert len(d['newExactProviders'])==rs['resolved']
+          assert len({x['image'] for x in d['newExactProviders']})==len(d['newExactProviders'])
+          for x in d['newExactProviders']:
+              assert x['provider']=='retail-ipak-traced-native-hash'
+              assert x['resolution']=='exact-nameHash-dataHash'
+              assert len(x['payloadSha256'])==64
+              assert x['matches']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V2.json
+          git commit -m 'Persist v2 production texture payload coverage' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V2
+          path: proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V2.json
+          if-no-files-found: error
