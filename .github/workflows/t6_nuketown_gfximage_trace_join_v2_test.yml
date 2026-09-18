@@ -1,0 +1,14 @@
+name: T6 packed GfxImage root-aware join v2 test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_gfximage_packed_identity_trace_join_v2.py'
+      - 'tools/test_t6_nuketown_gfximage_packed_identity_trace_join_v2.py'
+      - '.github/workflows/t6_nuketown_gfximage_trace_join_v2_test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/test_t6_nuketown_gfximage_packed_identity_trace_join_v2.py
