@@ -108,7 +108,8 @@
       "status": "partial",
       "evidence": [
         "manifests/xanim/zombies_672_animation_semantic_sweep_v1.json",
-        "tools/t6_xanim_normalize_v1.py"
+        "tools/t6_xanim_normalize_v1.py",
+        "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V4.json"
       ],
       "current": {
         "retailAnimationsSwept": 672,
@@ -116,9 +117,19 @@
         "constantDeltaTranslations": 71,
         "dynamicQuat2Deltas": 153,
         "constantQuat2Deltas": 76,
-        "knownFixtureGap": "constant full-quat delta retail fixture"
+        "knownFixtureGap": "constant full-quat delta size==0 branch has no direct retail fixture; exhaustive negative proof currently covers 11,205/11,205 XAnimParts in 18 retained count-closed XFiles, but not yet the full target corpus",
+        "retainedXFilesCountClosed": 18,
+        "exactXAnimRecordsCensused": 11205,
+        "exactXAnimRecordsUnresolved": 0,
+        "emptyPlaceholderRecords": 2849,
+        "transKeyedBranches": 1350,
+        "transConstantBranches": 199,
+        "quat2KeyedBranches": 348,
+        "quat2ConstantBranches": 215,
+        "dynamicFullQuatBranches": 5,
+        "constantFullQuatBranchesObserved": 0
       },
-      "closureRequirement": "Every serialized delta union branch used by retail T6 has at least one direct fixture and deterministic round-trip/semantic validation."
+      "closureRequirement": "Every serialized delta union branch used by the complete in-scope retail T6 corpus has direct deterministic validation, or an exact count-closed full-corpus census proves the branch unused. Current 18-XFile / 11,205-record negative coverage is retained but is not yet full-corpus closure."
     },
     {
       "id": "xanim-runtime-binding",
