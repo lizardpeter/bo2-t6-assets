@@ -59,7 +59,7 @@ def main():
     idx,root_meta=typed_index(bindings)
     refs=unique_refs(census)
     rows=[]
-    inline_model=re.compile(r"^\\*[0-9]+$")
+    inline_model=re.compile(r"^\*[0-9]+$")
     for (_kind,_atype,_name),r in sorted(refs.items()):
         is_inline=(r["kind"]=="model" and inline_model.fullmatch(r["name"]) is not None)
         matches=[] if is_inline else idx.get((r["expectedAssetType"],r["name"]),[])
