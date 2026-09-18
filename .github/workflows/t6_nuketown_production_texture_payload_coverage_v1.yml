@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/t6_nuketown_production_texture_payload_coverage_v1.py'
       - 'proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json'
+      - 'proof/T6_NUKETOWN_REFLECTION_INLINE_PAYLOAD_PROBE_V1.json'
       - '.github/workflows/t6_nuketown_production_texture_payload_coverage_v1.yml'
 permissions:
   actions: read
@@ -35,22 +36,24 @@ jobs:
             --census /tmp/census/proof/T6_NUKETOWN_PRODUCTION_TEXTURE_DEPENDENCY_CENSUS_FULL_V2.json \
             --identity-proof manifests/render/T6_NUKETOWN_IDENTITYNORMALMAP_BLOCK5_PROOF_V1.json \
             --lightmap-proof proof/T6_NUKETOWN_LIGHTMAP_INLINE_PAYLOAD_PROOF_V1.json \
+            --reflection-proof proof/T6_NUKETOWN_REFLECTION_INLINE_PAYLOAD_PROBE_V1.json \
             --out proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json
           python3 - <<'PY'
           import json
           j=json.load(open('proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json'));s=j['summary']
           assert s['productionUniqueImageCount']==450
           assert s['exact81IpakDdsCoveredCount']==75
-          assert s['retailInlineCoveredCount']==3
-          assert s['exactPayloadCoveredCount']==78
-          assert s['exactPayloadMissingCount']==372
+          assert s['retailInlineCoveredCount']==28
+          assert s['exactPayloadCoveredCount']==103
+          assert s['exactPayloadMissingCount']==347
           assert s['materialUniqueImageCount']==423
           assert s['materialExactPayloadCoveredCount']==76
           assert s['materialExactPayloadMissingCount']==347
           assert s['lightmapExactPayloadCoveredCount']==2
-          assert s['reflectionExactPayloadCoveredCount']==0
-          assert {x['image'] for x in j['additionalExactProviders']}=={'$identitynormalmap','*lightmap0_secondary','*lightmap1_secondary'}
-          assert not {'$identitynormalmap','*lightmap0_secondary','*lightmap1_secondary'} & set(j['unresolvedProductionImages'])
+          assert s['reflectionExactPayloadCoveredCount']==25
+          expected={'$identitynormalmap','*lightmap0_secondary','*lightmap1_secondary'}|{f'*reflection_probe{i}' for i in range(25)}
+          assert {x['image'] for x in j['additionalExactProviders']}==expected
+          assert not expected & set(j['unresolvedProductionImages'])
           PY
           git diff --check
       - name: Persist proof
@@ -61,7 +64,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add proof/T6_NUKETOWN_PRODUCTION_TEXTURE_PAYLOAD_COVERAGE_V1.json
           if ! git diff --cached --quiet; then
-            git commit -m 'Persist 78-image exact production payload coverage'
+            git commit -m 'Persist 103-image exact production payload coverage'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
