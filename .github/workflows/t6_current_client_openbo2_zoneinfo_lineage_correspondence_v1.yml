@@ -1,0 +1,47 @@
+name: T6 current client OpenBO2 zone-info lineage correspondence v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_openbo2_zoneinfo_lineage_correspondence_v1.py'
+      - '.github/workflows/t6_current_client_openbo2_zoneinfo_lineage_correspondence_v1.yml'
+      - 'proof/current_client/T6_CURRENT_CLIENT_ZONE_CLASSIFIER_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_ZONE_SECONDARY_MASK_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_ARGFIELD_PROOF_V1.json'
+permissions:
+  contents: write
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned lineage correspondence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_openbo2_zoneinfo_lineage_correspondence_v1.py             --classifier-proof proof/current_client/T6_CURRENT_CLIENT_ZONE_CLASSIFIER_SEMANTICS_V1.json             --secondary-proof proof/current_client/T6_CURRENT_CLIENT_ZONE_SECONDARY_MASK_SEMANTICS_V1.json             --argfield-proof proof/current_client/T6_CURRENT_CLIENT_ZONE_SINK_ARGFIELD_PROOF_V1.json             --out proof/current_client/T6_CURRENT_CLIENT_OPENBO2_ZONEINFO_LINEAGE_CORRESPONDENCE_V1.json | tee /tmp/summary.log
+          python3 - <<'PY'
+          import json
+          j=json.load(open('proof/current_client/T6_CURRENT_CLIENT_OPENBO2_ZONEINFO_LINEAGE_CORRESPONDENCE_V1.json'))
+          assert j['correspondence']['pc32RecordGeometryExactMatch'] is True
+          assert j['correspondence']['offset4ComparatorRoleAndThresholdExactMatch'] is True
+          assert j['authority'].startswith('comparative lineage')
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_OPENBO2_ZONEINFO_LINEAGE_CORRESPONDENCE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist pinned current-client OpenBO2 zone-info correspondence'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_OPENBO2_ZONEINFO_LINEAGE_CORRESPONDENCE_V1
+          path: |
+            proof/current_client/T6_CURRENT_CLIENT_OPENBO2_ZONEINFO_LINEAGE_CORRESPONDENCE_V1.json
+            /tmp/summary.log
+          if-no-files-found: error
+          compression-level: 9
