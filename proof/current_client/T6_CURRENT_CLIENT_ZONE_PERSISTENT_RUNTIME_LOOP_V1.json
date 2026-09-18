@@ -1,0 +1,59 @@
+{
+  "authority": "SHA-classified current Plutonium client only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-zone-persistent-runtime-loop-proof-v1",
+  "proofBoundary": "All facts are forced by exact persisted current-client instructions. This proves runtime consumption of the positional trailing classifier and the 0x8000 selection bit in revision 5346. It does not assign source-level allocFlags/freeFlags names, identify 0x007fdf40/0x006e09b0/0x00596780 by source symbols, establish historical-retail equivalence, or select any Technique winner.",
+  "proven": {
+    "persistentClassifierBit0x8000ControlsFirstPassSelection": true,
+    "persistentRecordAndClassifierArePassedTogetherTo0x007fdf40": true,
+    "processedCountAIsConditionallyDecrementedPerRecord": true,
+    "processedCountBActsAsPublishedLoopCount": true
+  },
+  "recordGeometry": {
+    "base": "0x012eee98",
+    "classifierOffset": 64,
+    "strideBytes": 68
+  },
+  "runtimeLoop": {
+    "firstPass": {
+      "firstSelectedRecordHelper": "0x006e09b0",
+      "predicate": {
+        "mask": "0x00008000",
+        "operation": "bit_test",
+        "recordOffset": 64
+      },
+      "selectedCountConsumer": "0x00596780",
+      "selectedCountLocal": "[ebp-4]",
+      "strideBytes": 68
+    },
+    "publishedCountGlobal": "0x014deacc",
+    "publishedCountIsReadThenCleared": true,
+    "secondPass": {
+      "failureDecrementsGlobal": "0x012c6f1c",
+      "fallbackInvocationArgumentsRightToLeft": [
+        "record_pointer",
+        "record_plus_0x40_classifier",
+        "zero_in_ebx",
+        "zero_in_ebx"
+      ],
+      "firstInvocationArgumentsRightToLeft": [
+        "record_pointer",
+        "record_plus_0x40_classifier",
+        "zero_in_ebx",
+        "first_selected_helper_result"
+      ],
+      "recordConsumer": "0x007fdf40",
+      "strideBytes": 68
+    }
+  },
+  "source": {
+    "bytes": 381439,
+    "path": "proof/current_client/T6_CURRENT_CLIENT_ZONE_PERSISTENT_GLOBAL_XREF_PROBE_V1.json",
+    "sha256": "39ce915397dc9ebccf6d0fd9a3c1193736839c3d9243a61c77529d539d3f8f9d"
+  }
+}
