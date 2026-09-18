@@ -1,0 +1,241 @@
+name: T6 retail MP world format8 corpus v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_retail_world_format_8_absence_census_v1.py'
+      - 'tools/t6_world_format8_expanded_scan_v1.py'
+      - 'tools/t6_world_format8_mp_corpus_v1.py'
+      - 'tools/test_t6_world_format8_mp_corpus_v1.py'
+      - 'manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json'
+      - '.github/workflows/t6_mp_world_format8_corpus_v1.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: t6-retail-mp-world-format8-corpus-v1
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: scan-shard-${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install and build exact FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zlib1g-dev libssl-dev >/dev/null
+          cc -O2 -Wall -Wextra -o /tmp/t6_expand tools/t6_fastfile_expand_pc_v1.c -lz -lcrypto
+          test -x /tmp/t6_expand
+          python3 -m py_compile \
+            tools/t6_retail_world_format_8_absence_census_v1.py \
+            tools/t6_world_format8_expanded_scan_v1.py \
+            tools/t6_world_format8_mp_corpus_v1.py \
+            tools/test_t6_world_format8_mp_corpus_v1.py
+          PYTHONPATH=tools python3 tools/test_t6_world_format8_mp_corpus_v1.py
+
+      - name: Scan exact retail MP shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/expanded /tmp/scans /tmp/logs
+          python3 - <<'PY' >/tmp/targets.tsv
+          import json,os
+          from pathlib import Path
+          shard=int(os.environ['SHARD'])
+          doc=json.loads(Path('manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json').read_text())
+          assert doc['format']=='t6-retail-mp-world-format-targets-v1'
+          rows={x['zone']:x for x in doc['maps']}
+          assert len(rows)==31
+          order=doc['scanOrder']
+          assert len(order)==31 and set(order)==set(rows)
+          for i,zone in enumerate(order):
+              if i % 4 != shard:
+                  continue
+              row=rows[zone]
+              print(zone, row['path'], row['bytes'], row['sha256'], sep='\t')
+          PY
+
+          while IFS=$'\t' read -r zone rel expected_bytes expected_sha; do
+            test -n "$zone"
+            src="/tmp/source/$zone.ff"
+            expanded="/tmp/expanded/$zone.expanded.bin"
+            url="https://r2.houseofkublai.com/bo2/$rel"
+            echo "FORMAT8_SCAN_START zone=$zone url=$url"
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
+              -o "$src" "$url"
+            actual_bytes=$(stat -c %s "$src")
+            test "$actual_bytes" = "$expected_bytes"
+            actual_sha=$(sha256sum "$src" | awk '{print $1}')
+            test "$actual_sha" = "$expected_sha"
+
+            /tmp/t6_expand "$src" "$expanded" "$zone" \
+              2>&1 | tee "/tmp/logs/$zone.expand.log"
+
+            python3 tools/t6_world_format8_expanded_scan_v1.py \
+              --zone "$zone" \
+              --source-fastfile "$src" \
+              --expanded "$expanded" \
+              --out "/tmp/scans/$zone.json" \
+              2>&1 | tee "/tmp/logs/$zone.scan.log"
+
+            rm -f "$src" "$expanded"
+            echo "FORMAT8_SCAN_COMPLETE zone=$zone"
+          done </tmp/targets.tsv
+
+          expected_count=$(wc -l </tmp/targets.tsv)
+          actual_count=$(find /tmp/scans -maxdepth 1 -type f -name '*.json' | wc -l)
+          test "$actual_count" = "$expected_count"
+          echo "SHARD_COMPLETE shard=$SHARD maps=$actual_count"
+
+      - name: Upload exact shard scans
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_FORMAT8_SCAN_SHARD_${{ matrix.shard }}
+          path: |
+            /tmp/scans
+            /tmp/logs
+          if-no-files-found: error
+          compression-level: 6
+
+  aggregate:
+    runs-on: ubuntu-latest
+    needs: scan
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all exact shard scans
+        uses: actions/download-artifact@v4
+        with:
+          pattern: T6_MP_FORMAT8_SCAN_SHARD_*
+          path: /tmp/shards
+
+      - name: Assemble and fail-closed validate complete 31-map corpus
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scans /tmp/proof
+          find /tmp/shards -type f -path '*/scans/*.json' -print0 \
+            | xargs -0 -I{} cp '{}' /tmp/scans/
+          test "$(find /tmp/scans -maxdepth 1 -type f -name '*.json' | wc -l)" = 31
+
+          python3 tools/test_t6_world_format8_mp_corpus_v1.py
+          python3 tools/t6_world_format8_mp_corpus_v1.py \
+            --targets manifests/world/T6_RETAIL_MP_WORLD_FORMAT_TARGETS_V1.json \
+            --scan-root /tmp/scans \
+            --out /tmp/proof/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json \
+            2>&1 | tee /tmp/proof/format8_corpus.log
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/proof/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json')
+          d=json.loads(p.read_text())
+          assert d['targetMapCount']==31,d
+          assert d['scannedMapCount']==31,d
+          assert d['allTargetFastfileIdentitiesMatched'] is True,d
+          assert d['targetFormat']==8,d
+          assert d['expectedVd1Stride']==20,d
+          print('FORMAT8_MP_CORPUS_RESULT '+json.dumps({
+              'scannedMapCount':d['scannedMapCount'],
+              'strongInlineTechniqueSetCount':d['strongInlineTechniqueSetCount'],
+              'formatDistribution':d['formatDistribution'],
+              'format8StrongInlineHitCount':d['format8StrongInlineHitCount'],
+              'strictInlineAbsenceAcrossAll31MpMaps':d['strictInlineAbsenceAcrossAll31MpMaps'],
+          },sort_keys=True))
+          if d['format8StrongInlineHits']:
+              for row in d['format8StrongInlineHits']:
+                  print('FORMAT8_CANDIDATE '+json.dumps(row,sort_keys=True))
+          PY
+          sha256sum /tmp/proof/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json \
+            | tee /tmp/proof/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.sha256
+
+      - name: Persist exact MP corpus census without promoting format 8
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cp /tmp/proof/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json \
+            manifests/world/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          p=Path('manifests/world/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json')
+          raw=p.read_bytes(); d=json.loads(raw)
+          hits=d['format8StrongInlineHitCount']
+          state=(
+              'candidate fixtures found; direct material-bound/raw allocation proof is still required'
+              if hits else
+              'zero strict-inline hits across all 31 MP maps; this is a bounded MP absence result only'
+          )
+          lines=[
+              '# T6 retail MP world format-8 corpus census v1',
+              '',
+              'This checkpoint is generated from the complete 31-map SHA-pinned retail MP target manifest.',
+              '',
+              '## Result',
+              '',
+              f"- scanned exact retail MP FastFiles: **{d['scannedMapCount']} / {d['targetMapCount']}**",
+              f"- strict inline TechniqueSet bodies: **{d['strongInlineTechniqueSetCount']}**",
+              f"- strict worldVertFormat=8 hits: **{hits}**",
+              f"- state: **{state}**",
+              f"- expected source-closed format-8 vd1 stride: **{d['expectedVd1Stride']} bytes**",
+              f"- census SHA-256: `{hashlib.sha256(raw).hexdigest()}`",
+              f"- workflow run: `{os.environ['RUN_ID']}`",
+              '',
+              '## Proof boundary',
+              '',
+              d['proofBoundary']['proven'],
+              '',
+              d['proofBoundary']['ifHit' if hits else 'ifNoHit'],
+              '',
+              '**This workflow never modifies the world-vertex format registry and never auto-promotes format 8.**',
+              ''
+          ]
+          Path('checkpoints/T6_RETAIL_MP_WORLD_FORMAT8_CORPUS_V1.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            manifests/world/T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1.json \
+            checkpoints/T6_RETAIL_MP_WORLD_FORMAT8_CORPUS_V1.md
+          if git diff --cached --quiet; then
+            echo 'Exact MP corpus census already matches main.'
+          else
+            git commit -m 'Persist exact 31-map T6 format-8 corpus census'
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+
+      - name: Upload complete corpus proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_MP_FORMAT8_CORPUS_CENSUS_V1
+          path: |
+            /tmp/proof
+            /tmp/scans
+          if-no-files-found: error
+          compression-level: 6
