@@ -44,9 +44,12 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('proof/current_client/T6_CURRENT_CLIENT_RELINK_PAYLOAD_HELPER_PROBE_V1.json'))
-          h=j['helper']; assert h['entry']=='0x00a72bf0'; assert h['bytes']>0
+          h=j['helper']; assert h['entry']=='0x00a72bf0'
           assert h['instructions'][0]['address']=='0x00a72bf0'
           assert h['instructions'][-1]['mnemonic'].startswith('ret')
+          assert h['overlapTarget']=='0x00a72db0'
+          assert h['overlapInstructions'][0]['address']=='0x00a72db0'
+          assert h['overlapInstructions'][-1]['mnemonic'].startswith('ret')
           PY
           git diff --check
           git config user.name github-actions[bot]
