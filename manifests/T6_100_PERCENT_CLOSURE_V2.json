@@ -118,7 +118,11 @@
         "tools/t6_compiled_xanim_v19_delta_v1.py",
         "tools/test_t6_compiled_xanim_v19_delta_v1.py",
         "manifests/xanim/zombies_672_animation_semantic_sweep_v1.json",
-        "standalone xanim.py retail parser"
+        "standalone xanim.py retail parser",
+        "proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json",
+        "proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json",
+        "proof/xanim/T6_XANIM_RETAINED_PLUS_MP_BRANCH_CORPUS_V1.json",
+        "tools/t6_xanim_retained_plus_mp_branch_corpus_v1.py"
       ],
       "current": {
         "retainedXFilesCensused": 18,
@@ -133,10 +137,22 @@
         "dynamicFullQuatDeltas": 5,
         "constantFullQuatDeltas": 0,
         "constantFullQuatRetainedCorpusAbsence": "exhaustive across all 11,205 XAnimParts in the 18 count-closed retained XFiles",
-        "knownFixtureGap": "no direct constant full-quat delta retail fixture; the size==0 12-byte source branch remains struct-derived outside the currently retained 18-XFile absence proof",
-        "compiledV19NonEmptyDeltaWriter": "implemented and regression-tested"
+        "knownFixtureGap": "no direct constant full-quat delta retail fixture; the size==0 12-byte source branch remains struct-derived outside the current 46-XFile union absence proof; full target Zombies/SP/dependency coverage remains incomplete",
+        "compiledV19NonEmptyDeltaWriter": "implemented and regression-tested",
+        "retainedV4XFilesCensused": 18,
+        "retainedPlusMpUniqueXFilesCensused": 46,
+        "retainedPlusMpXAnimRecordsExpected": 11482,
+        "retainedPlusMpXAnimRecordsStructurallyIdentified": 11482,
+        "retainedPlusMpDynamicDeltaTranslations": 1385,
+        "retainedPlusMpConstantDeltaTranslations": 199,
+        "retainedPlusMpDynamicQuat2Deltas": 383,
+        "retainedPlusMpConstantQuat2Deltas": 215,
+        "retainedPlusMpDynamicFullQuatDeltas": 9,
+        "retainedPlusMpConstantFullQuatDeltas": 0,
+        "constantFullQuatExpandedCorpusAbsence": "exhaustive across all 11,482 XAnimParts in 46 unique count-closed XFiles formed by the retained-v4 plus complete 31-map MP union",
+        "dynamicFullQuatCompiledV19DirectFixtures": "6 direct MP fixtures across Nuketown and Studio; 99 quaternion keys; compiled-v19 roundtrip reconstructs every original four-component int16 quaternion frame exactly"
       },
-      "closureRequirement": "Every serialized delta union branch used across the full target retail corpus must have a retained direct fixture or an exhaustive target-corpus absence proof, with deterministic normalized/compiled round-trip validation. Non-empty compiled-v19 interchange is implemented; remaining closure work is expansion of the exact branch census to the full target corpus or discovery of a direct constant full-quat fixture."
+      "closureRequirement": "Every serialized delta union branch used across the full target retail corpus must have a retained direct fixture or an exhaustive target-corpus absence proof, with deterministic normalized/compiled round-trip validation. Dynamic full-quaternion compiled-v19 interchange now has six direct raw-int16-exact MP fixtures; remaining closure work is full target-corpus expansion for the still-unobserved constant full-quaternion branch or discovery of a direct fixture."
     },
     {
       "id": "xanim-runtime-binding",
