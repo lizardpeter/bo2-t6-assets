@@ -122,7 +122,9 @@
         "proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json",
         "proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json",
         "proof/xanim/T6_XANIM_RETAINED_PLUS_MP_BRANCH_CORPUS_V1.json",
-        "tools/t6_xanim_retained_plus_mp_branch_corpus_v1.py"
+        "tools/t6_xanim_retained_plus_mp_branch_corpus_v1.py",
+        "proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json",
+        "proof/xanim/T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1.json"
       ],
       "current": {
         "retainedXFilesCensused": 18,
@@ -137,7 +139,7 @@
         "dynamicFullQuatDeltas": 5,
         "constantFullQuatDeltas": 0,
         "constantFullQuatRetainedCorpusAbsence": "exhaustive across all 11,205 XAnimParts in the 18 count-closed retained XFiles",
-        "knownFixtureGap": "no direct constant full-quat delta retail fixture; the size==0 12-byte source branch remains struct-derived outside the current 46-XFile union absence proof; full target Zombies/SP/dependency coverage remains incomplete",
+        "knownFixtureGap": "No constant full-quaternion branch exists anywhere in the complete 215-FastFile referenced public PC archive universe. Remaining authority boundary is only retail XFiles/platform/language variants not present in that archive; do not fabricate the unobserved constant-full-quat branch as retail-used.",
         "compiledV19NonEmptyDeltaWriter": "implemented and regression-tested",
         "retainedV4XFilesCensused": 18,
         "retainedPlusMpUniqueXFilesCensused": 46,
@@ -150,9 +152,22 @@
         "retainedPlusMpDynamicFullQuatDeltas": 9,
         "retainedPlusMpConstantFullQuatDeltas": 0,
         "constantFullQuatExpandedCorpusAbsence": "exhaustive across all 11,482 XAnimParts in 46 unique count-closed XFiles formed by the retained-v4 plus complete 31-map MP union",
-        "dynamicFullQuatCompiledV19DirectFixtures": "6 direct MP fixtures across Nuketown and Studio; 99 quaternion keys; compiled-v19 roundtrip reconstructs every original four-component int16 quaternion frame exactly"
+        "dynamicFullQuatCompiledV19DirectFixtures": "6 direct MP fixtures across Nuketown and Studio; 99 quaternion keys; compiled-v19 roundtrip reconstructs every original four-component int16 quaternion frame exactly",
+        "archiveFastFilesCensused": 215,
+        "archiveFastFilesCountClosed": 215,
+        "archiveXAnimRecordsExpected": 24114,
+        "archiveXAnimRecordsStructurallyIdentified": 24114,
+        "archivePartialFastFiles": 0,
+        "archiveDynamicDeltaTranslations": 3839,
+        "archiveConstantDeltaTranslations": 594,
+        "archiveDynamicQuat2Deltas": 1016,
+        "archiveConstantQuat2Deltas": 472,
+        "archiveDynamicFullQuatDeltas": 13,
+        "archiveConstantFullQuatDeltas": 0,
+        "constantFullQuatCompleteArchiveAbsence": "zero observed across all 24,114 structurally identified XAnimParts in every one of the 215/215 count-closed FastFiles in the referenced 13.676 GB public PC archive universe",
+        "dynamicFullQuatCompiledV19CompleteArchiveFixtures": "all 13 observed dynamic full-quaternion branches across four hit FastFiles; 483 quaternion keys; compiled-v19 normalization/interchange passes every observed branch with max rotational error 1.1102230246251565e-16"
       },
-      "closureRequirement": "Every serialized delta union branch used across the full target retail corpus must have a retained direct fixture or an exhaustive target-corpus absence proof, with deterministic normalized/compiled round-trip validation. Dynamic full-quaternion compiled-v19 interchange now has six direct raw-int16-exact MP fixtures; remaining closure work is full target-corpus expansion for the still-unobserved constant full-quaternion branch or discovery of a direct fixture."
+      "closureRequirement": "Every serialized delta union branch used across the target retail corpus must have direct retained fixtures or exhaustive absence proof. The complete referenced 215-FastFile public PC archive is now 215/215 count-closed (24,114 XAnimParts), has zero constant full-quaternion uses, and all 13 observed dynamic full-quaternion branches round-trip through compiled-v19. Remaining closure is corpus authority: prove the 215-file archive exhausts the declared PC retail target or enumerate and census any missing retail XFiles/variants."
     },
     {
       "id": "xanim-runtime-binding",
@@ -391,7 +406,7 @@
     "partial": 8,
     "open": 0,
     "release100Percent": false,
-    "milestone": "World formats 0-7 and XAnim runtime composition remain retail-byte closed for their stated scopes. Format-8 strict-inline absence is now complete across all 31 hash-pinned MP FastFiles (4,589 TechniqueSet bodies, zero hits), while Zombies/non-inline format-8 authority remains open. Exact Material render-state archival remains clean across the five decoded retained worlds; layered/special shader semantics, environment, dynamic-world, XAnim binary full-corpus coverage and independent validation remain incomplete."
+    "milestone": "World formats 0-7 and XAnim runtime composition remain retail-byte closed for their stated scopes. The referenced 215-FastFile public PC archive is now fully count-closed for XAnim (24,114/24,114 records), with zero constant full-quaternion uses and compiled-v19 proof for all 13 observed dynamic full-quaternion branches. Format-8 strict-inline absence is complete across all 31 hash-pinned MP FastFiles, while Zombies/non-inline format-8 authority remains open. Exact Material render-state archival remains clean across the retained worlds; layered/special shader semantics, environment, dynamic-world, target-corpus authority and independent validation remain incomplete."
   },
   "releaseRule": "100% is a boolean certification, not a rounded estimate: every gate above must be status=closed and its closureRequirement must be backed by retained evidence."
 }
