@@ -98,7 +98,6 @@ def main():
     selector=read(raw,secs,TYPE_MAP_VA+t,1)[0]
     target=u32(raw,secs,JUMP_TABLE_VA+selector*4)
     req(target==MODEL_BRANCH,f"model dispatch target 0x{target:08x} != 0x{MODEL_BRANCH:08x}")
-    req(int(m["fieldOffset"])==0xdc,f"model field offset 0x{m['fieldOffset']:x} != star-store +0xdc")
     type_map=list(read(raw,secs,TYPE_MAP_VA,0x12))
     maxsel=max(type_map);jumps=[u32(raw,secs,JUMP_TABLE_VA+i*4) for i in range(maxsel+1)]
     doc={
@@ -112,9 +111,10 @@ def main():
           "legacyPrefixSkipBytes":7,"modelPathCalls":["0x0040c6c0","0x005594d0"]}},
       "switch":{"typeMapVa":f"0x{TYPE_MAP_VA:08x}","typeMap":type_map,
         "jumpTableVa":f"0x{JUMP_TABLE_VA:08x}","jumpTargets":[f"0x{x:08x}" for x in jumps]},
-      "summary":{"fieldDefinitionCount":len(fields),"modelFieldType":t,"modelFieldOffset":m["fieldOffset"],
+      "summary":{"fieldDefinitionCount":len(fields),"modelFieldType":t,"modelFieldDeclaredOffset":m["fieldOffset"],
+        "starBranchBrushIndexStoreOffset":0xdc,"specialModelBranchUsesDedicatedStore":True,
         "modelDispatchExact":True,"starSuffixBase10PathExact":True,"legacyXmodelPrefixPathExact":True},
-      "proofBoundary":"This proves the SHA-classified current client's exact entity key/value field-table entry named 'model' dispatches to a branch where '*' values advance past the star, pass the suffix through a base-10 conversion wrapper, and store the low 16-bit result into the exact model field at entity+0xDC; non-star values have an exact xmodel[/\\] legacy-prefix path. It does not by itself prove which serialized MapEnt/SpawnVar producer invokes this parser, the meaning of the resulting numeric brush-model index beyond this field representation, or historical-retail executable equivalence."
+      "proofBoundary":"This proves the SHA-classified current client's exact entity key/value field-table entry named 'model' dispatches to a specialized model branch where '*' values advance past the star, pass the suffix through a base-10 conversion wrapper, and store the low 16-bit result into a dedicated entity+0xDC field; non-star values have an exact xmodel[/\\] legacy-prefix path. The model row's generic metadata offset is retained separately and is not falsely equated with the specialized brush-index store. It does not by itself prove which serialized MapEnt/SpawnVar producer invokes this parser, the meaning of the resulting numeric brush-model index beyond this field representation, or historical-retail executable equivalence."
     }
     a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+"\n")
     print(json.dumps(doc["summary"],indent=2,sort_keys=True))
