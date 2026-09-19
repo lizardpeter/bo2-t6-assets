@@ -1,0 +1,732 @@
+{
+  "format": "t6-xanim-retained-plus-mp-branch-corpus-v1",
+  "overlapChecks": [
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "exactAgreement": true,
+      "expected": 5,
+      "zone": "mp_hijacked"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 1,
+        "quatConstant": 0,
+        "quatKeyed": 2,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "exactAgreement": true,
+      "expected": 9,
+      "zone": "mp_nuketown_2020"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "exactAgreement": true,
+      "expected": 2,
+      "zone": "mp_raid"
+    }
+  ],
+  "proofBoundary": "Exact corpus union of the retained-v4 XFiles and the complete 31-map retail MP census. Overlapping zones are deduplicated only after exact expected/identified and six-branch agreement. This extends corpus-bounded absence evidence for constant full-quaternion delta tracks and independently carries the six direct dynamic-full-quaternion compiled-v19 exact-raw roundtrip fixtures. It is not exhaustive for all Zombies, campaign/SP, language, DLC dependency, or other target XFiles not represented by these two source corpora.",
+  "sources": {
+    "dynamicFullQuatCompiledV19": {
+      "format": "t6-mp-xanim-dynamic-full-quat-compiled-v19-retail-proof-v1",
+      "path": "proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json",
+      "sha256": "66a568d57f8e35636e1b877d0938e93671316325cce5488dcdb21001f24149b2"
+    },
+    "mp": {
+      "format": "t6-mp-xanim-delta-branch-corpus-v1",
+      "path": "proof/xanim/T6_MP_XANIM_DELTA_BRANCH_CORPUS_V1.json",
+      "sha256": "38a74945bacc2261cbad108fcd0ebf990298e25fd537ec27cbff2d461e6b3d4c"
+    },
+    "retained": {
+      "format": "t6-retail-xanim-full-quat-census-v4",
+      "path": "manifests/xanim/T6_RETAIL_XANIM_FULL_QUAT_CENSUS_V4.json",
+      "sha256": "bfc59a727a5e4aff55dcacfd88dd8600832c7c96e7b153d615bf431e1115b9d0"
+    }
+  },
+  "summary": {
+    "allUnionXFilesCountClosed": true,
+    "branchTotals": {
+      "quat2Constant": 215,
+      "quat2Keyed": 383,
+      "quatConstant": 0,
+      "quatKeyed": 9,
+      "transConstant": 199,
+      "transKeyed": 1385
+    },
+    "constantFullQuatObserved": 0,
+    "directDynamicFullQuatCompiledV19FixtureCount": 6,
+    "directDynamicFullQuatCompiledV19RawExactFixtureCount": 6,
+    "dynamicFullQuatObserved": 9,
+    "expectedXAnimRecords": 11482,
+    "overlapZoneCount": 3,
+    "overlapZones": [
+      "mp_hijacked",
+      "mp_nuketown_2020",
+      "mp_raid"
+    ],
+    "structuralRecordsIdentified": 11482,
+    "uniqueXFileCount": 46
+  },
+  "zones": [
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "code_post_gfx_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 2,
+      "identified": 2,
+      "source": "retained-v4",
+      "zone": "code_post_gfx_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 108,
+        "quat2Keyed": 93,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 124,
+        "transKeyed": 378
+      },
+      "expected": 4233,
+      "identified": 4233,
+      "source": "retained-v4",
+      "zone": "common_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 2905,
+      "identified": 2905,
+      "source": "retained-v4",
+      "zone": "common_patch_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 78,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 310
+      },
+      "expected": 819,
+      "identified": 819,
+      "source": "retained-v4",
+      "zone": "common_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "en_code_post_gfx_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "en_code_post_gfx_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 5,
+      "identified": 5,
+      "source": "retained-v4+mp-confirmed",
+      "zone": "mp_hijacked"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 1,
+        "quatConstant": 0,
+        "quatKeyed": 2,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 9,
+      "identified": 9,
+      "source": "retained-v4+mp-confirmed",
+      "zone": "mp_nuketown_2020"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 2,
+      "identified": 2,
+      "source": "retained-v4+mp-confirmed",
+      "zone": "mp_raid"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 1
+      },
+      "expected": 10,
+      "identified": 10,
+      "source": "retained-v4",
+      "zone": "patch_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "patch_ui_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "patch_ui_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 2
+      },
+      "expected": 51,
+      "identified": 51,
+      "source": "retained-v4",
+      "zone": "patch_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "ui_mp"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "retained-v4",
+      "zone": "ui_zm"
+    },
+    {
+      "branches": {
+        "quat2Constant": 43,
+        "quat2Keyed": 90,
+        "quatConstant": 0,
+        "quatKeyed": 3,
+        "transConstant": 38,
+        "transKeyed": 288
+      },
+      "expected": 1434,
+      "identified": 1434,
+      "source": "retained-v4",
+      "zone": "zm_prison"
+    },
+    {
+      "branches": {
+        "quat2Constant": 64,
+        "quat2Keyed": 83,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 37,
+        "transKeyed": 362
+      },
+      "expected": 1735,
+      "identified": 1735,
+      "source": "retained-v4",
+      "zone": "zm_tomb"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 14,
+      "identified": 14,
+      "source": "mp-corpus-v1",
+      "zone": "mp_bridge"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 2,
+      "identified": 2,
+      "source": "mp-corpus-v1",
+      "zone": "mp_carrier"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 21,
+      "identified": 21,
+      "source": "mp-corpus-v1",
+      "zone": "mp_castaway"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 9,
+      "identified": 9,
+      "source": "mp-corpus-v1",
+      "zone": "mp_concert"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 9,
+      "identified": 9,
+      "source": "mp-corpus-v1",
+      "zone": "mp_dig"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 7,
+      "identified": 7,
+      "source": "mp-corpus-v1",
+      "zone": "mp_dockside"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 7,
+      "identified": 7,
+      "source": "mp-corpus-v1",
+      "zone": "mp_downhill"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 8,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 4
+      },
+      "expected": 21,
+      "identified": 21,
+      "source": "mp-corpus-v1",
+      "zone": "mp_drone"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 1,
+      "identified": 1,
+      "source": "mp-corpus-v1",
+      "zone": "mp_express"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 13,
+      "identified": 13,
+      "source": "mp-corpus-v1",
+      "zone": "mp_frostbite"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 8,
+      "identified": 8,
+      "source": "mp-corpus-v1",
+      "zone": "mp_hydro"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 5,
+      "identified": 5,
+      "source": "mp-corpus-v1",
+      "zone": "mp_la"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 12,
+      "identified": 12,
+      "source": "mp-corpus-v1",
+      "zone": "mp_magma"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 0,
+      "identified": 0,
+      "source": "mp-corpus-v1",
+      "zone": "mp_meltdown"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 6,
+      "identified": 6,
+      "source": "mp-corpus-v1",
+      "zone": "mp_mirage"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 8,
+      "identified": 8,
+      "source": "mp-corpus-v1",
+      "zone": "mp_nightclub"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 7,
+      "identified": 7,
+      "source": "mp-corpus-v1",
+      "zone": "mp_overflow"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 5,
+      "identified": 5,
+      "source": "mp-corpus-v1",
+      "zone": "mp_paintball"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 25,
+      "identified": 25,
+      "source": "mp-corpus-v1",
+      "zone": "mp_pod"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 7,
+      "identified": 7,
+      "source": "mp-corpus-v1",
+      "zone": "mp_skate"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 4,
+      "identified": 4,
+      "source": "mp-corpus-v1",
+      "zone": "mp_slums"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 10,
+      "identified": 10,
+      "source": "mp-corpus-v1",
+      "zone": "mp_socotra"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 4,
+        "transConstant": 0,
+        "transKeyed": 4
+      },
+      "expected": 25,
+      "identified": 25,
+      "source": "mp-corpus-v1",
+      "zone": "mp_studio"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 3,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 3
+      },
+      "expected": 16,
+      "identified": 16,
+      "source": "mp-corpus-v1",
+      "zone": "mp_takeoff"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 4,
+      "identified": 4,
+      "source": "mp-corpus-v1",
+      "zone": "mp_turbine"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 15,
+      "identified": 15,
+      "source": "mp-corpus-v1",
+      "zone": "mp_uplink"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 12,
+      "identified": 12,
+      "source": "mp-corpus-v1",
+      "zone": "mp_vertigo"
+    },
+    {
+      "branches": {
+        "quat2Constant": 0,
+        "quat2Keyed": 0,
+        "quatConstant": 0,
+        "quatKeyed": 0,
+        "transConstant": 0,
+        "transKeyed": 0
+      },
+      "expected": 4,
+      "identified": 4,
+      "source": "mp-corpus-v1",
+      "zone": "mp_village"
+    }
+  ]
+}
