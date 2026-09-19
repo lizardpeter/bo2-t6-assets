@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse,importlib.util,json
 from pathlib import Path
 EXPECTED_SOURCE='aa581f23bf696c334020e19ad97e7f26f7772aac999b8720e7da60fbc1a61bc7'
-EXPECTED_DAG='b46197488dd9ef523158a4488a4fab8fe0ced793ffdbf44e34f2283f5327586b'
-EXPECTED_ROWS='e4ce7309c2a84449c830eb232b3c7a34317f2a2d27f56d5668b501420b469f7d'
+EXPECTED_DAG='2445f6adefcd1da3c5ae0f3df8ca12724ca0b2c26ba5e4102272956a8b3a2b86'
+EXPECTED_ROWS='fba744658342fd092fbcbb154adb59afd9e91e7a8c0e869bec2cdeda1dae87cb'
 EXPECTED_SUMMARY={'controlFlowLightmappedShaderCount':78,'ifCount':175,'elseCount':75,'endifCount':175,'maxNestingDepth':2,'ifTestModeCounts':{'nonzero':175},'conditionLightmapDependentCount':0,'lightmapDependentSampleInputCount':0,'discardCount':0,'symbolicBlockerCount':0,'lightmapSampleCount':232,'lightmapDependentOutputCount':234,'nodeCount':71736,'uniqueDagCount':78,'familyCounts':{'emissive_or_burning':{'shaderCount':33,'ifCount':78,'elseCount':36,'sampleCount':99,'outputCount':99,'nodeCount':33251,'conditionLightmapDependentCount':0},'rawnormal_special':{'shaderCount':11,'ifCount':26,'elseCount':12,'sampleCount':33,'outputCount':33,'nodeCount':10788,'conditionLightmapDependentCount':0},'tv_special':{'shaderCount':20,'ifCount':36,'elseCount':12,'sampleCount':60,'outputCount':60,'nodeCount':13333,'conditionLightmapDependentCount':0},'water':{'shaderCount':14,'ifCount':35,'elseCount':15,'sampleCount':40,'outputCount':42,'nodeCount':14364,'conditionLightmapDependentCount':0}},'outputDependencyPatternCount':6}
 
 def load(path,name):
