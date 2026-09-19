@@ -46,7 +46,9 @@ jobs:
           import json
           d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_ENTITY_MODEL_FIELD_SEMANTICS_V1.json'))
           s=d['summary']
-          assert s['modelFieldOffset']==0xdc
+          assert s['modelFieldDeclaredOffset']==0x16c
+          assert s['starBranchBrushIndexStoreOffset']==0xdc
+          assert s['specialModelBranchUsesDedicatedStore'] is True
           assert s['modelDispatchExact'] is True
           assert s['starSuffixBase10PathExact'] is True
           assert s['legacyXmodelPrefixPathExact'] is True
