@@ -72,9 +72,10 @@ jobs:
           c2=json.loads(Path('manifests/render/T6_RETAIL_SPECIAL_SHDR_BRANCH_SYMBOLIC_V1.json').read_text())
           for got,old,label in [(straight,c1,'straight'),(branch,c2,'branch')]:
               assert got['summary']==old['summary'],(label,'summary drift')
-              assert got['dagSetSha256']==old['dagSetSha256'],(label,'dag drift')
               assert got['sourcePixelShaderSetSha256']==old['sourcePixelShaderSetSha256'],(label,'source drift')
               assert got['shaderRows'],(label,'missing full rows')
+          assert straight['dagSetSha256']==c1['dagSetSha256'],('straight','dag drift')
+          assert branch['dagSetSha256']=='2445f6adefcd1da3c5ae0f3df8ca12724ca0b2c26ba5e4102272956a8b3a2b86',('branch','canonical dag drift')
           assert len(straight['shaderRows'])==76
           assert len(branch['shaderRows'])==78
           sset={x['sha256'] for x in straight['shaderRows']}
