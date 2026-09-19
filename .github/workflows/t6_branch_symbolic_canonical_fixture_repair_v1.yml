@@ -1,0 +1,40 @@
+name: T6 branch symbolic canonical fixture repair v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_repair_branch_symbolic_fixture_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_SYMBOLIC_FULL_ROWS_V2.json'
+      - '.github/workflows/t6_branch_symbolic_canonical_fixture_repair_v1.yml'
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive canonical compact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_repair_branch_symbolic_fixture_v1.py
+          python3 tools/test_t6_retail_special_shdr_branch_symbolic_v1.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add manifests/render/T6_RETAIL_SPECIAL_SHDR_BRANCH_SYMBOLIC_V1.json                   tools/test_t6_retail_special_shdr_branch_symbolic_v1.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Refresh canonical branch symbolic proof fixture'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_BRANCH_SYMBOLIC_CANONICAL_FIXTURE_REPAIR_V1
+          path: |
+            manifests/render/T6_RETAIL_SPECIAL_SHDR_BRANCH_SYMBOLIC_V1.json
+            tools/test_t6_retail_special_shdr_branch_symbolic_v1.py
+          if-no-files-found: error
+          compression-level: 9
