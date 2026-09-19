@@ -1,0 +1,84 @@
+name: T6 all observed dynamic full quat compiled v19 proof v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_all_fastfile_dynamic_full_quat_compiled_v19_proof_v1.py'
+      - 'proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_xanim_normalize_v1.py'
+      - 'tools/t6_xanim_serialized_walker.py'
+      - 'tools/t6_compiled_xanim_v19_delta_v1.py'
+      - '.github/workflows/t6_all_fastfile_dynamic_full_quat_compiled_v19_proof_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-closed expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+      - name: Recover exact four dynamic-full-quat FastFiles from verified archive
+        env:
+          PYTHONPATH: tools
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6_fullquat proof/xanim
+          python3 - <<'PY'
+          import json,os,pathlib,subprocess,hashlib
+          from t6_remote_zip_range_v1 import RemoteZip
+          corpus=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'))
+          hits=corpus['dynamicFullQuatHitFastFiles']
+          if len(hits)!=4:raise SystemExit(f'expected four hit zones, got {len(hits)}')
+          by_zone={r['zoneName']:r for r in corpus['rows']}
+          rz=RemoteZip(os.environ['ZIP_URL'],'bo2-t6-dynamic-fullquat')
+          entries,_=rz.central_directory();by_name={e['name']:e for e in entries}
+          for hit in hits:
+              z=hit['zoneName'];r=by_zone[z];zp=r['zipPath'];e=by_name.get(zp)
+              if e is None:raise SystemExit(f'{z}: archive entry missing {zp}')
+              raw=rz.extract(e,verify_crc=True);h=hashlib.sha256(raw).hexdigest()
+              if h!=r['fastFileSha256'] or len(raw)!=r['fastFileBytes']:raise SystemExit(f'{z}: raw identity drift')
+              ff=pathlib.Path('/tmp/t6_fullquat')/f'{z}.ff';exp=pathlib.Path('/tmp/t6_fullquat')/f'{z}.expanded';ff.write_bytes(raw)
+              p=subprocess.run(['/tmp/t6_expand',str(ff),str(exp),z],check=True)
+              b=exp.read_bytes();eh=hashlib.sha256(b).hexdigest()
+              if eh!=r['expandedSha256'] or len(b)!=r['expandedBytes']:raise SystemExit(f'{z}: expanded identity drift')
+              print(z,len(raw),h,len(b),eh,flush=True)
+          PY
+      - name: Roundtrip all 13 observed dynamic full-quat branches
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_all_fastfile_dynamic_full_quat_compiled_v19_proof_v1.py             --corpus proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json             --expanded mp_nuketown_2020 /tmp/t6_fullquat/mp_nuketown_2020.expanded             --expanded mp_studio /tmp/t6_fullquat/mp_studio.expanded             --expanded so_zclassic_zm_transit /tmp/t6_fullquat/so_zclassic_zm_transit.expanded             --expanded zm_prison /tmp/t6_fullquat/zm_prison.expanded             --out proof/xanim/T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/xanim/T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1.json'));s=d['summary']
+          assert s['hitZoneCount']==4
+          assert s['dynamicFullQuatFixtureCount']==13
+          assert s['allObservedArchiveDynamicFullQuatBranchesRoundTrip'] is True
+          assert s['constantFullQuatObservedInArchive']==0
+          assert s['maxRotationOneMinusAbsDot'] <= 2e-7
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/xanim/T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist all observed dynamic full-quat v19 proof'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1
+          path: proof/xanim/T6_ALL_FASTFILE_DYNAMIC_FULL_QUAT_COMPILED_V19_PROOF_V1.json
+          if-no-files-found: warn
+          compression-level: 9
