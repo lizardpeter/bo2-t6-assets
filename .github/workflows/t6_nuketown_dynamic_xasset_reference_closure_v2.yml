@@ -1,0 +1,54 @@
+name: T6 Nuketown dynamic XAsset reference closure v2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_dynamic_xasset_reference_closure_v2.py'
+      - 'proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V1.json'
+      - 'proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json'
+      - 'proof/T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1.json'
+      - '.github/workflows/t6_nuketown_dynamic_xasset_reference_closure_v2.yml'
+permissions:
+  contents: write
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Promote exact sprinkler alias and require zero external misses
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_dynamic_xasset_reference_closure_v2.py             --v1 proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V1.json             --script proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json             --typed proof/T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1.json             --out proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V2.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V2.json'));s=d['summary']
+          assert s=={
+            'referenceIdentityCount':251,
+            'directTypedXAssetResolvedCount':67,
+            'retailScriptAliasResolvedCount':1,
+            'externalXAssetReferenceCount':68,
+            'externalXAssetResolvedCount':68,
+            'unresolvedExternalXAssetReferenceCount':0,
+            'inlineBrushModelTokenCount':183,
+            'allExternalXAssetReferencesResolved':True
+          }
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V2.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist Nuketown dynamic external XAsset closure v2'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V2
+          path: proof/T6_NUKETOWN_DYNAMIC_XASSET_REFERENCE_CLOSURE_V2.json
+          if-no-files-found: error
