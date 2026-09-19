@@ -119,12 +119,13 @@ def symbolic(shader,operand,opcode):
   if sat:vals=[dag.add('op',op='saturate',args=[v]) for v in vals]
   for lane,val in zip(lanes,vals):state[(dest['type'],reg,lane)]=val
   i+=r['lengthDwords']
- outputs=[]
+ outputs=[];all_outputs=[]
  for (typ,reg,lane),node in sorted(state.items()):
   if typ!='output':continue
-  deps=sorted(dag.deps(node))
-  if deps:outputs.append({'output':f'o{reg}.{COMP[lane]}','node':node,'lightmapDependencies':deps})
- return {'hasControlFlow':has_cf,'samples':samples,'blockers':blockers,'outputs':outputs,'nodes':dag.nodes,'sideEffects':side}
+  deps=sorted(dag.deps(node));rec={'output':f'o{reg}.{COMP[lane]}','node':node,'lightmapDependencies':deps}
+  all_outputs.append(rec)
+  if deps:outputs.append(rec)
+ return {'hasControlFlow':has_cf,'samples':samples,'blockers':blockers,'outputs':outputs,'allOutputs':all_outputs,'nodes':dag.nodes,'sideEffects':side}
 
 def build(root,family_manifest,opcode_tool,operand_tool):
  opcode=load(opcode_tool,'opcode');operand=load(operand_tool,'operand');unique=opcode.collect(root,family_manifest,Path('tools/t6_retail_special_shader_payload_census_v1.py'),Path('tools/t6_retail_world_formats_45_proof_v1.py'))
