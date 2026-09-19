@@ -74,7 +74,7 @@ jobs:
           BIN=/tmp/oat-all-xasset-name-cache/Unlinker
           test -x "$BIN"
           for spec in map=mp_nuketown_2020 common=common_mp common_patch=common_patch_mp patch=patch_mp code_post=code_post_gfx_mp; do
-            label=\${spec%%=*}; zone=\${spec#*=}; ff="/tmp/game/zone/all/$zone.ff"; exp="/tmp/xasset/$zone.expanded"; log="/tmp/proof/$label.log"; binding="/tmp/proof/bindings/$label.json"
+            label=${spec%%=*}; zone=${spec#*=}; ff="/tmp/game/zone/all/$zone.ff"; exp="/tmp/xasset/$zone.expanded"; log="/tmp/proof/$label.log"; binding="/tmp/proof/bindings/$label.json"
             /tmp/t6_ff_expand "$ff" "$exp" "$zone"
             count=$(python3 - "$exp" <<'PY'
           import struct,sys
