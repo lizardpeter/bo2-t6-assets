@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'tools/t6_retail_special_missing_direct_shader_classification_v1.py'
+      - 'tools/t6_retail_special_missing_direct_symbolic_v1.py'
+      - 'tools/t6_retail_special_shdr_symbolic_v1.py'
       - 'tools/t6_retail_special_family_dxbc_extract_v1.py'
       - 'tools/t6_retail_special_direct_symbolic_coverage_v1.py'
       - 'proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V1.json'
@@ -60,7 +62,7 @@ jobs:
             mkdir -p "/tmp/missing_programs/$family"
             python3 tools/t6_retail_special_family_dxbc_extract_v1.py               --root /tmp/corpus --family "$family"               --helper tools/t6_retail_world_helper_compat_v1.py               --program-dir "/tmp/missing_programs/$family"               --out "/tmp/${family}_extract.json"
           done
-      - name: Classify exact 19 uncovered pixel shaders
+      - name: Classify and symbolically close exact 19 uncovered pixel shaders
         env:
           PYTHONPATH: tools
         shell: bash
@@ -72,14 +74,33 @@ jobs:
           d=json.load(open('proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json'))
           assert d['summary']['missingShaderCount']==19
           assert d['summary']['familyCounts']=={'default':1,'unlit':13,'water':5}
+          assert d['summary']['straightShaderCount']==19
+          assert d['summary']['branchShaderCount']==0
           print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          python3 tools/t6_retail_special_missing_direct_symbolic_v1.py \
+            --root /tmp/corpus \
+            --out proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json'))
+          s=d['summary']
+          assert s['shaderCount']==19
+          assert s['familyCounts']=={'default':1,'unlit':13,'water':5}
+          assert s['symbolicBlockerCount']==0
+          assert s['controlFlowShaderCount']==0
+          assert s['discardShaderCount']==1
+          assert s['completeOutputDagCoverage'] is True
+          assert all(r['outputCount']>0 for r in d['rows'])
+          print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json
+          git add proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json \
+                  proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json
           if ! git diff --cached --quiet; then
-            git commit -m 'Persist exact missing special shader classification'
+            git commit -m 'Persist exact missing special shader symbolic closure'
             pushed=0
             for attempt in 1 2 3 4 5; do
               git pull --rebase origin main
@@ -95,6 +116,7 @@ jobs:
           name: T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1
           path: |
             proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json
+            proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json
             /tmp/default_extract.json
             /tmp/unlit_extract.json
             /tmp/water_extract.json
