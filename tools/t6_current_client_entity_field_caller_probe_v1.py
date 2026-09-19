@@ -38,10 +38,25 @@ def locate(secs,va,n=1):
     raise E(f"VA 0x{va:x}+{n} not raw-backed")
 def row(i):return {"address":f"0x{i.address:08x}","bytes":i.bytes.hex(),"mnemonic":i.mnemonic,"opStr":i.op_str}
 def dis(raw,secs,label,a,b):
-    s,o=locate(secs,a,b-a);blob=raw[o:o+b-a];md=Cs(CS_ARCH_X86,CS_MODE_32)
-    ins=[row(i) for i in md.disasm(blob,a)]
+    s,o=locate(secs,a,b-a);blob=raw[o:o+b-a];md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+    decoded=list(md.disasm(blob,a));ins=[row(i) for i in decoded]
+    strings={}
+    for i in decoded:
+        for op in getattr(i,"operands",()):
+            if op.type!=2: continue
+            v=int(op.imm)&0xffffffff
+            try:
+                ss,oo=locate(secs,v)
+            except E:
+                continue
+            end=min(oo+256,ss["rawOffset"]+ss["rawSize"]);z=raw.find(b"\\0",oo,end)
+            if z<=oo:continue
+            bb=raw[oo:z]
+            if len(bb)<3 or any(x<0x20 or x>0x7e for x in bb):continue
+            strings[v]={"va":f"0x{v:08x}","text":bb.decode("ascii","replace"),"section":ss["name"]}
     return {"label":label,"startVa":f"0x{a:08x}","endVaExclusive":f"0x{b:08x}","section":s["name"],
-            "sha256":hashlib.sha256(blob).hexdigest(),"instructions":ins}
+            "sha256":hashlib.sha256(blob).hexdigest(),"instructions":ins,
+            "referencedPrintableStrings":[strings[k] for k in sorted(strings)]}
 def raw_ptr_hits(raw,secs,target):
     p=struct.pack("<I",target);out=[]
     for s in secs:
