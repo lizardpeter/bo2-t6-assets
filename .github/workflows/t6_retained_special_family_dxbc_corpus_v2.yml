@@ -1,0 +1,141 @@
+name: T6 retained special-family DXBC corpus v2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_retained_special_family_dxbc_corpus_v2.yml'
+      - 'tools/t6_retail_special_family_dxbc_extract_v1.py'
+      - 'tools/t6_retail_special_family_dxbc_validation_v1.py'
+      - 'tools/t6_retail_world_helper_compat_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_retail_special_shader_payload_census_v1.py'
+      - 'tools/t6_retail_world_formats_45_proof_v1.py'
+      - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
+
+permissions:
+  contents: write
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact expander and shader validators
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev vkd3d-compiler spirv-tools >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lcrypto -lz
+          mkdir -p /tmp/raw /tmp/corpus/mp /tmp/proof proof/render
+          vkd3d-compiler --version > /tmp/proof/vkd3d_version.txt
+          spirv-val --version > /tmp/proof/spirv_tools_version.txt
+
+      - name: Download and expand exact five-world retained corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A RAW=(
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+            [mp_raid]='f404d8d5a4d21c5b47c295fb79f5991f225fc46f81cb11323c27bb7fef51fef9'
+            [mp_hijacked]='789d8cafebec49fc17dbf4ee116db569e867414270ca42988179807034f10cae'
+            [zm_prison]='ea7069856afe495190bfe218d2e7eea3fa593cb9603228391338b90402724d03'
+            [zm_tomb]='10a3753404815957888122853ac817137af6244237d7f3b08c3c804a0a24e5b2'
+          )
+          declare -A EXP=(
+            [mp_nuketown_2020]='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+            [mp_raid]='d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8'
+            [mp_hijacked]='8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b'
+            [zm_prison]='e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487'
+            [zm_tomb]='4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219'
+          )
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            raw="/tmp/raw/${zone}.ff"
+            curl -fL --retry 4 --retry-delay 2 -o "$raw" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${RAW[$zone]}  $raw" | sha256sum -c -
+            if [[ "$zone" == mp_* ]]; then out="/tmp/corpus/mp/${zone}.expanded.bin"; else out="/tmp/corpus/${zone}.expanded.bin"; fi
+            /tmp/t6_fastfile_expand "$raw" "$out" "$zone" 2> "/tmp/proof/${zone}_expand.log"
+            echo "${EXP[$zone]}  $out" | sha256sum -c -
+          done
+
+      - name: Extract translate validate and persist every special family
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          families=(unlit water emissive_or_burning shadowcaster tv_special rawnormal_special default)
+          : > /tmp/proof/SPECIAL_FAMILY_SUMMARIES.jsonl
+          for family in "${families[@]}"; do
+            pdir="/tmp/proof/programs_${family}"
+            sdir="/tmp/proof/spirv_${family}"
+            mkdir -p "$pdir" "$sdir"
+            extract="/tmp/proof/${family}_extract.json"
+            python3 tools/t6_retail_special_family_dxbc_extract_v1.py \
+              --root /tmp/corpus --family "$family" \
+              --helper tools/t6_retail_world_helper_compat_v1.py \
+              --program-dir "$pdir" --out "$extract"
+            shopt -s nullglob
+            for cso in "$pdir"/*.cso; do
+              stem=$(basename "$cso" .cso)
+              vkd3d-compiler -x dxbc-tpf -b spirv-binary -o "$sdir/${stem}.spv" "$cso"
+              spirv-val "$sdir/${stem}.spv"
+              spirv-dis --raw-id "$sdir/${stem}.spv" -o "$sdir/${stem}.spvasm"
+            done
+            shopt -u nullglob
+            upper=$(printf '%s' "$family" | tr '[:lower:]' '[:upper:]')
+            out="proof/render/T6_RETAIL_SPECIAL_${upper}_DIRECT_DXBC_VALIDATED_V1.json"
+            python3 tools/t6_retail_special_family_dxbc_validation_v1.py \
+              --extract "$extract" --spirv-dir "$sdir" \
+              --vkd3d-version /tmp/proof/vkd3d_version.txt \
+              --spirv-tools-version /tmp/proof/spirv_tools_version.txt \
+              --out "$out"
+            python3 - "$out" <<'PY' >> /tmp/proof/SPECIAL_FAMILY_SUMMARIES.jsonl
+import json,sys
+d=json.load(open(sys.argv[1]))
+print(json.dumps(d['summary'],sort_keys=True))
+PY
+          done
+
+          python3 - <<'PY'
+import glob,json
+paths=glob.glob('proof/render/T6_RETAIL_SPECIAL_*_DIRECT_DXBC_VALIDATED_V1.json')
+docs=[json.load(open(p)) for p in paths]
+expected={'unlit':17,'water':7,'emissive_or_burning':3,'shadowcaster':1,'tv_special':1,'rawnormal_special':1,'default':1}
+got={d['family']:d['summary']['techniqueSetCount'] for d in docs}
+assert got==expected,(got,expected)
+assert sum(got.values())==31
+assert all(d['summary']['translationCoverageComplete'] for d in docs)
+assert all(d['summary']['structuralFailureCount']==0 for d in docs)
+print(json.dumps({
+  'familyCount':len(docs),
+  'techniqueSetCount':sum(got.values()),
+  'directProgramCount':sum(d['summary']['directProgramCount'] for d in docs),
+  'directProgramUseCount':sum(d['summary']['directProgramUseCount'] for d in docs),
+  'packedReferenceCount':sum(d['summary']['packedReferenceCount'] for d in docs)
+},indent=2,sort_keys=True))
+PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_*_DIRECT_DXBC_VALIDATED_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist complete retained special-family DXBC corpus'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAINED_SPECIAL_FAMILY_DXBC_CORPUS_V2
+          path: |
+            proof/render/T6_RETAIL_SPECIAL_*_DIRECT_DXBC_VALIDATED_V1.json
+            /tmp/proof/*_extract.json
+            /tmp/proof/SPECIAL_FAMILY_SUMMARIES.jsonl
+            /tmp/proof/*_version.txt
+          if-no-files-found: error
+          compression-level: 9
