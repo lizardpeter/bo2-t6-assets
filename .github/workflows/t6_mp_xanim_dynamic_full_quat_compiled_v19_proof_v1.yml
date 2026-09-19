@@ -1,0 +1,66 @@
+name: T6 MP XAnim dynamic full quat compiled v19 proof v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_mp_xanim_dynamic_full_quat_compiled_v19_proof_v1.py'
+      - 'tools/t6_xanim_normalize_v1.py'
+      - 'tools/t6_xanim_serialized_walker.py'
+      - 'tools/t6_compiled_xanim_v19_delta_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_mp_xanim_dynamic_full_quat_compiled_v19_proof_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-closed FastFile expander
+        run: cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+      - name: Recover exact retail fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6_xanim_fullquat proof/xanim
+          curl -fL --retry 4 --retry-delay 2 -o /tmp/t6_xanim_fullquat/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          curl -fL --retry 4 --retry-delay 2 -o /tmp/t6_xanim_fullquat/mp_studio.ff https://r2.houseofkublai.com/bo2/zone/all/mp_studio.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/t6_xanim_fullquat/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '074b9dd2915e2c146de1f3ee11e7ac3df0eae7867fb91ff4cdb5e506c546e700  /tmp/t6_xanim_fullquat/mp_studio.ff' | sha256sum -c -
+          /tmp/t6_ff_expand /tmp/t6_xanim_fullquat/mp_nuketown_2020.ff /tmp/t6_xanim_fullquat/mp_nuketown_2020.expanded mp_nuketown_2020
+          /tmp/t6_ff_expand /tmp/t6_xanim_fullquat/mp_studio.ff /tmp/t6_xanim_fullquat/mp_studio.expanded mp_studio
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/t6_xanim_fullquat/mp_nuketown_2020.expanded' | sha256sum -c -
+          echo 'd2c09b730835df084108c19ac4edbeac84ac90cf60ad2e76c02919b58b572d30  /tmp/t6_xanim_fullquat/mp_studio.expanded' | sha256sum -c -
+      - name: Normalize and roundtrip all six direct full-quat fixtures
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_mp_xanim_dynamic_full_quat_compiled_v19_proof_v1.py             --expanded mp_nuketown_2020 /tmp/t6_xanim_fullquat/mp_nuketown_2020.expanded             --expanded mp_studio /tmp/t6_xanim_fullquat/mp_studio.expanded             --out proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json'))
+          s=d['summary']
+          assert s['fixtureCount']==6
+          assert s['zoneCount']==2
+          assert s['allCompiledRoundTripsPassed'] is True
+          assert s['allFlatPoolsExhausted'] is True
+          assert s['walkerBlockerCount']==0
+          assert s['maxRotationOneMinusAbsDot'] <= 2e-7
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist retail full-quat XAnim compiled-v19 proof'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1
+          path: proof/xanim/T6_MP_XANIM_DYNAMIC_FULL_QUAT_COMPILED_V19_RETAIL_PROOF_V1.json
+          if-no-files-found: error
