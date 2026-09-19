@@ -77,6 +77,9 @@ def one(zone,path,start,name,fixed_sha):
     errs=[rotation_error(a,b) for a,b in zip(q["rawInt16Frames"],dq["rawInt16Frames"])]
     mx=max(errs,default=0.0)
     if mx>ROT_TOL:raise SystemExit(f"{zone}:{name}: quaternion rotation error {mx} > {ROT_TOL}")
+    raw_exact=q["rawInt16Frames"]==dq["rawInt16Frames"]
+    if not raw_exact:
+        raise SystemExit(f"{zone}:{name}: compiled-v19 full-quat reconstruction is rotationally equivalent but not raw-int16 exact")
     if not trans_equal(d.get("trans"),dec.get("trans")):
         raise SystemExit(f"{zone}:{name}: translation roundtrip mismatch")
     return {
@@ -89,6 +92,7 @@ def one(zone,path,start,name,fixed_sha):
         "nativeRawInt16FramesSha256":packed_hash(q["rawInt16Frames"]),
         "compiledDecodedRawInt16FramesSha256":packed_hash(dq["rawInt16Frames"]),
         "maxRotationOneMinusAbsDot":mx,
+        "rawInt16FramesExactRoundtrip":raw_exact,
       },
       "transMode":None if d.get("trans") is None else d["trans"].get("mode"),
       "compiledV19DeltaBytes":len(payload),"compiledV19DeltaSha256":sha_bytes(payload),
@@ -119,6 +123,7 @@ def main():
         "totalQuaternionKeyCount":sum(r["quat"]["keyCount"] for r in rows),
         "maxRotationOneMinusAbsDot":max(r["quat"]["maxRotationOneMinusAbsDot"] for r in rows),
         "allCompiledRoundTripsPassed":True,
+        "allQuaternionRawInt16FramesExact":all(r["quat"]["rawInt16FramesExactRoundtrip"] for r in rows),
         "allFlatPoolsExhausted":all(r["flatPoolsExhausted"] for r in rows),
         "walkerBlockerCount":sum(len(r["walkerBlockers"]) for r in rows),
       },
