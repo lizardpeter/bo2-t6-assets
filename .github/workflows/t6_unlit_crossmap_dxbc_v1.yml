@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/t6_unlit_crossmap_dxbc_v1.yml'
       - 'tools/t6_retail_special_family_dxbc_extract_v1.py'
+      - 'tools/t6_retail_special_family_dxbc_validation_v1.py'
       - 'tools/t6_retail_world_helper_compat_v1.py'
       - 'tools/t6_fastfile_expand_pc_v1.c'
       - 'tools/t6_retail_special_shader_payload_census_v1.py'
@@ -13,7 +14,7 @@ on:
       - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   extract:
@@ -100,6 +101,40 @@ jobs:
           done
           echo "$count" > /tmp/proof/translated_program_count.txt
           test "$count" -gt 0
+
+      - name: Seal and persist exact validated unlit shader corpus
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/render
+          python3 tools/t6_retail_special_family_dxbc_validation_v1.py \
+            --extract /tmp/proof/T6_RETAIL_UNLIT_DIRECT_DXBC_V1.json \
+            --spirv-dir /tmp/proof/spirv \
+            --vkd3d-version /tmp/proof/vkd3d_version.txt \
+            --spirv-tools-version /tmp/proof/spirv_tools_version.txt \
+            --out proof/render/T6_RETAIL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json'))
+          s=d['summary']
+          assert s['family']=='unlit'
+          assert s['techniqueSetCount']==17
+          assert s['translationCoverageComplete'] is True
+          assert s['translatedAndValidatedProgramCount']==s['directProgramCount']
+          assert s['structuralFailureCount']==0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist validated five-world unlit DXBC corpus'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Upload exact cross-map unlit shader corpus
         if: always()
