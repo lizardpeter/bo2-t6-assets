@@ -17,7 +17,7 @@ from capstone.x86 import X86_OP_IMM
 CLIENT_SHA="770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
 FORMAT="t6-current-client-inline-brush-model-semantic-probe-v1"
 CANDIDATE=(0x007c33c0,0x007c3580)
-BASE10=(0x00a779c0,0x00a77c40)
+BASE10=(0x00a73004,0x00a7303b)
 LITERAL_VAS=[0x00c2d058,0x00c61bb8,0x00c096c0]
 
 class E(RuntimeError):pass
