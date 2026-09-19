@@ -93,31 +93,10 @@ jobs:
               --vkd3d-version /tmp/proof/vkd3d_version.txt \
               --spirv-tools-version /tmp/proof/spirv_tools_version.txt \
               --out "$out"
-            python3 - "$out" <<'PY' >> /tmp/proof/SPECIAL_FAMILY_SUMMARIES.jsonl
-import json,sys
-d=json.load(open(sys.argv[1]))
-print(json.dumps(d['summary'],sort_keys=True))
-PY
+            python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d['summary'],sort_keys=True))" "$out" >> /tmp/proof/SPECIAL_FAMILY_SUMMARIES.jsonl
           done
 
-          python3 - <<'PY'
-import glob,json
-paths=glob.glob('proof/render/T6_RETAIL_SPECIAL_*_DIRECT_DXBC_VALIDATED_V1.json')
-docs=[json.load(open(p)) for p in paths]
-expected={'unlit':17,'water':7,'emissive_or_burning':3,'shadowcaster':1,'tv_special':1,'rawnormal_special':1,'default':1}
-got={d['family']:d['summary']['techniqueSetCount'] for d in docs}
-assert got==expected,(got,expected)
-assert sum(got.values())==31
-assert all(d['summary']['translationCoverageComplete'] for d in docs)
-assert all(d['summary']['structuralFailureCount']==0 for d in docs)
-print(json.dumps({
-  'familyCount':len(docs),
-  'techniqueSetCount':sum(got.values()),
-  'directProgramCount':sum(d['summary']['directProgramCount'] for d in docs),
-  'directProgramUseCount':sum(d['summary']['directProgramUseCount'] for d in docs),
-  'packedReferenceCount':sum(d['summary']['packedReferenceCount'] for d in docs)
-},indent=2,sort_keys=True))
-PY
+          python3 -c "import glob,json; paths=glob.glob('proof/render/T6_RETAIL_SPECIAL_*_DIRECT_DXBC_VALIDATED_V1.json'); docs=[json.load(open(p)) for p in paths]; expected={'unlit':17,'water':7,'emissive_or_burning':3,'shadowcaster':1,'tv_special':1,'rawnormal_special':1,'default':1}; got={d['family']:d['summary']['techniqueSetCount'] for d in docs}; assert got==expected,(got,expected); assert sum(got.values())==31; assert all(d['summary']['translationCoverageComplete'] for d in docs); assert all(d['summary']['structuralFailureCount']==0 for d in docs); print(json.dumps({'familyCount':len(docs),'techniqueSetCount':sum(got.values()),'directProgramCount':sum(d['summary']['directProgramCount'] for d in docs),'directProgramUseCount':sum(d['summary']['directProgramUseCount'] for d in docs),'packedReferenceCount':sum(d['summary']['packedReferenceCount'] for d in docs)},indent=2,sort_keys=True))"
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
