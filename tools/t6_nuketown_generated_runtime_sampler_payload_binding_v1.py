@@ -12,7 +12,7 @@ from pathlib import Path
 BIND_FMT="t6-nuketown-generated-runtime-sampler-surface-binding-v1"
 LM_FMT="t6-nuketown-lightmap-inline-payload-proof-v1"
 RP_FMT="t6-nuketown-reflection-inline-payload-probe-v1"
-COV_FMT="t6-nuketown-production-texture-payload-coverage-v2"
+COV1_FMT="t6-nuketown-production-texture-payload-coverage-v1"\nCOV2_FMT="t6-nuketown-production-texture-payload-coverage-v2"
 FORMAT="t6-nuketown-generated-runtime-sampler-payload-binding-v1"
 class E(RuntimeError):pass
 def req(c,m):
@@ -44,25 +44,29 @@ def provider_maps(lm,rp):
         }
     return lm_by,rp_by
 
-def exact_coverage_set(cov):
-    names=set()
-    # V2 carries prior exact providers plus new exact providers.
-    for key in ("exactProviders","priorExactProviders","newExactProviders"):
-        for r in cov.get(key,[]) or []:
-            n=r.get("image")
-            if n:names.add(str(n))
-    # Some revisions retain the canonical list directly.
-    for n in cov.get("coveredProductionImages",[]) or []: names.add(str(n))
-    return names
+def exact_inline_coverage(cov1):
+    rows=cov1.get("additionalExactProviders",[]) or []
+    out={}
+    for r in rows:
+        n=str(r.get("image") or "")
+        req(n and n not in out,f"invalid/duplicate v1 inline provider {n!r}")
+        out[n]=r
+    return out
 
-def build(bind,lm,rp,cov):
+def build(bind,lm,rp,cov1,cov2):
     req(bind.get("format")==BIND_FMT,f"binding format {bind.get('format')!r}")
     req(lm.get("format")==LM_FMT,f"lightmap payload format {lm.get('format')!r}")
     req(rp.get("format")==RP_FMT,f"reflection payload format {rp.get('format')!r}")
-    req(cov.get("format")==COV_FMT,f"coverage format {cov.get('format')!r}")
+    req(cov1.get("format")==COV1_FMT,f"coverage v1 format {cov1.get('format')!r}")
+    req(cov2.get("format")==COV2_FMT,f"coverage v2 format {cov2.get('format')!r}")
+    s1=cov1.get("summary",{});s2=cov2.get("summary",{})
+    req(int(s1.get("exactPayloadCoveredCount",-1))==103,"v1 exact-payload population drift")
+    req(int(s1.get("retailInlineCoveredCount",-1))==28,"v1 inline-provider population drift")
+    req(int(s2.get("v1ExactPayloadCoveredCount",-1))==103,"v2 does not retain v1 103-provider baseline")
+    req(int(s2.get("exactPayloadCoveredCount",-1))==450 and int(s2.get("exactPayloadMissingCount",-1))==0,"v2 production payload closure is not 450/450")
     req(bind.get("summary",{}).get("allSampledRuntimeResourceIdentitiesResolved") is True,"resource identity proof not closed")
     lm_by,rp_by=provider_maps(lm,rp)
-    coverage=exact_coverage_set(cov)
+    coverage=exact_inline_coverage(cov1)
     resources={};rows=[];kind_counts=collections.Counter();bind_count=0
     for s in bind.get("surfaces",[]):
         br=[]
@@ -75,7 +79,10 @@ def build(bind,lm,rp,cov):
                 p=rp_by.get(img);kind="reflectionProbeSampler"
             else: raise E(f"surface {s.get('surfaceIndex')}: unexpected runtime sampler {res!r}")
             req(p is not None,f"{res}/{img}: no exact inline payload provider")
-            req(img in coverage,f"{res}/{img}: absent from production exact-payload coverage v2")
+            covrow=coverage.get(img)
+            req(covrow is not None,f"{res}/{img}: absent from v1 explicit inline-provider ledger")
+            req(str(covrow.get("payloadSha256") or "")==p["payloadSha256"],f"{img}: v1 inline-provider payload SHA disagrees")
+            req(int(covrow.get("resourceBytes",-1))==p["payloadBytes"],f"{img}: v1 inline-provider byte count disagrees")
             prior=resources.setdefault(img,{"image":img,**p})
             req(prior["payloadSha256"]==p["payloadSha256"],f"{img}: payload provider disagreement")
             br.append({
@@ -106,25 +113,27 @@ def build(bind,lm,rp,cov):
     req(kind_counts["reflectionProbeSampler"]==int(bind["summary"]["resolvedReflectionProbeSurfaceBindingCount"]),"reflection binding count drift")
     return {
       "format":FORMAT,
-      "authority":"exact generated per-surface code-sampler resource identity joined to independent exact serialized inline payload proofs and production exact-payload coverage v2",
+      "authority":"exact generated per-surface code-sampler resource identity joined to independent serialized inline payload proofs, explicit v1 inline-provider ledger, and v2 450/450 production closure",
       "summary":summary,
       "resources":[resources[k] for k in sorted(resources)],
       "surfaces":rows,
-      "proofBoundary":"This proves exact retail payload byte identity for every resolved generated-surface lightmapSamplerSecondary/reflectionProbeSampler resource use. It does not assign channel/color meaning, decode BC formats, prove GPU upload/sampler state, choose reflection coordinates/LOD beyond separately retained shader evidence, or resolve hdrControl0 runtime value."
+      "proofBoundary":"This proves exact retail payload byte identity for every resolved generated-surface lightmapSamplerSecondary/reflectionProbeSampler resource use. Identity membership is cross-checked against the explicit v1 inline-provider ledger; v2 is used only as the independent 450/450 production closure, never as an identity list it does not contain. It does not assign channel/color meaning, decode BC formats, prove GPU upload/sampler state, choose reflection coordinates/LOD beyond separately retained shader evidence, or resolve hdrControl0 runtime value."
     }
 
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--binding",type=Path,required=True);ap.add_argument("--lightmap-payload",type=Path,required=True)
-    ap.add_argument("--reflection-payload",type=Path,required=True);ap.add_argument("--coverage",type=Path,required=True)
+    ap.add_argument("--reflection-payload",type=Path,required=True)
+    ap.add_argument("--coverage-v1",type=Path,required=True);ap.add_argument("--coverage-v2",type=Path,required=True)
     ap.add_argument("--out",type=Path,required=True);a=ap.parse_args()
-    bind,lm,rp,cov=[load(x) for x in (a.binding,a.lightmap_payload,a.reflection_payload,a.coverage)]
-    d=build(bind,lm,rp,cov)
+    bind,lm,rp,cov1,cov2=[load(x) for x in (a.binding,a.lightmap_payload,a.reflection_payload,a.coverage_v1,a.coverage_v2)]
+    d=build(bind,lm,rp,cov1,cov2)
     d["sources"]={
       "binding":{"path":str(a.binding),"sha256":sh(a.binding)},
       "lightmapPayload":{"path":str(a.lightmap_payload),"sha256":sh(a.lightmap_payload)},
       "reflectionPayload":{"path":str(a.reflection_payload),"sha256":sh(a.reflection_payload)},
-      "productionCoverage":{"path":str(a.coverage),"sha256":sh(a.coverage)},
+      "productionCoverageV1":{"path":str(a.coverage_v1),"sha256":sh(a.coverage_v1)},
+      "productionCoverageV2":{"path":str(a.coverage_v2),"sha256":sh(a.coverage_v2)},
     }
     a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(d,indent=2,sort_keys=True)+"\n")
     print(json.dumps(d["summary"],indent=2,sort_keys=True))
