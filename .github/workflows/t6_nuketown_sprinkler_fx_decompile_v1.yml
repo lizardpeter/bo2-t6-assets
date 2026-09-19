@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/decompwork
+          mkdir -p /tmp/decompwork /tmp/decompwork/proof
           cp /tmp/oatout/maps/mp/mp_nuketown_2020_fx.gsc /tmp/decompwork/mp_nuketown_2020_fx.gsc
           cd /tmp/decompwork
           /tmp/gsc-tool/build/bin/amd64/release/gsc-tool -m decomp -g t6 -s pc mp_nuketown_2020_fx.gsc | tee /tmp/decompile.log
@@ -105,4 +105,5 @@ jobs:
             /tmp/decompile.log
             /tmp/sprinkler_lines.txt
             /tmp/gsc_tool_sha256.txt
+            /tmp/decompwork/proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json
           if-no-files-found: warn
