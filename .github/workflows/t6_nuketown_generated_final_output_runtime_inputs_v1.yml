@@ -1,0 +1,172 @@
+name: T6 Nuketown generated final output runtime inputs v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_nuketown_generated_final_output_runtime_input_census_v1.py'
+      - 'tools/t6_nuketown_generated_shader_recipe_recover_v3.py'
+      - 'tools/t6_generated_slot4_final_output_symbolic_v3.py'
+      - 'tools/t6_generated_final_output_cbuffer_signature_v2.py'
+      - 'tools/t6_generated_final_output_texture_resource_binding_v2.py'
+      - 'tools/t6_generated_final_output_code_constant_identity_v2.py'
+      - 'tools/t6_generated_final_output_code_sampler_identity_v2.py'
+      - 'tools/t6_code_constant_source_table_v1.py'
+      - 'tools/t6_code_sampler_source_table_v1.py'
+      - '.github/workflows/t6_nuketown_generated_final_output_runtime_inputs_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-\${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build pinned OAT Unlinker only if cache is absent
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_build
+          git -C /tmp/oat_build checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat_build submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat_build
+          git -C /tmp/oat_build diff --check
+          cd /tmp/oat_build
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-unlinker-cache
+          install -m 0755 "$BIN" /tmp/oat-unlinker-cache/Unlinker
+          printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' \
+            9dca965366541504b71fa8cfb7ac049cb9b717e1 \
+            "$(sha256sum "$GITHUB_WORKSPACE/tools/t6_oat_9dca_gcc_compat_patch_v3.py" | awk '{print $1}')" \
+            > /tmp/oat-unlinker-cache/source_identity.txt
+
+      - name: Save exact pinned OAT Unlinker cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-\${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Recover exact Nuketown TechniqueSet dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          mkdir -p /tmp/game/zone/all /tmp/oat_out /tmp/proof proof/render
+          curl -fL --retry 4 --retry-delay 2 \
+            -o /tmp/game/zone/all/mp_nuketown_2020.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          /tmp/t6_expand /tmp/game/zone/all/mp_nuketown_2020.ff /tmp/mp_nuketown_2020.expanded mp_nuketown_2020
+          echo '7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505  /tmp/mp_nuketown_2020.expanded' | sha256sum -c -
+          /tmp/oat-unlinker-cache/Unlinker --no-color --verbose --include-assets techniqueset \
+            --output-folder /tmp/oat_out /tmp/game/zone/all/mp_nuketown_2020.ff \
+            > /tmp/proof/oat_techset.log 2>&1
+          test "$(find /tmp/oat_out/techsets -type f -name '*.techset' | wc -l)" -gt 0
+          test "$(find /tmp/oat_out/shader_bin -type f -name 'ps_*.cso' | wc -l)" -gt 0
+
+      - name: Rebuild exact 120/34/34 final-output DAG and corrected bindings
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_generated_shader_recipe_recover_v3.py \
+            --expanded-world /tmp/mp_nuketown_2020.expanded \
+            --oat-root /tmp/oat_out \
+            --out /tmp/proof/recipes.json
+          python3 tools/t6_generated_slot4_final_output_symbolic_v3.py \
+            --recipes /tmp/proof/recipes.json \
+            --oat-root /tmp/oat_out \
+            --strict-nuketown \
+            --out /tmp/proof/final.json
+          python3 tools/t6_generated_final_output_cbuffer_signature_v2.py \
+            --final-output /tmp/proof/final.json \
+            --oat-root /tmp/oat_out \
+            --out /tmp/proof/cbuffer.json
+          python3 tools/t6_generated_final_output_texture_resource_binding_v2.py \
+            --final-output /tmp/proof/final.json \
+            --oat-root /tmp/oat_out \
+            --out /tmp/proof/textures.json
+
+      - name: Recover pinned T6 code input tables and exact identities
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_tables
+          git -C /tmp/oat_tables checkout -q 2ca512abe7cb82d70a94d5ad7846043c3978862d
+          python3 tools/t6_code_constant_source_table_v1.py \
+            --oat-source-root /tmp/oat_tables --out /tmp/proof/code_constant_table.json
+          python3 tools/t6_code_sampler_source_table_v1.py \
+            --oat-source-root /tmp/oat_tables --out /tmp/proof/code_sampler_table.json
+          python3 tools/t6_generated_final_output_code_constant_identity_v2.py \
+            --cbuffer-signature /tmp/proof/cbuffer.json \
+            --code-constant-table /tmp/proof/code_constant_table.json \
+            --out /tmp/proof/code_constants.json
+          python3 tools/t6_generated_final_output_code_sampler_identity_v2.py \
+            --texture-binding /tmp/proof/textures.json \
+            --sampler-table /tmp/proof/code_sampler_table.json \
+            --out /tmp/proof/code_samplers.json
+
+      - name: Persist exact dynamic runtime-input census
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_nuketown_generated_final_output_runtime_input_census_v1.py \
+            --final /tmp/proof/final.json \
+            --cbuffer /tmp/proof/cbuffer.json \
+            --code-constants /tmp/proof/code_constants.json \
+            --textures /tmp/proof/textures.json \
+            --code-samplers /tmp/proof/code_samplers.json \
+            --out proof/render/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1.json'))
+          s=d['summary']
+          assert s['programCount']==34
+          assert s['materialCount']==120
+          assert s['cbufferInputOccurrenceCount']>0
+          assert s['textureInputOccurrenceCount']>0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist Nuketown generated final-output runtime input census'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1
+          path: |
+            proof/render/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1.json
+            /tmp/proof/*.json
+            /tmp/proof/oat_techset.log
+          if-no-files-found: error
+          compression-level: 9
