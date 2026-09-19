@@ -31,10 +31,16 @@ def walk(payload):
   rows.append((op,ln,bool(tok&0x80000000),bool(tok&0x2000)));i+=ln
  if i!=decl:raise ValueError('instruction walk did not land at declared end')
  return rows
+def _scan_helper(h,d,blocks,before):
+ if hasattr(h,'parse_front') and hasattr(h,'scan_techsets'):
+  front=h.parse_front(d);return front['blockSizes'],h.scan_techsets(d,front['blockSizes'],before=before)
+ if hasattr(h,'front') and hasattr(h,'scan_tech'):
+  b,_=h.front(d);rows=[{**r,'fixedStart':int(r['start']),'worldVertFormat':int(r['fmt'])} for r in h.scan_tech(d,b,before)];return b,rows
+ raise ValueError('world helper exposes neither supported retained scanning API')
 def collect(root,family_manifest,parser_path,helper_path):
  p=load(parser_path,'payload');h=p.load_helper(helper_path) if hasattr(p,'load_helper') else p.load_world_helper(helper_path);famdoc=json.loads(family_manifest.read_text());fam={x['techniqueSet']:x['family'] for x in famdoc['specialTechniqueSets']};uniq={}
  for mn,cfg in p.MAPS.items():
-  d=(root/cfg['rel']).read_bytes();front=h.parse_front(d);blocks=front['blockSizes'];rs=h.scan_techsets(d,blocks,before=cfg['world'])[-(cfg['q1']-cfg['q0']+1):]
+  d=(root/cfg['rel']).read_bytes();blocks,allrs=_scan_helper(h,d,None,cfg['world']);rs=allrs[-(cfg['q1']-cfg['q0']+1):]
   for i,r in enumerate(rs):r['xassetIndex']=cfg['q0']+i
   for i,r in enumerate(rs):
    ts=p.parse_techset(d,r,rs[i+1]['fixedStart'] if i+1<len(rs) else cfg['world'],blocks,h)
@@ -62,5 +68,5 @@ def build(root,family_manifest,parser_path,helper_path):
  lenrows=[{'opcode':OPCODES[op],'lengthDwords':ln,'count':n} for (op,ln),n in sorted(lens.items())]
  return {'format':'t6-retail-special-shdr-opcode-census-v1','producer':'tools/t6_retail_special_shdr_opcode_census_v1.py','sourcePixelShaderSetSha256':'aa581f23bf696c334020e19ad97e7f26f7772aac999b8720e7da60fbc1a61bc7','reference':{'format':'Microsoft D3D10/SM4 tokenized program format','opcodeMask':'0x7ff','instructionLengthBits':'30:24','source':'d3d10TokenizedProgramFormat.hpp'},'summary':summary,'instructionLengthVariantSetSha256':dig(lenrows),'instructionLengthVariantCount':len(lenrows),'proofBoundary':'Direct token-boundary census over the 176 unique retained special pixel SHDR programs. Instruction opcode IDs and encoded DWORD lengths are decoded from authoritative retail bytecode; operands and arithmetic semantics are intentionally not decoded by this stage.'}
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--root',type=Path,default=Path('/mnt/data/t6_xanim_corpus'));ap.add_argument('--family-manifest',type=Path,default=Path('manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'));ap.add_argument('--parser',type=Path,default=Path('tools/t6_retail_special_shader_payload_census_v1.py'));ap.add_argument('--helper',type=Path,default=Path('tools/t6_retail_world_formats_45_proof_v1.py'));ap.add_argument('--out',type=Path,required=True);a=ap.parse_args();d=build(a.root,a.family_manifest,a.parser,a.helper);a.out.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n');print(json.dumps(d['summary'],indent=2,sort_keys=True))
+ ap=argparse.ArgumentParser();ap.add_argument('--root',type=Path,default=Path('/mnt/data/t6_xanim_corpus'));ap.add_argument('--family-manifest',type=Path,default=Path('manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'));ap.add_argument('--parser',type=Path,default=Path('tools/t6_retail_special_shader_payload_census_v1.py'));ap.add_argument('--helper',type=Path,default=Path('tools/t6_retail_world_helper_compat_v1.py'));ap.add_argument('--out',type=Path,required=True);a=ap.parse_args();d=build(a.root,a.family_manifest,a.parser,a.helper);a.out.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n');print(json.dumps(d['summary'],indent=2,sort_keys=True))
 if __name__=='__main__':main()
