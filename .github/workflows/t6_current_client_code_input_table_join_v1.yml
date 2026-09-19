@@ -63,7 +63,15 @@ jobs:
           s=d['summary']
           assert s['requiredRendererRowCount']==7
           assert all(len(d['requiredRendererRows'][k]) for k in d['requiredRendererRows'])
-          assert s['samplerAmbiguousRowCount']==0
+          # Global duplicate exact rows are retained as static-copy evidence;
+          # only the seven renderer rows above are required to be unique.
+          assert s['samplerSourceRowCount']==55
+          assert s['samplerUniqueExactRowCount']==43
+          assert s['samplerAbsentRowCount']==0
+          assert s['samplerAmbiguousRowCount']==12
+          assert s['constantSourceRowCount']==220
+          assert s['constantUniqueExactRowCount']==217
+          assert s['constantAbsentRowCount']==3
           assert s['constantAmbiguousRowCount']==0
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
