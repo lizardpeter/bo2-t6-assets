@@ -1,0 +1,125 @@
+name: T6 all FastFile XAnim branch corpus v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_all_fastfile_xanim_branch_corpus_v1.py'
+      - 'tools/t6_remote_zip_range_v1.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_xanim_retail_delta_branch_census_v1.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v2.py'
+      - 'tools/t6_xanim_retail_delta_branch_census_v3.py'
+      - '.github/workflows/t6_all_fastfile_xanim_branch_corpus_v1.yml'
+permissions:
+  contents: write
+jobs:
+  scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-closed expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+      - name: Census deterministic archive shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: '8'
+          ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/work
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,subprocess,sys
+          from t6_remote_zip_range_v1 import RemoteZip
+          import t6_xanim_retail_delta_branch_census_v3 as v3
+          shard=int(os.environ['SHARD']);n=int(os.environ['SHARDS'])
+          rz=RemoteZip(os.environ['ZIP_URL'],f'bo2-t6-xanim-corpus/{shard}')
+          entries,meta=rz.central_directory()
+          ff=sorted([e for e in entries if e['name'].lower().endswith('.ff')],key=lambda e:e['name'].lower())
+          if len(ff)!=215:raise SystemExit(f'archive FastFile count {len(ff)} != 215')
+          selected=[(i,e) for i,e in enumerate(ff) if i%n==shard]
+          rows=[]
+          for local,(gi,e) in enumerate(selected):
+              name=e['name'];fname=name.rsplit('/',1)[-1];zone=fname[:-3]
+              row={'globalIndex':gi,'shardIndex':local,'zipPath':name,'file':fname,'zoneName':zone,
+                   'zipCrc32':f"{e['crc32']:08x}",'zipUncompressedBytes':e['uncompressedSize']}
+              ffp=pathlib.Path('/tmp/work')/f'{gi:03d}.ff';exp=pathlib.Path('/tmp/work')/f'{gi:03d}.expanded'
+              try:
+                  raw=rz.extract(e,verify_crc=True);ffp.write_bytes(raw)
+                  row.update(fastFileBytes=len(raw),fastFileSha256=hashlib.sha256(raw).hexdigest())
+                  p=subprocess.run(['/tmp/t6_expand',str(ffp),str(exp),zone],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
+                  row['expandRc']=p.returncode
+                  if p.returncode!=0 or not exp.is_file():
+                      row.update(status='expand_failed',error=p.stderr[-1000:])
+                  else:
+                      c=v3.census(exp)
+                      row.update(
+                        status='green',expandedBytes=c['expandedBytes'],expandedSha256=c['expandedSha256'],
+                        xassetCount=c['xassetCount'],expectedXAnimCount=c['expectedXAnimCount'],
+                        structuralRecordCount=c['structuralRecordCount'],emptyPlaceholderCount=c['emptyPlaceholderCount'],
+                        countClosesExactly=c['countClosesExactly'],inlineNames=c['inlineNames'],packedNames=c['packedNames'],
+                        overlaps=c['overlaps'],branches=c['branches'],constantFullQuat=c['constantFullQuat'],
+                        dynamicFullQuatCount=c['dynamicFullQuatCount'],dynamicFullQuatExamples=c['dynamicFullQuatExamples'])
+                      if row['overlaps']!=0:raise RuntimeError(f'overlapping XAnim records: {row["overlaps"]}')
+              except Exception as exc:
+                  if row.get('status')!='green':row.update(status='exception',error=repr(exc))
+                  else:raise
+              finally:
+                  ffp.unlink(missing_ok=True);exp.unlink(missing_ok=True)
+              rows.append(row)
+              print(gi,row['status'],fname,row.get('expectedXAnimCount'),row.get('structuralRecordCount'),row.get('branches'),flush=True)
+          doc={'format':'t6-all-fastfile-xanim-branch-corpus-shard-v1','shard':shard,'shardCount':n,
+               'archiveFastFileCount':len(ff),'remoteZip':meta,'rows':rows,
+               'summary':{'selectedCount':len(rows),'green':sum(r['status']=='green' for r in rows),
+                          'failed':sum(r['status']!='green' for r in rows),
+                          'countClosed':sum(bool(r.get('countClosesExactly')) for r in rows)},
+               'proofBoundary':'Per-shard strict XAnim structural branch census. Only count-closed rows can authorize whole-FastFile absence; partial rows remain positive-only evidence.'}
+          pathlib.Path(f'/tmp/proof/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_SHARD_{shard}_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+          if doc['summary']['failed']:raise SystemExit('one or more expansion/census failures in shard')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_SHARD_${{ matrix.shard }}_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
+  aggregate:
+    needs: scan
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_SHARD_*_V1
+          path: /tmp/shards
+          merge-multiple: true
+      - name: Aggregate fail-closed 215-FastFile branch corpus
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_all_fastfile_xanim_branch_corpus_v1.py             --shard-dir /tmp/shards             --out proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist complete 215-FastFile XAnim branch corpus'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1
+          path: proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json
+          if-no-files-found: error
+          compression-level: 9
