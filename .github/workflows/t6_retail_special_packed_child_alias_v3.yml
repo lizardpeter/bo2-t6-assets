@@ -1,0 +1,92 @@
+name: T6 special packed child alias v3
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retail_special_packed_child_alias_v3.py'
+      - 'tools/t6_retail_special_shader_payload_census_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V2.json'
+      - 'tools/t6_retail_world_helper_compat_v1.py'
+      - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
+      - '.github/workflows/t6_retail_special_packed_child_alias_v3.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build expander and recover exact retained worlds
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          mkdir -p /tmp/raw /tmp/corpus/mp proof/render
+          declare -A RAW=(
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+            [mp_raid]='bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888'
+            [mp_hijacked]='2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037'
+            [zm_prison]='ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1'
+            [zm_tomb]='663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5'
+          )
+          declare -A EXP=(
+            [mp_nuketown_2020]='7e791fb90a085f3bff9e0df895e5a232fa91cc43bcd0027225fe811f7891d505'
+            [mp_raid]='d3874c5981a01d75b72c9584e0e7d8af6132f28135f1a1ec6c4db2b9ac5037f8'
+            [mp_hijacked]='8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b'
+            [zm_prison]='e9d334a173d05b2854370822bc2cb16c9d5eb6226254aaf28b726cfedc340487'
+            [zm_tomb]='4b4e7cff929304fe58c83a2864dc76ddb8a295b6e6c548b30cb04a514800d219'
+          )
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            raw="/tmp/raw/${zone}.ff"
+            curl -fL --retry 4 --retry-delay 2 -o "$raw" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${RAW[$zone]}  $raw" | sha256sum -c -
+            if [[ "$zone" == mp_* ]]; then out="/tmp/corpus/mp/${zone}.expanded.bin"; else out="/tmp/corpus/${zone}.expanded.bin"; fi
+            /tmp/t6_expand "$raw" "$out" "$zone"
+            echo "${EXP[$zone]}  $out" | sha256sum -c -
+          done
+      - name: Resolve packed child aliases by exact cross-map keys
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_special_packed_child_alias_v3.py \
+            --root /tmp/corpus \
+            --out proof/render/T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V3.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V3.json'))
+          s=d['summary']
+          assert s['specialTargetPointerIdentityCount']==129
+          assert s['specialTargetOccurrenceCount']==1138
+          assert s['resolvedPointerIdentityCount']+s['unresolvedPointerIdentityCount']==129
+          assert s['resolvedSpecialOccurrenceCount']+s['unresolvedSpecialOccurrenceCount']==1138
+          assert s['v2ResolvedPointerIdentityCount']==16
+          assert s['newlyResolvedPointerIdentityCountBeyondV2']>=0
+          assert s['conflictCount']>=0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V3.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist all-world special packed child aliases'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V3
+          path: proof/render/T6_RETAIL_SPECIAL_PACKED_CHILD_ALIAS_V3.json
+          if-no-files-found: error
+          compression-level: 9
