@@ -1,0 +1,121 @@
+name: T6 qualified sprinkler FX typed ownership v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_exact_typed_xasset_name_root_join_v1.py'
+      - 'tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py'
+      - 'tools/t6_oat_all_xasset_ordinal_name_binding_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - '.github/workflows/t6_qualified_sprinkler_fx_typed_ownership_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-closed expander
+        run: cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+      - name: Restore all-XAsset instrumented OAT
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-all-xasset-name-cache
+          key: oat-unlinker-t6-9dca965-compat-v3-all-xasset-name-v1-\${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Build all-XAsset instrumented OAT if needed
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-all-xasset-name-cache
+          install -m 0755 "$BIN" /tmp/oat-all-xasset-name-cache/Unlinker
+          printf 'oat_commit=%s\ncompat_patch_sha256=%s\ntrace_patch_sha256=%s\n' \
+            9dca965366541504b71fa8cfb7ac049cb9b717e1 \
+            "$(sha256sum "$GITHUB_WORKSPACE/tools/t6_oat_9dca_gcc_compat_patch_v3.py" | awk '{print $1}')" \
+            "$(sha256sum "$GITHUB_WORKSPACE/tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py" | awk '{print $1}')" \
+            >/tmp/oat-all-xasset-name-cache/source_identity.txt
+      - name: Save all-XAsset OAT cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-all-xasset-name-cache
+          key: oat-unlinker-t6-9dca965-compat-v3-all-xasset-name-v1-\${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Fetch exact five roots and bind native XAssets
+        shell: bash
+        env:
+          PYTHONPATH: tools
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/xasset /tmp/proof/bindings /tmp/oat_out proof
+          for f in mp_nuketown_2020.ff common_mp.ff common_patch_mp.ff patch_mp.ff code_post_gfx_mp.ff; do
+            curl -fL --retry 4 --retry-delay 2 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/game/zone/all/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/game/zone/all/patch_mp.ff' | sha256sum -c -
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/game/zone/all/code_post_gfx_mp.ff' | sha256sum -c -
+          BIN=/tmp/oat-all-xasset-name-cache/Unlinker
+          test -x "$BIN"
+          for spec in map=mp_nuketown_2020 common=common_mp common_patch=common_patch_mp patch=patch_mp code_post=code_post_gfx_mp; do
+            label=\${spec%%=*}; zone=\${spec#*=}; ff="/tmp/game/zone/all/$zone.ff"; exp="/tmp/xasset/$zone.expanded"; log="/tmp/proof/$label.log"; binding="/tmp/proof/bindings/$label.json"
+            /tmp/t6_ff_expand "$ff" "$exp" "$zone"
+            count=$(python3 - "$exp" <<'PY'
+          import struct,sys
+          d=open(sys.argv[1],'rb').read()
+          print(struct.unpack_from('<I',d,56)[0])
+          PY
+            )
+            "$BIN" --no-color --verbose --include-assets image --output-folder "/tmp/oat_out/$label" "$ff" >"$log" 2>&1
+            test "$(grep -c '^T6_XASSET_ORDINAL_NAME' "$log")" -eq "$count"
+            python3 tools/t6_oat_all_xasset_ordinal_name_binding_v1.py --expanded "$exp" --native-log "$log" --oat-commit 9dca965366541504b71fa8cfb7ac049cb9b717e1 --out "$binding"
+          done
+      - name: Join exact qualified FX target
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_exact_typed_xasset_name_root_join_v1.py \
+            --name water/fx_water_fire_sprinkler_thin \
+            --expected-type FX \
+            --binding map /tmp/proof/bindings/map.json \
+            --binding common /tmp/proof/bindings/common.json \
+            --binding common_patch /tmp/proof/bindings/common_patch.json \
+            --binding patch /tmp/proof/bindings/patch.json \
+            --binding code_post /tmp/proof/bindings/code_post.json \
+            --out proof/T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1.json
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist qualified sprinkler FX typed ownership'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1
+          path: |
+            proof/T6_QUALIFIED_SPRINKLER_FX_TYPED_OWNERSHIP_V1.json
+            /tmp/proof/bindings
+          if-no-files-found: warn
+          compression-level: 9
