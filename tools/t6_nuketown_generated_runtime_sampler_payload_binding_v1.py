@@ -12,7 +12,8 @@ from pathlib import Path
 BIND_FMT="t6-nuketown-generated-runtime-sampler-surface-binding-v1"
 LM_FMT="t6-nuketown-lightmap-inline-payload-proof-v1"
 RP_FMT="t6-nuketown-reflection-inline-payload-probe-v1"
-COV1_FMT="t6-nuketown-production-texture-payload-coverage-v1"\nCOV2_FMT="t6-nuketown-production-texture-payload-coverage-v2"
+COV1_FMT="t6-nuketown-production-texture-payload-coverage-v1"
+COV2_FMT="t6-nuketown-production-texture-payload-coverage-v2"
 FORMAT="t6-nuketown-generated-runtime-sampler-payload-binding-v1"
 class E(RuntimeError):pass
 def req(c,m):
