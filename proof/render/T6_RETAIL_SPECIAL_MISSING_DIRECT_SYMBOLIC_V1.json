@@ -1,0 +1,1683 @@
+{
+  "format": "t6-retail-special-missing-direct-symbolic-v1",
+  "proofBoundary": "Exact SHA-256 identity and assembly-level straight-line dataflow only. Every row is one of the 19 direct retained pixel shaders previously absent from symbolic coverage, and its complete output register DAG is reconstructed from the retained SHDR token stream. Resource registers, constants, inputs and arithmetic operations remain symbolic unless independently mapped elsewhere. The single discard is retained as an exact side effect. This does not reconstruct HLSL, infer family semantics, resolve packed shader references, prove runtime resource values, or establish framebuffer equivalence.",
+  "rows": [
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 6,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "default",
+      "fullDagSha256": "7014edfcda3eb5bee834bf48a77e4c44bf42b4467557c1194cc823cbffa098dd",
+      "nodeCount": 6,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 2,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 3,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 4,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 5,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 15,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "0e9f38470621f7c1830c465861bdcd49a753b6dc07c32d2175b1fb30b1d05764",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 100,
+        "sampleCount": 3,
+        "saturateInstructionCount": 1
+      },
+      "family": "unlit",
+      "fullDagSha256": "db025c878807ccc9f10c5a8db24797dd0720f39d2ef0045d6972a8cf971d72d5",
+      "nodeCount": 313,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 310,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 311,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 312,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 109,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 3,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 323,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 426,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 613,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "17cbfe8769870139b593fe97354a8406469a2719bc52e3a24c30c889af39f763",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 39,
+        "sampleCount": 4,
+        "saturateInstructionCount": 1
+      },
+      "family": "unlit",
+      "fullDagSha256": "4d7420951463f33e8dcf0c3ed05187af6453d4d9ebd74dd3f187651abce12553",
+      "nodeCount": 102,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 99,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 100,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 101,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 9,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 4,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 86,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 102,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            4
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 137,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 170,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            3
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "1f60dfc5f98b376da728d3769a83e40ef927847a1a897bef0371aba19ef02643",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 46,
+        "sampleCount": 4,
+        "saturateInstructionCount": 4
+      },
+      "family": "unlit",
+      "fullDagSha256": "32b28339d65cd7e1f5dfba59543a4870cd379dd68d0b07167e0c9cc5c35895c9",
+      "nodeCount": 134,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 131,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 132,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 133,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 97,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 4,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 84,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 100,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            4
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 135,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 202,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            3
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "386e340bcd940e6e81624984dc88f07156b37d96741e5a5ad1ec9583b4941a55",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 18,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "unlit",
+      "fullDagSha256": "b739e3a6c87972040a2e99beac2a554e90e58f4d3fd0d0780f0eaadbc5502270",
+      "nodeCount": 44,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 41,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 42,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 43,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 13,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 31,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "55ab35ba2da1f4c84cb813f42abc0b64d089dcfb8b3bb5a1d7d08b536a8fb4fc",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 101,
+        "sampleCount": 3,
+        "saturateInstructionCount": 3
+      },
+      "family": "unlit",
+      "fullDagSha256": "3e59f8cbdca6a729a9ae6dfee7b2fcde4a77caf9bfce6abbb551674949d2661b",
+      "nodeCount": 319,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 316,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 317,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 318,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 109,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 3,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 320,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 423,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 627,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "78fa6faaea06adb04a98ba8f78b0c174f7504056d1205424f093d97dc6ad8233",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 18,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "unlit",
+      "fullDagSha256": "265e946f9244f13c84ef2c3a503d6ab8a18e22a9a94a2ba4a6137b2b797edbfb",
+      "nodeCount": 40,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 36,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 37,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 38,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 39,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 31,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "78fb2a01cdf3621f476598c6788d0eaf34cc0e5cf601803a3ec111c23d1f2571",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 14,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "unlit",
+      "fullDagSha256": "d1a82e4d90f9a905007b2551821ba4660eec37e58157ba572b7e509855e1d2f2",
+      "nodeCount": 27,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 24,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 25,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 26,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 23,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 20,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "7cb6101c24618e6f43403e5e1fd506f4723c0552107a60137bf0cf4d440f6201",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 99,
+        "sampleCount": 3,
+        "saturateInstructionCount": 3
+      },
+      "family": "unlit",
+      "fullDagSha256": "88e6fd27e6e00d71e9c38c83e2ee441cda8f440f032bfffd2dc1e3af4eb137bd",
+      "nodeCount": 303,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 300,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 301,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 302,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 109,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 3,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 317,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 420,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 624,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "ceef10aad04ce783aeaac420faee65e39f65d6d40f77741b61fdf40e316235b5",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 12,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "unlit",
+      "fullDagSha256": "3b4f684afa5572d728c233a693c864e07bb2435d4442f89c6b5bb29b4bca5dc7",
+      "nodeCount": 29,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 24,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 26,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 28,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 13,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 20,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "d01b5485e1f60ef5a14379571b68ef9875d3d05b36ed74c024fe59ebb1ad3723",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 1,
+        "instructionCount": 21,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "unlit",
+      "fullDagSha256": "eae355339b47b301ebf7870d4d7aa96d4ddd84914aa600af339e7b0ae5104989",
+      "nodeCount": 49,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 46,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 47,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 48,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 16,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 31,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "e1460e6d6019b4aa219dd0c21799345cfe2cfb3c78cc6fe22154955b654990e8",
+      "sideEffects": [
+        {
+          "atDword": 63,
+          "lightmapDependencies": [],
+          "op": "discard"
+        }
+      ]
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 21,
+        "sampleCount": 1,
+        "saturateInstructionCount": 1
+      },
+      "family": "unlit",
+      "fullDagSha256": "154f0d94fddbdf2db659335277d541159c5f8dd990061aa46d26f735ee12ecb7",
+      "nodeCount": 34,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 31,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 32,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 33,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 3,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 51,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "ee6d476ac94591f277332173114f9a73914e5bc0356f0f1ecae6faadc4d9d48d",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 23,
+        "sampleCount": 1,
+        "saturateInstructionCount": 1
+      },
+      "family": "unlit",
+      "fullDagSha256": "ce4a40e3f867ff9be5eb1e53d8d3dc36457d8944d053de4dda5be36fee920f8b",
+      "nodeCount": 48,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 36,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 37,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 38,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 47,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 35,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "f4e635b3b1ca8483897645fd36ba847e92130bdc12eb21049ffda80ae8732116",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 44,
+        "sampleCount": 4,
+        "saturateInstructionCount": 4
+      },
+      "family": "unlit",
+      "fullDagSha256": "e19cca4ca05cdeb7ec2d7c08d0bd68ed431e00d1b7e2df8ea8c2a99c3b9608f6",
+      "nodeCount": 120,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 117,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 118,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 119,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 12,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 4,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 78,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 94,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            4
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 129,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 196,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            3
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        }
+      ],
+      "sha256": "fb32e1e55dbd5c382d0421f6aa2e6c50e569b573df79c85a51de3190ed7f62b2",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 145,
+        "sampleCount": 14,
+        "saturateInstructionCount": 9
+      },
+      "family": "water",
+      "fullDagSha256": "a590e51fd5766d747ce45c1459dbfc008f609aab20aa6ef0c8fa4da8ea384f89",
+      "nodeCount": 501,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 498,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 499,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 500,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 4,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 14,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 147,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            5
+          ],
+          "samplerRegisters": [
+            5
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 156,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            5
+          ],
+          "samplerRegisters": [
+            5
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 182,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            5
+          ],
+          "samplerRegisters": [
+            5
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 191,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            5
+          ],
+          "samplerRegisters": [
+            5
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 246,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            6
+          ],
+          "samplerRegisters": [
+            6
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 255,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            6
+          ],
+          "samplerRegisters": [
+            6
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 269,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            6
+          ],
+          "samplerRegisters": [
+            6
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 283,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            6
+          ],
+          "samplerRegisters": [
+            6
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 316,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 325,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 357,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 418,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 719,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            4
+          ],
+          "samplerRegisters": [
+            4
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 769,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            3
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        }
+      ],
+      "sha256": "3fdd933a028d9b8f2a02578c7800f23b6406a19ba0f940b47cd7157d7a8b0514",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 8,
+        "sampleCount": 0,
+        "saturateInstructionCount": 0
+      },
+      "family": "water",
+      "fullDagSha256": "797924694844c6b519bdcce0262ee4520cf5bf031b26c4a2ed633ec4c4339d81",
+      "nodeCount": 17,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 13,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 14,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 15,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 16,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 0,
+      "samples": [],
+      "sha256": "6ad3c418be58151681e6b3219093338454dfb183e62809752dd1b79068fddbf0",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 8,
+        "sampleCount": 0,
+        "saturateInstructionCount": 0
+      },
+      "family": "water",
+      "fullDagSha256": "797924694844c6b519bdcce0262ee4520cf5bf031b26c4a2ed633ec4c4339d81",
+      "nodeCount": 17,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 13,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 14,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 15,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 16,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 0,
+      "samples": [],
+      "sha256": "8065bcf3d0d8c4072af52d57160d425652c9679c2876696fe0c23ac08e4337d8",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 123,
+        "sampleCount": 6,
+        "saturateInstructionCount": 8
+      },
+      "family": "water",
+      "fullDagSha256": "e5a69bff56a45c8e685a48438bc1f2582fbfb1d3ed11b10a11a221db960b1969",
+      "nodeCount": 406,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 403,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 404,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 405,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 368,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 6,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 62,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 71,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            1
+          ],
+          "samplerRegisters": [
+            2
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 103,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            1
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 213,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            4
+          ],
+          "samplerRegisters": [
+            4
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 313,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            2
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        },
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 410,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            3
+          ],
+          "samplerRegisters": [
+            3
+          ]
+        }
+      ],
+      "sha256": "981459bbdadfab2dadc24eb9387bf0272260ac654e7bba79157c9e5364785bc7",
+      "sideEffects": []
+    },
+    {
+      "classification": {
+        "discardCount": 0,
+        "instructionCount": 6,
+        "sampleCount": 1,
+        "saturateInstructionCount": 0
+      },
+      "family": "water",
+      "fullDagSha256": "7014edfcda3eb5bee834bf48a77e4c44bf42b4467557c1194cc823cbffa098dd",
+      "nodeCount": 6,
+      "outputCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 2,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 3,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 4,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 5,
+          "output": "o0.w"
+        }
+      ],
+      "sampleInstructionCount": 1,
+      "samples": [
+        {
+          "channels": [
+            "w",
+            "x",
+            "y",
+            "z"
+          ],
+          "instructionDword": 15,
+          "kinds": [
+            "textureSample"
+          ],
+          "resourceRegisters": [
+            0
+          ],
+          "samplerRegisters": [
+            0
+          ]
+        }
+      ],
+      "sha256": "bc14d0449be0b024d30bcebed16b06c4464da6f3a6bd1728343aee247ffc4930",
+      "sideEffects": []
+    }
+  ],
+  "shaderSetSha256": "5d143bc8b661aa75bdd947452bf86b0b8220628f3471c6f6328c1b49505e4126",
+  "sources": {
+    "classification": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json",
+      "sha256": "3c0816a9b5cd4cfd91649c08cf6e0f28901cd950bb92915497ddcce25acddcee"
+    },
+    "coverage": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V1.json",
+      "sha256": "4b1b956e9f7be29c2c4f8bee446f22f49c741a792c4ffeba3dac039e209b1a16"
+    },
+    "familyManifest": {
+      "path": "manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json",
+      "sha256": "be51f70dc8f645ae577dc3642a6f59005cbaee1792ab60ec58ddd98b841d7ead"
+    }
+  },
+  "summary": {
+    "completeOutputDagCoverage": true,
+    "controlFlowShaderCount": 0,
+    "discardInstructionCount": 1,
+    "discardShaderCount": 1,
+    "familyCounts": {
+      "default": 1,
+      "unlit": 13,
+      "water": 5
+    },
+    "nodeCount": 2515,
+    "outputLaneCount": 76,
+    "sampleInstructionCount": 50,
+    "shaderCount": 19,
+    "symbolicBlockerCount": 0,
+    "uniqueFullDagCount": 17
+  }
+}
