@@ -279,9 +279,12 @@
         "proof/render/T6_RETAIL_SPECIAL_SHADOWCASTER_DIRECT_DXBC_VALIDATED_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_TV_SPECIAL_DIRECT_DXBC_VALIDATED_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json",
-        "proof/render/T6_RETAIL_SPECIAL_WATER_DIRECT_DXBC_VALIDATED_V1.json"
+        "proof/render/T6_RETAIL_SPECIAL_WATER_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json"
       ],
-      "closureRequirement": "Layered blend/compositor behavior plus special glass/decal/emissive/scrolling/water-like technique families used by target maps are shader/provenance closed and reproduced by the T6-aware adapter.",
+      "closureRequirement": "Direct retained pixel-shader symbolic coverage is now complete at 176/176 for the stated five-world seven-family denominator. Remaining closure is the packed/reused Technique/shader/program dependency graph, exact runtime resource/constant provider semantics (including hdrControl0 where applicable), special-family playback/state integration, and final framebuffer validation across the declared target corpus.",
       "current": {
         "retainedLayeredMaterials": 1130,
         "layeredIdentityGrammarFailures": 0,
@@ -372,7 +375,17 @@
             "packedReferences": 200
           }
         },
-        "retainedSpecialCorpusBoundary": "All 211 directly retained programs across all 31 retained special TechniqueSets are exact-byte retained and translate/spirv-val cleanly. The 956 packed technique/shader references remain unresolved and no semantic arithmetic equivalence is inferred from translation."
+        "retainedSpecialCorpusBoundary": "All 211 directly retained programs across all 31 retained special TechniqueSets are exact-byte retained and translate/spirv-val cleanly. The 956 packed technique/shader references remain unresolved and no semantic arithmetic equivalence is inferred from translation.",
+        "retainedSpecialDirectPixelShaderDenominator": 176,
+        "retainedSpecialDirectPixelShaderSymbolicallyClosed": 176,
+        "retainedSpecialDirectPixelShaderSymbolicCoveragePercent": 100,
+        "retainedSpecialDirectPixelShaderMissing": 0,
+        "retainedSpecialNewFullOutputDagShaders": 19,
+        "retainedSpecialNewFullOutputDagNodes": 2515,
+        "retainedSpecialNewFullOutputDagOutputLanes": 76,
+        "retainedSpecialNewFullOutputDagSampleInstructions": 50,
+        "retainedSpecialNewFullOutputDagDiscardInstructions": 1,
+        "retainedSpecialDirectPixelShaderBoundary": "All 176 directly retained pixel-shader DXBC identities in the seven-family five-world denominator now have exact assembly-level symbolic dataflow proofs. This does not resolve packed Technique/shader/program references, reconstruct HLSL, prove runtime values, or establish framebuffer equivalence."
       }
     },
     {
