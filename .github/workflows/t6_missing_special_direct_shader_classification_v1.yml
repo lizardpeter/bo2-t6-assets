@@ -80,8 +80,14 @@ jobs:
           git add proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json
           if ! git diff --cached --quiet; then
             git commit -m 'Persist exact missing special shader classification'
-            git pull --rebase origin main
-            git push origin HEAD:main
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              echo "push race on attempt $attempt; retrying" >&2
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
           fi
       - uses: actions/upload-artifact@v4
         if: always()
