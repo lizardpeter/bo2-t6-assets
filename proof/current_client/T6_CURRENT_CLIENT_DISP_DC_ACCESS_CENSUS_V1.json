@@ -1,0 +1,197 @@
+{
+  "authority": "SHA-classified current Plutonium client only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-disp-dc-access-census-v1",
+  "hits": [
+    {
+      "contextAfter": [
+        {
+          "address": "0x00b69017",
+          "bytes": "8b6e28",
+          "mnemonic": "mov",
+          "opStr": "ebp, dword ptr [esi + 0x28]"
+        },
+        {
+          "address": "0x00b6901a",
+          "bytes": "8b45fc",
+          "mnemonic": "mov",
+          "opStr": "eax, dword ptr [ebp - 4]"
+        },
+        {
+          "address": "0x00b6901d",
+          "bytes": "89442428",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x28], eax"
+        },
+        {
+          "address": "0x00b69021",
+          "bytes": "8b4011",
+          "mnemonic": "mov",
+          "opStr": "eax, dword ptr [eax + 0x11]"
+        },
+        {
+          "address": "0x00b69024",
+          "bytes": "89442410",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x10], eax"
+        },
+        {
+          "address": "0x00b69028",
+          "bytes": "33c0",
+          "mnemonic": "xor",
+          "opStr": "eax, eax"
+        },
+        {
+          "address": "0x00b6902a",
+          "bytes": "660f57c0",
+          "mnemonic": "xorpd",
+          "opStr": "xmm0, xmm0"
+        },
+        {
+          "address": "0x00b6902e",
+          "bytes": "57",
+          "mnemonic": "push",
+          "opStr": "edi"
+        },
+        {
+          "address": "0x00b6902f",
+          "bytes": "89442440",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x40], eax"
+        },
+        {
+          "address": "0x00b69033",
+          "bytes": "8944243c",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x3c], eax"
+        },
+        {
+          "address": "0x00b69037",
+          "bytes": "660f13442420",
+          "mnemonic": "movlpd",
+          "opStr": "qword ptr [esp + 0x20], xmm0"
+        },
+        {
+          "address": "0x00b6903d",
+          "bytes": "894c2410",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x10], ecx"
+        },
+        {
+          "address": "0x00b69041",
+          "bytes": "8b442410",
+          "mnemonic": "mov",
+          "opStr": "eax, dword ptr [esp + 0x10]"
+        },
+        {
+          "address": "0x00b69045",
+          "bytes": "894618",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esi + 0x18], eax"
+        },
+        {
+          "address": "0x00b69048",
+          "bytes": "8b18",
+          "mnemonic": "mov",
+          "opStr": "ebx, dword ptr [eax]"
+        },
+        {
+          "address": "0x00b6904a",
+          "bytes": "83c004",
+          "mnemonic": "add",
+          "opStr": "eax, 4"
+        },
+        {
+          "address": "0x00b6904d",
+          "bytes": "89442410",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esp + 0x10], eax"
+        },
+        {
+          "address": "0x00b69051",
+          "bytes": "8bc3",
+          "mnemonic": "mov",
+          "opStr": "eax, ebx"
+        },
+        {
+          "address": "0x00b69053",
+          "bytes": "25ff000000",
+          "mnemonic": "and",
+          "opStr": "eax, 0xff"
+        },
+        {
+          "address": "0x00b69058",
+          "bytes": "8d3cc500000000",
+          "mnemonic": "lea",
+          "opStr": "edi, [eax*8]"
+        }
+      ],
+      "contextBefore": [
+        {
+          "address": "0x00b69000",
+          "bytes": "81eccc000000",
+          "mnemonic": "sub",
+          "opStr": "esp, 0xcc"
+        },
+        {
+          "address": "0x00b69006",
+          "bytes": "8b8c24d4000000",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [esp + 0xd4]"
+        },
+        {
+          "address": "0x00b6900d",
+          "bytes": "53",
+          "mnemonic": "push",
+          "opStr": "ebx"
+        },
+        {
+          "address": "0x00b6900e",
+          "bytes": "55",
+          "mnemonic": "push",
+          "opStr": "ebp"
+        },
+        {
+          "address": "0x00b6900f",
+          "bytes": "56",
+          "mnemonic": "push",
+          "opStr": "esi"
+        }
+      ],
+      "instruction": {
+        "address": "0x00b69010",
+        "bytes": "8bb424dc000000",
+        "mnemonic": "mov",
+        "opStr": "esi, dword ptr [esp + 0xdc]"
+      },
+      "matchingOperands": [
+        {
+          "access": "read",
+          "baseReg": "esp",
+          "disp": 220,
+          "indexReg": null,
+          "operandIndex": 1,
+          "scale": 1,
+          "sizeBytes": 4
+        }
+      ],
+      "section": ".interpr"
+    }
+  ],
+  "proofBoundary": "Exact decoded current-client memory operands with displacement +0xDC and nonzero base register only. A +0xDC access is not assigned to gentity_s or brushmodel by displacement coincidence; structure identity and consumer semantics require independent dataflow anchors.",
+  "summary": {
+    "accessCounts": {
+      "read": 1
+    },
+    "instructionHitCount": 1,
+    "operandHitCount": 1,
+    "sizeByteCounts": {
+      "4": 1
+    }
+  }
+}
