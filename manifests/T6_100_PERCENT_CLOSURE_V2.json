@@ -272,7 +272,14 @@
         "proof/render/T6_NUKETOWN_GENERATED_FINAL_OUTPUT_RUNTIME_INPUT_CENSUS_V1.json",
         "proof/render/T6_NUKETOWN_GENERATED_RUNTIME_SAMPLER_SURFACE_BINDING_V1.json",
         "proof/render/T6_NUKETOWN_GENERATED_RUNTIME_SAMPLER_PAYLOAD_BINDING_V1.json",
-        "proof/render/T6_RETAIL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json"
+        "proof/render/T6_RETAIL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_DEFAULT_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_EMISSIVE_OR_BURNING_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_RAWNORMAL_SPECIAL_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_SHADOWCASTER_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_TV_SPECIAL_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_UNLIT_DIRECT_DXBC_VALIDATED_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_WATER_DIRECT_DXBC_VALIDATED_V1.json"
       ],
       "closureRequirement": "Layered blend/compositor behavior plus special glass/decal/emissive/scrolling/water-like technique families used by target maps are shader/provenance closed and reproduced by the T6-aware adapter.",
       "current": {
@@ -318,7 +325,54 @@
         "retainedUnlitPackedReferenceCount": 590,
         "retainedUnlitDirectProgramsTranslatedAndSpirvValidated": 26,
         "retainedUnlitStructuralFailureCount": 0,
-        "retainedUnlitSemanticBoundary": "All directly retained five-world unlit DXBC programs are exact-byte retained and translate/spirv-val cleanly; 590 packed references remain unresolved and translation success is not pixel-shader arithmetic equivalence."
+        "retainedUnlitSemanticBoundary": "All directly retained five-world unlit DXBC programs are exact-byte retained and translate/spirv-val cleanly; 590 packed references remain unresolved and translation success is not pixel-shader arithmetic equivalence.",
+        "retainedSpecialFamilyCount": 7,
+        "retainedSpecialTechniqueSetCount": 31,
+        "retainedSpecialDirectProgramCount": 211,
+        "retainedSpecialDirectVertexShaderCount": 35,
+        "retainedSpecialDirectPixelShaderCount": 176,
+        "retainedSpecialDirectProgramUseCount": 247,
+        "retainedSpecialPackedReferenceCount": 956,
+        "retainedSpecialDirectProgramsTranslatedAndSpirvValidated": 211,
+        "retainedSpecialStructuralFailureCount": 0,
+        "retainedSpecialDirectFamilyCounts": {
+          "default": {
+            "techniqueSets": 1,
+            "directPrograms": 2,
+            "packedReferences": 1
+          },
+          "emissive_or_burning": {
+            "techniqueSets": 3,
+            "directPrograms": 64,
+            "packedReferences": 76
+          },
+          "rawnormal_special": {
+            "techniqueSets": 1,
+            "directPrograms": 22,
+            "packedReferences": 27
+          },
+          "shadowcaster": {
+            "techniqueSets": 1,
+            "directPrograms": 0,
+            "packedReferences": 35
+          },
+          "tv_special": {
+            "techniqueSets": 1,
+            "directPrograms": 22,
+            "packedReferences": 27
+          },
+          "unlit": {
+            "techniqueSets": 17,
+            "directPrograms": 26,
+            "packedReferences": 590
+          },
+          "water": {
+            "techniqueSets": 7,
+            "directPrograms": 75,
+            "packedReferences": 200
+          }
+        },
+        "retainedSpecialCorpusBoundary": "All 211 directly retained programs across all 31 retained special TechniqueSets are exact-byte retained and translate/spirv-val cleanly. The 956 packed technique/shader references remain unresolved and no semantic arithmetic equivalence is inferred from translation."
       }
     },
     {
