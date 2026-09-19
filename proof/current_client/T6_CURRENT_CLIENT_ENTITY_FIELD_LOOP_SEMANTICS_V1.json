@@ -1,0 +1,111 @@
+{
+  "arguments": {
+    "arg1": {
+      "evidence": [
+        {
+          "operation": "load arg1",
+          "va": "0x005c2283"
+        },
+        {
+          "operation": "read dword count at arg1+4",
+          "va": "0x005c2287"
+        },
+        {
+          "operation": "first pair cursor arg1+8",
+          "va": "0x005c22a0"
+        },
+        {
+          "operation": "load value pointer at pair+4",
+          "va": "0x005c22bb"
+        },
+        {
+          "operation": "load key pointer at pair+0",
+          "va": "0x005c22be"
+        },
+        {
+          "operation": "advance pair cursor by 8",
+          "va": "0x005c230d"
+        },
+        {
+          "operation": "loop index compared to dword count at arg1+4",
+          "va": "0x005c2317"
+        }
+      ],
+      "role": "SpawnVar-shaped key/value set"
+    },
+    "arg2": {
+      "evidence": [
+        {
+          "operation": "load original second stack argument into ebx",
+          "va": "0x005c228c"
+        },
+        {
+          "operation": "address entity+0x134",
+          "va": "0x005c231f"
+        },
+        {
+          "operation": "address entity+0x140",
+          "va": "0x005c232c"
+        },
+        {
+          "operation": "special model branch writes low16 result to entity+0xdc",
+          "va": "0x005c23ff"
+        }
+      ],
+      "register": "ebx",
+      "role": "entity base"
+    },
+    "arg3": {
+      "evidence": [
+        {
+          "operation": "special non-star model path tests original third stack argument",
+          "va": "0x005c241b"
+        }
+      ],
+      "role": "mode/radiant_update-shaped flag"
+    }
+  },
+  "authority": "SHA-classified current Plutonium client semantics; public T6 source is locator/type vocabulary only",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5346",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "fieldDispatch": {
+    "modelDedicatedStoreOffset": 220,
+    "modelDispatchVa": "0x005c23f0",
+    "modelStarSuffixDecimal": true,
+    "rowBytes": 20,
+    "tableVa": "0x00c77138",
+    "typeOffset": 12
+  },
+  "format": "t6-current-client-entity-field-loop-semantics-v1",
+  "function": {
+    "bytes": 448,
+    "endVaExclusive": "0x005c2440",
+    "section": ".text",
+    "sha256": "84a265028b0d2444bd99667bd47ba93a33ed868143c4b7c79a8f1254d96139d0",
+    "startVa": "0x005c2280"
+  },
+  "proofBoundary": "This proves the SHA-classified current client's exact three-argument entity-field loop has the independently matching T6 SpawnVar-shaped layout and model dispatch. The public source declaration/layout is used only to name a byte-proven structure. This proof does not yet establish which MapEnt/entityString producer populated a specific SpawnVar instance, that +0xDC is consumed as ClipMap.subModels[N], or historical-retail executable equivalence.",
+  "sourceLocator": {
+    "authority": "locator/type vocabulary only; current-client bytes below are semantic authority for this proof",
+    "commit": "a64812d21946baf710cec7fa26b98ad0d193903b",
+    "declaration": "void G_ParseEntityFields(const SpawnVar *spawnVar, gentity_t *ent, int radiant_update)",
+    "gameSpawnPath": "src/code/src_noserver/game_mp/g_spawn_mp.cpp",
+    "repository": "builtbyxeno/OpenBO2",
+    "spawnVarLayout": "bool spawnVarsValid; int numSpawnVars; char *spawnVars[64][2]; int numSpawnVarChars; char spawnVarChars[2048]",
+    "typesPath": "src/code/src_noserver/all_types.h"
+  },
+  "summary": {
+    "entityArgumentIndex": 2,
+    "fieldRowBytes": 20,
+    "modelDedicatedStoreOffset": 220,
+    "modelStarSuffixDecimalPathExact": true,
+    "spawnVarCountOffset": 4,
+    "spawnVarPairArrayOffset": 8,
+    "spawnVarPairStrideBytes": 8,
+    "thirdModeArgumentIndex": 3
+  }
+}
