@@ -46,6 +46,7 @@ jobs:
           assert s['fixtureCount']==6
           assert s['zoneCount']==2
           assert s['allCompiledRoundTripsPassed'] is True
+          assert s['allQuaternionRawInt16FramesExact'] is True
           assert s['allFlatPoolsExhausted'] is True
           assert s['walkerBlockerCount']==0
           assert s['maxRotationOneMinusAbsDot'] <= 2e-7
