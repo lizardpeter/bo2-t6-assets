@@ -38,7 +38,10 @@ def _scan_helper(h,d,blocks,before):
   b,_=h.front(d);rows=[{**r,'fixedStart':int(r['start']),'worldVertFormat':int(r['fmt'])} for r in h.scan_tech(d,b,before)];return b,rows
  raise ValueError('world helper exposes neither supported retained scanning API')
 def collect(root,family_manifest,parser_path,helper_path):
- p=load(parser_path,'payload');h=p.load_helper(helper_path) if hasattr(p,'load_helper') else p.load_world_helper(helper_path);famdoc=json.loads(family_manifest.read_text());fam={x['techniqueSet']:x['family'] for x in famdoc['specialTechniqueSets']};uniq={}
+ p=load(parser_path,'payload');h=p.load_helper(helper_path) if hasattr(p,'load_helper') else p.load_world_helper(helper_path)
+ if not hasattr(h,'decode_zone_pointer'):
+  h=load(Path('tools/t6_retail_world_helper_compat_v1.py'),'fmt45compat')
+ famdoc=json.loads(family_manifest.read_text());fam={x['techniqueSet']:x['family'] for x in famdoc['specialTechniqueSets']};uniq={}
  for mn,cfg in p.MAPS.items():
   d=(root/cfg['rel']).read_bytes();blocks,allrs=_scan_helper(h,d,None,cfg['world']);rs=allrs[-(cfg['q1']-cfg['q0']+1):]
   for i,r in enumerate(rs):r['xassetIndex']=cfg['q0']+i
