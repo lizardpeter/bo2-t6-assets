@@ -15,7 +15,8 @@ RES="t6-retail-special-oat-same-zone-child-resolution-v1"
 FULL="t6-retail-special-symbolic-full-rows-v2"
 MISS="t6-retail-special-missing-direct-symbolic-v1"
 NUKE="t6-nuketown-special-full-output-symbolic-seal-v1"
-DIRECT="t6-retail-special-direct-symbolic-coverage-v2"\nPACKED_MISS="t6-retail-special-missing-packed-ps-symbolic-v1"
+DIRECT="t6-retail-special-direct-symbolic-coverage-v2"
+PACKED_MISS="t6-retail-special-missing-packed-ps-symbolic-v1"
 
 def load(p:Path):return json.loads(p.read_text())
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -27,6 +28,7 @@ def main():
     ap.add_argument("--missing",type=Path,required=True)
     ap.add_argument("--nuketown",type=Path,required=True)
     ap.add_argument("--direct-coverage",type=Path,required=True)
+    ap.add_argument("--missing-packed",type=Path,required=True)
     ap.add_argument("--out",type=Path,required=True)
     a=ap.parse_args()
     res=load(a.resolution);full=load(a.full_rows);miss=load(a.missing);nuke=load(a.nuketown);direct=load(a.direct_coverage);packed_miss=load(a.missing_packed)
