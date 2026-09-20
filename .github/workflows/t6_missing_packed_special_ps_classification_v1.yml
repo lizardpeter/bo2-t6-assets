@@ -1,0 +1,104 @@
+name: T6 missing packed special PS classification v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retail_special_missing_packed_ps_classification_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json'
+      - 'tools/t6_retail_special_shdr_opcode_census_v1.py'
+      - 'tools/t6_retail_special_shdr_operand_census_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - '.github/workflows/t6_missing_packed_special_ps_classification_v1.yml'
+permissions:
+  contents: write
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+      - name: Require exact pinned OAT cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          mkdir -p /tmp/game/zone/all /tmp/oat proof/render /tmp/proof
+          sha256sum "$BIN" | tee /tmp/proof/unlinker_sha256.txt
+      - name: Recover exact retained worlds
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A RAW=(
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+            [mp_raid]='bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888'
+            [mp_hijacked]='2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037'
+            [zm_prison]='ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1'
+            [zm_tomb]='663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5'
+          )
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            f="/tmp/game/zone/all/${zone}.ff"
+            curl -fL --retry 4 --retry-delay 2 -o "$f" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${RAW[$zone]}  $f" | sha256sum -c -
+          done
+      - name: Dump exact same-zone TechniqueSets and shader binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            out="/tmp/oat/${zone}"
+            mkdir -p "$out"
+            "$BIN" --no-color --include-assets techniqueset --output-folder "$out" "/tmp/game/zone/all/${zone}.ff" 2>&1 | tee "/tmp/proof/${zone}_techset.log"
+          done
+          find /tmp/oat -type f -name 'ps_*.cso' -print0 | sort -z | xargs -0 sha256sum > /tmp/proof/all_ps_sha256.txt
+      - name: Classify exact three missing packed PS identities
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_special_missing_packed_ps_classification_v1.py             --coverage proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json             --program-root /tmp/oat             --out proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json'))
+          s=d['summary']
+          assert s['targetUniqueShaderCount']==3
+          assert s['targetPackedOccurrenceCount']==22
+          assert s['recoveredUniqueShaderCount']==3
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact missing packed PS classification'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1
+          path: |
+            proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json
+            /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
