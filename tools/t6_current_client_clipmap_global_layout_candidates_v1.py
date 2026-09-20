@@ -50,12 +50,13 @@ def in_image(base,ib,size):return ib<=base<ib+size
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("exe",type=Path);ap.add_argument("--revision",required=True);ap.add_argument("--out",type=Path,required=True);a=ap.parse_args()
     raw=a.exe.read_bytes();dg=hashlib.sha256(raw).hexdigest();req(dg==SHA,f"SHA drift {dg}")
-    ib,size_img,secs=pe(raw);md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+    ib,size_img,secs=pe(raw);md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
     refs=[];section_ins={}
     for s in secs:
       if not s["exec"]:continue
       blob=raw[s["rawOffset"]:s["rawOffset"]+s["rawSize"]];ins=list(md.disasm(blob,s["va"]));section_ins[s["name"]]=ins
       for n,i in enumerate(ins):
+        if i.id==0:continue
         for op in i.operands:
           if op.type!=X86_OP_MEM or op.mem.base!=0 or op.mem.index!=0:continue
           addr=int(op.mem.disp)&0xffffffff
