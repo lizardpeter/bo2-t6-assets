@@ -8,7 +8,8 @@ on:
       - 'proof/render/T6_RETAIL_SPECIAL_SYMBOLIC_FULL_ROWS_V2.json'
       - 'proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json'
       - 'manifests/render/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json'
-      - 'proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json'\n      - 'proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json'
+      - 'proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json'
+      - 'proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json'
       - '.github/workflows/t6_packed_special_ps_symbolic_coverage_v1.yml'
 permissions:
   contents: write
@@ -22,7 +23,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/t6_retail_special_packed_ps_symbolic_coverage_v1.py             --resolution proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json             --full-rows proof/render/T6_RETAIL_SPECIAL_SYMBOLIC_FULL_ROWS_V2.json             --missing proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json             --nuketown manifests/render/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json             --direct-coverage proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json             --out proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json
+          python3 tools/t6_retail_special_packed_ps_symbolic_coverage_v1.py \
+            --resolution proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json \
+            --full-rows proof/render/T6_RETAIL_SPECIAL_SYMBOLIC_FULL_ROWS_V2.json \
+            --missing proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json \
+            --nuketown manifests/render/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json \
+            --direct-coverage proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json \
+            --missing-packed proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json \
+            --out proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json
           python3 - <<'PY'
           import json
           d=json.load(open('proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json'))
@@ -44,7 +52,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json
           if ! git diff --cached --quiet; then
-            git commit -m 'Persist packed special PS symbolic coverage'
+            git commit -m 'Persist complete packed special PS symbolic coverage'
             pushed=0
             for attempt in 1 2 3 4 5; do
               git pull --rebase origin main
