@@ -1,0 +1,109 @@
+name: T6 special native VertexDecl resolution v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_vertexdecl_native_trace_patch_v1.py'
+      - 'tools/t6_retail_special_vertexdecl_native_resolution_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_PACKED_REFERENCE_TOPOLOGY_V1.json'
+      - 'proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json'
+      - '.github/workflows/t6_special_native_vertexdecl_resolution_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore instrumented OAT cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-vertexdecl-cache
+          key: oat-t6-vertexdecl-native-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_vertexdecl_native_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Build exact instrumented pinned OAT
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_vertexdecl_native_trace_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-vertexdecl-cache
+          install -m 0755 "$BIN" /tmp/oat-vertexdecl-cache/Unlinker
+      - name: Save instrumented OAT cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-vertexdecl-cache
+          key: oat-t6-vertexdecl-native-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_vertexdecl_native_trace_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Fetch exact five retained worlds
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x /tmp/oat-vertexdecl-cache/Unlinker
+          mkdir -p /tmp/game/zone/all /tmp/out /tmp/proof proof/render
+          for f in mp_nuketown_2020.ff mp_raid.ff mp_hijacked.ff zm_prison.ff zm_tomb.ff; do
+            curl -fL --retry 4 --retry-delay 2 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo 'bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888  /tmp/game/zone/all/mp_raid.ff' | sha256sum -c -
+          echo '2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037  /tmp/game/zone/all/mp_hijacked.ff' | sha256sum -c -
+          echo 'ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1  /tmp/game/zone/all/zm_prison.ff' | sha256sum -c -
+          echo '663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5  /tmp/game/zone/all/zm_tomb.ff' | sha256sum -c -
+      - name: Trace native block-5 offsets and VertexDecl fields per world
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-vertexdecl-cache/Unlinker
+          : > /tmp/proof/counts.txt
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            mkdir -p "/tmp/out/$zone"
+            "$BIN" --no-color --include-assets techniqueset --output-folder "/tmp/out/$zone" "/tmp/game/zone/all/$zone.ff" >"/tmp/proof/$zone.log" 2>&1
+            off=$(grep -Ec '^T6_BLOCK5_OFFSET_(NATIVE|LOOKUP) ' "/tmp/proof/$zone.log" || true)
+            vd=$(grep -Ec '^T6_VERTEXDECL_NATIVE ' "/tmp/proof/$zone.log" || true)
+            printf '%s block5=%s vertexdecl=%s\n' "$zone" "$off" "$vd" | tee -a /tmp/proof/counts.txt
+            test "$off" -gt 0
+            test "$vd" -gt 0
+          done
+      - name: Join exact packed VertexDecl tokens to native fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_special_vertexdecl_native_resolution_v1.py             --topology proof/render/T6_RETAIL_SPECIAL_PACKED_REFERENCE_TOPOLOGY_V1.json             --same-zone proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json             --log mp_nuketown_2020=/tmp/proof/mp_nuketown_2020.log             --log mp_raid=/tmp/proof/mp_raid.log             --log mp_hijacked=/tmp/proof/mp_hijacked.log             --log zm_prison=/tmp/proof/zm_prison.log             --log zm_tomb=/tmp/proof/zm_tomb.log             --out proof/render/T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1.json
+          python3 -c "import json; d=json.load(open('proof/render/T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1.json')); s=d['summary']; assert s['vertexDeclOccurrenceCount']==459; assert s['uniqueVertexDeclPointerIdentityCount']==30; assert s['errorCount']==0; assert s['allVertexDeclOccurrencesNativeFieldClosed']; print(json.dumps(s,indent=2,sort_keys=True))"
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist native special VertexDecl resolution'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1
+          path: |
+            proof/render/T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1.json
+            /tmp/proof/counts.txt
+          if-no-files-found: error
+          compression-level: 9
