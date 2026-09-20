@@ -119,19 +119,23 @@ def main():
            str(r["pixelShader"]["asset"]))
         candidate[k].append(r)
 
+    unresolved_by_identity=collections.defaultdict(list)
+    for idx,u in enumerate(unresolved):
+        unresolved_by_identity[(str(u.get("map")),str(u.get("techniqueSet")),str(u.get("technique")),str(u.get("name")))].append((idx,u))
+
     recovered=[]; ambiguous=[]; no_rdef=[]
     for o in omissions:
         if o["stage"]!="pixel": continue
         ck=(o["map"],o["techniqueSet"],o["technique"],o["shaderAsset"])
         passes=candidate.get(ck,[])
+        allowed_passes={int(r["passIndex"]):r for r in passes}
         hits=[]
-        for r in passes:
-            dest=o["destination"]
-            for idx,u in enumerate(unresolved):
-                if (u.get("map")==o["map"] and u.get("techniqueSet")==o["techniqueSet"] and
-                    u.get("technique")==o["technique"] and u.get("passIndex")==r["passIndex"] and
-                    u.get("name")==dest):
-                    hits.append((r,idx,u))
+        ik=(o["map"],o["techniqueSet"],o["technique"],o["destination"])
+        for idx,u in unresolved_by_identity.get(ik,[]):
+            pi=int(u.get("passIndex",-1))
+            r=allowed_passes.get(pi)
+            if r is not None:
+                hits.append((r,idx,u))
         # Exact same dumped shader asset + exact RDEF destination should normally isolate a pass.
         uniq={(int(r["passIndex"]),idx) for r,idx,u in hits}
         if len(uniq)==1:
