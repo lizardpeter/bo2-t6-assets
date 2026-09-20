@@ -8,7 +8,7 @@ on:
       - 'proof/render/T6_RETAIL_SPECIAL_SYMBOLIC_FULL_ROWS_V2.json'
       - 'proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json'
       - 'manifests/render/T6_NUKETOWN_SPECIAL_FULL_OUTPUT_SYMBOLIC_V1.json'
-      - 'proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json'
+      - 'proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json'\n      - 'proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json'
       - '.github/workflows/t6_packed_special_ps_symbolic_coverage_v1.yml'
 permissions:
   contents: write
@@ -29,6 +29,13 @@ jobs:
           s=d['summary']
           assert s['packedPixelShaderOccurrenceCount']==281
           assert s['projectedOccurrenceCount']==281
+          assert s['uniqueResolvedPixelShaderSha256Count']==31
+          assert s['symbolicCoveredOccurrenceCount']==281
+          assert s['symbolicCoveredUniqueShaderCount']==31
+          assert s['symbolicMissingOccurrenceCount']==0
+          assert s['symbolicMissingUniqueShaderCount']==0
+          assert s['symbolicCoveragePercentByOccurrence']==100.0
+          assert s['symbolicCoveragePercentByUniqueShader']==100.0
           assert s['invalidSameZoneResolutionRowCount']==0
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
