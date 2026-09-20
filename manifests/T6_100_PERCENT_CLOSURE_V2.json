@@ -282,7 +282,10 @@
         "proof/render/T6_RETAIL_SPECIAL_WATER_DIRECT_DXBC_VALIDATED_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SHADER_CLASSIFICATION_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_MISSING_DIRECT_SYMBOLIC_V1.json",
-        "proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json"
+        "proof/render/T6_RETAIL_SPECIAL_DIRECT_SYMBOLIC_COVERAGE_V2.json",
+        "proof/render/T6_RETAIL_SPECIAL_PACKED_REFERENCE_TOPOLOGY_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json",
+        "proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_CENSUS_V1.json"
       ],
       "closureRequirement": "Direct retained pixel-shader symbolic coverage is now complete at 176/176 for the stated five-world seven-family denominator. Remaining closure is the packed/reused Technique/shader/program dependency graph, exact runtime resource/constant provider semantics (including hdrControl0 where applicable), special-family playback/state integration, and final framebuffer validation across the declared target corpus.",
       "current": {
@@ -385,7 +388,24 @@
         "retainedSpecialNewFullOutputDagOutputLanes": 76,
         "retainedSpecialNewFullOutputDagSampleInstructions": 50,
         "retainedSpecialNewFullOutputDagDiscardInstructions": 1,
-        "retainedSpecialDirectPixelShaderBoundary": "All 176 directly retained pixel-shader DXBC identities in the seven-family five-world denominator now have exact assembly-level symbolic dataflow proofs. This does not resolve packed Technique/shader/program references, reconstruct HLSL, prove runtime values, or establish framebuffer equivalence."
+        "retainedSpecialDirectPixelShaderBoundary": "All 176 directly retained pixel-shader DXBC identities in the seven-family five-world denominator now have exact assembly-level symbolic dataflow proofs. This does not resolve packed Technique/shader/program references, reconstruct HLSL, prove runtime values, or establish framebuffer equivalence.",
+        "retainedSpecialPackedDependencyOccurrenceCount": 1436,
+        "retainedSpecialPackedUniquePointerIdentityCount": 330,
+        "retainedSpecialPackedTechniqueOccurrences": 277,
+        "retainedSpecialPackedTechniqueUniquePointerIdentities": 180,
+        "retainedSpecialPackedVsOccurrences": 419,
+        "retainedSpecialPackedVsUniquePointerIdentities": 60,
+        "retainedSpecialPackedPsOccurrences": 260,
+        "retainedSpecialPackedPsUniquePointerIdentities": 39,
+        "retainedSpecialPackedInlinePsNameOccurrences": 21,
+        "retainedSpecialPackedInlinePsNameUniquePointerIdentities": 21,
+        "retainedSpecialPackedVertexDeclOccurrences": 459,
+        "retainedSpecialPackedVertexDeclUniquePointerIdentities": 30,
+        "retainedSpecialSameZoneTechniqueAndShaderOccurrenceResolutionCount": 977,
+        "retainedSpecialSameZoneVertexRoutingOccurrenceResolutionCount": 459,
+        "retainedSpecialSameZoneConflictCount": 0,
+        "retainedSpecialTechniqueAndShaderPackedIdentityClosure": "all 277 packed Technique refs and all 700 packed VS/PS/inline-PS-name refs resolve through exact same-world pinned-OAT native loader output; no cross-zone precedence, pointer arithmetic, adjacency, or appearance inference",
+        "retainedSpecialVertexDeclRemainingBoundary": "all 459 occurrences / 30 unique VertexDecl pointers have exact same-zone routing semantics, but native declaration flags streamCount/hasOptionalSource/isLoaded are being closed separately before declaring full VertexDecl structural closure"
       }
     },
     {
