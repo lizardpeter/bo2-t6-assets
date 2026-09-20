@@ -1,0 +1,306 @@
+{
+  "authority": "exact three-SHA packed symbolic deficit + exact pinned-OAT same-zone CSO bytes + existing fail-closed SM4 straight-line evaluator",
+  "format": "t6-retail-special-missing-packed-ps-symbolic-v1",
+  "proofBoundary": "Exact assembly-level full-output DAGs for the three previously unmatched packed PS CSO hashes. A shader with no output write is retained as an exact no-output program rather than assigned a color. Resource registers/constants/input lanes remain symbolic unless independently mapped elsewhere. No family/name/slot similarity, visual behavior, HLSL reconstruction, or neighboring shader semantics participate.",
+  "rows": [
+    {
+      "classification": {
+        "controlFlowCounts": {},
+        "discardCount": 0,
+        "instructionCount": 4,
+        "sampleCount": 0
+      },
+      "families": [
+        "unlit"
+      ],
+      "fullDagSha256": "f1e07fa3a71d713475b8c3d2f903ad53e1e96d0c62d823cbe37290a8901536d2",
+      "nodeCount": 4,
+      "nodes": [
+        {
+          "id": 0,
+          "kind": "symbol",
+          "name": "v0.x"
+        },
+        {
+          "id": 1,
+          "kind": "symbol",
+          "name": "v0.y"
+        },
+        {
+          "id": 2,
+          "kind": "symbol",
+          "name": "v0.z"
+        },
+        {
+          "id": 3,
+          "kind": "symbol",
+          "name": "v0.w"
+        }
+      ],
+      "outputLaneCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 0,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 1,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 2,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 3,
+          "output": "o0.w"
+        }
+      ],
+      "packedOccurrenceCount": 1,
+      "recoveredAssetNames": [
+        "pimp_shader_radiant_109e2eb0.hlsl",
+        "pimp_shader_radiant_8559c620.hlsl",
+        "pimp_shader_radiant_c16e578d.hlsl",
+        "pimp_shader_radiant_f0ddcb0c.hlsl"
+      ],
+      "sampleInstructionCount": 0,
+      "sampleInstructionDwords": [],
+      "sha256": "828aec9bc0d288792d098bb309c6c015d61070d9f51cb56721d573d5b82b6304",
+      "sideEffects": [],
+      "writesAnyOutput": true
+    },
+    {
+      "classification": {
+        "controlFlowCounts": {},
+        "discardCount": 0,
+        "instructionCount": 11,
+        "sampleCount": 1
+      },
+      "families": [
+        "unlit"
+      ],
+      "fullDagSha256": "239d9c564c12ee9157d4d90844ade1dc2d34a602dbe4c07677ef1865eaf253a3",
+      "nodeCount": 11,
+      "nodes": [
+        {
+          "id": 0,
+          "kind": "symbol",
+          "name": "v2.x"
+        },
+        {
+          "id": 1,
+          "kind": "symbol",
+          "name": "v2.y"
+        },
+        {
+          "args": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "channel": "x",
+          "id": 2,
+          "instructionDword": 24,
+          "kind": "textureSample",
+          "opcode": "sample",
+          "resourceRegister": 0,
+          "samplerRegister": 0
+        },
+        {
+          "args": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "channel": "y",
+          "id": 3,
+          "instructionDword": 24,
+          "kind": "textureSample",
+          "opcode": "sample",
+          "resourceRegister": 0,
+          "samplerRegister": 0
+        },
+        {
+          "args": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "channel": "z",
+          "id": 4,
+          "instructionDword": 24,
+          "kind": "textureSample",
+          "opcode": "sample",
+          "resourceRegister": 0,
+          "samplerRegister": 0
+        },
+        {
+          "args": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "channel": "w",
+          "id": 5,
+          "instructionDword": 24,
+          "kind": "textureSample",
+          "opcode": "sample",
+          "resourceRegister": 0,
+          "samplerRegister": 0
+        },
+        {
+          "id": 6,
+          "kind": "symbol",
+          "name": "v1.w"
+        },
+        {
+          "args": [
+            5,
+            6
+          ],
+          "id": 7,
+          "kind": "op",
+          "op": "mul"
+        },
+        {
+          "id": 8,
+          "kind": "symbol",
+          "name": "cb2[1].z"
+        },
+        {
+          "id": 9,
+          "kind": "symbol",
+          "name": "cb2[1].y"
+        },
+        {
+          "args": [
+            8,
+            9
+          ],
+          "id": 10,
+          "kind": "op",
+          "op": "add"
+        }
+      ],
+      "outputLaneCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 10,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 10,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 10,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 7,
+          "output": "o0.w"
+        }
+      ],
+      "packedOccurrenceCount": 3,
+      "recoveredAssetNames": [
+        "pimp_shader_debugperformance_62f2bf28.hlsl"
+      ],
+      "sampleInstructionCount": 1,
+      "sampleInstructionDwords": [
+        24
+      ],
+      "sha256": "a911d9b30326c61a7b7d8c77ca419f0fe1259c754a780b8048045ee0ab982628",
+      "sideEffects": [],
+      "writesAnyOutput": true
+    },
+    {
+      "classification": {
+        "controlFlowCounts": {},
+        "discardCount": 0,
+        "instructionCount": 3,
+        "sampleCount": 0
+      },
+      "families": [
+        "emissive_or_burning",
+        "rawnormal_special",
+        "tv_special",
+        "unlit",
+        "water"
+      ],
+      "fullDagSha256": "7fdaeed2ab6b8dad5977a7698ccf45391fa9991b8d15d62144a8116d44127aea",
+      "nodeCount": 1,
+      "nodes": [
+        {
+          "bits": "3f800000",
+          "id": 0,
+          "kind": "literal32"
+        }
+      ],
+      "outputLaneCount": 4,
+      "outputs": [
+        {
+          "lightmapDependencies": [],
+          "node": 0,
+          "output": "o0.x"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 0,
+          "output": "o0.y"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 0,
+          "output": "o0.z"
+        },
+        {
+          "lightmapDependencies": [],
+          "node": 0,
+          "output": "o0.w"
+        }
+      ],
+      "packedOccurrenceCount": 18,
+      "recoveredAssetNames": [
+        "pimp_shader_null_3b4a8bd3.hlsl"
+      ],
+      "sampleInstructionCount": 0,
+      "sampleInstructionDwords": [],
+      "sha256": "ba6a650c7c7f4a7703a13ad59ba939958af63e114e90ef67d74c4acad7fecf0b",
+      "sideEffects": [],
+      "writesAnyOutput": true
+    }
+  ],
+  "shaderSetSha256": "0ddf73531fdb0ff2259cb4208123682612bc8292a29bd3ad22dda45436006026",
+  "sources": {
+    "classification": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json",
+      "sha256": "5e9373953e54a63cf5a143be98235c1a86f189edde257418e8880682cec1a5c2"
+    },
+    "programRoot": "/tmp/oat"
+  },
+  "summary": {
+    "completeMissingPackedPixelShaderSymbolicCoverage": true,
+    "controlFlowShaderCount": 0,
+    "exactNoOutputShaderCount": 0,
+    "nodeCount": 16,
+    "outputLaneCount": 12,
+    "outputWritingShaderCount": 3,
+    "packedOccurrenceCount": 22,
+    "sampleInstructionCount": 1,
+    "shaderCount": 3,
+    "symbolicBlockerCount": 0,
+    "uniqueFullDagCount": 3
+  }
+}
