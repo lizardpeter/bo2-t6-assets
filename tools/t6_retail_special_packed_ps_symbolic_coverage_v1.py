@@ -15,7 +15,7 @@ RES="t6-retail-special-oat-same-zone-child-resolution-v1"
 FULL="t6-retail-special-symbolic-full-rows-v2"
 MISS="t6-retail-special-missing-direct-symbolic-v1"
 NUKE="t6-nuketown-special-full-output-symbolic-seal-v1"
-DIRECT="t6-retail-special-direct-symbolic-coverage-v2"
+DIRECT="t6-retail-special-direct-symbolic-coverage-v2"\nPACKED_MISS="t6-retail-special-missing-packed-ps-symbolic-v1"
 
 def load(p:Path):return json.loads(p.read_text())
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -29,12 +29,13 @@ def main():
     ap.add_argument("--direct-coverage",type=Path,required=True)
     ap.add_argument("--out",type=Path,required=True)
     a=ap.parse_args()
-    res=load(a.resolution);full=load(a.full_rows);miss=load(a.missing);nuke=load(a.nuketown);direct=load(a.direct_coverage)
+    res=load(a.resolution);full=load(a.full_rows);miss=load(a.missing);nuke=load(a.nuketown);direct=load(a.direct_coverage);packed_miss=load(a.missing_packed)
     if res.get("format")!=RES:raise SystemExit("resolution format drift")
     if full.get("format")!=FULL:raise SystemExit("full rows format drift")
     if miss.get("format")!=MISS:raise SystemExit("missing symbolic format drift")
     if nuke.get("format")!=NUKE:raise SystemExit("nuketown symbolic format drift")
     if direct.get("format")!=DIRECT:raise SystemExit("direct coverage format drift")
+    if packed_miss.get("format")!=PACKED_MISS:raise SystemExit("missing packed symbolic format drift")
     if not direct["summary"].get("completeDirectPixelShaderSymbolicCoverage") or direct["summary"]["coveredDirectPixelShaderCount"]!=176:
         raise SystemExit("direct symbolic denominator not complete")
 
@@ -46,6 +47,7 @@ def main():
     for x in full.get("branchShaderRows",[]):add(x["sha256"],"five-world-branch",{"dagSha256":x.get("dagSha256"),"family":x.get("family")})
     for x in nuke.get("shaderRows",[]):add(x["pixelShaderSha256"],"nuketown-full-output",{"dagSha256":x.get("dagSha256"),"asset":x.get("asset")})
     for x in miss.get("rows",[]):add(x["sha256"],"missing-direct-full-output",{"dagSha256":x.get("fullDagSha256"),"family":x.get("family")})
+    for x in packed_miss.get("rows",[]):add(x["sha256"],"missing-packed-full-output",{"dagSha256":x.get("fullDagSha256"),"families":x.get("families",[])})
 
     psrows=[r for r in res.get("rows",[]) if r.get("kind") in ("packedPSObjectRef","packedInlinePSNameRef")]
     if len(psrows)!=281:raise SystemExit(f"packed PS occurrence drift {len(psrows)}")
@@ -92,11 +94,13 @@ def main():
         "fullRows":{"path":str(a.full_rows),"sha256":sha(a.full_rows)},
         "missingDirect":{"path":str(a.missing),"sha256":sha(a.missing)},
         "nuketownFullOutput":{"path":str(a.nuketown),"sha256":sha(a.nuketown)},
-        "directCoverage":{"path":str(a.direct_coverage),"sha256":sha(a.direct_coverage)}},
+        "directCoverage":{"path":str(a.direct_coverage),"sha256":sha(a.direct_coverage)},
+        "missingPacked":{"path":str(a.missing_packed),"sha256":sha(a.missing_packed)}},
       "summary":summary,"uniquePixelShaders":unique,"occurrences":projected,
       "missingUniquePixelShaders":missing_hash,"invalidRows":bad,
       "proofBoundary":"Symbolic semantics transfer only across exact pixel-shader CSO SHA-256 identity. No family label, TechniqueSet/Technique name, slot/pass adjacency, pointer alias component, SPIR-V similarity, or visual behavior is used. An unmatched exact hash remains a genuine symbolic-decompilation blocker."}
     if bad:raise SystemExit(f"same-zone input invalid: {len(bad)} rows")
+    if missing_hash:raise SystemExit(f"packed symbolic closure incomplete: {len(missing_hash)} unique hashes")
     a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+"\n")
     print(json.dumps(summary,indent=2,sort_keys=True))
     if missing_hash:
