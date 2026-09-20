@@ -1,0 +1,92 @@
+name: T6 special same-zone OAT child resolution v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retail_special_oat_same_zone_child_resolution_v1.py'
+      - 'tools/t6_oat_slot_shader_resolver_v1.py'
+      - 'tools/t6_oat_techset_binding_manifest_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_PACKED_REFERENCE_TOPOLOGY_V1.json'
+      - '.github/workflows/t6_special_same_zone_oat_child_resolution_v1.yml'
+permissions:
+  contents: write
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+      - name: Require exact pinned OAT cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          META=/tmp/oat-unlinker-cache/source_identity.txt
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          test -x "$BIN"
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' "$META"
+          grep -qx "compat_patch_sha256=$PATCH_SHA" "$META"
+          mkdir -p /tmp/game/zone/all /tmp/oat proof/render /tmp/proof
+          sha256sum "$BIN" | tee /tmp/proof/unlinker_sha256.txt
+      - name: Download exact five retained worlds
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in mp_nuketown_2020.ff mp_raid.ff mp_hijacked.ff zm_prison.ff zm_tomb.ff; do
+            curl -fL --retry 4 --retry-delay 2 -o "/tmp/game/zone/all/$f" "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+          echo 'f404d8d5a4d21c5b47c295fb79f5991f225fc46f81cb11323c27bb7fef51fef9  /tmp/game/zone/all/mp_raid.ff' | sha256sum -c -
+          echo '789d8cafebec49fc17dbf4ee116db569e867414270ca42988179807034f10cae  /tmp/game/zone/all/mp_hijacked.ff' | sha256sum -c -
+          echo 'ea7069856afe495190bfe218d2e7eea3fa593cb9603228391338b90402724d03  /tmp/game/zone/all/zm_prison.ff' | sha256sum -c -
+          echo '10a3753404815957888122853ac817137af6244237d7f3b08c3c804a0a24e5b2  /tmp/game/zone/all/zm_tomb.ff' | sha256sum -c -
+      - name: Dump each world independently through native T6 TechniqueSet loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            out="/tmp/oat/${zone}"
+            mkdir -p "$out"
+            "$BIN" --no-color --include-assets techniqueset --output-folder "$out" "/tmp/game/zone/all/${zone}.ff" 2>&1 | tee "/tmp/proof/${zone}_techset.log"
+            printf '%s techsets=%s techniques=%s vs=%s ps=%s\n' "$zone"               "$(find "$out/techsets" -type f -name '*.techset' 2>/dev/null | wc -l)"               "$(find "$out/techniques" -type f -name '*.tech' 2>/dev/null | wc -l)"               "$(find "$out/shader_bin" -type f -name 'vs_*.cso' 2>/dev/null | wc -l)"               "$(find "$out/shader_bin" -type f -name 'ps_*.cso' 2>/dev/null | wc -l)"
+          done | tee /tmp/proof/oat_root_counts.txt
+      - name: Resolve exact same-zone packed children
+        env:
+          PYTHONPATH: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_special_oat_same_zone_child_resolution_v1.py             --topology proof/render/T6_RETAIL_SPECIAL_PACKED_REFERENCE_TOPOLOGY_V1.json             --root mp_nuketown_2020=/tmp/oat/mp_nuketown_2020             --root mp_raid=/tmp/oat/mp_raid             --root mp_hijacked=/tmp/oat/mp_hijacked             --root zm_prison=/tmp/oat/zm_prison             --root zm_tomb=/tmp/oat/zm_tomb             --strict             --out proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json
+          python3 -c "import json; d=json.load(open('proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json')); s=d['summary']; assert s['topologyRowCount']==1436; assert s['conflictCount']==0; assert s['packedTechniqueResolvedCount']>0; assert s['packedShaderOrNameResolvedCount']>0; print(json.dumps(s,indent=2,sort_keys=True))"
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist same-zone OAT special child resolution'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1
+          path: |
+            proof/render/T6_RETAIL_SPECIAL_OAT_SAME_ZONE_CHILD_RESOLUTION_V1.json
+            /tmp/proof
+          if-no-files-found: error
+          compression-level: 0
