@@ -1,0 +1,134 @@
+name: T6 retained special omitted code-input recovery v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_oat_techset_debug_patch_v1.py'
+      - 'tools/t6_retail_special_omitted_code_input_recovery_v1.py'
+      - 'tools/t6_oat_9dca_gcc_compat_patch_v3.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_RUNTIME_INPUT_CENSUS_V1.json'
+      - 'manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json'
+      - '.github/workflows/t6_retained_special_omitted_code_input_recovery_v1.yml'
+permissions:
+  contents: write
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact pinned debug OAT cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-techset-debug-cache
+          key: oat-t6-techset-debug-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_techset_debug_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Build exact pinned debug OAT
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          python3 tools/t6_oat_techset_debug_patch_v1.py /tmp/oat
+          git -C /tmp/oat diff --check
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find /tmp/oat/build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-techset-debug-cache
+          install -m 0755 "$BIN" /tmp/oat-techset-debug-cache/Unlinker
+          printf '%s\n' 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' > /tmp/oat-techset-debug-cache/source_identity.txt
+          printf 'compat_patch_sha256=%s\n' "$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')" >> /tmp/oat-techset-debug-cache/source_identity.txt
+          printf 'debug_patch_sha256=%s\n' "$(sha256sum tools/t6_oat_techset_debug_patch_v1.py | awk '{print $1}')" >> /tmp/oat-techset-debug-cache/source_identity.txt
+      - name: Save exact pinned debug OAT cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-techset-debug-cache
+          key: oat-t6-techset-debug-9dca965-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_techset_debug_patch_v1.py') }}-ubuntu24-x86-debug
+      - name: Recover exact retained worlds
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-techset-debug-cache/Unlinker
+          test -x "$BIN"
+          mkdir -p /tmp/game/zone/all /tmp/debug-oat /tmp/proof proof/render
+          declare -A RAW=(
+            [mp_nuketown_2020]='6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0'
+            [mp_raid]='bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888'
+            [mp_hijacked]='2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037'
+            [zm_prison]='ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1'
+            [zm_tomb]='663c2f6e275fb6a8a2844bcc0e31808abe681ce7c2a2ddc6f616ef98fc7cd0b5'
+          )
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            f="/tmp/game/zone/all/${zone}.ff"
+            curl -fL --retry 4 --retry-delay 2 -o "$f" "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${RAW[$zone]}  $f" | sha256sum -c -
+          done
+      - name: Dump exact same-world TechniqueSets with OAT omission comments
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-techset-debug-cache/Unlinker
+          for zone in mp_nuketown_2020 mp_raid mp_hijacked zm_prison zm_tomb; do
+            out="/tmp/debug-oat/${zone}"
+            mkdir -p "$out"
+            "$BIN" --no-color --include-assets techniqueset --output-folder "$out" "/tmp/game/zone/all/${zone}.ff" >"/tmp/proof/${zone}.log" 2>&1
+            n=$(grep -Rh '^ *// Omitted due to matching accessors:' "$out/techniques" 2>/dev/null | wc -l)
+            printf '%s omissions=%s\n' "$zone" "$n" | tee -a /tmp/proof/counts.txt
+            test "$n" -gt 0
+          done
+      - name: Recover exact omitted code inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retail_special_omitted_code_input_recovery_v1.py \
+            --family-census manifests/render/T6_RETAIL_SPECIAL_MATERIAL_FAMILY_CENSUS_V1.json \
+            --runtime-census proof/render/T6_RETAIL_SPECIAL_RUNTIME_INPUT_CENSUS_V1.json \
+            --root mp_nuketown_2020=/tmp/debug-oat/mp_nuketown_2020 \
+            --root mp_raid=/tmp/debug-oat/mp_raid \
+            --root mp_hijacked=/tmp/debug-oat/mp_hijacked \
+            --root zm_prison=/tmp/debug-oat/zm_prison \
+            --root zm_tomb=/tmp/debug-oat/zm_tomb \
+            --out proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json'))
+          s=d['summary']
+          assert s['specialTechniqueSetIdentityCount']==31
+          assert s['missingDumpFileCount']==0
+          assert s['debugOmissionOccurrenceCount']>0
+          assert s['pixelOmittedIdentityAmbiguousCount']==0
+          assert s['pixelOmittedIdentityWithoutUnassignedRdefCount']==0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          print('ACCESSORS',json.dumps(d['accessorOccurrences'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist omitted special code-input recovery'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then pushed=1; break; fi
+              sleep "$attempt"
+            done
+            test "$pushed" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1
+          path: |
+            proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json
+            /tmp/proof/counts.txt
+          if-no-files-found: error
+          compression-level: 9
