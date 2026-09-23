@@ -42,9 +42,13 @@
       "enumValue": 25,
       "historicalRetailEquivalent": false,
       "pixelOccurrences": 120,
-      "providerProof": null,
-      "providerProofBoundary": null,
-      "providerStatus": "unresolved",
+      "providerProof": {
+        "format": "t6-current-client-gametime-provider-semantics-v1",
+        "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_PROVIDER_SEMANTICS_V1.json",
+        "sha256": "a6aee42cf891e907578e299fc4108e0e8f428e4c3ce01feb5fedd5c0b7f4f8d2"
+      },
+      "providerProofBoundary": "Closes current-client provider dataflow for gameTime: all six direct copy-routine callers have exact source/state setup, source record lane +4 is copied byte-for-byte to renderState+0x1A2C, and the exact four-lane gameTime transform/version update is proven. The human semantic name, physical units and cadence of source lane +4 remain intentionally unknown; current-client provider closure here means executable dataflow is sufficient to reproduce the input from the same source record, not that those physical semantics or historical-retail equivalence are known.",
+      "providerStatus": "current-client-provider-closed",
       "sourceClass": "constant",
       "totalOccurrences": 363,
       "updateFrequency": "RARELY",
@@ -340,9 +344,13 @@
       "enumValue": 17,
       "historicalRetailEquivalent": false,
       "pixelOccurrences": 23,
-      "providerProof": null,
-      "providerProofBoundary": null,
-      "providerStatus": "unresolved",
+      "providerProof": {
+        "format": "t6-current-client-render-target-size-provider-semantics-v1",
+        "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_SIZE_PROVIDER_SEMANTICS_V1.json",
+        "sha256": "80cd5ff2a53351ccf496ed2c27a041ffdb2924bf95d3bb865d682b80e54c3e2e"
+      },
+      "providerProofBoundary": "Closes SHA-classified current-client renderTargetSize provider semantics exactly: enum-17 lanes 0/1 are float conversions of uint16 width/height from fixed render-target table record 2, lanes 2/3 are exact zero, and the version slot increments in the same writer cluster. It does not claim historical-retail executable equivalence, framebuffer identity, or that record 2 has a human render-target name beyond its exact table index and field geometry.",
+      "providerStatus": "current-client-provider-closed",
       "sourceClass": "constant",
       "totalOccurrences": 23,
       "updateFrequency": "RARELY",
@@ -532,15 +540,15 @@
     }
   ],
   "summary": {
-    "currentClientClosedConstantCount": 1,
+    "currentClientClosedConstantCount": 3,
     "currentClientClosedSamplerCount": 0,
-    "currentClientProviderClosedCount": 1,
-    "currentClientProviderClosedOccurrenceCount": 17,
-    "currentClientProviderClosurePercent": 2.7027027027027026,
+    "currentClientProviderClosedCount": 3,
+    "currentClientProviderClosedOccurrenceCount": 403,
+    "currentClientProviderClosurePercent": 8.108108108108109,
     "historicalRetailEquivalentProviderCount": 0,
     "runtimeInputAccessorCount": 37,
     "runtimeInputOccurrenceCount": 3607,
-    "unresolvedProviderCount": 36,
-    "unresolvedProviderOccurrenceCount": 3590
+    "unresolvedProviderCount": 34,
+    "unresolvedProviderOccurrenceCount": 3204
   }
 }
