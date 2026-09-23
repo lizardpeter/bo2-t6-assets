@@ -44,8 +44,8 @@ def main():
     den=json.loads(a.denominator.read_text());req(den.get("format")==DEN_FMT,"denominator format drift")
     constants=[x for x in den["rows"] if x["sourceClass"]=="constant" and int(x["enumValue"]) < 0xD3]
     matrix_rows=[x for x in den["rows"] if x["sourceClass"]=="constant" and int(x["enumValue"]) >= 0xD3]
-    req(len(constants)==29,f"expected 29 float4 constants, got {len(constants)}")
-    req(len(matrix_rows)==3,f"expected 3 matrix-class constants, got {len(matrix_rows)}")
+    req(len(constants)==28,f"expected 28 float4 constants, got {len(constants)}")
+    req(len(matrix_rows)==4,f"expected 4 matrix-class constants, got {len(matrix_rows)}")
     target_map={}
     meta={}
     for x in constants:
