@@ -42,8 +42,10 @@ def main():
     a=ap.parse_args()
     raw=a.exe.read_bytes();dg=hashlib.sha256(raw).hexdigest();req(dg==SHA,f"SHA drift {dg}")
     den=json.loads(a.denominator.read_text());req(den.get("format")==DEN_FMT,"denominator format drift")
-    constants=[x for x in den["rows"] if x["sourceClass"]=="constant"]
-    req(len(constants)==32,f"expected 32 constants, got {len(constants)}")
+    constants=[x for x in den["rows"] if x["sourceClass"]=="constant" and int(x["enumValue"]) < 0xD3]
+    matrix_rows=[x for x in den["rows"] if x["sourceClass"]=="constant" and int(x["enumValue"]) >= 0xD3]
+    req(len(constants)==29,f"expected 29 float4 constants, got {len(constants)}")
+    req(len(matrix_rows)==3,f"expected 3 matrix-class constants, got {len(matrix_rows)}")
     target_map={}
     meta={}
     for x in constants:
@@ -88,6 +90,8 @@ def main():
                    "xrefs":ah})
     summary={
       "constantInputCount":len(rows),
+      "matrixInputExcludedCount":len(matrix_rows),
+      "matrixInputExcluded":[{"accessor":x["accessor"],"enumSymbol":x["enumSymbol"],"enumValue":x["enumValue"],"totalOccurrences":x["totalOccurrences"]} for x in matrix_rows],
       "constantsWithAnyDirectXref":sum(x["directXrefInstructionCount"]>0 for x in rows),
       "constantsWithDirectDestinationOrRmw":sum(x["directDestinationOrRmwCount"]>0 for x in rows),
       "totalDirectXrefInstructions":len(hits),
@@ -96,7 +100,7 @@ def main():
     doc={"format":FORMAT,"authority":"SHA-classified current-client exact decoded operands + exact current-client generic code-constant storage + exact retained-special constant denominator",
       "client":{"revision":a.revision,"bytes":len(raw),"sha256":dg,"imageBaseHex":f"0x{ib:08x}"},
       "summary":summary,"rows":rows,
-      "proofBoundary":"Locator only. Exact direct operands to mathematically derived current-client constant value/version slots are retained. Destination-position diagnostics do not by themselves prove producer formulas, command ownership, update timing, draw-time values, or historical-retail equivalence. Constants accessed only through generic indexed helpers may legitimately have zero direct xrefs."}
+      "proofBoundary":"Locator only. Exact direct operands to mathematically derived current-client float4 constant value/version slots are retained. Matrix-class constants (enum >= 0xD3) are explicitly excluded because T6 stores/derives them through the separate versioned matrix path. Destination-position diagnostics do not by themselves prove producer formulas, command ownership, update timing, draw-time values, or historical-retail equivalence. Constants accessed only through generic indexed helpers may legitimately have zero direct xrefs."}
     a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+"\n")
     print(json.dumps(summary,indent=2,sort_keys=True))
     for x in rows:
