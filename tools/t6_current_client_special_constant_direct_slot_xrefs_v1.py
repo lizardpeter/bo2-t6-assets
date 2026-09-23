@@ -50,14 +50,14 @@ def main():
       e=int(x["enumValue"]);acc=x["accessor"]
       slots=[VALUE_BASE+e*16+j*4 for j in range(4)]
       ver=VERSION_BASE+e*2
-      meta[acc]={"enumValue":e,"enumSymbol":x["enumSymbol"],"totalOccurrences":x["totalOccurrences"],
+      meta[acc]={"accessor":acc,"enumValue":e,"enumSymbol":x["enumSymbol"],"totalOccurrences":x["totalOccurrences"],
                  "valueVas":[f"0x{v:08x}" for v in slots],"versionVa":f"0x{ver:08x}"}
       for j,v in enumerate(slots):target_map.setdefault(v,[]).append((acc,f"value[{j}]"))
       target_map.setdefault(ver,[]).append((acc,"version"))
     ib,secs=pe(raw);hits=[]
     for s in secs:
       if not s["exec"]:continue
-      md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+      md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
       ins=list(md.disasm(raw[s["rawOffset"]:s["rawOffset"]+s["rawSize"]],s["va"]))
       for n,i in enumerate(ins):
         refs=[]
