@@ -33,6 +33,11 @@ REGISTRY={
    "path":"proof/current_client/T6_CURRENT_CLIENT_SCRIPT_VECTOR0_PROVIDER_SEMANTICS_V1.json",
    "format":"t6-current-client-script-vector0-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
+ },
+ "postFxControl6":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL6_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-postfx-control6-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
