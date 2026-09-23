@@ -62,6 +62,8 @@ def main():
       md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
       ins=list(md.disasm(raw[s["rawOffset"]:s["rawOffset"]+s["rawSize"]],s["va"]))
       for n,i in enumerate(ins):
+        if i.id==0:
+          continue
         refs=[]
         for oi,op in enumerate(i.operands):
           vals=[]
