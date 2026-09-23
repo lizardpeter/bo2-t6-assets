@@ -1,0 +1,71 @@
+{
+  "authority": "SHA-classified current-client exact unique caller copy contract + exact postFxControl6 arithmetic/write dataflow",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-postfx-control6-provider-semantics-v1",
+  "proofBoundary": "Closes SHA-classified current-client postFxControl6 provider dataflow exactly. The sole caller copies a 0x90-byte source record to the callee stack; exact source offsets +0x5C/+0x6C/+0x7C/+0x8C produce [A*(1-B), C*(1-D), A, C] with an exact +1 version update. The human semantic names/units of A/B/C/D and historical-retail executable equivalence remain unproven.",
+  "providerFormula": {
+    "A": "float32(sourceRecord+0x5C)",
+    "B": "float32(sourceRecord+0x6C)",
+    "C": "float32(sourceRecord+0x7C)",
+    "D": "float32(sourceRecord+0x8C)",
+    "lane0": "A - A*B = A*(1-B)",
+    "lane1": "C - C*D = C*(1-D)",
+    "lane2": "A",
+    "lane3": "C",
+    "version": "uint16 version slot at 0x03A383C2 += 1"
+  },
+  "runtimeInput": {
+    "accessor": "postFxControl6",
+    "enumSymbol": "CONST_SRC_CODE_POSTFX_CONTROL6",
+    "enumValue": 113,
+    "retainedSpecialOccurrences": 22,
+    "sourceClass": "constant",
+    "valueVas": [
+      "0x03a37a10",
+      "0x03a37a14",
+      "0x03a37a18",
+      "0x03a37a1c"
+    ],
+    "versionVa": "0x03a383c2"
+  },
+  "sourceRecordContract": {
+    "copyBytes": 144,
+    "copyDwordCount": 36,
+    "physicalSemanticName": "unresolved",
+    "sourceOffsets": {
+      "A": 92,
+      "B": 108,
+      "C": 124,
+      "D": 140
+    },
+    "sourceRegisterBeforeRepMovsd": "esi",
+    "uniqueCallerVa": "0x00769983"
+  },
+  "sources": {
+    "directWriteClusters": {
+      "format": "t6-current-client-special-constant-direct-write-clusters-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_WRITE_CLUSTERS_V1.json",
+      "sha256": "f0dbad04383c56c34d8d8e75de6bce060d657854e83c98fc024df8535d5e35f6"
+    },
+    "providerFunction": {
+      "format": "t6-current-client-postfx-control6-provider-function-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL6_PROVIDER_FUNCTION_V1.json",
+      "sha256": "d58e5872483682997d6c04bd6e3d4054e9f022fd510ec83e7a7253c489bddba0"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": true,
+    "enumValue": 113,
+    "historicalRetailEquivalent": false,
+    "laneFormulaClosed": true,
+    "retainedSpecialOccurrenceCount": 22,
+    "sourceCopyContractClosed": true,
+    "uniqueCallerClosed": true,
+    "versionUpdateClosed": true
+  }
+}
