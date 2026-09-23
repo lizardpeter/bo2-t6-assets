@@ -1,0 +1,50 @@
+name: T6 special runtime input OpenBO2 locator catalog v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_special_runtime_input_openbo2_locator_catalog_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json'
+      - '.github/workflows/t6_special_runtime_input_openbo2_locator_catalog_v1.yml'
+permissions:
+  contents: write
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover pinned OpenBO2 locator source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/builtbyxeno/OpenBO2.git /tmp/openbo2
+          git -C /tmp/openbo2 checkout -q a64812d21946baf710cec7fa26b98ad0d193903b
+          test "$(git -C /tmp/openbo2 rev-parse HEAD)" = a64812d21946baf710cec7fa26b98ad0d193903b
+      - name: Catalog exact enum numeric source locators
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_special_runtime_input_openbo2_locator_catalog_v1.py             --denominator proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json             --openbo2 /tmp/openbo2             --out proof/render/T6_SPECIAL_RUNTIME_INPUT_OPENBO2_LOCATOR_CATALOG_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_SPECIAL_RUNTIME_INPUT_OPENBO2_LOCATOR_CATALOG_V1.json'))
+          s=d['summary']
+          assert s['runtimeInputAccessorCount']==37
+          assert s['accessorsWithConcreteNumericUse']+s['accessorsWithoutConcreteNumericUse']==37
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_SPECIAL_RUNTIME_INPUT_OPENBO2_LOCATOR_CATALOG_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist 37-input provider locator catalog'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SPECIAL_RUNTIME_INPUT_OPENBO2_LOCATOR_CATALOG_V1
+          path: proof/render/T6_SPECIAL_RUNTIME_INPUT_OPENBO2_LOCATOR_CATALOG_V1.json
+          if-no-files-found: error
