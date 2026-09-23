@@ -1,0 +1,75 @@
+{
+  "authority": "SHA-classified current-client exact render-command table + handler dataflow + exact retained-special static code-input identity",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-material-color-provider-semantics-v1",
+  "genericConstantStorage": {
+    "indexSource": "RC_SET_CUSTOM_CONSTANT command dword at +4",
+    "valueBaseVa": "0x03a37300",
+    "valueStrideBytes": 16,
+    "versionBaseVa": "0x03a382e0",
+    "versionStrideBytes": 2
+  },
+  "lineageDifference": {
+    "note": "Pinned OpenBO2 locator source writes only three materialColor components in its loop, while the SHA-classified current client exact handler writes four. Current-client byte semantics are authoritative for this proof; the source-lineage loop is not substituted."
+  },
+  "materialColorProvider": {
+    "advancesCommandByLeadingUint16Size": true,
+    "commandColorSourceOffsets": [
+      4,
+      8,
+      12,
+      16
+    ],
+    "componentCount": 4,
+    "destinationValueIndex": 46,
+    "destinationValueVas": [
+      "0x03a375e0",
+      "0x03a375e4",
+      "0x03a375e8",
+      "0x03a375ec"
+    ],
+    "handlerVa": "0x00745bc0",
+    "incrementsVersion": true,
+    "renderCommand": "RC_SET_MATERIAL_COLOR",
+    "renderCommandIndex": 2,
+    "versionIndex": 46,
+    "versionVa": "0x03a3833c"
+  },
+  "proofBoundary": "Closes materialColor provider semantics for the SHA-classified current client: command source offsets, all four float writes, exact code-constant index 46 destinations, version increment, and command-stream advance. It does not by itself prove historical-retail executable equivalence, the producer that enqueues RC_SET_MATERIAL_COLOR, or the draw-time materialColor values for every retained scene.",
+  "runtimeInput": {
+    "accessor": "materialColor",
+    "currentClientStaticRowVa": 13800016,
+    "enumSymbol": "CONST_SRC_CODE_MATERIAL_COLOR",
+    "enumValue": 46,
+    "retainedSpecialOccurrences": 17,
+    "sourceClass": "constant",
+    "updateFrequency": "RARELY"
+  },
+  "sources": {
+    "handlerProbe": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CUSTOM_CONSTANT_MATERIAL_COLOR_PROBE_V1.json",
+      "sha256": "3c8d5917831c7fe6f7801ea7100a1af9892d88634e220974bad15b0200797bfc"
+    },
+    "renderCommandTable": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_COMMAND_TABLE_LOCATOR_V1.json",
+      "sha256": "0db3fa7c45401f40832259e3410807d0ecbc43b1b7d2b7b2a7a16cfdb777ef7f"
+    },
+    "retainedSpecialStaticInputs": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    }
+  },
+  "summary": {
+    "commandAdvanceExact": true,
+    "componentCount": 4,
+    "currentClientProviderClosed": true,
+    "enumValue": 46,
+    "valueAddressRelationExact": true,
+    "versionAddressRelationExact": true
+  }
+}
