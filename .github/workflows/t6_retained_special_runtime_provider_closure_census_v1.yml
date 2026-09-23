@@ -1,0 +1,46 @@
+name: T6 retained special runtime provider closure census v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retained_special_runtime_provider_closure_census_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json'
+      - '.github/workflows/t6_retained_special_runtime_provider_closure_census_v1.yml'
+permissions:
+  contents: write
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project fail-closed provider closure census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_retained_special_runtime_provider_closure_census_v1.py             --denominator proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json             --repo-root .             --out proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json'))
+          s=d['summary']
+          assert s['runtimeInputAccessorCount']==37
+          assert s['currentClientProviderClosedCount']==1
+          assert s['unresolvedProviderCount']==36
+          assert [x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed']==['materialColor']
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist runtime-provider closure census'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1
+          path: proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json
+          if-no-files-found: error
