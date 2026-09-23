@@ -34,12 +34,14 @@ def pe(raw):
     return ib,secs
 def row(i):return {"address":f"0x{i.address:08x}","bytes":i.bytes.hex(),"mnemonic":i.mnemonic,"opStr":i.op_str}
 def state97(i):
+    if i.id==0:return None
     if i.mnemonic!="mov" or len(i.operands)!=2:return None
     d,s=i.operands
     if d.type!=X86_OP_MEM or d.size!=1 or d.mem.base==0 or d.mem.index!=0:return None
     if s.type!=X86_OP_IMM or (int(s.imm)&0xff)!=0x61:return None
     return (d.mem.base,int(d.mem.disp))
 def dword_store(i,base,disp):
+    if i.id==0:return False
     if i.mnemonic!="mov" or len(i.operands)!=2:return False
     d=i.operands[0]
     return d.type==X86_OP_MEM and d.size==4 and d.mem.base==base and d.mem.index==0 and int(d.mem.disp)==disp
@@ -49,9 +51,10 @@ def main():
     ib,secs=pe(raw);candidates=[]
     for sec in secs:
       if not sec["exec"]:continue
-      md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+      md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
       ins=list(md.disasm(raw[sec["rawOffset"]:sec["rawOffset"]+sec["rawSize"]],sec["va"]))
       for n,i in enumerate(ins):
+        if i.id==0:continue
         st=state97(i)
         if not st:continue
         base,sdisp=st;idisp=sdisp-DELTA
