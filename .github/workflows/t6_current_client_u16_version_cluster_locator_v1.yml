@@ -23,6 +23,7 @@ jobs:
           python3 tools/t6_current_client_fetch_exact_v1.py \
             --out-exe /tmp/client/t6mp.exe \
             --out-identity /tmp/client/identity.json
+          python3 -c "import json; print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])" > /tmp/client/revision
 
       - name: Locate dense uint16 plus-one clusters
         shell: bash
