@@ -15,9 +15,9 @@ INPUT_FORMAT="t6-retail-special-omitted-code-input-static-identity-v1"
 OPENBO2_COMMIT="a64812d21946baf710cec7fa26b98ad0d193903b"
 
 PATTERNS={
- "constValue":lambda n:re.compile(rf"(?:\\.|->)consts\\s*\\[\\s*{n}\\s*\\]"),
- "constVersion":lambda n:re.compile(rf"(?:\\.|->)constVersions\\s*\\[\\s*{n}\\s*\\]"),
- "codeImage":lambda n:re.compile(rf"(?:\\.|->)codeImages\\s*\\[\\s*{n}\\s*\\]"),
+ "constValue":lambda n:re.compile(rf"(?:\.|->)consts\s*\[\s*{n}\s*\]"),
+ "constVersion":lambda n:re.compile(rf"(?:\.|->)constVersions\s*\[\s*{n}\s*\]"),
+ "codeImage":lambda n:re.compile(rf"(?:\.|->)codeImages\s*\[\s*{n}\s*\]"),
 }
 
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
