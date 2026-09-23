@@ -289,7 +289,9 @@
         "proof/render/T6_RETAIL_SPECIAL_VERTEXDECL_NATIVE_RESOLUTION_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_CLASSIFICATION_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json",
-        "proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json"
+        "proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json",
+        "proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json",
+        "proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json"
       ],
       "closureRequirement": "For the retained five-world seven-family denominator, direct and packed pixel-shader symbolic dataflow plus packed child/VertexDecl identity are closed. Remaining closure is exact runtime MaterialShaderArgument/resource/code-constant provider semantics (including generated hdrControl0 where applicable), vertex-stage/input-transform semantics needed by the target replay path, sampler/upload mechanics, special-family playback/state integration, final framebuffer validation, and declared target-corpus authority.",
       "current": {
@@ -315,7 +317,7 @@
           "rawNormal": 1,
           "default": 1
         },
-        "remainingSemanticGap": "Packed special child ownership is no longer a blocker: 330/330 unique identities and 1,436/1,436 occurrences are exact same-zone resolved, native VertexDecl structure is closed, and both direct (176/176) and packed (31/31; 281/281 occurrences) special PS symbolic dataflow are complete for the retained five-world corpus. Remaining renderer closure is runtime argument/resource/code-constant provider semantics and sampler/upload mechanics, vertex-stage/input-transform semantics where required for non-native replay, special-family playback/state integration, generated hdrControl0 runtime value/provider, and final framebuffer validation across the declared target corpus.",
+        "remainingSemanticGap": "Packed special child ownership, native VertexDecl structure, and direct/packed pixel-shader symbolic dataflow are closed for the retained five-world corpus. Runtime provider closure now has an explicit 37-input fail-closed denominator: materialColor is exact for the SHA-classified current client; 36 providers remain unresolved. Remaining renderer closure is those runtime argument/resource/code-constant providers, sampler/upload mechanics, vertex-stage/input-transform semantics where required, special-family playback/state integration, generated hdrControl0 runtime value/provider, historical-retail equivalence where required, and final framebuffer validation.",
         "nuketownGeneratedFinalOutputPrograms": 34,
         "nuketownGeneratedFinalOutputMaterials": 120,
         "nuketownGeneratedFinalOutputUnresolvedCbufferSourceOccurrences": 0,
@@ -430,7 +432,17 @@
         "retainedSpecialPackedPixelShaderNewFullOutputDagNodes": 16,
         "retainedSpecialPackedPixelShaderNewFullOutputDagOutputLanes": 12,
         "retainedSpecialPackedPixelShaderNewSampleInstructions": 1,
-        "retainedSpecialPackedDependencyBoundary": "All 1,436 packed special child occurrences / 330 unique raw pointer identities are same-zone resolved without conflict; all 459 VertexDecl occurrences / 30 identities have exact native declaration-field closure; all 281 packed PS occurrences / 31 exact CSO SHA-256 identities have assembly-level symbolic output coverage. This does not by itself prove runtime code-constant/resource values, sampler/API upload behavior, vertex-shader physical semantics, or framebuffer equivalence."
+        "retainedSpecialPackedDependencyBoundary": "All 1,436 packed special child occurrences / 330 unique raw pointer identities are same-zone resolved without conflict; all 459 VertexDecl occurrences / 30 identities have exact native declaration-field closure; all 281 packed PS occurrences / 31 exact CSO SHA-256 identities have assembly-level symbolic output coverage. This does not by itself prove runtime code-constant/resource values, sampler/API upload behavior, vertex-shader physical semantics, or framebuffer equivalence.",
+        "retainedSpecialRuntimeProviderInputDenominator": 37,
+        "retainedSpecialRuntimeProviderOccurrenceDenominator": 3607,
+        "retainedSpecialCurrentClientProviderClosedInputs": 1,
+        "retainedSpecialCurrentClientProviderUnresolvedInputs": 36,
+        "retainedSpecialCurrentClientProviderClosedOccurrences": 17,
+        "retainedSpecialCurrentClientProviderUnresolvedOccurrences": 3590,
+        "retainedSpecialCurrentClientProviderClosurePercent": 2.7027027027027026,
+        "retainedSpecialHistoricalRetailEquivalentProviderCount": 0,
+        "materialColorCurrentClientProvider": "closed: exact RC_SET_MATERIAL_COLOR command source offsets + four float writes + code-constant enum 46 value/version destinations + command advance",
+        "materialColorCurrentClientLineageDifference": "Pinned OpenBO2 locator source writes three components; exact SHA-classified current-client handler writes four. Current-client bytes are retained as authority."
       }
     },
     {
