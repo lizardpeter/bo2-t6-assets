@@ -1,0 +1,181 @@
+{
+  "authority": "SHA-classified current client exact bytes plus exact render-command table index 2",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-material-color-handler-probe-v1",
+  "handler": {
+    "bytes": 96,
+    "endVaExclusive": "0x00745c20",
+    "instructions": [
+      {
+        "address": "0x00745bc0",
+        "bytes": "833d2828a20300",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [0x3a22828], 0"
+      },
+      {
+        "address": "0x00745bc7",
+        "bytes": "56",
+        "mnemonic": "push",
+        "opStr": "esi"
+      },
+      {
+        "address": "0x00745bc8",
+        "bytes": "57",
+        "mnemonic": "push",
+        "opStr": "edi"
+      },
+      {
+        "address": "0x00745bc9",
+        "bytes": "8b7c240c",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esp + 0xc]"
+      },
+      {
+        "address": "0x00745bcd",
+        "bytes": "8b37",
+        "mnemonic": "mov",
+        "opStr": "esi, dword ptr [edi]"
+      },
+      {
+        "address": "0x00745bcf",
+        "bytes": "7405",
+        "mnemonic": "je",
+        "opStr": "0x745bd6"
+      },
+      {
+        "address": "0x00745bd1",
+        "bytes": "e84ac00000",
+        "mnemonic": "call",
+        "opStr": "0x751c20"
+      },
+      {
+        "address": "0x00745bd6",
+        "bytes": "f30f104604",
+        "mnemonic": "movss",
+        "opStr": "xmm0, dword ptr [esi + 4]"
+      },
+      {
+        "address": "0x00745bdb",
+        "bytes": "f30f1105e075a303",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [0x3a375e0], xmm0"
+      },
+      {
+        "address": "0x00745be3",
+        "bytes": "f30f104608",
+        "mnemonic": "movss",
+        "opStr": "xmm0, dword ptr [esi + 8]"
+      },
+      {
+        "address": "0x00745be8",
+        "bytes": "f30f1105e475a303",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [0x3a375e4], xmm0"
+      },
+      {
+        "address": "0x00745bf0",
+        "bytes": "f30f10460c",
+        "mnemonic": "movss",
+        "opStr": "xmm0, dword ptr [esi + 0xc]"
+      },
+      {
+        "address": "0x00745bf5",
+        "bytes": "f30f1105e875a303",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [0x3a375e8], xmm0"
+      },
+      {
+        "address": "0x00745bfd",
+        "bytes": "f30f104610",
+        "mnemonic": "movss",
+        "opStr": "xmm0, dword ptr [esi + 0x10]"
+      },
+      {
+        "address": "0x00745c02",
+        "bytes": "66ff053c83a303",
+        "mnemonic": "inc",
+        "opStr": "word ptr [0x3a3833c]"
+      },
+      {
+        "address": "0x00745c09",
+        "bytes": "f30f1105ec75a303",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [0x3a375ec], xmm0"
+      },
+      {
+        "address": "0x00745c11",
+        "bytes": "8b07",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [edi]"
+      },
+      {
+        "address": "0x00745c13",
+        "bytes": "0fb708",
+        "mnemonic": "movzx",
+        "opStr": "ecx, word ptr [eax]"
+      },
+      {
+        "address": "0x00745c16",
+        "bytes": "03c8",
+        "mnemonic": "add",
+        "opStr": "ecx, eax"
+      },
+      {
+        "address": "0x00745c18",
+        "bytes": "890f",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [edi], ecx"
+      },
+      {
+        "address": "0x00745c1a",
+        "bytes": "5f",
+        "mnemonic": "pop",
+        "opStr": "edi"
+      },
+      {
+        "address": "0x00745c1b",
+        "bytes": "5e",
+        "mnemonic": "pop",
+        "opStr": "esi"
+      },
+      {
+        "address": "0x00745c1c",
+        "bytes": "c3",
+        "mnemonic": "ret",
+        "opStr": ""
+      },
+      {
+        "address": "0x00745c1d",
+        "bytes": "cc",
+        "mnemonic": "int3",
+        "opStr": ""
+      },
+      {
+        "address": "0x00745c1e",
+        "bytes": "cc",
+        "mnemonic": "int3",
+        "opStr": ""
+      },
+      {
+        "address": "0x00745c1f",
+        "bytes": "cc",
+        "mnemonic": "int3",
+        "opStr": ""
+      }
+    ],
+    "section": ".text",
+    "sha256": "bccf98ad455ac3f42f3ee4fef9b3c8bc8541812f44f126dede5d2f7587487ef7",
+    "startVa": "0x00745bc0"
+  },
+  "proofBoundary": "Exact table pointer and bounded current-client handler bytes/disassembly only. The handler is not yet promoted as materialColor semantics until a separate projector proves its command-pointer reads, three color-component transfers, code-constant destination, dirty/version behavior, and command-stream advance.",
+  "table": {
+    "handlerVa": "0x00745bc0",
+    "index": 2,
+    "va": "0x00d27e70"
+  }
+}
