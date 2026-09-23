@@ -1,0 +1,213 @@
+{
+  "authority": "SHA-classified current-client exact bytes/dataflow",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "copySemantics": {
+    "copies": [
+      {
+        "bytes": 8,
+        "inputOffset": 0,
+        "stateOffset": 6696
+      },
+      {
+        "bytes": 8,
+        "inputOffset": 8,
+        "stateOffset": 6704
+      },
+      {
+        "bytes": 4,
+        "inputOffset": 16,
+        "stateOffset": 6712
+      }
+    ],
+    "gameTimeScalarT": {
+      "inputOffset": 4,
+      "reason": "second dword of exact 8-byte copy input+0 -> state+0x1A28",
+      "stateOffset": 6700
+    },
+    "inputBaseRegister": "eax",
+    "sourceStateBaseRegister": "edx"
+  },
+  "directCallers": [
+    {
+      "bytes": "e862d30300",
+      "callVa": "0x00732479",
+      "section": ".text"
+    },
+    {
+      "bytes": "e8dbcb0300",
+      "callVa": "0x00732c00",
+      "section": ".text"
+    },
+    {
+      "bytes": "e877c60300",
+      "callVa": "0x00733164",
+      "section": ".text"
+    },
+    {
+      "bytes": "e8b2c00300",
+      "callVa": "0x00733729",
+      "section": ".text"
+    },
+    {
+      "bytes": "e89a9b0200",
+      "callVa": "0x00745c41",
+      "section": ".text"
+    },
+    {
+      "bytes": "e852b8ffff",
+      "callVa": "0x00773f89",
+      "section": ".text"
+    }
+  ],
+  "format": "t6-current-client-gametime-state-copy-probe-v1",
+  "function": {
+    "bytes": 118,
+    "endVaExclusive": "0x0076f856",
+    "instructions": [
+      {
+        "address": "0x0076f7e0",
+        "bytes": "f30f7e00",
+        "mnemonic": "movq",
+        "opStr": "xmm0, qword ptr [eax]"
+      },
+      {
+        "address": "0x0076f7e4",
+        "bytes": "660fd682281a0000",
+        "mnemonic": "movq",
+        "opStr": "qword ptr [edx + 0x1a28], xmm0"
+      },
+      {
+        "address": "0x0076f7ec",
+        "bytes": "f30f7e4008",
+        "mnemonic": "movq",
+        "opStr": "xmm0, qword ptr [eax + 8]"
+      },
+      {
+        "address": "0x0076f7f1",
+        "bytes": "660fd682301a0000",
+        "mnemonic": "movq",
+        "opStr": "qword ptr [edx + 0x1a30], xmm0"
+      },
+      {
+        "address": "0x0076f7f9",
+        "bytes": "8b4810",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [eax + 0x10]"
+      },
+      {
+        "address": "0x0076f7fc",
+        "bytes": "898a381a0000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [edx + 0x1a38], ecx"
+      },
+      {
+        "address": "0x0076f802",
+        "bytes": "8b4c2404",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [esp + 4]"
+      },
+      {
+        "address": "0x0076f806",
+        "bytes": "898af8190000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [edx + 0x19f8], ecx"
+      },
+      {
+        "address": "0x0076f80c",
+        "bytes": "d94008",
+        "mnemonic": "fld",
+        "opStr": "dword ptr [eax + 8]"
+      },
+      {
+        "address": "0x0076f80f",
+        "bytes": "d99a101a0000",
+        "mnemonic": "fstp",
+        "opStr": "dword ptr [edx + 0x1a10]"
+      },
+      {
+        "address": "0x0076f815",
+        "bytes": "d9400c",
+        "mnemonic": "fld",
+        "opStr": "dword ptr [eax + 0xc]"
+      },
+      {
+        "address": "0x0076f818",
+        "bytes": "d99a141a0000",
+        "mnemonic": "fstp",
+        "opStr": "dword ptr [edx + 0x1a14]"
+      },
+      {
+        "address": "0x0076f81e",
+        "bytes": "d94010",
+        "mnemonic": "fld",
+        "opStr": "dword ptr [eax + 0x10]"
+      },
+      {
+        "address": "0x0076f821",
+        "bytes": "d99a181a0000",
+        "mnemonic": "fstp",
+        "opStr": "dword ptr [edx + 0x1a18]"
+      },
+      {
+        "address": "0x0076f827",
+        "bytes": "c782241a000000000000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [edx + 0x1a24], 0"
+      },
+      {
+        "address": "0x0076f831",
+        "bytes": "e88afeffff",
+        "mnemonic": "call",
+        "opStr": "0x76f6c0"
+      },
+      {
+        "address": "0x0076f836",
+        "bytes": "0f57c0",
+        "mnemonic": "xorps",
+        "opStr": "xmm0, xmm0"
+      },
+      {
+        "address": "0x0076f839",
+        "bytes": "f30f10922c1a0000",
+        "mnemonic": "movss",
+        "opStr": "xmm2, dword ptr [edx + 0x1a2c]"
+      },
+      {
+        "address": "0x0076f841",
+        "bytes": "f30f11825c1a0000",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [edx + 0x1a5c], xmm0"
+      },
+      {
+        "address": "0x0076f849",
+        "bytes": "f30f1182601a0000",
+        "mnemonic": "movss",
+        "opStr": "dword ptr [edx + 0x1a60], xmm0"
+      },
+      {
+        "address": "0x0076f851",
+        "bytes": "e96af70000",
+        "mnemonic": "jmp",
+        "opStr": "0x77efc0"
+      }
+    ],
+    "section": ".text",
+    "sha256": "f897ba23699c3416aff2fa49abd3f3a6d7901e5e119dfe33ac06a29f1a78d988",
+    "startVa": "0x0076f7e0"
+  },
+  "postCopy": {
+    "argumentFromStackOffset": 4,
+    "callsStateUpdate": "0x0076f6c0",
+    "storedToStateOffset": 6648
+  },
+  "proofBoundary": "Proves current-client byte-level copying only: state+0x1A2C receives input+4 whenever this function executes. It does not yet identify the semantic type/units of input+4, prove every gameTime update passes through this function, or establish historical-retail equivalence.",
+  "summary": {
+    "directCallerCount": 6,
+    "gameTimeFieldIndirectWriteClosed": true
+  }
+}
