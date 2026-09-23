@@ -1,0 +1,48 @@
+name: T6 retained special omitted code-input static identity v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_retail_special_omitted_code_input_static_identity_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_CODE_INPUT_TABLE_JOIN_V1.json'
+      - '.github/workflows/t6_retail_special_omitted_code_input_static_identity_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Join exact 37-input static identity denominator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/render
+          python3 tools/t6_retail_special_omitted_code_input_static_identity_v1.py             --recovery proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_RECOVERY_V1.json             --client-table proof/current_client/T6_CURRENT_CLIENT_CODE_INPUT_TABLE_JOIN_V1.json             --out proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json'))
+          s=d['summary']
+          assert s['runtimeInputAccessorCount']==37
+          assert s['codeConstantAccessorCount']==32
+          assert s['codeSamplerAccessorCount']==5
+          assert s['uniqueExactCurrentClientStaticRowCount']==37
+          assert s['runtimeProviderSemanticsRemainingCount']==37
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist 37-input special runtime denominator'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1
+          path: proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json
+          if-no-files-found: error
