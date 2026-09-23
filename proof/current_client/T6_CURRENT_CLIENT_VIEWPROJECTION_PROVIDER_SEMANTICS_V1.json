@@ -1,0 +1,83 @@
+{
+  "authority": "SHA-classified current-client exact matrix getter + dispatch + helper bytes and exact retained-special accessor identity",
+  "client": {
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-viewprojection-provider-semantics-v1",
+  "formula": {
+    "commonAdjustment": "M16.row3 = Vec4(S+0x19E0) * M16",
+    "condition": "u32(S+0x19FC) == 0x40000000",
+    "destination": "matrixIndex16 storage at S+0x0400; SSE stores align each 16-byte destination row downward to a 16-byte boundary",
+    "falseBranch": [
+      "M16 = copy64(S+0x16D0)"
+    ],
+    "getter": "enum227 => matrixIndex16; returned row address = S + 16*64 + firstRow*16",
+    "matrixProductConvention": "C[row] = A[row].x*B[0] + A[row].y*B[1] + A[row].z*B[2] + A[row].w*B[3]",
+    "sourcePointer": "S = first argument to base-16 helper at 0x772CA0",
+    "trueBranch": [
+      "if u16(S+0x1996) != u16(S+0x19CA), call exact baseIndex-8 derive helper 0x772AC0",
+      "M16 = Mat4(S+0x1650) * Mat4(S+0x0200)"
+    ],
+    "vectorProductConvention": "out = v.x*M[0] + v.y*M[1] + v.z*M[2] + v.w*M[3]",
+    "version": "u16(S+0x19A6) = u16(S+0x19CE)"
+  },
+  "helperArithmetic": {
+    "matrixHelper": {
+      "coreBytesSha256": "640d150c2b7b3fff9d7b99543fc9f2c294630c0f1651d0995aa57dfe97d33cd3",
+      "coreEndVaExclusive": "0x005867da",
+      "entryVa": "0x005866b0",
+      "formula": "C[row] = A[row].x*B[0] + A[row].y*B[1] + A[row].z*B[2] + A[row].w*B[3]",
+      "straightLine": true
+    },
+    "vectorHelper": {
+      "entryVa": "0x0064d510",
+      "formula": "out = v.x*M[0] + v.y*M[1] + v.z*M[2] + v.w*M[3]",
+      "functionSha256": "05e02a71919d1943eaffa982b202def425e81290bf3ed4b8c851135e815c91b0"
+    }
+  },
+  "proofBoundary": "Closes the SHA-classified current client's viewProjectionMatrix provider as exact executable dataflow in source-relative offsets, including both branches, matrix multiplication, vector adjustment, getter address, and version caching. Human physical names/units for S+0x1650/S+0x16D0/S+0x19E0/S+0x19FC are intentionally unresolved. The SSE helpers align destination rows down to 16-byte boundaries exactly as recorded. Historical-retail executable equivalence and framebuffer equivalence remain unproven.",
+  "runtimeInput": {
+    "accessor": "viewProjectionMatrix",
+    "enumSymbol": "CONST_SRC_CODE_VIEW_PROJECTION_MATRIX",
+    "enumValue": 227,
+    "pixelOccurrences": 0,
+    "retainedSpecialOccurrences": 581,
+    "sourceClass": "constant",
+    "updateFrequency": "PER_OBJECT",
+    "vertexOccurrences": 581
+  },
+  "sources": {
+    "denominator": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "dispatch": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_DERIVE_DISPATCH_V1.json",
+      "sha256": "78d2df3ad979b533c2f61581d78ecccc95d15b052a1bcce26d793bf5fefc10e1"
+    },
+    "getter": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_GETTER_SEMANTICS_V1.json",
+      "sha256": "96800d2ef2ce5d5d5c7e8b812a5e42b39a79683a24fb9802b6e8347234de7042"
+    },
+    "helper": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_HELPER_PROBE_V1.json",
+      "sha256": "8270b62a831775293e4f867fcdcb6cad62c9af061924bd97efed85b1434e78b9"
+    },
+    "math": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_MATH_HELPER_PROBE_V1.json",
+      "sha256": "13d9dc5f96253c9a247f8b5790cb7b79fc98228fe59edd56928fdd9fbc849d14"
+    }
+  },
+  "summary": {
+    "branchFormulaClosed": true,
+    "currentClientProviderClosed": true,
+    "enumValue": 227,
+    "historicalRetailEquivalent": false,
+    "matrixIndex": 16,
+    "matrixMultiplyHelperClosed": true,
+    "retainedSpecialOccurrenceCount": 581,
+    "vectorTransformHelperClosed": true,
+    "versionUpdateClosed": true
+  }
+}
