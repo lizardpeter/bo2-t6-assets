@@ -18,6 +18,16 @@ REGISTRY={
    "path":"proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json",
    "format":"t6-current-client-material-color-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
+ },
+ "gameTime":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_GAMETIME_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-gametime-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+ },
+ "renderTargetSize":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_SIZE_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-render-target-size-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
