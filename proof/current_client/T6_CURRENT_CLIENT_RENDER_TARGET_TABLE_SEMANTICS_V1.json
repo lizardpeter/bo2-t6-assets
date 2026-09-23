@@ -1,0 +1,56 @@
+{
+  "authority": "SHA-classified current-client RC_RESOLVE_COMPOSITE exact handler dataflow",
+  "callback": {
+    "argument": "first dword of fixed table record 25",
+    "argumentVa": "0x03a26914",
+    "commandCallbackPointerOffset": 4
+  },
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-render-target-table-semantics-v1",
+  "proofBoundary": "Closes current-client table geometry used by the exact RC_RESOLVE_COMPOSITE handler: base, 20-byte stride, selected-record uint16 width/height offsets, source-state writes, and fixed record-25 first-dword callback argument. The first dword is structurally the callback resource field in this handler; calling it GfxRenderTarget.image uses T6 source-lineage vocabulary and is not historical-retail proof. Record-8 address is exact arithmetic from the current-client table, but its float-Z role remains unpromoted until an exact consumer closes that relation.",
+  "recordTable": {
+    "baseVa": "0x03a26720",
+    "derivedRecord8FirstDwordVa": "0x03a267c0",
+    "fixedRecord25FirstDwordVa": "0x03a26914",
+    "recordCountNotProvenHere": true,
+    "recordStrideBytes": 20,
+    "selectedRecordAuxByteSource": "byte lookup result",
+    "selectedRecordHeightOffset": 14,
+    "selectedRecordHeightType": "uint16",
+    "selectedRecordIndexPipeline": "frameBuffer byte -> byte lookup table -> index * 20",
+    "selectedRecordWidthOffset": 12,
+    "selectedRecordWidthType": "uint16"
+  },
+  "renderCommand": {
+    "handlerVa": "0x00745d30",
+    "index": 9,
+    "name": "RC_RESOLVE_COMPOSITE"
+  },
+  "sourceStateWrites": {
+    "auxByteVa": "0x03A38564",
+    "heightDwordVa": "0x03A3856C",
+    "widthDwordVa": "0x03A38568"
+  },
+  "sources": {
+    "handlerProbe": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_HANDLER_PROBE_V1.json",
+      "sha256": "ccbed6ec5159179347ce57ca20c2cb4cfe00425c862e3fa57e55d49f555fabd8"
+    },
+    "renderCommandTable": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_COMMAND_TABLE_LOCATOR_V1.json",
+      "sha256": "0db3fa7c45401f40832259e3410807d0ecbc43b1b7d2b7b2a7a16cfdb777ef7f"
+    }
+  },
+  "summary": {
+    "record25FirstDwordCallbackExact": true,
+    "record8FirstDwordAddressDerivedExactly": true,
+    "recordStrideBytes": 20,
+    "tableBaseExact": true,
+    "widthHeightOffsetsExact": true
+  }
+}
