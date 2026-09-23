@@ -1,0 +1,72 @@
+{
+  "authority": "SHA-classified current-client exact provider function + exact render-target table geometry + exact enum-17 direct destinations",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-render-target-size-provider-semantics-v1",
+  "proofBoundary": "Closes SHA-classified current-client renderTargetSize provider semantics exactly: enum-17 lanes 0/1 are float conversions of uint16 width/height from fixed render-target table record 2, lanes 2/3 are exact zero, and the version slot increments in the same writer cluster. It does not claim historical-retail executable equivalence, framebuffer identity, or that record 2 has a human render-target name beyond its exact table index and field geometry.",
+  "providerFormula": {
+    "lane0": "float32(uint16(renderTargetTable[2].width))",
+    "lane1": "float32(uint16(renderTargetTable[2].height))",
+    "lane2": "0.0f",
+    "lane3": "0.0f",
+    "version": "uint16 version slot at 0x03A38302 increments in the same exact writer cluster"
+  },
+  "runtimeInput": {
+    "accessor": "renderTargetSize",
+    "enumSymbol": "CONST_SRC_CODE_RENDER_TARGET_SIZE",
+    "enumValue": 17,
+    "retainedSpecialOccurrences": 23,
+    "sourceClass": "constant",
+    "updateFrequency": null,
+    "valueVas": [
+      "0x03a37410",
+      "0x03a37414",
+      "0x03a37418",
+      "0x03a3741c"
+    ],
+    "versionVa": "0x03a38302"
+  },
+  "source": {
+    "heightFieldOffset": 14,
+    "heightSourceVa": "0x03a26756",
+    "heightType": "uint16",
+    "recordIndex": 2,
+    "recordStrideBytes": 20,
+    "renderTargetTableBaseVa": "0x03a26720",
+    "widthFieldOffset": 12,
+    "widthSourceVa": "0x03a26754",
+    "widthType": "uint16"
+  },
+  "sources": {
+    "directProviderClusters": {
+      "format": "t6-current-client-high-value-direct-provider-clusters-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_HIGH_VALUE_DIRECT_PROVIDER_CLUSTERS_V1.json",
+      "sha256": "e9dc6cb736d21588a6ec98c6ea888c2885017a94b4047b951b367ecf0dc876c2"
+    },
+    "providerFunction": {
+      "format": "t6-current-client-render-target-size-provider-function-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_SIZE_PROVIDER_FUNCTION_V1.json",
+      "sha256": "9d16739a370ef3ad2140e2cae0f6773c656c4e5c5866282a98d32ae605401c45"
+    },
+    "renderTargetTable": {
+      "format": "t6-current-client-render-target-table-semantics-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_TABLE_SEMANTICS_V1.json",
+      "sha256": "cc567481c681248cd3d21a7e89b4db3f6ae711d4d3983a1365b306f9896cb1d4"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": true,
+    "enumValue": 17,
+    "historicalRetailEquivalent": false,
+    "laneFormulaClosed": true,
+    "renderTargetRecordIndex": 2,
+    "retainedSpecialOccurrenceCount": 23,
+    "sourceFieldsClosed": true,
+    "tableGeometryClosed": true,
+    "versionUpdateClosed": true
+  }
+}
