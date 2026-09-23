@@ -1,0 +1,68 @@
+{
+  "authority": "SHA-classified current-client exact function dataflow + exact enum-169 direct destination cluster",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-script-vector0-provider-semantics-v1",
+  "proofBoundary": "Closes SHA-classified current-client scriptVector0 provider dataflow exactly: the function argument-0 object owns a pointer at +0x77C, and four consecutive float32 lanes at pointee offsets +0x400..+0x40C are copied lane-for-lane into enum-169 storage with an exact +1 version increment. The human semantic name of that pointee block and historical-retail executable equivalence remain unproven; no values are inferred or substituted.",
+  "providerFormula": {
+    "lane0": "float32(*(*(arg0+0x77C)+0x400))",
+    "lane1": "float32(*(*(arg0+0x77C)+0x404))",
+    "lane2": "float32(*(*(arg0+0x77C)+0x408))",
+    "lane3": "float32(*(*(arg0+0x77C)+0x40C))",
+    "version": "uint16 version slot at 0x03A38432 += 1 before lane stores"
+  },
+  "runtimeInput": {
+    "accessor": "scriptVector0",
+    "enumSymbol": "CONST_SRC_CODE_GENERIC_PARAM0",
+    "enumValue": 169,
+    "retainedSpecialOccurrences": 160,
+    "sourceClass": "constant",
+    "updateFrequency": null,
+    "valueVas": [
+      "0x03a37d90",
+      "0x03a37d94",
+      "0x03a37d98",
+      "0x03a37d9c"
+    ],
+    "versionVa": "0x03a38432"
+  },
+  "sourceContract": {
+    "argumentLoadVa": "0x0076ae9c",
+    "derivedBase": "EBX = *(arg0+0x77C) + 0x1E0 + 0x228 = *(arg0+0x77C) + 0x408",
+    "functionArgument0Register": "edi",
+    "humanSemanticNameOfSourceBlock": "unresolved",
+    "laneSourceOffsets": [
+      1024,
+      1028,
+      1032,
+      1036
+    ],
+    "pointerFieldOffset": 1916,
+    "vectorBaseRelativeToPointerFieldTarget": 1024
+  },
+  "sources": {
+    "directProviderClusters": {
+      "format": "t6-current-client-high-value-direct-provider-clusters-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_HIGH_VALUE_DIRECT_PROVIDER_CLUSTERS_V1.json",
+      "sha256": "e9dc6cb736d21588a6ec98c6ea888c2885017a94b4047b951b367ecf0dc876c2"
+    },
+    "providerFunction": {
+      "format": "t6-current-client-render-target-size-provider-function-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_TARGET_SIZE_PROVIDER_FUNCTION_V1.json",
+      "sha256": "9d16739a370ef3ad2140e2cae0f6773c656c4e5c5866282a98d32ae605401c45"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": true,
+    "enumValue": 169,
+    "historicalRetailEquivalent": false,
+    "laneFormulaClosed": true,
+    "retainedSpecialOccurrenceCount": 160,
+    "sourcePointerChainClosed": true,
+    "versionUpdateClosed": true
+  }
+}
