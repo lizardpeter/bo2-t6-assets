@@ -41,8 +41,12 @@ jobs:
           git add proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_VERSION_WRITE_XREFS_V1.json
           if ! git diff --cached --quiet; then
             git commit -m 'Persist worldMatrix version-write xrefs'
-            git pull --rebase origin main
-            git push origin HEAD:main
+            for attempt in 1 2 3 4; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 4
+              sleep 2
+            done
           fi
           rm -f /tmp/client/t6mp.exe
       - uses: actions/upload-artifact@v4
