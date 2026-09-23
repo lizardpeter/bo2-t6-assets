@@ -1,0 +1,57 @@
+name: T6 current client special constant direct slot xrefs v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_special_constant_direct_slot_xrefs_v1.py'
+      - 'tools/t6_current_client_fetch_exact_v1.py'
+      - 'proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json'
+      - '.github/workflows/t6_current_client_special_constant_direct_slot_xrefs_v1.yml'
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover exact current client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 tools/t6_current_client_fetch_exact_v1.py             --out-exe /tmp/client/t6mp.exe             --out-identity /tmp/client/identity.json
+      - name: Scan exact constant slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json
+          rev=$(python3 -c "import json;print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])")
+          python3 tools/t6_current_client_special_constant_direct_slot_xrefs_v1.py             /tmp/client/t6mp.exe --revision "$rev"             --denominator proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json             --out proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1.json'))
+          assert d['client']['sha256']=='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          assert d['summary']['constantInputCount']==32
+          # materialColor must be rediscovered by this generic census.
+          m=next(x for x in d['rows'] if x['accessor']=='materialColor')
+          assert m['directDestinationOrRmwCount']>0
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist direct special-constant slot xrefs'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          rm -f /tmp/client/t6mp.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1.json
+          if-no-files-found: error
