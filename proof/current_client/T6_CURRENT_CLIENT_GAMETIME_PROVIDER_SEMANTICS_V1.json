@@ -1,0 +1,141 @@
+{
+  "authority": "SHA-classified current-client exact caller setup + byte-copy dataflow + exact gameTime transform",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-gametime-provider-semantics-v1",
+  "proofBoundary": "Closes current-client provider dataflow for gameTime: all six direct copy-routine callers have exact source/state setup, source record lane +4 is copied byte-for-byte to renderState+0x1A2C, and the exact four-lane gameTime transform/version update is proven. The human semantic name, physical units and cadence of source lane +4 remain intentionally unknown; current-client provider closure here means executable dataflow is sufficient to reproduce the input from the same source record, not that those physical semantics or historical-retail equivalence are known.",
+  "providerTransform": {
+    "floor": "floor(T), implemented by signed 2^23 float32 rounding plus conditional 1.0 correction",
+    "fraction": "f = T - floor(T)",
+    "lanes": [
+      {
+        "expression": "sin(theta)",
+        "lane": 0,
+        "x87": "second fstp after fsincos"
+      },
+      {
+        "expression": "cos(theta)",
+        "lane": 1,
+        "x87": "first fstp after fsincos"
+      },
+      {
+        "expression": "f",
+        "lane": 2
+      },
+      {
+        "expression": "T",
+        "lane": 3
+      }
+    ],
+    "phase": "theta = float32(f * 6.2831854820251465)",
+    "version": "uint16 version slot at 0x03A38312 increments before value stores"
+  },
+  "runtimeInput": {
+    "accessor": "gameTime",
+    "enumSymbol": "CONST_SRC_CODE_GAMETIME",
+    "enumValue": 25,
+    "retainedSpecialOccurrences": 363,
+    "sourceClass": "constant",
+    "valueVas": [
+      "0x03a37490",
+      "0x03a37494",
+      "0x03a37498",
+      "0x03a3749c"
+    ],
+    "versionVa": "0x03a38312"
+  },
+  "sourceRecordContract": {
+    "callerCount": 6,
+    "callers": [
+      {
+        "callVa": "0x00732479",
+        "sourceBaseRegister": "edi",
+        "sourceKind": "scene-record+0x180",
+        "sourceSetupVa": "0x00732468",
+        "stateKind": "global-render-state",
+        "stateSetupVa": "0x0073246e"
+      },
+      {
+        "callVa": "0x00732c00",
+        "sourceBaseRegister": "edi",
+        "sourceKind": "scene-record+0x180",
+        "sourceSetupVa": "0x00732bf5",
+        "stateKind": "global-render-state",
+        "stateSetupVa": "0x00732bfb"
+      },
+      {
+        "callVa": "0x00733164",
+        "sourceBaseRegister": "edi",
+        "sourceKind": "scene-record+0x180",
+        "sourceSetupVa": "0x00733159",
+        "stateKind": "global-render-state",
+        "stateSetupVa": "0x0073315f"
+      },
+      {
+        "callVa": "0x00733729",
+        "sourceBaseRegister": "ebp",
+        "sourceKind": "scene-record+0x180",
+        "sourceSetupVa": "0x0073371e",
+        "stateKind": "global-render-state",
+        "stateSetupVa": "0x00733724"
+      },
+      {
+        "callVa": "0x00745c41",
+        "sourceBaseRegister": "eax-from-[esi]",
+        "sourceKind": "command-record+4",
+        "sourceSetupVa": "0x00745c39",
+        "stateKind": "global-render-state",
+        "stateSetupVa": "0x00745c3c"
+      },
+      {
+        "callVa": "0x00773f89",
+        "sourceBaseRegister": "ebx",
+        "sourceKind": "scene-record+0x180",
+        "sourceSetupVa": "0x00773f79",
+        "stateKind": "caller-supplied-render-state",
+        "stateSetupVa": "0x00773f7f"
+      }
+    ],
+    "copyRoutineInputRegister": "eax",
+    "copyRoutineVa": "0x0076f7e0",
+    "physicalSemanticName": "unresolved",
+    "physicalUnits": "unresolved",
+    "renderStateRegister": "edx",
+    "scalarTRenderStateOffset": 6700,
+    "scalarTSourceOffset": 4,
+    "sourceRecordBytes": 20,
+    "updateCadence": "unresolved"
+  },
+  "sources": {
+    "callers": {
+      "format": "t6-current-client-gametime-source-object-callers-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_SOURCE_OBJECT_CALLERS_V1.json",
+      "sha256": "bf4d0be2bc01f1682d445180d2ce1613a3e7be2cef2b3985e70defb3e3c3c9d0"
+    },
+    "stateCopy": {
+      "format": "t6-current-client-gametime-state-copy-probe-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_STATE_COPY_PROBE_V1.json",
+      "sha256": "f50f51449c375805c6477300895234817e9f9db44a6ed90d7b9f5b749196406f"
+    },
+    "transform": {
+      "format": "t6-current-client-gametime-transform-semantics-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_TRANSFORM_SEMANTICS_V1.json",
+      "sha256": "bee43cfdcbc21b4190ad2e1827a10bdafd42dea61cb7aea6845429a14aea85ad"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": true,
+    "currentClientTransformClosed": true,
+    "enumValue": 25,
+    "exactCallerCount": 6,
+    "historicalRetailEquivalent": false,
+    "physicalUnitsClosed": false,
+    "retainedSpecialOccurrenceCount": 363,
+    "sourceRecordContractClosed": true,
+    "sourceScalarProviderDataflowClosed": true
+  }
+}
