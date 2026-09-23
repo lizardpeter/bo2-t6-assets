@@ -35,6 +35,7 @@ def pe(raw):
     return ib,secs
 def row(i):return {"address":f"0x{i.address:08x}","bytes":i.bytes.hex(),"mnemonic":i.mnemonic,"opStr":i.op_str}
 def push11(i):
+    if i.id==0:return False
     return i.mnemonic=="push" and len(i.operands)==1 and i.operands[0].type==X86_OP_IMM and int(i.operands[0].imm)==11
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("exe",type=Path);ap.add_argument("--revision",required=True);ap.add_argument("--out",type=Path,required=True);a=ap.parse_args()
@@ -42,9 +43,10 @@ def main():
     ib,secs=pe(raw);candidates=[]
     for s in secs:
         if not s["exec"]:continue
-        md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True
+        md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
         ins=list(md.disasm(raw[s["rawOffset"]:s["rawOffset"]+s["rawSize"]],s["va"]))
         for n,i in enumerate(ins):
+            if i.id==0:continue
             if i.mnemonic!="call" or len(i.operands)!=1 or i.operands[0].type!=X86_OP_IMM:continue
             if not any(push11(z) for z in ins[max(0,n-5):n]):continue
             # Track EAX aliases created immediately after return.
