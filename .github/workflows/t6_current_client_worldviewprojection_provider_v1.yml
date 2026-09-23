@@ -1,0 +1,42 @@
+name: T6 current client worldViewProjectionMatrix provider v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_derived_matrix_provider_semantics_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_BASE_HELPER_CORPUS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_MATH_HELPER_PROBE_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json'
+      - 'proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json'
+      - '.github/workflows/t6_current_client_worldviewprojection_provider_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove worldViewProjectionMatrix
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_derived_matrix_provider_semantics_v1.py             --accessor worldViewProjectionMatrix             --denominator proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json             --corpus proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_BASE_HELPER_CORPUS_V1.json             --math proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_MATH_HELPER_PROBE_V1.json             --viewprojection proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json             --out proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json'))
+          s=d['summary']; assert s['currentClientProviderClosed'] is True and s['enumValue']==231 and s['baseIndex']==20
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact worldViewProjectionMatrix provider'
+            for attempt in 1 2 3 4; do git pull --rebase origin main; if git push origin HEAD:main; then break; fi; test "$attempt" -lt 4; sleep 2; done
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json
+          if-no-files-found: error
