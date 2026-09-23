@@ -1,0 +1,44 @@
+name: T6 current client postFxControl0-3 writer clusters v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_postfx_control0_3_writer_clusters_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_5_XREFS_V1.json'
+      - '.github/workflows/t6_current_client_postfx_control0_3_writer_clusters_v1.yml'
+permissions:
+  contents: write
+jobs:
+  compact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compact direct writer xrefs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/current_client
+          python3 tools/t6_current_client_postfx_control0_3_writer_clusters_v1.py             --xrefs proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_5_XREFS_V1.json             --out proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_3_WRITER_CLUSTERS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_3_WRITER_CLUSTERS_V1.json'))
+          assert d['summary']['unboundedXrefCount']==0
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_3_WRITER_CLUSTERS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist compact postFxControl0-3 writer clusters'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_POSTFX_CONTROL0_3_WRITER_CLUSTERS_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL0_3_WRITER_CLUSTERS_V1.json
+          if-no-files-found: error
+          compression-level: 9
