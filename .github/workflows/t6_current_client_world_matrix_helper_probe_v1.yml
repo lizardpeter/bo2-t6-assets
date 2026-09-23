@@ -1,0 +1,58 @@
+name: T6 current client worldMatrix helper probes v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_world_matrix_helper_probe_v1.py'
+      - 'tools/t6_current_client_fetch_exact_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_WRITER_FUNCTIONS_V2.json'
+      - '.github/workflows/t6_current_client_world_matrix_helper_probe_v1.yml'
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover exact current client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 tools/t6_current_client_fetch_exact_v1.py --out-exe /tmp/client/t6mp.exe --out-identity /tmp/client/identity.json
+      - name: Probe exact worldMatrix helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_WRITER_FUNCTIONS_V2.json
+          rev=$(python3 -c "import json;print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])")
+          python3 tools/t6_current_client_world_matrix_helper_probe_v1.py /tmp/client/t6mp.exe --revision "$rev" --out proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1.json'))
+          assert set(d['helpers'])=={'placementBasisHelper','matrixConstructHelper'}
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist exact worldMatrix helper probes'
+            for attempt in 1 2 3 4; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 4
+              sleep 2
+            done
+          fi
+          rm -f /tmp/client/t6mp.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1.json
+          if-no-files-found: error
+          compression-level: 9
