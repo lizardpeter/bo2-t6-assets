@@ -239,33 +239,12 @@
       "accessor": "materialColor",
       "enumSymbol": "CONST_SRC_CODE_MATERIAL_COLOR",
       "enumValue": 46,
-      "hits": [
-        {
-          "context": {
-            "endLine": 2196,
-            "startLine": 2190,
-            "text": "\tcmd = (GfxCmdSetMaterialColor*)execState->cmd;\n\tfor (i = 0; i < 3; ++i)\n\t{\n\t\tgfxCmdBufSourceState.input.consts[46].v[i] = cmd->color.v[i];\n\t}\n\t++gfxCmdBufSourceState.constVersions[46];\n\n"
-          },
-          "kind": "constValue",
-          "line": 2193,
-          "path": "src/code/src_noserver/gfx_d3d/rb_backend.cpp"
-        },
-        {
-          "context": {
-            "endLine": 2198,
-            "startLine": 2192,
-            "text": "\t{\n\t\tgfxCmdBufSourceState.input.consts[46].v[i] = cmd->color.v[i];\n\t}\n\t++gfxCmdBufSourceState.constVersions[46];\n\n\texecState->cmd = (char*)execState->cmd + *(unsigned short*)execState->cmd;\n}\n"
-          },
-          "kind": "constVersion",
-          "line": 2195,
-          "path": "src/code/src_noserver/gfx_d3d/rb_backend.cpp"
-        }
-      ],
-      "lineageStatus": "concrete-numeric-use",
-      "locatorHitCount": 2,
+      "hits": [],
+      "lineageStatus": "no-numeric-use-in-pinned-source",
+      "locatorHitCount": 0,
       "locatorHitCountsByKind": {
-        "constValue": 1,
-        "constVersion": 1
+        "constValue": 0,
+        "constVersion": 0
       },
       "occurrenceCount": 17,
       "sourceClass": "constant",
@@ -485,22 +464,11 @@
       "accessor": "worldMatrix",
       "enumSymbol": "CONST_SRC_CODE_WORLD_MATRIX",
       "enumValue": 211,
-      "hits": [
-        {
-          "context": {
-            "endLine": 29561,
-            "startLine": 29555,
-            "text": "\nstruct __declspec(align(16)) GfxCmdBufInput\n{\n  vec4_t consts[211];\n  const GfxImage *codeImages[55];\n  unsigned __int8 codeImageSamplerStates[55];\n  const GfxBackEndData *data;\n"
-          },
-          "kind": "constValue",
-          "line": 29558,
-          "path": "src/code/src_noserver/types.h"
-        }
-      ],
-      "lineageStatus": "concrete-numeric-use",
-      "locatorHitCount": 1,
+      "hits": [],
+      "lineageStatus": "no-numeric-use-in-pinned-source",
+      "locatorHitCount": 0,
       "locatorHitCountsByKind": {
-        "constValue": 1,
+        "constValue": 0,
         "constVersion": 0
       },
       "occurrenceCount": 581,
@@ -554,42 +522,11 @@
       "accessor": "floatZSampler",
       "enumSymbol": "TEXTURE_SRC_CODE_FLOATZ",
       "enumValue": 18,
-      "hits": [
-        {
-          "context": {
-            "endLine": 574,
-            "startLine": 568,
-            "text": "\tProg = Image_GetProg(11);\n\n\tassert(context.source);\n\tcontext.source->input.codeImages[18] = Prog;\n\tcontext.source->input.codeImageSamplerStates[18] = 97;\n\n\tswitch (dx.multiSampleType)\n"
-          },
-          "kind": "codeImage",
-          "line": 571,
-          "path": "src/code/src_noserver/gfx_d3d/rb_backend.cpp"
-        },
-        {
-          "context": {
-            "endLine": 608,
-            "startLine": 602,
-            "text": "\tGfxImage* image = gfxRenderTargets[8].image;\n\tif (!source)\n\t{\n\t\tassertCont(source, context.source->input.codeImages[18] = image);\n\t\tsource = 0;\n\t}\n\tsource->input.codeImages[18] = image;\n"
-          },
-          "kind": "codeImage",
-          "line": 605,
-          "path": "src/code/src_noserver/gfx_d3d/rb_backend.cpp"
-        },
-        {
-          "context": {
-            "endLine": 611,
-            "startLine": 605,
-            "text": "\t\tassertCont(source, context.source->input.codeImages[18] = image);\n\t\tsource = 0;\n\t}\n\tsource->input.codeImages[18] = image;\n}\n\n/*\n"
-          },
-          "kind": "codeImage",
-          "line": 608,
-          "path": "src/code/src_noserver/gfx_d3d/rb_backend.cpp"
-        }
-      ],
-      "lineageStatus": "concrete-numeric-use",
-      "locatorHitCount": 3,
+      "hits": [],
+      "lineageStatus": "no-numeric-use-in-pinned-source",
+      "locatorHitCount": 0,
       "locatorHitCountsByKind": {
-        "codeImage": 3
+        "codeImage": 0
       },
       "occurrenceCount": 23,
       "sourceClass": "sampler",
@@ -625,12 +562,12 @@
     }
   ],
   "summary": {
-    "accessorsWithConcreteNumericUse": 3,
-    "accessorsWithoutConcreteNumericUse": 34,
-    "constantAccessorsWithValueWriteLocator": 2,
-    "constantAccessorsWithVersionWriteLocator": 1,
+    "accessorsWithConcreteNumericUse": 0,
+    "accessorsWithoutConcreteNumericUse": 37,
+    "constantAccessorsWithValueWriteLocator": 0,
+    "constantAccessorsWithVersionWriteLocator": 0,
     "runtimeInputAccessorCount": 37,
-    "samplerAccessorsWithCodeImageLocator": 1,
-    "totalNumericLocatorHitCount": 6
+    "samplerAccessorsWithCodeImageLocator": 0,
+    "totalNumericLocatorHitCount": 0
   }
 }
