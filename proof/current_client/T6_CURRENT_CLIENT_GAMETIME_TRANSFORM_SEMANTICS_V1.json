@@ -1,0 +1,71 @@
+{
+  "authority": "SHA-classified current-client exact arithmetic bytes/constants + exact gameTime enum-25 slot writes",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-gametime-transform-semantics-v1",
+  "proofBoundary": "Closes only the SHA-classified current-client transformation from scalar T at 0x03A3852C to gameTime lanes/version. The producer, units, update cadence and draw-time value of T remain unresolved, so the overall runtime provider is intentionally not marked closed. Historical-retail executable equivalence is also unproven.",
+  "runtimeInput": {
+    "accessor": "gameTime",
+    "enumSymbol": "CONST_SRC_CODE_GAMETIME",
+    "enumValue": 25,
+    "totalOccurrences": 363,
+    "valueVas": [
+      "0x03a37490",
+      "0x03a37494",
+      "0x03a37498",
+      "0x03a3749c"
+    ],
+    "versionVa": "0x03a38312"
+  },
+  "sourceScalar": {
+    "providerStatus": "unresolved",
+    "symbolicName": "T",
+    "va": "0x03a3852c"
+  },
+  "sources": {
+    "arithmetic": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_ARITHMETIC_PROBE_V1.json",
+      "sha256": "6b031a20bef262a0cf153af6c68aaf5113b2da7a5bc1e27b334a4d7d6cc4b862"
+    },
+    "writes": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_WRITE_CLUSTER_V1.json",
+      "sha256": "d5d9ea5f3b978197466a5f2f40f6ae54df069ca90fc822619bba204c8053bfe7"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": false,
+    "currentClientTransformClosed": true,
+    "retainedSpecialOccurrenceCount": 363,
+    "sourceScalarProviderClosed": false
+  },
+  "transform": {
+    "floor": "floor(T), implemented by signed 2^23 float32 rounding plus conditional 1.0 correction",
+    "fraction": "f = T - floor(T)",
+    "lanes": [
+      {
+        "expression": "sin(theta)",
+        "lane": 0,
+        "x87": "second fstp after fsincos"
+      },
+      {
+        "expression": "cos(theta)",
+        "lane": 1,
+        "x87": "first fstp after fsincos"
+      },
+      {
+        "expression": "f",
+        "lane": 2
+      },
+      {
+        "expression": "T",
+        "lane": 3
+      }
+    ],
+    "phase": "theta = float32(f * 6.2831854820251465)",
+    "version": "uint16 version slot at 0x03A38312 increments before value stores"
+  }
+}
