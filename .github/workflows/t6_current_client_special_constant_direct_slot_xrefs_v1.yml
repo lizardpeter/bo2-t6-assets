@@ -35,7 +35,8 @@ jobs:
           import json
           d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_SPECIAL_CONSTANT_DIRECT_SLOT_XREFS_V1.json'))
           assert d['client']['sha256']=='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
-          assert d['summary']['constantInputCount']==32
+          assert d['summary']['constantInputCount']==29
+          assert d['summary']['matrixInputExcludedCount']==3
           # materialColor must be rediscovered by this generic census.
           m=next(x for x in d['rows'] if x['accessor']=='materialColor')
           assert m['directDestinationOrRmwCount']>0
