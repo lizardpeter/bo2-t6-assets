@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'tools/t6_current_client_u16_version_cluster_locator_v1.py'
+      - 'tools/t6_current_client_fetch_exact_v1.py'
       - '.github/workflows/t6_current_client_u16_version_cluster_locator_v1.yml'
 permissions:
   contents: write
@@ -14,30 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
-      - name: Recover SHA-classified current client
+      - name: Recover exact SHA-classified current client
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/client proof/current_client
-          python3 - <<'PY'
-          import hashlib,json,urllib.request
-          from pathlib import Path
-          eps=['https://cdn.plutoniummod.com/updater/prod/info.json','https://cdn.plutonium.pw/updater/prod/info.json']
-          def get(u):
-              q=urllib.request.Request(u,headers={'User-Agent':'bo2-t6-assets-u16-version-cluster/1'})
-              with urllib.request.urlopen(q,timeout=180) as r:return r.read()
-          info=None
-          for ep in eps:
-              try:info=json.loads(get(ep));break
-              except Exception:pass
-          if info is None:raise SystemExit('no CDN info')
-          rows=[x for x in info['files'] if x.get('name','').replace('\\','/').lower()=='games/t6mp.exe']
-          if len(rows)!=1:raise SystemExit(f'expected one t6mp.exe row, got {len(rows)}')
-          rec=rows[0];raw=get(info['baseUrl']+rec['hash']);sha=hashlib.sha256(raw).hexdigest()
-          if str(info.get('revision'))!='5346' or sha!='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf':
-              raise SystemExit(f'classified client changed revision={info.get("revision")} sha={sha}')
-          Path('/tmp/client/t6mp.exe').write_bytes(raw);Path('/tmp/client/revision').write_text(str(info['revision']))
-          PY
+          python3 tools/t6_current_client_fetch_exact_v1.py \
+            --out-exe /tmp/client/t6mp.exe \
+            --out-identity /tmp/client/identity.json
+
       - name: Locate dense uint16 plus-one clusters
         shell: bash
         run: |
