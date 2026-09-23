@@ -1,0 +1,81 @@
+{
+  "authority": "SHA-classified current-client exact render-command table + exact RC_SET_CUSTOM_CONSTANT handler dataflow",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "command": {
+    "handlerVa": "0x00745b70",
+    "id": 1,
+    "name": "RC_SET_CUSTOM_CONSTANT",
+    "recordLayout": {
+      "byteCount": {
+        "meaning": "record byte size used to advance execState->cmd",
+        "offset": 0,
+        "type": "uint16"
+      },
+      "enum": {
+        "meaning": "T6 code-constant enum index",
+        "offset": 4,
+        "type": "uint32"
+      },
+      "value0": {
+        "offset": 8,
+        "type": "float32"
+      },
+      "value1": {
+        "offset": 12,
+        "type": "float32"
+      },
+      "value2": {
+        "offset": 16,
+        "type": "float32"
+      },
+      "value3": {
+        "offset": 20,
+        "type": "float32"
+      }
+    }
+  },
+  "format": "t6-current-client-rc-set-custom-constant-handler-semantics-v1",
+  "proofBoundary": "Closes the SHA-classified current-client backend semantics of RC_SET_CUSTOM_CONSTANT exactly. It proves how any received command enum/value record updates generic code-constant storage and versioning. It does not prove that a particular retained-special accessor is actually emitted by a front-end command producer; individual enum usage must be joined independently before that accessor is promoted to provider-closed. Historical-retail executable equivalence is also unproven.",
+  "sources": {
+    "commandTable": {
+      "format": "t6-current-client-render-command-table-locator-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_RENDER_COMMAND_TABLE_LOCATOR_V1.json",
+      "sha256": "0db3fa7c45401f40832259e3410807d0ecbc43b1b7d2b7b2a7a16cfdb777ef7f"
+    },
+    "handlerProbe": {
+      "format": "t6-current-client-custom-constant-and-material-color-handlers-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CUSTOM_CONSTANT_MATERIAL_COLOR_PROBE_V1.json",
+      "sha256": "3c8d5917831c7fe6f7801ea7100a1af9892d88634e220974bad15b0200797bfc"
+    }
+  },
+  "storageContract": {
+    "formula": {
+      "advance": "execState->cmd += uint16(record+0)",
+      "value[0]": "float32(record+8) -> *(0x03A37300 + enum*16 + 0)",
+      "value[1]": "float32(record+12) -> *(0x03A37300 + enum*16 + 4)",
+      "value[2]": "float32(record+16) -> *(0x03A37300 + enum*16 + 8)",
+      "value[3]": "float32(record+20) -> *(0x03A37300 + enum*16 + 12)",
+      "version": "uint16 *(0x03A382E0 + enum*2) += 1"
+    },
+    "valueBaseVa": "0x03a37300",
+    "valueStridePerEnum": 16,
+    "versionBaseVa": "0x03a382e0",
+    "versionStridePerEnum": 2
+  },
+  "summary": {
+    "commandAdvanceClosed": true,
+    "commandId": 1,
+    "currentClientBackendHandlerClosed": true,
+    "genericValueStorageClosed": true,
+    "genericVersionStorageClosed": true,
+    "handlerAddressClosed": true,
+    "historicalRetailEquivalent": false,
+    "individualEnumProducerUsageClosed": false,
+    "recordLayoutClosed": true
+  }
+}
