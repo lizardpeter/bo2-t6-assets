@@ -53,7 +53,7 @@ def main():
         counts[acc]={"writerCount":len(oo),
                      "immediateWriterCount":sum(x["storedOperandKind"]=="immediate" for x in oo),
                      "registerWriterCount":sum(x["storedOperandKind"]=="register" for x in oo),
-                     "registerWriterWithVisibleDefinitionCount":sum(x["storedOperandKind"]=="register" and x["nearestStoredRegisterDefinition"] for x in oo)}
+                     "registerWriterWithVisibleDefinitionCount":sum(bool(x["storedOperandKind"]=="register" and x["nearestStoredRegisterDefinition"]) for x in oo)}
     out={"format":FORMAT,"authority":"deterministic compact projection of exhaustive exact sampler-state byte-overlap writer census",
       "source":{"path":str(a.source),"sha256":sha(a.source),"format":d["format"]},
       "summary":counts,"rows":out_rows,
