@@ -130,6 +130,18 @@ REGISTRY={
    "format":"t6-current-client-light-block-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
    "runtimeInputsList":True,
+ },
+ "shadowmapSamplerSpot":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_SHADOW_SPOT_ATTENUATION_SAMPLER_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-shadow-spot-attenuation-sampler-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+   "runtimeInputsList":True,
+ },
+ "attenuationSampler":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_SHADOW_SPOT_ATTENUATION_SAMPLER_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-shadow-spot-attenuation-sampler-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+   "runtimeInputsList":True,
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
