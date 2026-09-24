@@ -73,7 +73,13 @@ def main():
         if not p.is_file():raise SystemExit(f"{acc}: registered provider proof missing: {p}")
         proof=json.loads(p.read_text())
         if proof.get("format")!=reg["format"]:raise SystemExit(f"{acc}: provider proof format drift")
-        r=proof.get("runtimeInput",{})
+        if reg.get("runtimeInputsList"):
+          members=[x for x in proof.get("runtimeInputs",[]) if x.get("accessor")==acc]
+          if len(members)!=1:
+            raise SystemExit(f"{acc}: provider family member count {len(members)}")
+          r=members[0]
+        else:
+          r=proof.get("runtimeInput",{})
         if r.get("accessor")!=acc or int(r.get("enumValue",-1))!=int(src["enumValue"]):
           raise SystemExit(f"{acc}: provider proof identity mismatch")
         if proof.get("summary",{}).get(reg["summaryFlag"]) is not True:
