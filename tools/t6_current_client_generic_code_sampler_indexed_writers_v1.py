@@ -56,8 +56,8 @@ def main():
       "indexedOrDirectWriterInstructionCount":len(hits),
       "codeImagesWriterInstructionCount":sum(h["array"]=="codeImages" for h in hits),
       "samplerStatesWriterInstructionCount":sum(h["array"]=="codeImageSamplerStates" for h in hits),
-      "indexedCodeImagesWriterCount":sum(h["array"]=="codeImages" and h["memory"]["indexReg"] for h in hits),
-      "indexedSamplerStatesWriterCount":sum(h["array"]=="codeImageSamplerStates" and h["memory"]["indexReg"] for h in hits),
+      "indexedCodeImagesWriterCount":sum(h["array"]=="codeImages" and h["memory"]["indexReg"] is not None for h in hits),
+      "indexedSamplerStatesWriterCount":sum(h["array"]=="codeImageSamplerStates" and h["memory"]["indexReg"] is not None for h in hits),
     }
     doc={"format":FORMAT,"authority":"SHA-classified current-client exact decoded destination operands",
       "client":{"revision":a.revision,"bytes":len(raw),"sha256":dg,"imageBaseHex":f"0x{ib:08x}"},
