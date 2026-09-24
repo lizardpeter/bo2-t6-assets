@@ -1,0 +1,60 @@
+{
+  "authority": "SHA-classified current-client exact pointer-table initialization topology + independently proven source-state field/array offsets",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "contradictions": {
+    "allExceedEntryStride": true,
+    "pointedEntryStride": 10232,
+    "subobjectPlusCodeImagesBase": 10456,
+    "subobjectPlusGameTimeRequiredEnd": 11748,
+    "subobjectPlusSamplerStatesBase": 10676
+  },
+  "format": "t6-current-client-shadow-config-source-state-alias-disproof-v1",
+  "independentSourceStateMinimums": {
+    "codeImageSamplerStatesBaseOffset": 5644,
+    "codeImagesBaseOffset": 5424,
+    "gameTimeCopyHighestExclusiveOffset": 6716
+  },
+  "pointerTopology": {
+    "indexedEntryFormula": "0x02FB8488 + index*0x27F8",
+    "outerIndexStride": 165088,
+    "pointedEntryBaseVaIndex0": "0x02fb8488",
+    "pointedEntryStride": 10232,
+    "pointerTableBaseVa": "0x02fb838c",
+    "shadowConfigSubobjectFormula": "(0x02FB8488 + index*0x27F8) + 0x13A8",
+    "shadowConfigSubobjectOffset": 5032
+  },
+  "proofBoundary": "This is a negative identity proof. It proves that the per-index object reached through 0x02FB838C, specifically its +0x13A8 shadow-config subobject, cannot be the full current-client code-source-state base because independently proven source-state members would exceed the exact 0x27F8 pointed-entry stride. It does not identify the human type of the 0x27F8 object or locate the true enum37/38 provider by itself.",
+  "sources": {
+    "codeSamplerArrays": {
+      "format": "t6-current-client-code-pixel-sampler-array-semantics-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json",
+      "sha256": "0633f8495cbf496910bdd8a1654ead0ebbb11cbf5b1cd1d6e1a1c84e812f4d15"
+    },
+    "gameTimeState": {
+      "format": "t6-current-client-gametime-state-copy-probe-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_GAMETIME_STATE_COPY_PROBE_V1.json",
+      "sha256": "f50f51449c375805c6477300895234817e9f9db44a6ed90d7b9f5b749196406f"
+    },
+    "pointerXrefs": {
+      "format": "t6-current-client-shadow-config-pointer-table-xrefs-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_POINTER_TABLE_XREFS_V1.json",
+      "sha256": "058fcdb3b84851612a0ec3a02f252123998ed4df0c121498cf3cff4a59ddbb61"
+    },
+    "shadowObject": {
+      "format": "t6-current-client-shadow-config-object-provenance-probe-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_OBJECT_PROVENANCE_PROBE_V1.json",
+      "sha256": "f8fbd0c69c3483167b99e6ea6dedfa221dd75919780bbec069b5e68ea23d09ce"
+    }
+  },
+  "summary": {
+    "enum37Enum38ProviderPromotionFrom00497450Forbidden": true,
+    "offsetAliasDisproved": true,
+    "pointerEntryTopologyClosed": true,
+    "shadowConfigPlus13A8IsCodeSourceState": false
+  }
+}
