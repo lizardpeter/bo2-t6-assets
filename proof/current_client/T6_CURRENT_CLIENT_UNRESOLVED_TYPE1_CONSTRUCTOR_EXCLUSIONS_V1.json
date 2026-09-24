@@ -1,0 +1,42 @@
+{
+  "authority": "exact candidate bodies joined against the independently proven current-client type-1 runtime-record ABI",
+  "candidateSources": [
+    {
+      "format": "t6-current-client-enum37-constructor-function-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_ENUM37_CONSTRUCTOR_FUNCTION_V1.json",
+      "sha256": "a5c76a7a9c2c946d63b7542c1a24e1fb370cf37b208b4ea8e3d114c8075cac64"
+    },
+    {
+      "format": "t6-current-client-enum60-constructor-function-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_ENUM60_CONSTRUCTOR_FUNCTION_V1.json",
+      "sha256": "2da9119e7cb33fffbf815d7157c5cce00f537d60aae2bb6a397174d395f0f86b"
+    }
+  ],
+  "exclusions": [
+    {
+      "accessor": "shadowmapSwitchPartition",
+      "candidateVa": "0x004af867",
+      "enumValue": 37,
+      "reason": "freelist queue node: allocator resets dword +0/+4, constructor stores enum-like tag at +4 and one payload dword at +8, then consumer enqueues the pointer into a 1024-entry ring; no type-1 size/type header or four-lane payload exists",
+      "type1RecordCandidate": false
+    },
+    {
+      "accessor": "spotShadowmapPixelAdjust",
+      "candidateVa": "0x00736c7c",
+      "enumValue": 60,
+      "reason": "configuration/result object: dword +0 is forced zero (therefore uint16 size/type header is zero), byte +8 is a mode flag, value words extend through +0x18, and +0x1C/+0x20 are separate subobjects; layout contradicts the proven type-1 ABI",
+      "type1RecordCandidate": false
+    }
+  ],
+  "format": "t6-current-client-unresolved-type1-constructor-exclusions-v1",
+  "proofBoundary": "Hard negative classification for these two specific +4 immediate candidates only. It does not prove the unresolved runtime inputs lack dynamically built type-1 records elsewhere; upstream table-copy/record-construction paths remain the search frontier.",
+  "summary": {
+    "excludedCandidateCount": 2,
+    "remainingPromotedCandidateCount": 0
+  },
+  "type1Source": {
+    "format": "t6-current-client-generic-code-constant-type1-dispatch-join-v1",
+    "path": "proof/current_client/T6_CURRENT_CLIENT_GENERIC_CODE_CONSTANT_TYPE1_DISPATCH_JOIN_V1.json",
+    "sha256": "096243db0cb6c9d37330313e2bfc0f48baea0504d7dc509183c45ee00c9c0d7f"
+  }
+}
