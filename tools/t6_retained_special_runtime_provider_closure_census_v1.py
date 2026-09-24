@@ -43,6 +43,16 @@ REGISTRY={
    "path":"proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json",
    "format":"t6-current-client-viewprojection-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
+ },
+ "worldViewProjectionMatrix":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-worldviewprojection-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+ },
+ "shadowLookupMatrix":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_SHADOWLOOKUP_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-shadowlookup-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
