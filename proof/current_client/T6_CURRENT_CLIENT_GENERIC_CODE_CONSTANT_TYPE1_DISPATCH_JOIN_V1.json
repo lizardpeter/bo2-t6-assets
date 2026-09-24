@@ -1,0 +1,35 @@
+{
+  "authority": "exact join of current-client indirect type dispatch and generic code-constant setter semantics",
+  "dispatcher": {
+    "callSiteVa": "0x00749F74",
+    "handlerFormula": "uint32(0x00D27E70 + typeByte*4)",
+    "handlerTableBase": "0x00D27E70",
+    "recordCursorLocal": "[esp+8]",
+    "type1Handler": "0x00745B70",
+    "typeByte": "uint8(runtimeRecord+0x02)",
+    "wrapperArgument": "address of local runtimeRecord cursor"
+  },
+  "format": "t6-current-client-generic-code-constant-type1-dispatch-join-v1",
+  "proofBoundary": "Closes the generic current-client type-1 runtime-record dispatch and setter contract. It does not prove that a particular code-constant enum is supplied by a type-1 record on a given render path; per-enum reachability/provider ownership remains a separate gate.",
+  "sources": {
+    "dispatchSha256": "5f5ef37166dd2a77453f016513b95f3f5f67af6a08798cc07803e2105881272c",
+    "setterSha256": "04faf15cb64a765aa2bee0e4c47ef706bb92b7fd289b53b9df39ae090833b051"
+  },
+  "summary": {
+    "genericCodeConstantRecordProviderClosed": true,
+    "handlerTableIndex": 1,
+    "type1DispatchClosed": true
+  },
+  "type1Record": {
+    "advance": "runtimeRecord += uint16(runtimeRecord+0x00)",
+    "destination": "0x03A37300 + enumValue*16",
+    "enumValue": "uint32(runtimeRecord+0x04)",
+    "lanes": [
+      "float32(runtimeRecord+0x08)",
+      "float32(runtimeRecord+0x0C)",
+      "float32(runtimeRecord+0x10)",
+      "float32(runtimeRecord+0x14)"
+    ],
+    "version": "uint16[0x03A382E0 + enumValue*2] += 1"
+  }
+}
