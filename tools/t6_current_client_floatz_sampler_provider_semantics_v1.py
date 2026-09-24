@@ -42,7 +42,17 @@ def main():
     denrows=[r for r in den["rows"] if r["accessor"]==ACC]
     if len(denrows)!=1 or int(denrows[0]["enumValue"])!=ENUM or denrows[0]["sourceClass"]!="sampler":
         raise SystemExit("denominator identity drift")
-    h0=find_hit(x,"0x00741a16");m=insmap(h0)
+    # Union every exact xref window attributed to the same decoded function so
+    # terminal branches outside the first hit's local context remain evidence-backed.
+    fh=[h for h in x["hits"] if h.get("diagnosticFunctionStartVa")=="0x00741910"]
+    if not fh: raise SystemExit("floatZ function evidence absent")
+    m={}
+    for h in fh:
+        for z in h["contextBefore"]+[h["instruction"]]+h["contextAfter"]:
+            prev=m.get(z["address"])
+            if prev is not None and prev!=z:
+                raise SystemExit(f"{z['address']}: conflicting decoded instruction evidence")
+            m[z["address"]]=z
     gate(m,"0x00741a10","mov","eax, dword ptr [ebp + 8]")
     gate(m,"0x00741a16","mov","dword ptr [eax + 0x1578], 0x3a24df8")
     gate(m,"0x00741a20","mov","edx, dword ptr [ebp + 8]")
