@@ -34,8 +34,8 @@ jobs:
           rows=[x for x in info['files'] if x.get('name','').replace('\\','/').lower()=='games/t6mp.exe']
           if len(rows)!=1: raise SystemExit(f'expected one t6mp.exe row, got {len(rows)}')
           rec=rows[0]; raw=get(info['baseUrl']+rec['hash']); sha=hashlib.sha256(raw).hexdigest()
-          if str(info.get('revision'))!='5346' or sha!='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf':
-              raise SystemExit(f'classified client changed revision={info.get("revision")} sha={sha}')
+          if sha!='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf':
+              raise SystemExit(f'classified client bytes changed revision={info.get("revision")} sha={sha}')
           Path('/tmp/client/t6mp.exe').write_bytes(raw); Path('/tmp/client/revision').write_text(str(info['revision']))
           PY
       - name: Persist focused live-writer proof
