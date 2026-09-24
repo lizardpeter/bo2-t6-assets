@@ -1,0 +1,69 @@
+{
+  "authority": "joined exact current-client slot-6 writer denominator and value/range proofs",
+  "format": "t6-current-client-shadowmap-sampler-sun-all-writer-state-byte-semantics-v1",
+  "geometry": {
+    "byteIndex": 2,
+    "packedDwordOffset": 5648,
+    "samplerStateArrayOffset": 5644,
+    "slotIndex": 6,
+    "targetByteOffset": 5650
+  },
+  "proofBoundary": "Closes the current-client slot-6 sampler-state byte across the frozen decoded writer denominator. Image-resource identity, byte-to-API sampler interpretation, historical executable equivalence and final-frame effects remain separate gates.",
+  "sources": {
+    "ediSha256": "39b34856160ade7c15c13707620b98aa1880a08b768e23ec8b1598aa5f73945a",
+    "initializerSha256": "b0406274d0f7ff7688bef6ca9e4662ea3cfab610f206ac6472af3cadf96492c5",
+    "overlapSha256": "e86add9cc240d7b12a8b23126234c6ec0c80ae056fbc8549908388b277af6e51",
+    "sourcesSha256": "0ae60c22eb76cb22af6f59d06ff470816847b1a4d454e5ae670222d9c75c9534"
+  },
+  "summary": {
+    "allDecodedWritersForceTargetByteZero": true,
+    "currentClientSamplerStateByteClosed": true,
+    "finalSamplerStateByteValue": 0,
+    "writerDenominatorComplete": true,
+    "writerInstructionCount": 7
+  },
+  "writers": [
+    {
+      "basis": "exact initializer proof",
+      "packedUpperBound": 0,
+      "targetByteValue": 0,
+      "writerVa": "0x004555a6"
+    },
+    {
+      "basis": "unsigned cap <=0x15FF",
+      "packedUpperBound": 5631,
+      "targetByteValue": 0,
+      "writerVa": "0x009a7d3f"
+    },
+    {
+      "basis": "min(EAX,0x15FB)+4",
+      "packedUpperBound": 5631,
+      "targetByteValue": 0,
+      "writerVa": "0x009a7dd3"
+    },
+    {
+      "basis": "EDI zero on writer branch; pop/ret is alternate arm",
+      "packedUpperBound": 0,
+      "targetByteValue": 0,
+      "writerVa": "0x009bcde7"
+    },
+    {
+      "basis": "EDX=0",
+      "packedUpperBound": 0,
+      "targetByteValue": 0,
+      "writerVa": "0x009bd388"
+    },
+    {
+      "basis": "ECX=1",
+      "packedUpperBound": 1,
+      "targetByteValue": 0,
+      "writerVa": "0x009c1dbb"
+    },
+    {
+      "basis": "EBX=1",
+      "packedUpperBound": 1,
+      "targetByteValue": 0,
+      "writerVa": "0x009c2a88"
+    }
+  ]
+}
