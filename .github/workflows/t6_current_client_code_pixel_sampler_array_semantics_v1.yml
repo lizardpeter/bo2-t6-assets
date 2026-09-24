@@ -1,0 +1,57 @@
+name: T6 current client code pixel sampler array semantics v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_code_pixel_sampler_array_semantics_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_CODE_IMAGE_ARRAY_LAYOUT_LOCATOR_V1.json'
+      - '.github/workflows/t6_current_client_code_pixel_sampler_array_semantics_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover exact pinned OAT source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          test "$(git -C /tmp/oat rev-parse HEAD)" = 9dca965366541504b71fa8cfb7ac049cb9b717e1
+      - name: Prove generic type-4 code-sampler arrays
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/current_client
+          python3 tools/t6_current_client_code_pixel_sampler_array_semantics_v1.py             --layout-proof proof/current_client/T6_CURRENT_CLIENT_CODE_IMAGE_ARRAY_LAYOUT_LOCATOR_V1.json             --t6-assets-header /tmp/oat/src/Common/Game/T6/T6_Assets.h             --oat-commit 9dca965366541504b71fa8cfb7ac049cb9b717e1             --out proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json'))
+          s=d['summary']
+          assert s['codePixelSamplerType']==4
+          assert s['codeSamplerUnionOffset']==8
+          assert s['genericCurrentClientConsumerCount']==2
+          assert s['codeImagesBaseOffset']==0x1530
+          assert s['codeImageSamplerStatesBaseOffset']==0x160c
+          assert s['arrayContractClosed'] is True
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist current-client code pixel sampler array semantics'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json
+          if-no-files-found: error
+          compression-level: 9
