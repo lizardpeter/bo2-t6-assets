@@ -31,6 +31,11 @@ SPECS={
 def load(p):return json.loads(Path(p).read_text())
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def byaddr(ins):return {int(x["address"],16):x for x in ins}
+def helper_entry(h):
+    if h.get("entryVa"): return h["entryVa"]
+    ins=h.get("instructions") or []
+    if not ins: raise SystemExit("helper has no entryVa or instructions")
+    return ins[0]["address"]
 def gate(m,va,mn,op):
     x=m.get(va)
     if not x or x["mnemonic"]!=mn or x["opStr"]!=op:
@@ -62,7 +67,7 @@ def prove_wvp(h,math,vp):
     for a,b,c in gates:gate(m,a,b,c)
     if vp.get("summary",{}).get("currentClientProviderClosed") is not True:
         raise SystemExit("viewProjection prerequisite not closed")
-    if math["helpers"]["matrixHelper"]["entryVa"]!="0x005866b0":raise SystemExit("matrix helper identity drift")
+    if helper_entry(math["helpers"]["matrixHelper"])!="0x005866b0":raise SystemExit("matrix helper identity drift")
     return {
       "condition":"u32(S+0x19FC) == 0x40000000",
       "worldTemp":"copy64(S+0x0000) to local W",
@@ -90,7 +95,7 @@ def prove_shadow(h,math):
       (0x00772e19,"mov","word ptr [ebx + 0x19b6], ax"),
     ]
     for a,b,c in gates:gate(m,a,b,c)
-    if math["helpers"]["vectorHelper"]["entryVa"]!="0x0064d510":raise SystemExit("vector helper identity drift")
+    if helper_entry(math["helpers"]["vectorHelper"])!="0x0064d510":raise SystemExit("vector helper identity drift")
     return {
       "initial":"Mat4(S+0x0600) = copy64(S+0x17A0)",
       "adjustment":"row3(Mat4(S+0x0600)) = Vec4(S+0x19E0) * Mat4(S+0x0600)",
