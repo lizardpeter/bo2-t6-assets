@@ -1,0 +1,103 @@
+{
+  "authority": "pinned OAT T6 serialized argument vocabulary + SHA-classified current-client generic code-sampler lookup",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-code-pixel-sampler-array-semantics-v1",
+  "pinnedSource": {
+    "commit": "9dca965366541504b71fa8cfb7ac049cb9b717e1",
+    "path": "/tmp/oat/src/Common/Game/T6/T6_Assets.h",
+    "repository": "Laupetin/OpenAssetTools",
+    "serializedArgument": {
+      "codePixelSamplerType": 4,
+      "codeSamplerUnionOffset": 8
+    },
+    "sha256": "138ab62db70118e11a33f58fdc6c02ed5bd3beab7f589829053dc1a2976fdff9"
+  },
+  "proofBoundary": "This closes the SHA-classified current client's generic code-pixel-sampler lookup contract and exact runtime array offsets. It does not identify the producer of any particular code-image slot, assign physical meaning to sampler-state byte values, or prove historical-retail executable equivalence.",
+  "runtimeContract": {
+    "codeImageSamplerStatesBaseOffset": 5644,
+    "codeImagesBaseOffset": 5424,
+    "genericConsumers": [
+      {
+        "imageRead": {
+          "address": "0x0077d758",
+          "bytes": "8bbc8130150000",
+          "mnemonic": "mov",
+          "opStr": "edi, dword ptr [ecx + eax*4 + 0x1530]"
+        },
+        "stateRead": {
+          "address": "0x0077d75f",
+          "bytes": "8a94010c160000",
+          "mnemonic": "mov",
+          "opStr": "dl, byte ptr [ecx + eax + 0x160c]"
+        },
+        "type4Gates": [
+          {
+            "address": "0x0077d73f",
+            "bytes": "66833e04",
+            "mnemonic": "cmp",
+            "opStr": "word ptr [esi], 4"
+          }
+        ],
+        "unionAdvanceCandidates": [
+          {
+            "address": "0x0077d749",
+            "bytes": "83c608",
+            "mnemonic": "add",
+            "opStr": "esi, 8"
+          }
+        ]
+      },
+      {
+        "imageRead": {
+          "address": "0x0077de62",
+          "bytes": "8bbc8630150000",
+          "mnemonic": "mov",
+          "opStr": "edi, dword ptr [esi + eax*4 + 0x1530]"
+        },
+        "stateRead": {
+          "address": "0x0077de69",
+          "bytes": "8a94060c160000",
+          "mnemonic": "mov",
+          "opStr": "dl, byte ptr [esi + eax + 0x160c]"
+        },
+        "type4Gates": [
+          {
+            "address": "0x0077de4d",
+            "bytes": "66833e04",
+            "mnemonic": "cmp",
+            "opStr": "word ptr [esi], 4"
+          }
+        ],
+        "unionAdvanceCandidates": [
+          {
+            "address": "0x0077de57",
+            "bytes": "8d4e08",
+            "mnemonic": "lea",
+            "opStr": "ecx, [esi + 8]"
+          }
+        ]
+      }
+    ],
+    "imageLookup": "source + codeSampler*4 + 0x1530",
+    "samplerStateLookup": "source + codeSampler + 0x160C"
+  },
+  "sources": {
+    "layoutProof": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_IMAGE_ARRAY_LAYOUT_LOCATOR_V1.json",
+      "sha256": "42a5dd694f600ed2786e296a8f7ac280d20e3155d3975e4da67a8bed90dcd000"
+    }
+  },
+  "summary": {
+    "arrayContractClosed": true,
+    "codeImageSamplerStatesBaseOffset": 5644,
+    "codeImagesBaseOffset": 5424,
+    "codePixelSamplerType": 4,
+    "codeSamplerUnionOffset": 8,
+    "genericCurrentClientConsumerCount": 2
+  }
+}
