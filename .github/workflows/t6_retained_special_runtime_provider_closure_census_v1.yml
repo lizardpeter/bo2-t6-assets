@@ -11,6 +11,8 @@ on:
       - 'proof/current_client/T6_CURRENT_CLIENT_SCRIPT_VECTOR0_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_POSTFX_CONTROL6_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SHADOWLOOKUP_PROVIDER_SEMANTICS_V1.json'
       - '.github/workflows/t6_retained_special_runtime_provider_closure_census_v1.yml'
 permissions:
   contents: write
@@ -30,11 +32,11 @@ jobs:
           d=json.load(open('proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json'))
           s=d['summary']
           assert s['runtimeInputAccessorCount']==37
-          assert s['currentClientProviderClosedCount']==6
-          assert s['unresolvedProviderCount']==31
-          assert s['currentClientProviderClosedOccurrenceCount']==1166
-          assert s['unresolvedProviderOccurrenceCount']==2441
-          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix'}
+          assert s['currentClientProviderClosedCount']==8
+          assert s['unresolvedProviderCount']==29
+          assert s['currentClientProviderClosedOccurrenceCount']==1244
+          assert s['unresolvedProviderOccurrenceCount']==2363
+          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix','worldViewProjectionMatrix','shadowLookupMatrix'}
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
