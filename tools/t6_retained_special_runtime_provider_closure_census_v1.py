@@ -142,6 +142,12 @@ REGISTRY={
    "format":"t6-current-client-shadow-spot-attenuation-sampler-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
    "runtimeInputsList":True,
+ },
+ "floatZSampler":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_FLOATZ_SAMPLER_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-floatz-sampler-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+   "runtimeInputSingle":True,
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
