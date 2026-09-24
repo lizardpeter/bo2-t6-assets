@@ -1,0 +1,48 @@
+name: T6 current client unresolved type1 constructor exclusions v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_unresolved_type1_constructor_exclusions_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_ENUM37_CONSTRUCTOR_FUNCTION_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_ENUM60_CONSTRUCTOR_FUNCTION_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_GENERIC_CODE_CONSTANT_TYPE1_DISPATCH_JOIN_V1.json'
+      - '.github/workflows/t6_current_client_unresolved_type1_constructor_exclusions_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify false type1 constructors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_unresolved_type1_constructor_exclusions_v1.py \
+            --enum37 proof/current_client/T6_CURRENT_CLIENT_ENUM37_CONSTRUCTOR_FUNCTION_V1.json \
+            --enum60 proof/current_client/T6_CURRENT_CLIENT_ENUM60_CONSTRUCTOR_FUNCTION_V1.json \
+            --type1 proof/current_client/T6_CURRENT_CLIENT_GENERIC_CODE_CONSTANT_TYPE1_DISPATCH_JOIN_V1.json \
+            --out proof/current_client/T6_CURRENT_CLIENT_UNRESOLVED_TYPE1_CONSTRUCTOR_EXCLUSIONS_V1.json
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_UNRESOLVED_TYPE1_CONSTRUCTOR_EXCLUSIONS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist unresolved type1 constructor exclusions'
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then ok=1; break; fi
+              sleep 2
+            done
+            test "$ok" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_UNRESOLVED_TYPE1_CONSTRUCTOR_EXCLUSIONS_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_UNRESOLVED_TYPE1_CONSTRUCTOR_EXCLUSIONS_V1.json
+          if-no-files-found: error
+          compression-level: 9
