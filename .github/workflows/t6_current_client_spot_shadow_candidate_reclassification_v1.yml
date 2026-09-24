@@ -1,0 +1,48 @@
+name: T6 current client spot-shadow candidate reclassification v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_spot_shadow_candidate_reclassification_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_WRITER_PROBE_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_ENTRY_XREFS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_CALL_CONTRACT_PROBE_V1.json'
+      - '.github/workflows/t6_current_client_spot_shadow_candidate_reclassification_v1.yml'
+permissions:
+  contents: write
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject unsupported provider promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/current_client
+          python3 tools/t6_current_client_spot_shadow_candidate_reclassification_v1.py             --writer proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_WRITER_PROBE_V1.json             --entry-xrefs proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_ENTRY_XREFS_V1.json             --call-contract proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_CALL_CONTRACT_PROBE_V1.json             --out proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_CANDIDATE_RECLASSIFICATION_V1.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_CANDIDATE_RECLASSIFICATION_V1.json'))
+          assert d['summary']['candidateRejectedForProviderPromotion'] is True
+          assert d['summary']['providerClosed'] is False
+          assert d['summary']['versionSlotTouches']==0
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_CANDIDATE_RECLASSIFICATION_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist spot-shadow provider candidate rejection'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_CANDIDATE_RECLASSIFICATION_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_CANDIDATE_RECLASSIFICATION_V1.json
+          if-no-files-found: error
+          compression-level: 9
