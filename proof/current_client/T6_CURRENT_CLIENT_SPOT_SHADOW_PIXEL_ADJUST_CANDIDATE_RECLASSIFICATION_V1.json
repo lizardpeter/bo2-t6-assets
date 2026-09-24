@@ -1,0 +1,61 @@
+{
+  "authority": "SHA-classified current-client exact writer/callsite/callback evidence",
+  "candidate": {
+    "enum60or61ValueDisplacementTouchCount": 18,
+    "enum60or61VersionSlotTouchCount": 0,
+    "exactDirectCallsites": [
+      "0x009bf6f1",
+      "0x009c0211"
+    ],
+    "functionSha256": "79dfab782f56841b519e98887750989fbed9247634939b6538b9b2f88ba77f0b",
+    "startVa": "0x009bea80"
+  },
+  "classification": "rejected-as-runtime-provider-proof",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "entryContract": {
+    "callerAContext": {
+      "edi": "dword(context+4)",
+      "esi": "dword(context+8)",
+      "writerArg1": "EBX+1",
+      "writerCallback": "0x009BEA40"
+    },
+    "callerB": {
+      "writerArg1": "0",
+      "writerCallback": "0x009BEA10"
+    },
+    "writerArg1Read": "[frame+0xB8] after exact prologue"
+  },
+  "format": "t6-current-client-spot-shadow-pixel-adjust-candidate-reclassification-v1",
+  "proofBoundary": "This proof rejects one tempting current-client provider candidate. It does not prove enum60/61 are never written elsewhere, does not assign physical meanings to the candidate's EDI/ESI structures, and does not weaken the unresolved runtime-provider gate.",
+  "reasons": [
+    "numeric displacement overlap with const-value slots is not object-identity proof",
+    "callerA ESI is only proven as dword(context+8), not as GfxCmdBufSourceState",
+    "writer has zero exact accesses to enum60/61 version slots 0x1858/0x185A",
+    "provider promotion therefore remains unsupported despite exact live arithmetic"
+  ],
+  "sources": {
+    "callContract": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_CALL_CONTRACT_PROBE_V1.json",
+      "sha256": "60e7ad7deaf93ca5f5408ba5b08ff5e2bedbc3d7f5d9453bf10baed4687c5348"
+    },
+    "entryXrefs": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_WRITER_ENTRY_XREFS_V1.json",
+      "sha256": "5a8603f66694f7723d87c385253a4fdd952cb02bca7452f22931764a2edca03c"
+    },
+    "writer": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_SPOT_SHADOW_PIXEL_ADJUST_WRITER_PROBE_V1.json",
+      "sha256": "2fe46f35d00605b8d37caf2b61abb1cbffe886405deb75e98e5d70a32e34cc81"
+    }
+  },
+  "summary": {
+    "candidateRejectedForProviderPromotion": true,
+    "providerClosed": false,
+    "valueDisplacementTouchesRetainedAsLocatorEvidence": 18,
+    "versionSlotTouches": 0
+  }
+}
