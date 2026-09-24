@@ -148,6 +148,12 @@ REGISTRY={
    "format":"t6-current-client-floatz-sampler-provider-semantics-v1",
    "summaryFlag":"currentClientProviderClosed",
    "runtimeInputSingle":True,
+ },
+ "debugPerformance":{
+   "path":"proof/current_client/T6_CURRENT_CLIENT_DEBUG_PERFORMANCE_PROVIDER_SEMANTICS_V1.json",
+   "format":"t6-current-client-debug-performance-provider-semantics-v1",
+   "summaryFlag":"currentClientProviderClosed",
+   "runtimeInputSingle":True,
  }
 }
 def sha(p:Path):return hashlib.sha256(p.read_bytes()).hexdigest()
