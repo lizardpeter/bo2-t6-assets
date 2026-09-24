@@ -19,6 +19,7 @@ from capstone import Cs,CS_ARCH_X86,CS_MODE_32
 SHA="770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
 FMT="t6-current-client-shared-shadow-attenuation-sampler-cluster-v1"
 RANGES=[
+ ("provenancePrefix",0x0072D280,0x0072D415),
  ("dlightAttenuationCluster",0x0072D415,0x0072D4B0),
  ("spotShadowCluster",0x0072D58B,0x0072D680),
  ("secondaryWriter",0x0072FAE0,0x0072FB50),
