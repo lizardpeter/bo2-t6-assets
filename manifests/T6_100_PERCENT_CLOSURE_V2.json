@@ -291,7 +291,10 @@
         "proof/render/T6_RETAIL_SPECIAL_MISSING_PACKED_PS_SYMBOLIC_V1.json",
         "proof/render/T6_RETAIL_SPECIAL_PACKED_PS_SYMBOLIC_COVERAGE_V1.json",
         "proof/current_client/T6_CURRENT_CLIENT_MATERIAL_COLOR_PROVIDER_SEMANTICS_V1.json",
-        "proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json"
+        "proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json",
+        "proof/current_client/T6_CURRENT_CLIENT_WORLDMATRIX_PROVIDER_SEMANTICS_V1.json",
+        "proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json",
+        "proof/current_client/T6_CURRENT_CLIENT_SHADOWLOOKUP_PROVIDER_SEMANTICS_V1.json"
       ],
       "closureRequirement": "For the retained five-world seven-family denominator, direct and packed pixel-shader symbolic dataflow plus packed child/VertexDecl identity are closed. Remaining closure is exact runtime MaterialShaderArgument/resource/code-constant provider semantics (including generated hdrControl0 where applicable), vertex-stage/input-transform semantics needed by the target replay path, sampler/upload mechanics, special-family playback/state integration, final framebuffer validation, and declared target-corpus authority.",
       "current": {
@@ -317,7 +320,7 @@
           "rawNormal": 1,
           "default": 1
         },
-        "remainingSemanticGap": "Packed special child ownership, native VertexDecl structure, and direct/packed pixel-shader symbolic dataflow are closed for the retained five-world corpus. Runtime provider closure now has an explicit 37-input fail-closed denominator: materialColor is exact for the SHA-classified current client; 36 providers remain unresolved. Remaining renderer closure is those runtime argument/resource/code-constant providers, sampler/upload mechanics, vertex-stage/input-transform semantics where required, special-family playback/state integration, generated hdrControl0 runtime value/provider, historical-retail equivalence where required, and final framebuffer validation.",
+        "remainingSemanticGap": "Direct/packed special PS dataflow, packed child ownership, native VertexDecls, generated sampler payload ownership, and 9/37 current-client runtime providers (1,825/3,607 occurrences) are now closed for the stated retained corpus. Remaining renderer closure is the other 28 runtime provider identities (especially light constants, code-image samplers, post-FX controls), vertex-stage physical semantics where required, sampler/upload/state integration, historical-retail equivalence boundaries, and final framebuffer validation.",
         "nuketownGeneratedFinalOutputPrograms": 34,
         "nuketownGeneratedFinalOutputMaterials": 120,
         "nuketownGeneratedFinalOutputUnresolvedCbufferSourceOccurrences": 0,
@@ -442,7 +445,24 @@
         "retainedSpecialCurrentClientProviderClosurePercent": 2.7027027027027026,
         "retainedSpecialHistoricalRetailEquivalentProviderCount": 0,
         "materialColorCurrentClientProvider": "closed: exact RC_SET_MATERIAL_COLOR command source offsets + four float writes + code-constant enum 46 value/version destinations + command advance",
-        "materialColorCurrentClientLineageDifference": "Pinned OpenBO2 locator source writes three components; exact SHA-classified current-client handler writes four. Current-client bytes are retained as authority."
+        "materialColorCurrentClientLineageDifference": "Pinned OpenBO2 locator source writes three components; exact SHA-classified current-client handler writes four. Current-client bytes are retained as authority.",
+        "retainedSpecialRuntimeInputAccessorDenominator": 37,
+        "retainedSpecialRuntimeInputOccurrenceDenominator": 3607,
+        "retainedSpecialCurrentClientProviderClosedAccessorCount": 9,
+        "retainedSpecialCurrentClientProviderClosedOccurrenceCount": 1825,
+        "retainedSpecialCurrentClientProviderUnresolvedAccessorCount": 28,
+        "retainedSpecialCurrentClientProviderUnresolvedOccurrenceCount": 1782,
+        "retainedSpecialCurrentClientProviderClosedAccessorPercent": 24.324324324324323,
+        "retainedSpecialCurrentClientProviderClosedOccurrencePercent": 50.59523149431661,
+        "retainedSpecialWorldMatrixOccurrenceCount": 581,
+        "retainedSpecialWorldMatrixProviderClosed": true,
+        "retainedSpecialWorldMatrixWriterRouteCount": 10,
+        "retainedSpecialWorldMatrixRouteClasses": {
+          "copy64": 2,
+          "helper64": 5,
+          "row4x16": 3
+        },
+        "retainedSpecialRuntimeProviderBoundary": "Current-client provider closure now covers 9/37 exact runtime input identities and 1,825/3,607 retained-special occurrences. worldMatrix is exact as a base-0 matrix-cache contract across all ten recovered writer routes. Remaining 28 inputs require provider semantics; current-client closure is not historical-retail executable equivalence and does not itself prove framebuffer parity."
       }
     },
     {
