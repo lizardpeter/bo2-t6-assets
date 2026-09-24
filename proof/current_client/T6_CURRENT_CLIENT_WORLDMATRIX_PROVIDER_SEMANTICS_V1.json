@@ -1,0 +1,287 @@
+{
+  "accessor": "worldMatrix",
+  "authority": "SHA-classified current-client exact code-matrix getter + exhaustive direct base-0 version writers + exact matrix-population route gates",
+  "enumValue": 211,
+  "format": "t6-current-client-worldmatrix-provider-semantics-v1",
+  "matrix": {
+    "baseIndex": 0,
+    "bytes": 64,
+    "cacheOffset": 0,
+    "matrixIndex": 0,
+    "returnAddress": "source + firstRow*16"
+  },
+  "occurrenceCount": 581,
+  "proofBoundary": "Closes the SHA-classified current-client worldMatrix provider as an executable base-0 cache contract: enum 211 indexes matrix 0, and every recovered direct base-0 version writer also populates the 64-byte matrix through one of the exact gated COPY64, HELPER64, or four-row routes before/with synchronized version updates. Route labels describe machine behavior, not source symbols. This does not name the physical object/placement inputs of each route, prove historical-retail executable equivalence, or establish framebuffer equivalence.",
+  "sources": {
+    "denominator": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "getter": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_GETTER_SEMANTICS_V1.json",
+      "sha256": "96800d2ef2ce5d5d5c7e8b812a5e42b39a79683a24fb9802b6e8347234de7042"
+    },
+    "helpers": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_HELPER_PROBE_V1.json",
+      "sha256": "8ba5b012c6b6829248d40339b41b551c5ad613cbb1b9d51552486dea65e0a84c"
+    },
+    "writers": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_WORLD_MATRIX_WRITER_FUNCTIONS_V2.json",
+      "sha256": "96efcc70dc21972df76ccacc8b160fe13621b094ce76bc27142624f29e5beed7"
+    }
+  },
+  "summary": {
+    "allWriterFunctionsPopulateBaseZeroMatrix": true,
+    "allWriterFunctionsSynchronizeMatrixAndConstVersions": true,
+    "copy64RouteCount": 2,
+    "currentClientProviderClosed": true,
+    "helper64RouteCount": 5,
+    "row4x16RouteCount": 3,
+    "writerFunctionCount": 10
+  },
+  "writerRoutes": [
+    {
+      "constVersionWrite": {
+        "address": "0x0076f629",
+        "bytes": "66898b86190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [ebx + 0x1986], cx"
+      },
+      "endVaExclusive": "0x0076f644",
+      "matrixVersionWrite": {
+        "address": "0x0076f5ee",
+        "bytes": "660183c6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [ebx + 0x19c6], ax"
+      },
+      "route": "COPY64",
+      "routeGateVas": [
+        "0x0076f630",
+        "0x0076f632",
+        "0x0076f637",
+        "0x0076f63b"
+      ],
+      "sha256": "3e55532e33d0a0de1537051f28aa048bc1979babd1ce0a50d84777cb453df7af",
+      "sourceStateBaseRegister": "ebx",
+      "startVa": "0x0076f510"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0076f787",
+        "bytes": "66898286190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [edx + 0x1986], ax"
+      },
+      "endVaExclusive": "0x0076f7d6",
+      "matrixVersionWrite": {
+        "address": "0x0076f74f",
+        "bytes": "66019ac6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [edx + 0x19c6], bx"
+      },
+      "route": "COPY64",
+      "routeGateVas": [
+        "0x0076f78e",
+        "0x0076f793",
+        "0x0076f798",
+        "0x0076f79a",
+        "0x0076f7a9",
+        "0x0076f7bb",
+        "0x0076f7ce"
+      ],
+      "sha256": "16dbc132d03867701cab108d220744670ec9a33eccbe11f55c30ce6fbb8a4ae0",
+      "sourceStateBaseRegister": "edx",
+      "startVa": "0x0076f6c0"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077297b",
+        "bytes": "66898686190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [esi + 0x1986], ax"
+      },
+      "endVaExclusive": "0x007729d7",
+      "matrixVersionWrite": {
+        "address": "0x00772958",
+        "bytes": "66018ec6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [esi + 0x19c6], cx"
+      },
+      "route": "HELPER64",
+      "routeGateVas": [
+        "0x007729cd",
+        "0x007729ce"
+      ],
+      "sha256": "0df64c198a3ac291c88d0c2a4b98b8406c911bf3dfed08ea3e4afdc189d3c287",
+      "sourceStateBaseRegister": "esi",
+      "startVa": "0x00772940"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077c6cc",
+        "bytes": "66898b86190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [ebx + 0x1986], cx"
+      },
+      "endVaExclusive": "0x0077c819",
+      "matrixVersionWrite": {
+        "address": "0x0077c6a9",
+        "bytes": "660183c6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [ebx + 0x19c6], ax"
+      },
+      "route": "HELPER64",
+      "routeGateVas": [
+        "0x0077c726",
+        "0x0077c727"
+      ],
+      "sha256": "4b6f3270d91dce8d45755403f4fc5f618d5df9517537946a55f6e73b3094d544",
+      "sourceStateBaseRegister": "ebx",
+      "startVa": "0x0077c0b0"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077ce7e",
+        "bytes": "66898686190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [esi + 0x1986], ax"
+      },
+      "endVaExclusive": "0x0077ce9c",
+      "matrixVersionWrite": {
+        "address": "0x0077ce48",
+        "bytes": "66018ec6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [esi + 0x19c6], cx"
+      },
+      "route": "HELPER64",
+      "routeGateVas": [
+        "0x0077ce7d",
+        "0x0077ce85"
+      ],
+      "sha256": "904f901c6018e1e4b5b63b42fe75774da811b42e89138d3427db1b4cb6ca743a",
+      "sourceStateBaseRegister": "esi",
+      "startVa": "0x0077cde0"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077e50b",
+        "bytes": "66898386190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [ebx + 0x1986], ax"
+      },
+      "endVaExclusive": "0x0077e5fe",
+      "matrixVersionWrite": {
+        "address": "0x0077e4d9",
+        "bytes": "66018bc6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [ebx + 0x19c6], cx"
+      },
+      "route": "ROW4X16",
+      "routeGateVas": [
+        "0x0077e500",
+        "0x0077e516",
+        "0x0077e524",
+        "0x0077e533"
+      ],
+      "sha256": "5778d48805c35b5c9a32662084a7180bd9d63dc6b20e86f8f1defc9b5fb95c95",
+      "sourceStateBaseRegister": "ebx",
+      "startVa": "0x0077e320"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077e789",
+        "bytes": "66898686190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [esi + 0x1986], ax"
+      },
+      "endVaExclusive": "0x0077e89f",
+      "matrixVersionWrite": {
+        "address": "0x0077e74f",
+        "bytes": "66018ec6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [esi + 0x19c6], cx"
+      },
+      "route": "ROW4X16",
+      "routeGateVas": [
+        "0x0077e772",
+        "0x0077e77a",
+        "0x0077e797",
+        "0x0077e7aa"
+      ],
+      "sha256": "4e732640aecacc73665292df590131290b6a6c783f91a9deac6973c15d065af4",
+      "sourceStateBaseRegister": "esi",
+      "startVa": "0x0077e600"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077e9e2",
+        "bytes": "66898686190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [esi + 0x1986], ax"
+      },
+      "endVaExclusive": "0x0077ea6b",
+      "matrixVersionWrite": {
+        "address": "0x0077e9ab",
+        "bytes": "66018ec6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [esi + 0x19c6], cx"
+      },
+      "route": "ROW4X16",
+      "routeGateVas": [
+        "0x0077e9ce",
+        "0x0077e9d6",
+        "0x0077e9f0",
+        "0x0077ea03"
+      ],
+      "sha256": "36ac77e2e149b618f302f386c32b13a24bd22f60592c62f1cc3f472478718178",
+      "sourceStateBaseRegister": "esi",
+      "startVa": "0x0077e8a0"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077fbb0",
+        "bytes": "66899086190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [eax + 0x1986], dx"
+      },
+      "endVaExclusive": "0x0077fc24",
+      "matrixVersionWrite": {
+        "address": "0x0077fb8d",
+        "bytes": "6601b0c6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [eax + 0x19c6], si"
+      },
+      "route": "HELPER64",
+      "routeGateVas": [
+        "0x0077fc04",
+        "0x0077fc17"
+      ],
+      "sha256": "38b517b652328f4ba1805eace908e1ab4dd11e70679f302a79e2c931a9802e96",
+      "sourceStateBaseRegister": "eax",
+      "startVa": "0x0077fb20"
+    },
+    {
+      "constVersionWrite": {
+        "address": "0x0077ffc4",
+        "bytes": "6689b986190000",
+        "mnemonic": "mov",
+        "opStr": "word ptr [ecx + 0x1986], di"
+      },
+      "endVaExclusive": "0x00780182",
+      "matrixVersionWrite": {
+        "address": "0x0077ff91",
+        "bytes": "660199c6190000",
+        "mnemonic": "add",
+        "opStr": "word ptr [ecx + 0x19c6], bx"
+      },
+      "route": "HELPER64",
+      "routeGateVas": [
+        "0x00780012",
+        "0x00780019"
+      ],
+      "sha256": "45a16ad70b696819f546e04accaacb6747a4b6b63281952f7bb6a31e0e8c61fa",
+      "sourceStateBaseRegister": "ecx",
+      "startVa": "0x0077fe30"
+    }
+  ]
+}
