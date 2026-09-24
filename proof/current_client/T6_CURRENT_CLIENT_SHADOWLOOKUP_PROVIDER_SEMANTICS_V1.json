@@ -1,0 +1,55 @@
+{
+  "authority": "SHA-classified current-client exact code-matrix helper dataflow + exact retained-special accessor identity",
+  "baseIndex": 24,
+  "client": {
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-shadowlookup-provider-semantics-v1",
+  "formula": {
+    "adjustment": "row3(Mat4(S+0x0600)) = Vec4(S+0x19E0) * Mat4(S+0x0600)",
+    "getter": "enum235 => matrixIndex24 => S+0x0600 + firstRow*16",
+    "initial": "Mat4(S+0x0600) = copy64(S+0x17A0)",
+    "vectorConvention": "out = v.x*M[0] + v.y*M[1] + v.z*M[2] + v.w*M[3]",
+    "version": "u16(S+0x19B6) = u16(S+0x19D2)"
+  },
+  "helperEntryVa": "0x00772de0",
+  "helperSha256": "f974487c7db6c97ef762ca6288e9f10e07ff60cc237170562427331eb0641dad",
+  "proofBoundary": "Closes the SHA-classified current client's provider formula in exact source-relative offsets and exact matrix arithmetic. Human physical names/units for source-state fields are not inferred beyond the accessor identity and already-proven matrix storage/version layout. Historical-retail executable equivalence and framebuffer equivalence remain unproven.",
+  "runtimeInput": {
+    "accessor": "shadowLookupMatrix",
+    "enumSymbol": "CONST_SRC_CODE_SHADOW_LOOKUP_MATRIX",
+    "enumValue": 235,
+    "pixelOccurrences": 0,
+    "retainedSpecialOccurrences": 77,
+    "sourceClass": "constant",
+    "updateFrequency": "RARELY",
+    "vertexOccurrences": 77
+  },
+  "sources": {
+    "corpus": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_BASE_HELPER_CORPUS_V1.json",
+      "sha256": "8edbdb7c36f5520e1cf328ab91bb0de519636007fda4df02b7106cdee9854f82"
+    },
+    "denominator": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "math": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_MATH_HELPER_PROBE_V1.json",
+      "sha256": "13d9dc5f96253c9a247f8b5790cb7b79fc98228fe59edd56928fdd9fbc849d14"
+    },
+    "viewProjection": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json",
+      "sha256": "552569ad52a56ddc8ffe19c50006f88003a4fc97941fa8d821ccb0f4132abbdd"
+    }
+  },
+  "summary": {
+    "baseIndex": 24,
+    "currentClientProviderClosed": true,
+    "enumValue": 235,
+    "formulaClosed": true,
+    "historicalRetailEquivalent": false,
+    "retainedSpecialOccurrenceCount": 77
+  }
+}
