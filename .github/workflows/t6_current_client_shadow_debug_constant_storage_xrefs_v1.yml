@@ -38,8 +38,13 @@ jobs:
           git add proof/current_client/T6_CURRENT_CLIENT_SHADOW_DEBUG_CONSTANT_STORAGE_XREFS_V1.json
           if ! git diff --cached --quiet; then
             git commit -m 'Persist shadow debug constant storage xrefs'
-            git pull --rebase origin main
-            git push origin HEAD:main
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then ok=1; break; fi
+              sleep 2
+            done
+            test "$ok" = 1
           fi
           rm -f /tmp/client/t6mp.exe
       - uses: actions/upload-artifact@v4
