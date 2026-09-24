@@ -1,0 +1,64 @@
+{
+  "authority": "SHA-classified current-client exact code-matrix helper dataflow + exact retained-special accessor identity",
+  "baseIndex": 20,
+  "client": {
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-worldviewprojection-provider-semantics-v1",
+  "formula": {
+    "condition": "u32(S+0x19FC) == 0x40000000",
+    "falseBranch": [
+      "W.row3.xyz += Vec3(S+0x19E0)",
+      "B = Mat4(S+0x16D0)"
+    ],
+    "getter": "enum231 => matrixIndex20 => S+0x0500 + firstRow*16",
+    "multiplyConvention": "C[row] = A[row].x*B[0] + A[row].y*B[1] + A[row].z*B[2] + A[row].w*B[3]",
+    "result": "Mat4(S+0x0500) = W * B",
+    "trueBranch": [
+      "if u16(S+0x19A6) != u16(S+0x19CE), derive exact baseIndex16 via 0x772CA0",
+      "B = Mat4(S+0x0400)"
+    ],
+    "version": "u16(S+0x19AE) = u16(S+0x19D0)",
+    "worldTemp": "copy64(S+0x0000) to local W"
+  },
+  "helperEntryVa": "0x00772d20",
+  "helperSha256": "7e65205b090f61450108a66a7d2a31001e6f8de7ca97b51d42e7d905b9a6674f",
+  "proofBoundary": "Closes the SHA-classified current client's provider formula in exact source-relative offsets and exact matrix arithmetic. Human physical names/units for source-state fields are not inferred beyond the accessor identity and already-proven matrix storage/version layout. Historical-retail executable equivalence and framebuffer equivalence remain unproven.",
+  "runtimeInput": {
+    "accessor": "worldViewProjectionMatrix",
+    "enumSymbol": "CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX",
+    "enumValue": 231,
+    "pixelOccurrences": 0,
+    "retainedSpecialOccurrences": 1,
+    "sourceClass": "constant",
+    "updateFrequency": "PER_PRIM",
+    "vertexOccurrences": 1
+  },
+  "sources": {
+    "corpus": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_BASE_HELPER_CORPUS_V1.json",
+      "sha256": "8edbdb7c36f5520e1cf328ab91bb0de519636007fda4df02b7106cdee9854f82"
+    },
+    "denominator": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "math": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_MATH_HELPER_PROBE_V1.json",
+      "sha256": "13d9dc5f96253c9a247f8b5790cb7b79fc98228fe59edd56928fdd9fbc849d14"
+    },
+    "viewProjection": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_VIEWPROJECTION_PROVIDER_SEMANTICS_V1.json",
+      "sha256": "552569ad52a56ddc8ffe19c50006f88003a4fc97941fa8d821ccb0f4132abbdd"
+    }
+  },
+  "summary": {
+    "baseIndex": 20,
+    "currentClientProviderClosed": true,
+    "enumValue": 231,
+    "formulaClosed": true,
+    "historicalRetailEquivalent": false,
+    "retainedSpecialOccurrenceCount": 1
+  }
+}
