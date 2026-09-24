@@ -27,9 +27,9 @@ def main():
     req(e60.get("format")==E60_FMT,"enum60 format drift")
     req(t.get("format")==TYPE1_FMT,"type1 format drift")
     # Proven type1 ABI from joined dispatcher/setter semantics.
-    abi=t["type1RecordAbi"]
-    req(abi["enumValue"]=="uint32(record+0x04)","type1 enum ABI drift")
-    req(abi["lane0"]=="float32(record+0x08)","type1 lane0 ABI drift")
+    abi=t["type1Record"]
+    req(abi["enumValue"]=="uint32(runtimeRecord+0x04)","type1 enum ABI drift")
+    req(abi["lanes"][0]=="float32(runtimeRecord+0x08)","type1 lane0 ABI drift")
     e37ops=ops(e37["constructor"]["instructions"])
     req(("0x004af867","mov","dword ptr [eax + 4], 0x25") in e37ops,"enum37 anchor drift")
     req(("0x004af86e","mov","dword ptr [eax + 8], ecx") in e37ops,"enum37 payload drift")
