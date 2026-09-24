@@ -76,8 +76,8 @@ def main():
 
     # Exact caller dataflow around slot7 and the call into 0x786210 must all exist in spot context.
     ctx={x["address"]:x for x in spot["context"]}
+    req(rec.get("auxPointerSource")=="record + 0x150 -> caller local -> writer EAX -> [EAX+4]","selected record aux-pointer provenance drift")
     required={
-      "0x007869d4":"edx, dword ptr [ebp + 0x150]",
       "0x007869e8":"edx, dword ptr [ebp + 0x3c]",
       "0x007869eb":"edx, edx, 0x1e0",
       "0x007869f1":"edx, [edx + ecx + 0x48b670]",
