@@ -15,6 +15,7 @@ on:
       - 'proof/current_client/T6_CURRENT_CLIENT_WORLDVIEWPROJECTION_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_SHADOWLOOKUP_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_LIGHT_BLOCK_PROVIDER_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SHADOW_SPOT_ATTENUATION_SAMPLER_PROVIDER_SEMANTICS_V1.json'
       - '.github/workflows/t6_retained_special_runtime_provider_closure_census_v1.yml'
 # worldMatrix provider proof uses normalized runtimeInput identity schema
 permissions:
@@ -35,11 +36,11 @@ jobs:
           d=json.load(open('proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json'))
           s=d['summary']
           assert s['runtimeInputAccessorCount']==37
-          assert s['currentClientProviderClosedCount']==21
-          assert s['unresolvedProviderCount']==16
-          assert s['currentClientProviderClosedOccurrenceCount']==3014
-          assert s['unresolvedProviderOccurrenceCount']==593
-          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix','worldMatrix','worldViewProjectionMatrix','shadowLookupMatrix','lightPosition','lightDiffuse','lightSpotDir','lightSpotFactors','lightFallOffA','lightFallOffB','lightSpotMatrix0','lightSpotMatrix1','lightSpotMatrix2','lightSpotAABB','lightConeControl1','lightSpotCookieSlideControl'}
+          assert s['currentClientProviderClosedCount']==23
+          assert s['unresolvedProviderCount']==14
+          assert s['currentClientProviderClosedOccurrenceCount']==3179
+          assert s['unresolvedProviderOccurrenceCount']==428
+          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix','worldMatrix','worldViewProjectionMatrix','shadowLookupMatrix','lightPosition','lightDiffuse','lightSpotDir','lightSpotFactors','lightFallOffA','lightFallOffB','lightSpotMatrix0','lightSpotMatrix1','lightSpotMatrix2','lightSpotAABB','lightConeControl1','lightSpotCookieSlideControl','shadowmapSamplerSpot','attenuationSampler'}
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
