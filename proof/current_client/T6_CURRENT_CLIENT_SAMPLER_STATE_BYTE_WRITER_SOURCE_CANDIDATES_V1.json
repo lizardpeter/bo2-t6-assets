@@ -1,0 +1,511 @@
+{
+  "authority": "deterministic compact projection of exhaustive exact sampler-state byte-overlap writer census",
+  "format": "t6-current-client-sampler-state-byte-writer-source-candidates-v1",
+  "proofBoundary": "Diagnostic source-definition projection only. Immediate stores are exact values. A nearest visible register definition is not automatically the reaching definition across branches/calls; base-object identity, later writer ordering, resource ownership and historical-retail equivalence remain separate gates.",
+  "rows": {
+    "dlightAttenuationSampler": [
+      {
+        "baseReg": "edi",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009bc63e",
+            "bytes": "83bf8808000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [edi + 0x888], 0"
+          },
+          {
+            "address": "0x009bc645",
+            "bytes": "750a",
+            "mnemonic": "jne",
+            "opStr": "0x9bc651"
+          },
+          {
+            "address": "0x009bc651",
+            "bytes": "83bec0c7010000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [esi + 0x1c7c0], 0"
+          },
+          {
+            "address": "0x009bc658",
+            "bytes": "7515",
+            "mnemonic": "jne",
+            "opStr": "0x9bc66f"
+          },
+          {
+            "address": "0x009bc65a",
+            "bytes": "83bf1016000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [edi + 0x1610], 0"
+          },
+          {
+            "address": "0x009bc661",
+            "bytes": "740c",
+            "mnemonic": "je",
+            "opStr": "0x9bc66f"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009bc634",
+          "bytes": "57",
+          "mnemonic": "push",
+          "opStr": "edi"
+        },
+        "nearestStoredRegisterDefinition": null,
+        "storedOperand": "2",
+        "storedOperandKind": "immediate",
+        "writer": {
+          "address": "0x009bc663",
+          "bytes": "c7871c16000002000000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [edi + 0x161c], 2"
+        }
+      },
+      {
+        "baseReg": "edi",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009bc63e",
+            "bytes": "83bf8808000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [edi + 0x888], 0"
+          },
+          {
+            "address": "0x009bc645",
+            "bytes": "750a",
+            "mnemonic": "jne",
+            "opStr": "0x9bc651"
+          },
+          {
+            "address": "0x009bc651",
+            "bytes": "83bec0c7010000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [esi + 0x1c7c0], 0"
+          },
+          {
+            "address": "0x009bc658",
+            "bytes": "7515",
+            "mnemonic": "jne",
+            "opStr": "0x9bc66f"
+          },
+          {
+            "address": "0x009bc65a",
+            "bytes": "83bf1016000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [edi + 0x1610], 0"
+          },
+          {
+            "address": "0x009bc661",
+            "bytes": "740c",
+            "mnemonic": "je",
+            "opStr": "0x9bc66f"
+          },
+          {
+            "address": "0x009bc66d",
+            "bytes": "eb0a",
+            "mnemonic": "jmp",
+            "opStr": "0x9bc679"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009bc634",
+          "bytes": "57",
+          "mnemonic": "push",
+          "opStr": "edi"
+        },
+        "nearestStoredRegisterDefinition": null,
+        "storedOperand": "0",
+        "storedOperandKind": "immediate",
+        "writer": {
+          "address": "0x009bc66f",
+          "bytes": "c7871c16000000000000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [edi + 0x161c], 0"
+        }
+      },
+      {
+        "baseReg": "esi",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009be39b",
+          "bytes": "56",
+          "mnemonic": "push",
+          "opStr": "esi"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009be3ad",
+          "bytes": "33c0",
+          "mnemonic": "xor",
+          "opStr": "eax, eax"
+        },
+        "storedOperand": "eax",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009be404",
+          "bytes": "89861c160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esi + 0x161c], eax"
+        }
+      },
+      {
+        "baseReg": "ebp",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009c1d80",
+          "bytes": "55",
+          "mnemonic": "push",
+          "opStr": "ebp"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009c1d95",
+          "bytes": "33c0",
+          "mnemonic": "xor",
+          "opStr": "eax, eax"
+        },
+        "storedOperand": "eax",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009c1dcd",
+          "bytes": "89851c160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [ebp + 0x161c], eax"
+        }
+      },
+      {
+        "baseReg": "eax",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009c2ae0",
+            "bytes": "83b81016000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [eax + 0x1610], 0"
+          },
+          {
+            "address": "0x009c2af7",
+            "bytes": "7518",
+            "mnemonic": "jne",
+            "opStr": "0x9c2b11"
+          },
+          {
+            "address": "0x009c2b11",
+            "bytes": "83b81416000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [eax + 0x1614], 0"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009c2b0f",
+          "bytes": "8bc1",
+          "mnemonic": "mov",
+          "opStr": "eax, ecx"
+        },
+        "nearestStoredRegisterDefinition": null,
+        "storedOperand": "0",
+        "storedOperandKind": "immediate",
+        "writer": {
+          "address": "0x009c2b18",
+          "bytes": "c7801c16000000000000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [eax + 0x161c], 0"
+        }
+      },
+      {
+        "baseReg": "edx",
+        "coveredRange": [
+          5660,
+          5664
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009c2b11",
+            "bytes": "83b81416000000",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [eax + 0x1614], 0"
+          },
+          {
+            "address": "0x009c2b22",
+            "bytes": "7516",
+            "mnemonic": "jne",
+            "opStr": "0x9c2b3a"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009c2b30",
+          "bytes": "8b542410",
+          "mnemonic": "mov",
+          "opStr": "edx, dword ptr [esp + 0x10]"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009c2b0f",
+          "bytes": "8bc1",
+          "mnemonic": "mov",
+          "opStr": "eax, ecx"
+        },
+        "storedOperand": "eax",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009c2b34",
+          "bytes": "89821c160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [edx + 0x161c], eax"
+        }
+      }
+    ],
+    "shadowmapSamplerSun": [
+      {
+        "baseReg": "eax",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [],
+        "nearestBaseRegisterDefinition": null,
+        "nearestStoredRegisterDefinition": null,
+        "storedOperand": "ecx",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x004555a6",
+          "bytes": "898810160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [eax + 0x1610], ecx"
+        }
+      },
+      {
+        "baseReg": "esi",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009a7d20",
+            "bytes": "3dff150000",
+            "mnemonic": "cmp",
+            "opStr": "eax, 0x15ff"
+          },
+          {
+            "address": "0x009a7d35",
+            "bytes": "7605",
+            "mnemonic": "jbe",
+            "opStr": "0x9a7d3c"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009a7d3e",
+          "bytes": "56",
+          "mnemonic": "push",
+          "opStr": "esi"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009a7d3c",
+          "bytes": "50",
+          "mnemonic": "push",
+          "opStr": "eax"
+        },
+        "storedOperand": "eax",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009a7d3f",
+          "bytes": "898610160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esi + 0x1610], eax"
+        }
+      },
+      {
+        "baseReg": "esi",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009a7db8",
+            "bytes": "7205",
+            "mnemonic": "jb",
+            "opStr": "0x9a7dbf"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009a7da0",
+          "bytes": "5e",
+          "mnemonic": "pop",
+          "opStr": "esi"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009a7dd0",
+          "bytes": "83c704",
+          "mnemonic": "add",
+          "opStr": "edi, 4"
+        },
+        "storedOperand": "edi",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009a7dd3",
+          "bytes": "89be10160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esi + 0x1610], edi"
+        }
+      },
+      {
+        "baseReg": "esi",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009bcdb6",
+            "bytes": "7e19",
+            "mnemonic": "jle",
+            "opStr": "0x9bcdd1"
+          }
+        ],
+        "nearestBaseRegisterDefinition": null,
+        "nearestStoredRegisterDefinition": null,
+        "storedOperand": "edi",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009bcde7",
+          "bytes": "89be10160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [esi + 0x1610], edi"
+        }
+      },
+      {
+        "baseReg": "ecx",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [
+          {
+            "address": "0x009bd361",
+            "bytes": "3910",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [eax], edx"
+          },
+          {
+            "address": "0x009bd363",
+            "bytes": "7637",
+            "mnemonic": "jbe",
+            "opStr": "0x9bd39c"
+          }
+        ],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009bd356",
+          "bytes": "8b4df8",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [ebp - 8]"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009bd35f",
+          "bytes": "33d2",
+          "mnemonic": "xor",
+          "opStr": "edx, edx"
+        },
+        "storedOperand": "edx",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009bd388",
+          "bytes": "899110160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [ecx + 0x1610], edx"
+        }
+      },
+      {
+        "baseReg": "ebp",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009c1d80",
+          "bytes": "55",
+          "mnemonic": "push",
+          "opStr": "ebp"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009c1db5",
+          "bytes": "b901000000",
+          "mnemonic": "mov",
+          "opStr": "ecx, 1"
+        },
+        "storedOperand": "ecx",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009c1dbb",
+          "bytes": "898d10160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [ebp + 0x1610], ecx"
+        }
+      },
+      {
+        "baseReg": "edx",
+        "coveredRange": [
+          5648,
+          5652
+        ],
+        "nearbyPredicates": [],
+        "nearestBaseRegisterDefinition": {
+          "address": "0x009c2a81",
+          "bytes": "8b542410",
+          "mnemonic": "mov",
+          "opStr": "edx, dword ptr [esp + 0x10]"
+        },
+        "nearestStoredRegisterDefinition": {
+          "address": "0x009c2a69",
+          "bytes": "bb01000000",
+          "mnemonic": "mov",
+          "opStr": "ebx, 1"
+        },
+        "storedOperand": "ebx",
+        "storedOperandKind": "register",
+        "writer": {
+          "address": "0x009c2a88",
+          "bytes": "899a10160000",
+          "mnemonic": "mov",
+          "opStr": "dword ptr [edx + 0x1610], ebx"
+        }
+      }
+    ]
+  },
+  "source": {
+    "format": "t6-current-client-sampler-state-byte-overlap-writers-v1",
+    "path": "proof/current_client/T6_CURRENT_CLIENT_SAMPLER_STATE_BYTE_OVERLAP_WRITERS_V1.json",
+    "sha256": "e86add9cc240d7b12a8b23126234c6ec0c80ae056fbc8549908388b277af6e51"
+  },
+  "summary": {
+    "dlightAttenuationSampler": {
+      "immediateWriterCount": 3,
+      "registerWriterCount": 3,
+      "registerWriterWithVisibleDefinitionCount": 3,
+      "writerCount": 6
+    },
+    "shadowmapSamplerSun": {
+      "immediateWriterCount": 0,
+      "registerWriterCount": 7,
+      "registerWriterWithVisibleDefinitionCount": 5,
+      "writerCount": 7
+    }
+  }
+}
