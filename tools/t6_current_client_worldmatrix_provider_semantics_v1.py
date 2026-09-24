@@ -89,7 +89,7 @@ def main():
     wm=[x for x in den["rows"] if x["accessor"]=="worldMatrix"]
     req(len(wm)==1,"worldMatrix denominator row count drift")
     wm=wm[0];req(wm["enumValue"]==211,"worldMatrix enum drift")
-    req(wm["occurrenceCount"]==581,"worldMatrix occurrence drift")
+    req(wm["totalOccurrences"]==581,"worldMatrix occurrence drift")
     req(getter["storage"]["firstCodeMatrixEnum"]==211,"getter first enum drift")
     # enum 211 -> matrixIndex 0 -> baseIndex 0; base zero is direct cache state
     matrix_index=wm["enumValue"]-getter["storage"]["firstCodeMatrixEnum"]
@@ -138,7 +138,7 @@ def main():
     doc={
       "format":FORMAT,
       "authority":"SHA-classified current-client exact code-matrix getter + exhaustive direct base-0 version writers + exact matrix-population route gates",
-      "accessor":"worldMatrix","enumValue":211,"occurrenceCount":wm["occurrenceCount"],
+      "accessor":"worldMatrix","enumValue":211,"occurrenceCount":wm["totalOccurrences"],
       "matrix":{"matrixIndex":0,"baseIndex":0,"cacheOffset":0,"bytes":64,
                 "returnAddress":"source + firstRow*16"},
       "writerRoutes":rows,
