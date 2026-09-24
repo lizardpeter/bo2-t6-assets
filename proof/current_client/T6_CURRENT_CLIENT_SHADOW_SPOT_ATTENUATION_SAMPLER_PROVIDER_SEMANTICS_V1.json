@@ -1,0 +1,98 @@
+{
+  "authority": "SHA-classified current-client generic code-sampler resolver + exact source-state/runtime-record provenance + exact slot writers",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-shadow-spot-attenuation-sampler-provider-semantics-v1",
+  "proofBoundary": "Closes SHA-classified current-client provider mechanics for shadowmapSamplerSpot and attenuationSampler: exact codeSampler enum identity, generic runtime array contract, source-state base, source-record provenance, image-pointer source offsets, slot writes, and sampler-state bytes are all proven. Higher-level physical names/units for raw runtime-record fields, meaning of sampler-state byte encodings, historical-retail executable equivalence, universal draw-time resources, and framebuffer equivalence remain unproven.",
+  "runtimeInputs": [
+    {
+      "accessor": "shadowmapSamplerSpot",
+      "enumSymbol": "TEXTURE_SRC_CODE_SHADOWMAP_SPOT",
+      "enumValue": 7,
+      "provider": {
+        "codeImageSlot": {
+          "formula": "source + 0x1530 + 7*4",
+          "offset": 5452,
+          "writerVa": "0x00786a2e"
+        },
+        "imageSource": {
+          "imagePointer": "uint32(secondaryRecord+0x1BC)",
+          "secondaryIndex": "uint32(selectedRecord+0x3C)",
+          "secondaryRecord": "0x48B670 + source[0x1644] + secondaryIndex*0x1E0",
+          "selectedRecord": "EBP = 0x4751D0 + source[0x1644] + callerIndex*0x160"
+        },
+        "samplerStateSlot": {
+          "exactByte": 101,
+          "formula": "source + 0x160C + 7",
+          "offset": 5651,
+          "writerVa": "0x00786a4f"
+        },
+        "sourceStateRegister": "EBX"
+      },
+      "retainedSpecialOccurrences": 97,
+      "sourceClass": "sampler",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "attenuationSampler",
+      "enumSymbol": "TEXTURE_SRC_CODE_LIGHT_ATTENUATION",
+      "enumValue": 15,
+      "provider": {
+        "codeImageSlot": {
+          "formula": "source + 0x1530 + 15*4",
+          "offset": 5484,
+          "writerVa": "0x00786221"
+        },
+        "imageSource": {
+          "auxPointer": "uint32(selectedRecord+0x150), saved by caller and restored to EAX at 0x00786A65",
+          "imagePointer": "uint32(auxPointer+4) at 0x00786216"
+        },
+        "samplerStateSlot": {
+          "exactByte": 19,
+          "formula": "source + 0x160C + 15",
+          "offset": 5659,
+          "writerVa": "0x00786227"
+        },
+        "sourceStateRegister": "ESI (exact EBX->ESI at 0x00786A72)"
+      },
+      "retainedSpecialOccurrences": 68,
+      "sourceClass": "sampler",
+      "updateFrequency": "RARELY"
+    }
+  ],
+  "sources": {
+    "array": {
+      "format": "t6-current-client-code-pixel-sampler-array-semantics-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json",
+      "sha256": "0633f8495cbf496910bdd8a1654ead0ebbb11cbf5b1cd1d6e1a1c84e812f4d15"
+    },
+    "denominator": {
+      "format": "t6-retail-special-omitted-code-input-static-identity-v1",
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "lightProvider": {
+      "format": "t6-current-client-light-block-provider-semantics-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_LIGHT_BLOCK_PROVIDER_SEMANTICS_V1.json",
+      "sha256": "d46528b0c25755ad784ab7f7f0d8bf08528c9bda5ced9577a6933de885bcc5b8"
+    },
+    "slotPairs": {
+      "format": "t6-current-client-code-sampler-slot-pair-locator-v1",
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_SAMPLER_SLOT_PAIR_LOCATOR_V1.json",
+      "sha256": "26c575dea8774c8e8fa348d868b65a68b6155ec2bc029e86e99dc8d473213e21"
+    }
+  },
+  "summary": {
+    "currentClientProviderClosed": true,
+    "genericSamplerArrayContractClosed": true,
+    "retainedSpecialOccurrenceCount": 165,
+    "runtimeInputCount": 2,
+    "slot15ProviderClosed": true,
+    "slot7ProviderClosed": true,
+    "sourceStateBaseClosed": true
+  }
+}
