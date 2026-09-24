@@ -18,6 +18,7 @@ on:
       - 'proof/current_client/T6_CURRENT_CLIENT_SHADOW_SPOT_ATTENUATION_SAMPLER_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_FLOATZ_SAMPLER_PROVIDER_SEMANTICS_V1.json'
       - 'proof/current_client/T6_CURRENT_CLIENT_DEBUG_PERFORMANCE_PROVIDER_SEMANTICS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SHADOWMAP_SAMPLER_SUN_PROVIDER_SEMANTICS_V1.json'
       - '.github/workflows/t6_retained_special_runtime_provider_closure_census_v1.yml'
 # worldMatrix provider proof uses normalized runtimeInput identity schema
 permissions:
@@ -38,11 +39,11 @@ jobs:
           d=json.load(open('proof/render/T6_RETAINED_SPECIAL_RUNTIME_PROVIDER_CLOSURE_CENSUS_V1.json'))
           s=d['summary']
           assert s['runtimeInputAccessorCount']==37
-          assert s['currentClientProviderClosedCount']==25
-          assert s['unresolvedProviderCount']==12
-          assert s['currentClientProviderClosedOccurrenceCount']==3246
-          assert s['unresolvedProviderOccurrenceCount']==361
-          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix','worldMatrix','worldViewProjectionMatrix','shadowLookupMatrix','lightPosition','lightDiffuse','lightSpotDir','lightSpotFactors','lightFallOffA','lightFallOffB','lightSpotMatrix0','lightSpotMatrix1','lightSpotMatrix2','lightSpotAABB','lightConeControl1','lightSpotCookieSlideControl','shadowmapSamplerSpot','attenuationSampler','floatZSampler','debugPerformance'}
+          assert s['currentClientProviderClosedCount']==26
+          assert s['unresolvedProviderCount']==11
+          assert s['currentClientProviderClosedOccurrenceCount']==3262
+          assert s['unresolvedProviderOccurrenceCount']==345
+          assert {x['accessor'] for x in d['rows'] if x['providerStatus']=='current-client-provider-closed'}=={'materialColor','gameTime','renderTargetSize','scriptVector0','postFxControl6','viewProjectionMatrix','worldMatrix','worldViewProjectionMatrix','shadowLookupMatrix','lightPosition','lightDiffuse','lightSpotDir','lightSpotFactors','lightFallOffA','lightFallOffB','lightSpotMatrix0','lightSpotMatrix1','lightSpotMatrix2','lightSpotAABB','lightConeControl1','lightSpotCookieSlideControl','shadowmapSamplerSpot','attenuationSampler','floatZSampler','debugPerformance','shadowmapSamplerSun'}
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
           git diff --check
