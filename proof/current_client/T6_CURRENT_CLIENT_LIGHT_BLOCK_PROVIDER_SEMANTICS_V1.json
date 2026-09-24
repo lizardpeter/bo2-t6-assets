@@ -1,0 +1,642 @@
+{
+  "authority": "SHA-classified current-client exact source-cache layout + exact light writer bytes + exact version-slot writes + exact single direct caller register provenance",
+  "format": "t6-current-client-light-block-provider-semantics-v1",
+  "proofBoundary": "Closes the SHA-classified current-client provider mechanics for the listed 12 light code constants: the single exact writer writes every float4 lane into the independently proven source-state constant cache at source+0x800+enum*16 and updates the matching constVersions slot at source+0x17E0+enum*2; its single direct caller passes that source-state base via EBX->ESI and selects the EDI input from an exact 0x160-byte indexed runtime-record table. Raw record offsets/formulas are authoritative; higher-level physical names for individual record fields, historical-retail executable equivalence, universal draw-time values, and framebuffer equivalence are not inferred.",
+  "provider": {
+    "constants": [
+      {
+        "accessor": "lightPosition",
+        "enumValue": 0,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0800",
+            "0x0804",
+            "0x0808",
+            "0x080c"
+          ],
+          "laneWriterAddresses": {
+            "0x0800": [
+              "0x00786880"
+            ],
+            "0x0804": [
+              "0x00786872"
+            ],
+            "0x0808": [
+              "0x00786888"
+            ],
+            "0x080c": [
+              "0x00786890"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17e0",
+          "writerAddresses": [
+            "0x00786898"
+          ]
+        }
+      },
+      {
+        "accessor": "lightDiffuse",
+        "enumValue": 1,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0810",
+            "0x0814",
+            "0x0818",
+            "0x081c"
+          ],
+          "laneWriterAddresses": {
+            "0x0810": [
+              "0x007868ac"
+            ],
+            "0x0814": [
+              "0x007868b2"
+            ],
+            "0x0818": [
+              "0x007868ba"
+            ],
+            "0x081c": [
+              "0x007868c2"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17e2",
+          "writerAddresses": [
+            "0x007868ca"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotDir",
+        "enumValue": 2,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0820",
+            "0x0824",
+            "0x0828",
+            "0x082c"
+          ],
+          "laneWriterAddresses": {
+            "0x0820": [
+              "0x007868e3"
+            ],
+            "0x0824": [
+              "0x007868e9"
+            ],
+            "0x0828": [
+              "0x007868f1"
+            ],
+            "0x082c": [
+              "0x007868f9"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17e4",
+          "writerAddresses": [
+            "0x00786901"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotFactors",
+        "enumValue": 3,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0830",
+            "0x0834",
+            "0x0838",
+            "0x083c"
+          ],
+          "laneWriterAddresses": {
+            "0x0830": [
+              "0x007864f8",
+              "0x00786944"
+            ],
+            "0x0834": [
+              "0x00786511",
+              "0x0078692c"
+            ],
+            "0x0838": [
+              "0x0078651d",
+              "0x00786937"
+            ],
+            "0x083c": [
+              "0x00786505",
+              "0x0078694c"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17e6",
+          "writerAddresses": [
+            "0x0078652a",
+            "0x00786954"
+          ]
+        }
+      },
+      {
+        "accessor": "lightFallOffA",
+        "enumValue": 5,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0850",
+            "0x0854",
+            "0x0858",
+            "0x085c"
+          ],
+          "laneWriterAddresses": {
+            "0x0850": [
+              "0x0078632a",
+              "0x007865cf"
+            ],
+            "0x0854": [
+              "0x00786346",
+              "0x007865d7"
+            ],
+            "0x0858": [
+              "0x0078634e",
+              "0x007865c1"
+            ],
+            "0x085c": [
+              "0x00786338",
+              "0x007865df"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17ea",
+          "writerAddresses": [
+            "0x0078635b",
+            "0x007865e7"
+          ]
+        }
+      },
+      {
+        "accessor": "lightFallOffB",
+        "enumValue": 6,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0860",
+            "0x0864",
+            "0x0868",
+            "0x086c"
+          ],
+          "laneWriterAddresses": {
+            "0x0860": [
+              "0x00786362",
+              "0x007865f1"
+            ],
+            "0x0864": [
+              "0x00786370",
+              "0x00786610"
+            ],
+            "0x0868": [
+              "0x00786378",
+              "0x007865ff"
+            ],
+            "0x086c": [
+              "0x00786380",
+              "0x00786618"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17ec",
+          "writerAddresses": [
+            "0x00786388",
+            "0x00786620"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotMatrix0",
+        "enumValue": 7,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0870",
+            "0x0874",
+            "0x0878",
+            "0x087c"
+          ],
+          "laneWriterAddresses": {
+            "0x0870": [
+              "0x00786799"
+            ],
+            "0x0874": [
+              "0x007867a7"
+            ],
+            "0x0878": [
+              "0x007867b5"
+            ],
+            "0x087c": [
+              "0x007867c3"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17ee",
+          "writerAddresses": [
+            "0x007867cb"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotMatrix1",
+        "enumValue": 8,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0880",
+            "0x0884",
+            "0x0888",
+            "0x088c"
+          ],
+          "laneWriterAddresses": {
+            "0x0880": [
+              "0x007867d8"
+            ],
+            "0x0884": [
+              "0x007867e6"
+            ],
+            "0x0888": [
+              "0x007867f4"
+            ],
+            "0x088c": [
+              "0x00786805"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17f0",
+          "writerAddresses": [
+            "0x00786816"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotMatrix2",
+        "enumValue": 9,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x0890",
+            "0x0894",
+            "0x0898",
+            "0x089c"
+          ],
+          "laneWriterAddresses": {
+            "0x0890": [
+              "0x0078681d"
+            ],
+            "0x0894": [
+              "0x00786839"
+            ],
+            "0x0898": [
+              "0x00786847"
+            ],
+            "0x089c": [
+              "0x00786855"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17f2",
+          "writerAddresses": [
+            "0x0078685d"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotAABB",
+        "enumValue": 11,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x08b0",
+            "0x08b4",
+            "0x08b8",
+            "0x08bc"
+          ],
+          "laneWriterAddresses": {
+            "0x08b0": [
+              "0x007866aa"
+            ],
+            "0x08b4": [
+              "0x007866b2"
+            ],
+            "0x08b8": [
+              "0x007866c0"
+            ],
+            "0x08bc": [
+              "0x007866a2"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17f6",
+          "writerAddresses": [
+            "0x007866c8"
+          ]
+        }
+      },
+      {
+        "accessor": "lightConeControl1",
+        "enumValue": 12,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x08c0",
+            "0x08c4",
+            "0x08c8",
+            "0x08cc"
+          ],
+          "laneWriterAddresses": {
+            "0x08c0": [
+              "0x0078664e"
+            ],
+            "0x08c4": [
+              "0x00786662"
+            ],
+            "0x08c8": [
+              "0x0078666a"
+            ],
+            "0x08cc": [
+              "0x00786656"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17f8",
+          "writerAddresses": [
+            "0x00786672"
+          ]
+        }
+      },
+      {
+        "accessor": "lightSpotCookieSlideControl",
+        "enumValue": 14,
+        "valueStorage": {
+          "baseOffset": 2048,
+          "baseRegister": "ESI",
+          "formula": "source + 0x800 + enum*16 + lane*4",
+          "laneOffsets": [
+            "0x08e0",
+            "0x08e4",
+            "0x08e8",
+            "0x08ec"
+          ],
+          "laneWriterAddresses": {
+            "0x08e0": [
+              "0x00786539"
+            ],
+            "0x08e4": [
+              "0x00786541"
+            ],
+            "0x08e8": [
+              "0x00786558"
+            ],
+            "0x08ec": [
+              "0x00786560"
+            ]
+          }
+        },
+        "versionStorage": {
+          "baseOffset": 6112,
+          "baseRegister": "ESI",
+          "formula": "source + 0x17E0 + enum*2",
+          "offset": "0x17fc",
+          "writerAddresses": [
+            "0x00786568"
+          ]
+        }
+      }
+    ],
+    "selectedRuntimeRecord": {
+      "activeByteCheckInstruction": "0x00786987",
+      "auxPointerSource": "record + 0x150 -> caller local -> writer EAX -> [EAX+4]",
+      "baseExpressionInstruction": "0x0078698f",
+      "indexScaleBytes": 352,
+      "indexScaleInstruction": "0x00786981",
+      "recordToWriterEDI": "0x00786a70"
+    },
+    "sourceStateBase": {
+      "EBXToWriterESI": "0x00786a72",
+      "callerFirstStackArgumentToEBX": "0x00786964",
+      "independentValueLayout": "source + 0x800 + enum*16",
+      "independentVersionLayout": "source + 0x17E0 + enum*2"
+    },
+    "writer": {
+      "endVaExclusive": "0x00786960",
+      "sha256": "b8b815456fe80bdf35711972f02aff7b0151fb933c950be468f4fa0d4a3d2d0b",
+      "startVa": "0x00786210"
+    }
+  },
+  "runtimeInputs": [
+    {
+      "accessor": "lightPosition",
+      "currentClientStaticRowVa": 13803896,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_POSITION",
+      "enumValue": 0,
+      "retainedSpecialOccurrences": 130,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightDiffuse",
+      "currentClientStaticRowVa": 13803916,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_DIFFUSE",
+      "enumValue": 1,
+      "retainedSpecialOccurrences": 130,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotDir",
+      "currentClientStaticRowVa": 13803936,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOTDIR",
+      "enumValue": 2,
+      "retainedSpecialOccurrences": 130,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotFactors",
+      "currentClientStaticRowVa": 13803956,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOTFACTORS",
+      "enumValue": 3,
+      "retainedSpecialOccurrences": 97,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightFallOffA",
+      "currentClientStaticRowVa": 13803996,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_FALLOFF_A",
+      "enumValue": 5,
+      "retainedSpecialOccurrences": 130,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightFallOffB",
+      "currentClientStaticRowVa": 13804016,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_FALLOFF_B",
+      "enumValue": 6,
+      "retainedSpecialOccurrences": 130,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotMatrix0",
+      "currentClientStaticRowVa": 13804036,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOT_MATRIX0",
+      "enumValue": 7,
+      "retainedSpecialOccurrences": 102,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotMatrix1",
+      "currentClientStaticRowVa": 13804056,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOT_MATRIX1",
+      "enumValue": 8,
+      "retainedSpecialOccurrences": 102,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotMatrix2",
+      "currentClientStaticRowVa": 13804076,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOT_MATRIX2",
+      "enumValue": 9,
+      "retainedSpecialOccurrences": 102,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotAABB",
+      "currentClientStaticRowVa": 13804116,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOT_AABB",
+      "enumValue": 11,
+      "retainedSpecialOccurrences": 34,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightConeControl1",
+      "currentClientStaticRowVa": 13804136,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_CONE_CONTROL1",
+      "enumValue": 12,
+      "retainedSpecialOccurrences": 34,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    },
+    {
+      "accessor": "lightSpotCookieSlideControl",
+      "currentClientStaticRowVa": 13804176,
+      "enumSymbol": "CONST_SRC_CODE_LIGHT_SPOT_COOKIE_SLIDE_CONTROL",
+      "enumValue": 14,
+      "retainedSpecialOccurrences": 68,
+      "sourceClass": "constant",
+      "updateFrequency": "RARELY"
+    }
+  ],
+  "sources": {
+    "callers": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_LIGHT_WRITER_786210_CALLERS_V1.json",
+      "sha256": "e43045f655d7461883eecbad42955b22a5436f48f71cc3710ea9d66bde769533"
+    },
+    "denominator": {
+      "path": "proof/render/T6_RETAIL_SPECIAL_OMITTED_CODE_INPUT_STATIC_IDENTITY_V1.json",
+      "sha256": "2bf38e80ac95ee73a4093e5278d005dbd42a25fe5a75aaff4104d10a754cd466"
+    },
+    "getter": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_CODE_MATRIX_GETTER_SEMANTICS_V1.json",
+      "sha256": "96800d2ef2ce5d5d5c7e8b812a5e42b39a79683a24fb9802b6e8347234de7042"
+    },
+    "versionXrefs": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_LIGHT_CONST_VERSION_WRITER_XREFS_V1.json",
+      "sha256": "01d9e8b1a6b7e9193e557e295148b2e6bd160f7c477b434ad71297f6ae5b916c"
+    },
+    "writer": {
+      "path": "proof/current_client/T6_CURRENT_CLIENT_LIGHT_WRITER_786210_PROBE_V1.json",
+      "sha256": "23d2896092e03d82f03ac5d179b983728c05dfc1f66f96ee0928cbd9bc923e38"
+    }
+  },
+  "summary": {
+    "allProviderInputsShareExactSourceStateBase": true,
+    "allValueLanesHaveExactWriter": true,
+    "allVersionSlotsHaveExactWriter": true,
+    "currentClientProviderClosed": true,
+    "directCallerCount": 1,
+    "retainedSpecialOccurrenceCount": 1189,
+    "runtimeInputCount": 12,
+    "selectedRuntimeRecordStrideBytes": 352,
+    "writerFunctionCount": 1
+  }
+}
