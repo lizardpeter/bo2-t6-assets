@@ -139,6 +139,12 @@ def main():
       "format":FORMAT,
       "authority":"SHA-classified current-client exact code-matrix getter + exhaustive direct base-0 version writers + exact matrix-population route gates",
       "accessor":"worldMatrix","enumValue":211,"occurrenceCount":wm["totalOccurrences"],
+      "runtimeInput":{
+        "accessor":"worldMatrix","enumSymbol":wm["enumSymbol"],"enumValue":211,
+        "sourceClass":wm["sourceClass"],"updateFrequency":wm["updateFrequency"],
+        "retainedSpecialOccurrences":wm["totalOccurrences"],
+        "currentClientStaticRowVa":wm["currentClientStaticRowVa"],
+      },
       "matrix":{"matrixIndex":0,"baseIndex":0,"cacheOffset":0,"bytes":64,
                 "returnAddress":"source + firstRow*16"},
       "writerRoutes":rows,
