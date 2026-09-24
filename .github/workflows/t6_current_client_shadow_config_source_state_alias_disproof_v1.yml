@@ -1,0 +1,50 @@
+name: T6 current client shadow config source-state alias disproof v1
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_current_client_shadow_config_source_state_alias_disproof_v1.py'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_POINTER_TABLE_XREFS_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_OBJECT_PROVENANCE_PROBE_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_GAMETIME_STATE_COPY_PROBE_V1.json'
+      - 'proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json'
+      - '.github/workflows/t6_current_client_shadow_config_source_state_alias_disproof_v1.yml'
+permissions:
+  contents: write
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove source-state alias impossible
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_current_client_shadow_config_source_state_alias_disproof_v1.py \
+            --pointer-xrefs proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_POINTER_TABLE_XREFS_V1.json \
+            --object-proof proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_OBJECT_PROVENANCE_PROBE_V1.json \
+            --gametime-proof proof/current_client/T6_CURRENT_CLIENT_GAMETIME_STATE_COPY_PROBE_V1.json \
+            --sampler-proof proof/current_client/T6_CURRENT_CLIENT_CODE_PIXEL_SAMPLER_ARRAY_SEMANTICS_V1.json \
+            --out proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_SOURCE_STATE_ALIAS_DISPROOF_V1.json
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_SOURCE_STATE_ALIAS_DISPROOF_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Persist shadow config source-state alias disproof'
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then ok=1; break; fi
+              sleep 2
+            done
+            test "$ok" = 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_CURRENT_CLIENT_SHADOW_CONFIG_SOURCE_STATE_ALIAS_DISPROOF_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_SHADOW_CONFIG_SOURCE_STATE_ALIAS_DISPROOF_V1.json
+          if-no-files-found: error
+          compression-level: 9
