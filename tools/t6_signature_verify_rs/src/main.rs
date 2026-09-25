@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use rsa::{pkcs1::DecodeRsaPublicKey, pss::Pss, RsaPublicKey};
+use rsa::{hazmat::rsa_encrypt, pkcs1::DecodeRsaPublicKey, traits::PublicKeyParts, BigUint, RsaPublicKey};
 use sha2::{Digest, Sha256};
 
 const SIGNATURE_OFFSET: usize = 56;
@@ -60,11 +60,104 @@ fn run() -> Result<(), String> {
 
     let key = RsaPublicKey::from_pkcs1_der(&TREYARCH_RSA_PUBLIC_KEY_DER)
         .map_err(|error| format!("failed to parse Treyarch RSA key: {error}"))?;
-    let pss = Pss::new_with_salt::<Sha256>(PSS_SALT_BYTES);
-    let digest = Sha256::digest(&table);
-    key.verify(pss, digest.as_slice(), signature)
-        .map_err(|error| format!("RSA-PSS verification failed: {error}"))?;
+    verify_libtomcrypt_pss(&key, signature, &table)?;
 
     println!("T6_RSA_SIGNATURE_VALID hash_table_bytes={} signature_bytes={} salt_bytes={}", table.len(), signature.len(), PSS_SALT_BYTES);
     Ok(())
+}
+
+
+fn verify_libtomcrypt_pss(
+    key: &RsaPublicKey,
+    signature: &[u8],
+    message_hash_bytes: &[u8],
+) -> Result<(), String> {
+    let modulus_bits = key.n().bits() as usize;
+    let modulus_bytes = key.size();
+    if signature.len() != modulus_bytes {
+        return Err(format!(
+            "RSA signature is {} bytes; modulus requires {modulus_bytes}",
+            signature.len()
+        ));
+    }
+
+    let sig_int = BigUint::from_bytes_be(signature);
+    if &sig_int >= key.n() {
+        return Err("RSA signature representative is outside modulus".to_owned());
+    }
+    let em_int = rsa_encrypt(key, &sig_int)
+        .map_err(|error| format!("raw RSA public operation failed: {error}"))?;
+    let raw = em_int.to_bytes_be();
+    if raw.len() > modulus_bytes {
+        return Err("raw RSA result exceeds modulus width".to_owned());
+    }
+    let mut em_full = vec![0u8; modulus_bytes];
+    em_full[modulus_bytes - raw.len()..].copy_from_slice(&raw);
+
+    let em_bits = modulus_bits
+        .checked_sub(1)
+        .ok_or_else(|| "invalid zero-bit RSA modulus".to_owned())?;
+    let em_len = (em_bits + 7) / 8;
+    let em = &em_full[modulus_bytes - em_len..];
+
+    const H_LEN: usize = 32;
+    if em_len < H_LEN + PSS_SALT_BYTES + 2 {
+        return Err("RSA modulus is too short for T6 PSS".to_owned());
+    }
+    if em.last().copied() != Some(0xbc) {
+        return Err("T6 PSS trailer byte is not 0xBC".to_owned());
+    }
+
+    let db_len = em_len - H_LEN - 1;
+    let (masked_db, tail) = em.split_at(db_len);
+    let h = &tail[..H_LEN];
+
+    let unused_bits = em_len * 8 - em_bits;
+    let forbidden_mask = 0xffu8
+        .checked_shl((8 - unused_bits) as u32)
+        .unwrap_or(0);
+    if masked_db[0] & forbidden_mask != 0 {
+        return Err("T6 PSS encoded message has forbidden high bits".to_owned());
+    }
+
+    let mut db = masked_db.to_vec();
+    mgf1_xor_sha256(&mut db, h);
+    db[0] &= 0xff >> unused_bits;
+
+    let ps_len = em_len - PSS_SALT_BYTES - H_LEN - 2;
+    if db[..ps_len].iter().any(|byte| *byte != 0) {
+        return Err("T6 PSS zero padding is invalid".to_owned());
+    }
+    if db[ps_len] != 0x01 {
+        return Err("T6 PSS separator is not 0x01".to_owned());
+    }
+    let salt = &db[db.len() - PSS_SALT_BYTES..];
+
+    let mut sha = Sha256::new();
+    sha.update([0u8; 8]);
+    sha.update(message_hash_bytes);
+    sha.update(salt);
+    let expected_h = sha.finalize();
+
+    if expected_h.as_slice() != h {
+        return Err("T6 LibTomCrypt-compatible PSS digest mismatch".to_owned());
+    }
+    Ok(())
+}
+
+fn mgf1_xor_sha256(target: &mut [u8], seed: &[u8]) {
+    let mut counter = 0u32;
+    let mut offset = 0usize;
+    while offset < target.len() {
+        let mut sha = Sha256::new();
+        sha.update(seed);
+        sha.update(counter.to_be_bytes());
+        let block = sha.finalize();
+        let count = (target.len() - offset).min(block.len());
+        for index in 0..count {
+            target[offset + index] ^= block[index];
+        }
+        offset += count;
+        counter = counter.wrapping_add(1);
+    }
 }
