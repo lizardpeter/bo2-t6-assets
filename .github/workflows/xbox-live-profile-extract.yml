@@ -346,9 +346,13 @@ jobs:
                               (None, false, None, None, None, None)
                           };
 
+                      let verified_online = live_account
+                          && online_xuid.as_deref() != Some("0000000000000000")
+                          && matches!(membership.as_deref(), Some("Silver/Free") | Some("Gold/Paid"));
+
                       println!(
-                          "  EXTRACT {} magic={:?} title_id={:08X} gamertag={:?} live={} online_xuid={:?} membership={:?}",
-                          path, magic, title_id, gamertag, live_account, online_xuid, membership
+                          "  EXTRACT {} magic={:?} title_id={:08X} gamertag={:?} live={} online_xuid={:?} membership={:?} verified_online={}",
+                          path, magic, title_id, gamertag, live_account, online_xuid, membership, verified_online
                       );
 
                       manifest.push(json!({
@@ -364,6 +368,7 @@ jobs:
                           "title_name": title_name,
                           "gamertag": gamertag,
                           "live_account": live_account,
+                          "verified_online": verified_online,
                           "online_xuid": online_xuid,
                           "membership": membership,
                           "account_type": account_type,
@@ -379,9 +384,9 @@ jobs:
               ).unwrap();
 
               let live_count = manifest.iter()
-                  .filter(|m| m.get("live_account").and_then(|v| v.as_bool()) == Some(true))
+                  .filter(|m| m.get("verified_online").and_then(|v| v.as_bool()) == Some(true))
                   .count();
-              println!("{}: extracted {} candidate package(s), {} verified Live account(s)",
+              println!("{}: extracted {} candidate package(s), {} verified online account(s)",
                   source_name, manifest.len(), live_count);
           }
           EOF
@@ -439,7 +444,7 @@ jobs:
 
             cat "$OUT/$IMAGE/manifest.json" || true
 
-            LIVE_COUNT="$(jq '[.[] | select(.live_account == true)] | length' "$OUT/$IMAGE/manifest.json" 2>/dev/null || echo 0)"
+            LIVE_COUNT="$(jq '[.[] | select(.verified_online == true)] | length' "$OUT/$IMAGE/manifest.json" 2>/dev/null || echo 0)"
             if [ "$LIVE_COUNT" -gt 0 ]; then
               echo "Found $LIVE_COUNT verified Xbox Live profile(s) in $IMAGE"
               FOUND_LIVE=1
