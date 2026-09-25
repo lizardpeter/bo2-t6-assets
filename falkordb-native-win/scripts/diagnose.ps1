@@ -2,7 +2,8 @@ param(
     [string]$WorkDir = "$PSScriptRoot\..\build"
 )
 
-$ErrorActionPreference = "Stop"\n$PSNativeCommandUseErrorActionPreference = $true
+$ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $WorkDir = [IO.Path]::GetFullPath($WorkDir)
 $Falkor = Join-Path $WorkDir "src\FalkorDB"
 $Prefix = Join-Path $WorkDir "native-prefix"
