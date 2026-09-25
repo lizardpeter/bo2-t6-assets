@@ -7,6 +7,7 @@ on:
       - t6-ipak-lzo-perf-lab
     paths:
       - 'tools/t6_ipak_lzo_corpus_v1.py'
+      - 'tools/t6_ipak_remote_lzo_corpus_v1.py'
       - 'tools/t6_ipak_lzo_perf_rs/**'
       - '.github/workflows/t6_ipak_lzo_perf_lab.yml'
 
@@ -24,23 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch pinned retail Nuketown IPAK
+      - name: Build range-backed shared retail LZO command corpus
         run: |
           set -euo pipefail
-          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ipak https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak
-          test "$(stat -c '%s' /tmp/mp_nuketown_2020.ipak)" = 165543936
-          echo '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031  /tmp/mp_nuketown_2020.ipak' | sha256sum -c -
-
-      - name: Build exact retail LZO command corpus
-        run: |
-          set -euo pipefail
-          python3 tools/t6_ipak_lzo_corpus_v1.py /tmp/mp_nuketown_2020.ipak /tmp/t6-lzo-corpus --scan-limit 128 | tee /tmp/corpus.json
+          python3 tools/t6_ipak_remote_lzo_corpus_v1.py \
+            https://r2.houseofkublai.com/bo2/zone/all/base.ipak \
+            /tmp/t6-lzo-corpus --limit 128 | tee /tmp/corpus.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/corpus.json'))
-          assert d['sourceSha256'] == '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031', d
+          assert d['url'] == 'https://r2.houseofkublai.com/bo2/zone/all/base.ipak', d
           assert d['lzoCommandCount'] == 128, d
           assert d['lzoCompressedBytes'] > 0 and d['lzoDecodedBytes'] > 0, d
+          assert d['rangeBytesFetched'] < d['remoteBytes'], d
           PY
 
       - name: Benchmark safe pure-Rust LZO decoders
@@ -66,7 +63,10 @@ jobs:
           best=max(rows,key=lambda r:r[3])
           base=next(r for r in rows if r[0]=='lzo-0.1.3')
           out=[
-              f"source_sha256={corpus['sourceSha256']}",
+              f"source_url={corpus['url']}",
+              f"source_remote_bytes={corpus['remoteBytes']}",
+              f"source_range_requests={corpus['rangeRequests']}",
+              f"source_range_bytes_fetched={corpus['rangeBytesFetched']}",
               f"lzo_commands={corpus['lzoCommandCount']}",
               f"lzo_compressed_bytes={corpus['lzoCompressedBytes']}",
               f"lzo_decoded_bytes={corpus['lzoDecodedBytes']}",
