@@ -1,0 +1,98 @@
+name: uregraph T6 source and R2 corpus
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout main with full history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Build Git/source/R2 manifests
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/out /tmp/tree
+          git rev-parse HEAD | tee /tmp/out/main_commit.txt
+          git bundle create /tmp/out/bo2-t6-assets.git.bundle --all
+          rsync -a --exclude='.git' ./ /tmp/tree/
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C /tmp/tree -cf /tmp/out/bo2-t6-assets-tree.tar .
+          zstd -T0 -10 /tmp/out/bo2-t6-assets-tree.tar -o /tmp/out/bo2-t6-assets-tree.tar.zst
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,json,urllib.request,urllib.error,concurrent.futures,hashlib
+          root=Path('.')
+          rx=re.compile(r"https://r2\.houseofkublai\.com/bo2[^\s'\"<>)\\]+")
+          urls=set()
+          for p in root.rglob('*'):
+              if not p.is_file() or '.git' in p.parts: continue
+              try:
+                  if p.stat().st_size>32*1024*1024: continue
+                  s=p.read_text(encoding='utf-8',errors='ignore')
+              except Exception: continue
+              for m in rx.findall(s):
+                  u=m.rstrip('.,;:]}')
+                  u=u.replace('\\n','').replace('\\','')
+                  urls.add(u)
+          bases=[
+            'https://r2.houseofkublai.com/bo2',
+            'https://r2.houseofkublai.com/bo2/pluto_t6_full_game',
+            'https://r2.houseofkublai.com/bo2/Plutonium/pluto_t6_full_game',
+            'https://r2.houseofkublai.com/bo2/game',
+          ]
+          for b in bases:
+              for n in ['t6mp.exe','t6sp.exe','t6mp(1)(1).exe','t6mpv43.exe']:
+                  urls.add(f'{b}/{n}')
+          ua={'User-Agent':'uregraph-t6-r2-census/1'}
+          def head(u):
+              row={'url':u}
+              try:
+                  req=urllib.request.Request(u,method='HEAD',headers=ua)
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      h=dict(r.headers)
+                      row.update(status=r.status,size=int(h.get('Content-Length') or 0),etag=h.get('ETag'),last_modified=h.get('Last-Modified'),content_type=h.get('Content-Type'))
+              except urllib.error.HTTPError as e:
+                  row.update(status=e.code,error='http')
+              except Exception as e:
+                  row.update(status=None,error=repr(e))
+              return row
+          rows=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=48) as ex:
+              for r in ex.map(head,sorted(urls)): rows.append(r)
+          reachable=[r for r in rows if r.get('status') in (200,206)]
+          manifest={'format':'uregraph-t6-r2-reference-census-v1','source_repo':'lizardpeter/bo2-t6-assets','commit':Path('/tmp/out/main_commit.txt').read_text().strip(),
+                    'discovered_url_count':len(rows),'reachable_count':len(reachable),'rows':rows}
+          Path('/tmp/out/T6_R2_REFERENCE_CENSUS.json').write_text(json.dumps(manifest,indent=2,sort_keys=True))
+          exp_size=12850328
+          exp_sha='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'
+          candidates=[]
+          for row in reachable:
+              if row.get('size')!=exp_size or not row['url'].lower().endswith('.exe'): continue
+              rec={'url':row['url'],'size':row['size']}
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(row['url'],headers=ua),timeout=90) as resp:
+                      raw=resp.read()
+                  rec['actual_size']=len(raw); rec['sha256']=hashlib.sha256(raw).hexdigest(); rec['exact_retail_t6mp']=(len(raw)==exp_size and rec['sha256']==exp_sha)
+              except Exception as e: rec['error']=repr(e)
+              candidates.append(rec)
+          Path('/tmp/out/T6_R2_RETAIL_T6MP_IDENTITY.json').write_text(json.dumps({'expected_size':exp_size,'expected_sha256':exp_sha,'candidates':candidates},indent=2,sort_keys=True))
+          print(json.dumps({'url_count':len(rows),'reachable':len(reachable),'retail_t6mp_candidates':candidates},indent=2))
+          PY
+          sha256sum /tmp/out/bo2-t6-assets.git.bundle /tmp/out/bo2-t6-assets-tree.tar.zst /tmp/out/T6_R2_REFERENCE_CENSUS.json /tmp/out/T6_R2_RETAIL_T6MP_IDENTITY.json > /tmp/out/SHA256SUMS.txt
+      - name: Upload T6 corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-source-r2-corpus
+          path: /tmp/out/
+          compression-level: 0
+          retention-days: 3
