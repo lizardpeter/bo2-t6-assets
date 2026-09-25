@@ -47,30 +47,30 @@ jobs:
           fetch webkinz_swf_current 'https://www.webkinz.com/Webkinz.swf?v390_249'
           fetch webkinz_swf_oldquery 'https://www.webkinz.com/Webkinz.swf?v320_181'
           fetch main2_www_current 'https://www.webkinz.com/SWF/main2.swf?v=v390_249'
-          fetch main2_assets_current 'https://assets.webkinz.com/SWF/main2.swf?v=v390_249'
+          fetch main2_assets_current 'https://www.webkinz.com/SWF/main2.swf?v=v390_249'
 
           # Current bootstrap children recovered from ActionScript strings.
-          fetch webkinzXML_swf 'https://assets.webkinz.com/SWF/server/webkinzXML.swf?v=v390_249'
-          fetch as3bridgeService_swf 'https://assets.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249'
-          fetch adBridge_swf 'https://assets.webkinz.com/SWF/server/adBridge.swf?v=v390_249'
-          fetch envMain_swf 'https://assets.webkinz.com/SWF/staticdata/envMain.swf?v=v390_249'
-          fetch tips_swf 'https://assets.webkinz.com/SWF/staticdata/tips.swf?v=v390_249'
-          fetch views_swf 'https://assets.webkinz.com/SWF/staticdata/views.swf?v=v390_249'
-          fetch mapi_swf 'https://assets.webkinz.com/SWF/VIEWS/MU2/MAPI.swf?rnd=v390_249'
-          fetch event_dispatcher_swf 'https://assets.webkinz.com/SWF/EventDispatcherScopeResolver.swf?v=v390_249'
-          fetch click_tracker_swf 'https://assets.webkinz.com/SWF/ClickTracker/WebkinzClickTracker.swf?v=v390_249'
-          fetch social_hub_swf 'https://assets.webkinz.com/SWF/SocialHub/SocialHub.swf?v=v390_249'
-          fetch fclicky_swf 'https://assets.webkinz.com/SWF/FLOATOBJECT/FClickyManager.swf?v=v390_249'
+          fetch webkinzXML_swf 'https://www.webkinz.com/SWF/server/webkinzXML.swf?v=v390_249'
+          fetch as3bridgeService_swf 'https://www.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249'
+          fetch adBridge_swf 'https://www.webkinz.com/SWF/server/adBridge.swf?v=v390_249'
+          fetch envMain_swf 'https://www.webkinz.com/SWF/staticdata/envMain.swf?v=v390_249'
+          fetch tips_swf 'https://www.webkinz.com/SWF/staticdata/tips.swf?v=v390_249'
+          fetch views_swf 'https://www.webkinz.com/SWF/staticdata/views.swf?v=v390_249'
+          fetch mapi_swf 'https://www.webkinz.com/SWF/VIEWS/MU2/MAPI.swf?rnd=v390_249'
+          fetch event_dispatcher_swf 'https://www.webkinz.com/SWF/EventDispatcherScopeResolver.swf?v=v390_249'
+          fetch click_tracker_swf 'https://www.webkinz.com/SWF/ClickTracker/WebkinzClickTracker.swf?v=v390_249'
+          fetch social_hub_swf 'https://www.webkinz.com/SWF/SocialHub/SocialHub.swf?v=v390_249'
+          fetch fclicky_swf 'https://www.webkinz.com/SWF/FLOATOBJECT/FClickyManager.swf?v=v390_249'
 
           # XML/config children.
-          fetch instance_factory_xml 'https://assets.webkinz.com/XML/InstanceFactory/InstanceFactoryData.xml?v=v390_249'
-          fetch translist_xml 'https://assets.webkinz.com/XML/L10N/TransList.xml?v=v390_249'
-          fetch language_exception_xml 'https://assets.webkinz.com/XML/L10N/languageException.xml?v=v390_249'
-          fetch main2_xml 'https://assets.webkinz.com/XML/L10N/main2.xml?v=v390_249'
-          fetch multi_tiered_xml 'https://assets.webkinz.com/XML/multiTiered.xml?v=v390_249'
-          fetch views_xml 'https://assets.webkinz.com/xml/views.xml?v=v390_249'
-          fetch feature_errors_xml 'https://assets.webkinz.com/featureErrors.xml?v=v390_249'
-          fetch ka_course_xml 'https://assets.webkinz.com/SWF/VIEWS/Kinzville/Academy/Data/KaCourseDetails.xml?v=v390_249'
+          fetch instance_factory_xml 'https://www.webkinz.com/XML/InstanceFactory/InstanceFactoryData.xml?v=v390_249'
+          fetch translist_xml 'https://www.webkinz.com/XML/L10N/TransList.xml?v=v390_249'
+          fetch language_exception_xml 'https://www.webkinz.com/XML/L10N/languageException.xml?v=v390_249'
+          fetch main2_xml 'https://www.webkinz.com/XML/L10N/main2.xml?v=v390_249'
+          fetch multi_tiered_xml 'https://www.webkinz.com/XML/multiTiered.xml?v=v390_249'
+          fetch views_xml 'https://www.webkinz.com/xml/views.xml?v=v390_249'
+          fetch feature_errors_xml 'https://www.webkinz.com/featureErrors.xml?v=v390_249'
+          fetch ka_course_xml 'https://www.webkinz.com/SWF/VIEWS/Kinzville/Academy/Data/KaCourseDetails.xml?v=v390_249'
 
           # Server discovery/config.
           fetch hydra_servers_xml 'https://es4aws.webkinz.com/servers.xml'
@@ -127,9 +127,9 @@ jobs:
                   for e in xr.findall('.//file'):
                       n=e.attrib.get('n'); tf=e.attrib.get('tf')
                       if n and not n.startswith('http'):
-                          swfs.append('https://assets.webkinz.com/SWF/'+n.lstrip('/')+'?v=v390_249')
+                          swfs.append('https://www.webkinz.com/SWF/'+n.lstrip('/')+'?v=v390_249')
                       if tf:
-                          trans.append('https://assets.webkinz.com/XML/L10N/'+tf.lstrip('/')+'?v=v390_249')
+                          trans.append('https://www.webkinz.com/XML/L10N/'+tf.lstrip('/')+'?v=v390_249')
                   swfs=sorted(set(swfs));trans=sorted(set(trans))
                   Path('out/maps/translist_content_urls.txt').write_text('\n'.join(swfs)+'\n')
                   Path('out/maps/translist_translation_urls.txt').write_text('\n'.join(trans)+'\n')
