@@ -27,6 +27,18 @@ jobs:
           cmake --version
           git --version
 
+      - name: Cache FalkorDB native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            falkordb-native-win/build/src/GraphBLAS
+            falkordb-native-win/build/src/LAGraph
+            falkordb-native-win/build/graphblas-build
+            falkordb-native-win/build/lagraph-build
+            falkordb-native-win/build/native-prefix
+            falkordb-native-win/native_host/target
+          key: falkordb-native-win-v2-${{ runner.os }}-${{ runner.arch }}
+
       - name: Bootstrap native dependencies
         shell: pwsh
         working-directory: falkordb-native-win
