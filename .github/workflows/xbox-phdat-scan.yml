@@ -1,0 +1,118 @@
+name: Scan Xbox 360 ph.dat snapshots
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install EWF tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3
+      - name: Download and mount forensic image
+        run: |
+          set -euxo pipefail
+          IMAGE="DRIVE2_TIME_FINAL.E01"
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/$IMAGE"
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --speed-time 120 --speed-limit 1024 "$URL" -o "/tmp/$IMAGE"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          sudo ls -lh /mnt/xbox-ewf/ewf1
+      - name: Scan raw image for phc3 records
+        run: |
+          set -euxo pipefail
+          OUT=/tmp/phdat-scan
+          mkdir -p "$OUT"
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import datetime, hashlib, json
+
+          raw = Path("/mnt/xbox-ewf/ewf1")
+          out = Path("/tmp/phdat-scan")
+          sig = b"phc3"
+          size = raw.stat().st_size
+          chunk_size = 64 * 1024 * 1024
+          hits = []
+          seen = set()
+
+          with raw.open("rb", buffering=0) as f:
+              base = 0
+              tail = b""
+              while True:
+                  chunk = f.read(chunk_size)
+                  if not chunk:
+                      break
+                  data = tail + chunk
+                  data_base = base - len(tail)
+                  pos = 0
+                  while True:
+                      i = data.find(sig, pos)
+                      if i < 0:
+                          break
+                      off = data_base + i
+                      if off not in seen:
+                          seen.add(off)
+                          hits.append(off)
+                      pos = i + 1
+                  base += len(chunk)
+                  tail = data[-3:]
+                  if base % (1024*1024*1024) < chunk_size:
+                      print(f"scanned {base/(1024**3):.1f}/{size/(1024**3):.1f} GiB hits={len(hits)}", flush=True)
+
+          enriched = []
+          EPOCH = 116444736000000000
+          with raw.open("rb", buffering=0) as f:
+              for off in sorted(hits):
+                  f.seek(off)
+                  b = f.read(71)
+                  if len(b) < 71:
+                      continue
+                  ft = int.from_bytes(b[0x0C:0x14], "big")
+                  title = int.from_bytes(b[0x20:0x24], "big")
+                  dt = None
+                  plausible_time = False
+                  try:
+                      sec = (ft - EPOCH) / 10_000_000
+                      d = datetime.datetime.fromtimestamp(sec, datetime.timezone.utc)
+                      dt = d.isoformat()
+                      plausible_time = 2005 <= d.year <= 2020
+                  except Exception:
+                      pass
+                  enriched.append({
+                      "offset": off,
+                      "sha256_71": hashlib.sha256(b).hexdigest(),
+                      "u32_04": int.from_bytes(b[4:8], "big"),
+                      "u32_08": int.from_bytes(b[8:12], "big"),
+                      "filetime_be_0c": f"{ft:016X}",
+                      "utc_0c": dt,
+                      "plausible_xbox360_time": plausible_time,
+                      "u32_14": int.from_bytes(b[0x14:0x18], "big"),
+                      "u32_18": f"{int.from_bytes(b[0x18:0x1C], 'big'):08X}",
+                      "u32_1c": f"{int.from_bytes(b[0x1C:0x20], 'big'):08X}",
+                      "title_id_20": f"{title:08X}",
+                      "tail_24_47_hex": b[0x24:].hex(),
+                      "raw_71_hex": b.hex()
+                  })
+
+          valid = [x for x in enriched if x["plausible_xbox360_time"]]
+          result = {"raw_size": size, "all_phc3_hits": enriched, "plausible_records": valid}
+          (out/"phdat_scan.json").write_text(json.dumps(result, indent=2))
+          print(json.dumps(result, indent=2))
+          PY
+          sudo chown -R "$USER":"$USER" "$OUT"
+      - name: Upload ph.dat scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-phdat-scan
+          path: /tmp/phdat-scan
