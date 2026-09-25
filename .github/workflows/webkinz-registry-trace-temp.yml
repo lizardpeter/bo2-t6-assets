@@ -1,0 +1,47 @@
+name: Temporary Webkinz registry trace
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch registry candidates
+        run: python3 tools/webkinz_registry_trace.py
+      - name: Download FFDec
+        run: |
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180 -o ffdec.zip "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
+          unzip -q ffdec.zip -d ffdec
+      - name: Decompile service SWFs
+        run: |
+          mkdir -p registry_trace/source registry_trace/meta
+          for f in registry_trace/input/*.swf; do
+            [ -f "$f" ] || continue
+            sig=$(head -c 3 "$f" || true)
+            case "$sig" in
+              FWS|CWS|ZWS)
+                n=$(basename "$f" .swf)
+                mkdir -p "registry_trace/source/$n"
+                java -Xmx3g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 600 -onerror ignore -export script "registry_trace/source/$n" "$f" > "registry_trace/meta/$n.ffdec.log" 2>&1 || true
+                ;;
+            esac
+          done
+      - name: Mine registry settings
+        run: |
+          grep -RniE 'ASSET_DOMAIN_ITEMS|ASSET_DOMAIN_PETS|ITEM_URL|ITEM_ICON_URL|PET_ICON_URL|AS2_ASSET_FOLDER|RegistryService|registryService|assetDomain|asset_domain|setting\.' registry_trace/source registry_trace/input > registry_trace/registry-hits.txt || true
+          grep -RhaoE 'https?://[^"'"'"' <>)]+' registry_trace/source registry_trace/input | sort -u > registry_trace/absolute-urls.txt || true
+          grep -RhaoE '([A-Za-z0-9_.%+ -]+/)+[A-Za-z0-9_.%+?=&-]+\.(swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js|txt)(\?[^"'"'"' <>)]*)?' registry_trace/source registry_trace/input | sort -u > registry_trace/resource-refs.txt || true
+          find registry_trace/source -type f -printf '%p\t%s\n' | sort > registry_trace/source-files.tsv
+      - name: Upload registry trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-registry-trace
+          path: registry_trace/
+          retention-days: 7
