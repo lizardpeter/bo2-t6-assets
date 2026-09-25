@@ -1,4 +1,4 @@
-name: Carve and rebuild Xbox 360 Live profile
+name: Reconstruct LabPlayerOne Xbox 360 profile
 
 on:
   push:
@@ -55,9 +55,9 @@ jobs:
           const SUPERBLOCK_SIZE: u64 = 0x1000;
           const SECTOR_SIZE: u64 = 0x200;
           const STFS_BLOCK: usize = 0x1000;
-          const DELETED_PROFILE_FIRST_CLUSTER: u32 = 21751;
-          const DELETED_PROFILE_SIZE: usize = 278528;
-          const PROFILE_NAME: &str = "E0000255AEF799DA";
+          const DELETED_PROFILE_FIRST_CLUSTER: u32 = 17798;
+          const DELETED_PROFILE_SIZE: usize = 225280;
+          const PROFILE_NAME: &str = "E00001B3AEF799DA";
 
           fn align_up(v: u64, a: u64) -> u64 { (v + a - 1) & !(a - 1) }
 
@@ -375,14 +375,14 @@ jobs:
           set -euxo pipefail
           OUT="/tmp/stfs-carve-result"
           mkdir -p "$OUT"
-          if [ ! -f "$OUT/reconstructed/E0000255AEF799DA" ]; then
+          if [ ! -f "$OUT/reconstructed/E00001B3AEF799DA" ]; then
             echo "No reconstructed profile to extract."
             exit 0
           fi
 
           git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
           mkdir -p "$OUT/unpacked"
-          python3 /tmp/nxe-dashboard/tools/extract_stfs.py             "$OUT/reconstructed/E0000255AEF799DA" "$OUT/unpacked"             | tee "$OUT/unpacked/extract.log"
+          python3 /tmp/nxe-dashboard/tools/extract_stfs.py             "$OUT/reconstructed/E00001B3AEF799DA" "$OUT/unpacked"             | tee "$OUT/unpacked/extract.log"
 
           find "$OUT/unpacked" -type f -printf '%p %s bytes\n' | sort
           for g in "$OUT"/unpacked/*.gpd "$OUT"/unpacked/*.fit; do
@@ -398,7 +398,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xbox360-profile-full-reconstruction
+          name: xbox360-labplayerone-full-reconstruction
           path: /tmp/stfs-carve-result
           if-no-files-found: warn
           retention-days: 7
