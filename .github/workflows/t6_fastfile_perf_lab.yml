@@ -27,19 +27,19 @@ jobs:
 
       - name: Benchmark scalar + miniz
         run: |
-          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,scalar -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/scalar_miniz.txt
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,scalar -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/scalar_miniz.txt
 
       - name: Benchmark scalar + zlib-rs
         run: |
-          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,scalar -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/scalar_zlibrs.txt
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,scalar -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/scalar_zlibrs.txt
 
       - name: Benchmark RustCrypto Salsa20 + miniz
         run: |
-          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,rustcrypto -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/rustcrypto_miniz.txt
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,rustcrypto -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/rustcrypto_miniz.txt
 
       - name: Benchmark RustCrypto Salsa20 + zlib-rs
         run: |
-          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/rustcrypto_zlibrs.txt
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/rustcrypto_zlibrs.txt
 
       - name: Benchmark winning path with output reserve
         run: |
@@ -66,10 +66,10 @@ jobs:
           hashes={r[4] for r in rows}
           if len(hashes)!=1:
               raise SystemExit(f"identity mismatch: {hashes}")
-          base=rows[0][1]
+          base_enc=rows[0][2]
           lines=[]
           for name,sec,enc,exp,h in rows:
-              lines.append(f"{name}: seconds={sec:.6f} speedup_vs_scalar_miniz={base/sec:.3f}x encrypted_mib_s={enc:.3f} expanded_mib_s={exp:.3f}")
+              lines.append(f"{name}: seconds={sec:.6f} speedup_vs_scalar_miniz={enc/base_enc:.3f}x encrypted_mib_s={enc:.3f} expanded_mib_s={exp:.3f}")
           lines.append(f"expanded_sha256={rows[0][4]}")
           report="\n".join(lines)+"\n"
           print(report,end="")
