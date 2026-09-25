@@ -15,7 +15,8 @@ use graph::{
         runtime::{QueryStatistics, ResultSummary, Runtime},
     },
 };
-use parking_lot::RwLock;\nuse orx_iterable::collection::Collection;
+use parking_lot::RwLock;
+use orx_iterable::collection::Collection;
 
 unsafe extern "C" {
     fn malloc(size: usize) -> *mut c_void;
