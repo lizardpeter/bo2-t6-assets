@@ -23,6 +23,37 @@ jobs:
           curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/input/RoomInter.xml "https://play.webkinz.com/SWF/ROOM/RoomInter.xml"
           curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/input/subApplications.xml "https://play.webkinz.com/subApplications/subApplications.xml?v=v390_249"
           sha256sum out/input/* > out/SHA256SUMS.txt
+          mkdir -p out/probes
+          python3 - <<'PY'
+from pathlib import Path
+bases=[
+ "https://play.webkinz.com/SWF/ITEMS/",
+ "https://play.webkinz.com/swf/items/",
+ "https://assets.webkinz.com/SWF/ITEMS/",
+ "https://assets.webkinz.com/swf/items/",
+]
+ids=[22241,22243,22245]
+dirs=["sw","nw","ne","se"]
+lines=[]
+for b in bases:
+    for i in ids:
+        for d in dirs:
+            for ext in ("png","xml"):
+                lines.append(f"{b}{i}/{d}.{ext}")
+Path("out/probe-urls.txt").write_text("\n".join(lines)+"\n")
+PY
+          i=0
+          while IFS= read -r u; do
+            i=$((i+1))
+            h=$(printf "%03d" "$i")
+            curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D "out/probes/$h.headers" -o "out/probes/$h.body" "$u" || true
+            printf '%s\t' "$u" >> out/probe-results.tsv
+            awk '/^HTTP\//{s=$2} END{printf "%s\t",s}' "out/probes/$h.headers" >> out/probe-results.tsv
+            awk 'BEGIN{IGNORECASE=1}/^content-type:/{ct=$0}END{sub(/^[^:]+:[[:space:]]*/,"",ct);gsub("\r","",ct);printf "%s\t",ct}' "out/probes/$h.headers" >> out/probe-results.tsv
+            wc -c < "out/probes/$h.body" | tr -d '\n' >> out/probe-results.tsv
+            printf '\t' >> out/probe-results.tsv
+            file -b "out/probes/$h.body" >> out/probe-results.tsv
+          done < out/probe-urls.txt
           mkdir -p out/source/webkinz-house
           java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 600 -onerror ignore -export script out/source/webkinz-house out/input/webkinz-house.swf > out/meta/ffdec.log 2>&1 || true
           grep -RniE 'ITEMS_FOLDER|SWF/ITEMS|itemUrl|sprite(sheet)?|wallpaper|flooring|assetDeliveryBaseURL|itemClass|itemType|load(File|Movie|Clip)|AssetLoader|requestItem|itemPath|itemAsset' out/source/webkinz-house > out/room-item-formulas.txt || true
