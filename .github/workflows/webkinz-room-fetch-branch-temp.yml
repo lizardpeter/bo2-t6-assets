@@ -1,4 +1,4 @@
-name: Temporary Webkinz room fetch branch
+name: Temporary Webkinz item asset base probe
 
 on:
   push:
@@ -9,26 +9,55 @@ permissions:
   contents: read
 
 jobs:
-  fetch:
+  probe:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fetch known public room resources
+      - name: Probe candidate room item roots
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/webkinz-house.swf "https://play.webkinz.com/subApplications/webkinz-house/webkinz-house.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession1.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession1.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession2.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession2.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/buildmap1024.swf "https://play.webkinz.com/SWF/ROOM/buildmap1024.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomInter.xml "https://play.webkinz.com/SWF/ROOM/RoomInter.xml"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/subApplications.xml "https://play.webkinz.com/subApplications/subApplications.xml?v=v390_249"
-          sha256sum out/* > out/SHA256SUMS.txt
-      - name: Upload room resources
+          cat > out/candidates.tsv <<'EOF'
+furniture_lower_flat	https://assets.webkinz.com/swf/items/178/sw.png
+furniture_upper_flat	https://assets.webkinz.com/SWF/ITEMS/178/sw.png
+furniture_lower_typed	https://assets.webkinz.com/swf/items/2/178/sw.png
+furniture_upper_typed	https://assets.webkinz.com/SWF/ITEMS/2/178/sw.png
+furniture_play_flat	https://play.webkinz.com/SWF/ITEMS/178/sw.png
+furniture_play_typed	https://play.webkinz.com/SWF/ITEMS/2/178/sw.png
+furniture_xml_lower_flat	https://assets.webkinz.com/swf/items/178/sw.xml
+furniture_xml_upper_flat	https://assets.webkinz.com/SWF/ITEMS/178/sw.xml
+wall_lower_flat	https://assets.webkinz.com/swf/items/184/large.png
+wall_upper_flat	https://assets.webkinz.com/SWF/ITEMS/184/large.png
+wall_lower_typed	https://assets.webkinz.com/swf/items/7/184/large.png
+wall_upper_typed	https://assets.webkinz.com/SWF/ITEMS/7/184/large.png
+floor_lower_flat	https://assets.webkinz.com/swf/items/160/large.png
+floor_upper_flat	https://assets.webkinz.com/SWF/ITEMS/160/large.png
+EOF
+          while IFS=$'\t' read -r name url; do
+            echo "$url" > "out/$name.url"
+            curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D "out/$name.headers" -o "out/$name.body" "$url" || true
+            file "out/$name.body" > "out/$name.file" 2>&1 || true
+            wc -c "out/$name.body" > "out/$name.size" 2>/dev/null || true
+          done < out/candidates.tsv
+          python3 - <<'PY'
+from pathlib import Path
+import json,re
+rows=[]
+for uf in sorted(Path("out").glob("*.url")):
+    n=uf.stem
+    h=Path("out")/(n+".headers")
+    b=Path("out")/(n+".body")
+    hdr=h.read_text(errors="ignore") if h.exists() else ""
+    sts=re.findall(r'^HTTP/\S+\s+(\d+)',hdr,re.M)
+    ct=re.findall(r'^content-type:\s*(.+)$',hdr,re.I|re.M)
+    rows.append({"name":n,"url":uf.read_text().strip(),"status":int(sts[-1]) if sts else None,"content_type":ct[-1].strip() if ct else "","size":b.stat().st_size if b.exists() else 0,"sig":b.read_bytes()[:16].hex() if b.exists() else ""})
+Path("out/summary.json").write_text(json.dumps(rows,indent=2))
+print(json.dumps(rows,indent=2))
+PY
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-room-resources
+          name: webkinz-item-base-probe
           path: out/
           retention-days: 7
