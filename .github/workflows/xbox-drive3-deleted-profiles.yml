@@ -52,7 +52,7 @@ jobs:
               /// Forensic helper for an active directory whose FAT chain still exists:
               /// return all slots from every cluster, including deleted entries.
               pub fn recovery_read_directory_chain_all(&mut self, first_cluster: u32) -> Result<Vec<DirectoryEntry>> {
-                  let chain = self.cluster_chain(first_cluster)?;
+                  let chain = self.read_chain(first_cluster)?;
                   let mut out = Vec::new();
                   for c in chain {
                       out.extend(self.recovery_read_directory_cluster_all(c)?);
