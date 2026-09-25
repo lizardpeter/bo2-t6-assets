@@ -15,6 +15,10 @@ URLS = {
     "main.js": "https://play.webkinz.com/main.f0803e1f17ed9e88d9ce.js",
     "runtime.js": "https://play.webkinz.com/runtime.4fd09af43b6bc8d95a03.js",
     "vendor.js": "https://play.webkinz.com/vendor.f9da5857a20f170f68a7.js",
+    "common.js": "https://play.webkinz.com/common.8cba702ee7ffc4f0306f.js",
+    "chunk1.js": "https://play.webkinz.com/1.bed31ad6b74769d0989b.js",
+    "chunk11.js": "https://play.webkinz.com/11.b248ee40ed2bc7ca5fb2.js",
+    "chunk22.js": "https://play.webkinz.com/22.6dcadeecc981526283f8.js",
 }
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
 
