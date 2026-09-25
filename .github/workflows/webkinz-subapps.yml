@@ -1,0 +1,163 @@
+name: Webkinz subapplication harvest
+
+on:
+  push:
+    branches:
+      - webkinz-harvest
+    paths:
+      - webkinz-subapps-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Enumerate subapplications and asset maps
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p archive meta
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, re, urllib.parse, urllib.request
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          BASE='https://www.webkinz.com/'
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140 Safari/537.36'
+          OUT=Path('archive')
+          META=Path('meta')
+
+          def get(url):
+              req=urllib.request.Request(url,headers={'User-Agent':UA})
+              try:
+                  with urllib.request.urlopen(req,timeout=35) as r:
+                      return r.status,r.geturl(),r.headers.get('Content-Type',''),r.read()
+              except urllib.error.HTTPError as e:
+                  try:b=e.read()
+                  except:b=b''
+                  return e.code,url,e.headers.get('Content-Type','') if e.headers else '',b
+              except Exception as e:
+                  return 0,url,type(e).__name__+': '+str(e),b''
+
+          code,_,_,xmlb=get(BASE+'subApplications/subApplications.xml')
+          if code != 200: raise SystemExit('subApplications.xml unavailable')
+          xr=ET.fromstring(xmlb)
+          names=sorted(set(e.attrib['name'] for e in xr.findall('subApplication') if e.attrib.get('name')))
+          (META/'subapplication_names.txt').write_text('\n'.join(names)+'\n')
+
+          first=[]
+          for n in names:
+              q=urllib.parse.quote(n,safe='-_.')
+              first += [
+                {'url':BASE+f'subApplications/{q}/web.json','rel':f'www.webkinz.com/subApplications/{n}/web.json','kind':'map','subapp':n},
+                {'url':BASE+f'subApplications/{q}/{q}.swf','rel':f'www.webkinz.com/subApplications/{n}/{n}.swf','kind':'content','subapp':n},
+              ]
+
+          results=[]
+          blobs={}
+          def fetch(rec):
+              st,eff,ct,b=get(rec['url'])
+              o={**rec,'status':st,'effective_url':eff,'content_type':ct,'size':len(b)}
+              if st==200 and b:
+                  p=OUT/rec['rel'];p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b)
+                  o['sha256']=hashlib.sha256(b).hexdigest()
+                  blobs[rec['rel']]=b
+              return o
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              for r in ex.map(fetch,first):results.append(r)
+
+          # Resolve every Source in every live web.json using the exact decompiled tag rules:
+          # no tag => ./subApplications/<Source>
+          # [remote] => ../subApplications/
+          # [l10n] => ../XML/L10N/US_EN
+          # [l10n_us_en] => ../XML/L10N/US_EN
+          # [help] => ../XML/HELP/
+          # [lib] => ./lib
+          second={}
+          for r in results:
+              if r['kind']!='map' or r['status']!=200:continue
+              p=OUT/r['rel']
+              try: obj=json.loads(p.read_text(errors='ignore'))
+              except Exception as e:
+                  continue
+              for section,val in (obj.get('AssetMap') or {}).items():
+                  if not isinstance(val,list):continue
+                  for ent in val:
+                      if not isinstance(ent,dict) or not ent.get('Source'):continue
+                      src=str(ent['Source']).replace('\\','/')
+                      raw=src
+                      if '[l10n_us_en]' in src:
+                          path=src.replace('[l10n_us_en]','XML/L10N/US_EN')
+                      elif '[l10n]' in src:
+                          path=src.replace('[l10n]','XML/L10N/US_EN')
+                      elif '[help]' in src:
+                          path=src.replace('[help]','XML/HELP')
+                      elif '[lib]' in src:
+                          path=src.replace('[lib]','lib')
+                      elif '[remote]' in src:
+                          path=src.replace('[remote]','subApplications')
+                      else:
+                          path='subApplications/'+src.lstrip('/')
+                      while path.startswith('./'):path=path[2:]
+                      while path.startswith('../'):path=path[3:]
+                      path=re.sub(r'/+','/',path).lstrip('/')
+                      url=BASE+urllib.parse.quote(path,safe='/:%?=&+,-_.()')
+                      rel='www.webkinz.com/'+urllib.parse.unquote(urllib.parse.urlparse(url).path).lstrip('/')
+                      second.setdefault(url,{'url':url,'rel':rel,'kind':'asset','subapp':r['subapp'],'section':section,'asset_name':ent.get('AssetName'),'source':raw})
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              for rr in ex.map(fetch,second.values()):results.append(rr)
+
+          # Mine live subapp SWF/JSON for further same-site resource references.
+          dep={}
+          pat=re.compile(rb'(?i)(?:\.\.?/|/)?(?:SWF|XML|subApplications|subbAplications|lib)/[A-Za-z0-9_ ./()&+,%~-]+\.(?:swf|xml|json|png|jpg|jpeg|gif|mp3|wav|flv|mp4)')
+          for p in OUT.rglob('*'):
+              if not p.is_file():continue
+              b=p.read_bytes()
+              for m in pat.finditer(b):
+                  s=m.group(0).decode('latin1','ignore').strip()
+                  while s.startswith('../'):s=s[3:]
+                  while s.startswith('./'):s=s[2:]
+                  s=s.lstrip('/')
+                  url=BASE+urllib.parse.quote(s,safe='/:%?=&+,-_.()')
+                  rel='www.webkinz.com/'+s
+                  if url not in second:
+                      dep.setdefault(url,{'url':url,'rel':rel,'kind':'mined','subapp':'','source':'mined'})
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              for rr in ex.map(fetch,dep.values()):results.append(rr)
+
+          results.sort(key=lambda x:(x['status']!=200,x['rel']))
+          live=[x for x in results if x['status']==200]
+          summary={
+              'subapplication_ids':len(xr.findall('subApplication')),
+              'unique_names':len(names),
+              'maps_live':sum(x['kind']=='map' and x['status']==200 for x in results),
+              'contents_live':sum(x['kind']=='content' and x['status']==200 for x in results),
+              'asset_sources_discovered':len(second),
+              'assets_live':sum(x['kind']=='asset' and x['status']==200 for x in results),
+              'mined_candidates':len(dep),
+              'mined_live':sum(x['kind']=='mined' and x['status']==200 for x in results),
+              'total_live_unique_urls':len(set(x['url'] for x in live)),
+              'live_bytes':sum(x['size'] for x in live),
+          }
+          (META/'manifest.json').write_text(json.dumps(results,indent=2))
+          (META/'summary.json').write_text(json.dumps(summary,indent=2))
+          (META/'live_urls.txt').write_text('\n'.join(sorted(set(x['url'] for x in live)))+'\n')
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-subapplications
+          path: |
+            archive/
+            meta/
+          if-no-files-found: error
+          retention-days: 7
