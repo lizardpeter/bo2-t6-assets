@@ -12,6 +12,9 @@ URLS = {
     "pet_config.swf": "https://play.webkinz.com/SWF/PETS/config.swf",
     "service.as": "https://play.webkinz.com/service.as",
     "server_packages_services.as": "https://play.webkinz.com/SWF/server/__Packages.com.webkinz.services.as",
+    "main.js": "https://play.webkinz.com/main.f0803e1f17ed9e88d9ce.js",
+    "runtime.js": "https://play.webkinz.com/runtime.4fd09af43b6bc8d95a03.js",
+    "vendor.js": "https://play.webkinz.com/vendor.f9da5857a20f170f68a7.js",
 }
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
 
