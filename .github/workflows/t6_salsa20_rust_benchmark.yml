@@ -1,0 +1,25 @@
+name: T6 Salsa20 Rust benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - t6-salsa20-rust-benchmark
+    paths:
+      - 'tools/t6_salsa20_bench_rs/**'
+      - '.github/workflows/t6_salsa20_rust_benchmark.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Benchmark scalar T6 core vs RustCrypto Salsa20
+        run: |
+          set -euo pipefail
+          cargo run --quiet --release --manifest-path tools/t6_salsa20_bench_rs/Cargo.toml | tee /tmp/t6-salsa20-bench.txt
+          grep -q '^T6_SALSA20_BENCH ' /tmp/t6-salsa20-bench.txt
