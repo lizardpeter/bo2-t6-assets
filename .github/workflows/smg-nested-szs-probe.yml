@@ -1,0 +1,71 @@
+name: smg nested szs probe
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import urllib.request,struct,json,hashlib
+          URL='https://r2.houseofkublai.com/super-mario-galaxy/DATA/files/AudioRes/Seqs/JaiSeq.arc'
+          raw=urllib.request.urlopen(urllib.request.Request(URL,headers={'User-Agent':'uregraph-smg-nested/1'})).read()
+          def cstr(b,o):
+              z=b.find(b'\0',o); return b[o:z].decode('utf-8','replace')
+          def rarc(b):
+              data_base=0x20+struct.unpack_from('>I',b,0x0c)[0]
+              nn,nr,ne,er,ss,sr=struct.unpack_from('>6I',b,0x20); nb=0x20+nr; eb=0x20+er; sb=0x20+sr
+              nodes=[]
+              for i in range(nn):
+                  o=nb+i*16; no,h,c,f=struct.unpack_from('>IHHI',b,o+4); nodes.append((cstr(b,sb+no),c,f))
+              ents=[]
+              for i in range(ne):
+                  o=eb+i*20; fid,h,an,do,sz,u=struct.unpack_from('>HHIIII',b,o); ents.append((fid,(an>>24)&255,cstr(b,sb+(an&0xffffff)),do,sz))
+              out=[]; seen=set()
+              def walk(ni,pre):
+                  if ni in seen:return
+                  seen.add(ni); _,cnt,first=nodes[ni]
+                  for j in range(first,first+cnt):
+                    fid,attr,nm,do,sz=ents[j]
+                    if nm in ('.','..'):continue
+                    if fid==0xffff or attr&2:
+                      if 0<=do<len(nodes):walk(do,pre+nm+'/')
+                    else:
+                      off=data_base+do;out.append((pre+nm,b[off:off+sz]))
+              walk(0,'');return out
+          def yaz0(s):
+              n=struct.unpack_from('>I',s,4)[0];o=bytearray();p=16;bits=0;code=0
+              while len(o)<n:
+                if bits==0:code=s[p];p+=1;bits=8
+                if code&0x80:o.append(s[p]);p+=1
+                else:
+                  b1,b2=s[p],s[p+1];p+=2;cp=len(o)-((((b1&15)<<8)|b2)+1);ln=b1>>4
+                  if ln==0:ln=s[p]+0x12;p+=1
+                  else:ln+=2
+                  for _ in range(ln):o.append(o[cp]);cp+=1
+                code=(code<<1)&255;bits-=1
+              return bytes(o[:n])
+          rows=[]
+          for name,data in rarc(raw):
+            if name.lower().endswith('.szs'):
+              dec=yaz0(data) if data[:4]==b'Yaz0' else data
+              rows.append({'path':name,'compressed_size':len(data),'decoded_size':len(dec),
+                           'compressed_sha256':hashlib.sha256(data).hexdigest(),'decoded_sha256':hashlib.sha256(dec).hexdigest(),
+                           'magic_hex':dec[:16].hex(),'magic_ascii':''.join(chr(x) if 32<=x<127 else '.' for x in dec[:16])})
+          out={'count':len(rows),'rows':rows}
+          open('out/nested_szs.json','w').write(json.dumps(out,indent=2))
+          from collections import Counter
+          print(json.dumps({'count':len(rows),'decoded_magic':Counter(r['magic_ascii'][:8] for r in rows)},indent=2,default=dict))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smg-nested-szs-probe
+          path: out/
+          retention-days: 3
