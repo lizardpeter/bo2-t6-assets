@@ -1,155 +1,101 @@
-name: Temporary Webkinz decompile
+name: Temporary Webkinz root and lazy-chunk probe
 
 on:
   pull_request:
     branches: [main]
 
 concurrency:
-  group: webkinz-decompile-${{ github.event.pull_request.number }}
+  group: webkinz-root-probe-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  decompile:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 8
     steps:
-      - name: Fetch tools and live Webkinz files
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p input out/js out/resources out/meta out/decompiled
-          java -version 2>&1 | tee out/meta/java-version.txt
-
-          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -o ffdec.zip             "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
-          unzip -q ffdec.zip -d ffdec
-          java -jar ffdec/ffdec.jar -help > out/meta/ffdec-help.txt 2>&1 || true
-
-          curl -L --fail --retry 2 --connect-timeout 10 --max-time 120             -o input/Webkinz.swf "https://www.webkinz.com/Webkinz.swf?v390_249"
-          curl -L --fail --retry 2 --connect-timeout 10 --max-time 120             -o input/main2.swf "https://www.webkinz.com/SWF/main2.swf?v=v390_249"
-          curl -L --fail --retry 2 --connect-timeout 10 --max-time 60             -o input/wconf.json "https://play.webkinz.com/wconf.js.php"
-          curl -L --fail --retry 2 --connect-timeout 10 --max-time 60             -o input/play.html "https://play.webkinz.com/"
-
-          for f in input/*; do
-            sha256sum "$f"
-            file "$f"
-          done | tee out/meta/input-files.txt
-
-      - name: Fetch current web shell bundles
+      - name: Fetch live play chunks and test legacy roots
         shell: bash
         run: |
           set +e
-          base="https://play.webkinz.com"
-          for f in             styles.f5d1c9eecac4834891da.css             runtime.4fd09af43b6bc8d95a03.js             polyfills.8ae21cca062f6f7f7c29.js             vendor.f9da5857a20f170f68a7.js             main.f0803e1f17ed9e88d9ce.js
-          do
-            curl -L -sS --connect-timeout 8 --max-time 60 -A "Mozilla/5.0"               -D "out/js/$f.headers" -o "out/js/$f" "$base/$f"
-            echo "$?" > "out/js/$f.exit"
-          done
+          mkdir -p out/chunks out/roots out/maps
 
-      - name: Probe current v390_249 asset graph
-        shell: bash
-        run: |
-          set +e
-          base="https://assets.webkinz.com"
-          version="v390_249"
-
-          fetch_asset() {
-            label="$1"
-            path="$2"
+          fetch() {
+            name="$1"; url="$2"; dir="$3"
             (
-              url="$base$path"
-              echo "$url" > "out/resources/$label.url"
-              curl -L -sS --connect-timeout 8 --max-time 60 -A "Mozilla/5.0"                 -D "out/resources/$label.headers"                 -o "out/resources/$label.body" "$url"
-              echo "$?" > "out/resources/$label.exit"
-              wc -c "out/resources/$label.body" > "out/resources/$label.size" 2>/dev/null || true
-              file "out/resources/$label.body" > "out/resources/$label.file" 2>/dev/null || true
-              sha256sum "out/resources/$label.body" > "out/resources/$label.sha256" 2>/dev/null || true
+              echo "$url" > "$dir/$name.url"
+              curl -L -sS --connect-timeout 8 --max-time 45 -A "Mozilla/5.0"                 -D "$dir/$name.headers" -o "$dir/$name.body" "$url"
+              echo $? > "$dir/$name.exit"
+              wc -c "$dir/$name.body" > "$dir/$name.size" 2>/dev/null || true
+              file "$dir/$name.body" > "$dir/$name.file" 2>/dev/null || true
+              sha256sum "$dir/$name.body" > "$dir/$name.sha256" 2>/dev/null || true
             ) &
           }
 
-          fetch_asset views_xml "/xml/views.xml?v=$version"
-          fetch_asset translist_xml "/XML/L10N/TransList.xml?v=$version"
-          fetch_asset language_exception_xml "/XML/L10N/languageException.xml?v=$version"
-          fetch_asset main2_xml "/main2.xml?v=$version"
-          fetch_asset multitiered_xml "/multiTiered.xml?v=$version"
-          fetch_asset instance_factory_xml "/XML/InstanceFactory/InstanceFactoryData.xml?v=$version"
-          fetch_asset tips_swf "/SWF/staticdata/tips.swf?v=$version"
-          fetch_asset items_swf "/items.swf?v=$version"
-          fetch_asset petclasses_swf "/petclasses.swf?v=$version"
-          fetch_asset views_swf "/SWF/staticdata/views.swf?v=$version"
-          fetch_asset envmain_swf "/SWF/staticdata/envMain.swf?v=$version"
-          fetch_asset webkinzxml_swf "/SWF/server/webkinzXML.swf?v=$version"
-          fetch_asset eventdispatcher_swf "/SWF/EventDispatcherScopeResolver.swf?v=$version"
-          fetch_asset as3bridge_swf "/SWF/server/as3bridgeService.swf?v=$version"
-          fetch_asset adbridge_swf "/SWF/server/adBridge.swf?v=$version"
-          fetch_asset topbar_swf "/SWF/TopBar.swf?v=$version"
-          fetch_asset socialhub_swf "/SWF/SocialHub/SocialHub.swf?v=$version"
-          fetch_asset mapi_swf "/SWF/VIEWS/MU2/MAPI.swf?v=$version"
-          fetch_asset webkinz_clicktracker_swf "/SWF/ClickTracker/WebkinzClickTracker.swf?v=$version"
+          # Lazy chunks required by PlayPageModule according to runtime bundle.
+          fetch common_js "https://play.webkinz.com/common.8cba702ee7ffc4f0306f.js" out/chunks
+          fetch chunk11_js "https://play.webkinz.com/11.b248ee40ed2bc7ca5fb2.js" out/chunks
+          fetch play22_js "https://play.webkinz.com/22.6dcadeecc981526283f8.js" out/chunks
+
+          # Source-map candidates for main/runtime/lazy chunks.
+          fetch main_map "https://play.webkinz.com/main.f0803e1f17ed9e88d9ce.js.map" out/maps
+          fetch runtime_map "https://play.webkinz.com/runtime.4fd09af43b6bc8d95a03.js.map" out/maps
+          fetch play22_map "https://play.webkinz.com/22.6dcadeecc981526283f8.js.map" out/maps
+          fetch chunk11_map "https://play.webkinz.com/11.b248ee40ed2bc7ca5fb2.js.map" out/maps
+          fetch common_map "https://play.webkinz.com/common.8cba702ee7ffc4f0306f.js.map" out/maps
+
+          version="v390_249"
+          for host in play.webkinz.com www.webkinz.com assets.webkinz.com; do
+            tag=$(echo "$host" | tr '.' '_')
+            fetch "${tag}_webkinz" "https://$host/Webkinz.swf?$version" out/roots
+            fetch "${tag}_main2" "https://$host/SWF/main2.swf?v=$version" out/roots
+            fetch "${tag}_main2xml" "https://$host/main2.xml?v=$version" out/roots
+            fetch "${tag}_viewsxml" "https://$host/xml/views.xml?v=$version" out/roots
+            fetch "${tag}_translist" "https://$host/XML/L10N/TransList.xml?v=$version" out/roots
+            fetch "${tag}_items" "https://$host/items.swf?v=$version" out/roots
+            fetch "${tag}_petclasses" "https://$host/petclasses.swf?v=$version" out/roots
+            fetch "${tag}_webkinzxml" "https://$host/SWF/server/webkinzXML.swf?v=$version" out/roots
+          done
           wait
 
-      - name: Decompile ActionScript with FFDec
-        shell: bash
-        run: |
-          set +e
-          mkdir -p out/decompiled/Webkinz out/decompiled/main2
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+          rows=[]
+          for d in (Path("out/chunks"),Path("out/maps"),Path("out/roots")):
+              for uf in sorted(d.glob("*.url")):
+                  k=uf.stem
+                  hdr=(d/(k+".headers")).read_text(errors="ignore") if (d/(k+".headers")).exists() else ""
+                  body=d/(k+".body")
+                  sts=re.findall(r'^HTTP/\S+\s+(\d+)',hdr,re.M)
+                  ct=re.findall(r'^content-type:\s*(.+)$',hdr,re.I|re.M)
+                  rows.append({
+                    "name":k,"url":uf.read_text(errors="ignore").strip(),
+                    "status":int(sts[-1]) if sts else None,
+                    "size":body.stat().st_size if body.exists() else 0,
+                    "type":ct[-1].strip() if ct else ""
+                  })
+          Path("out/status.json").write_text(json.dumps(rows,indent=2))
+          with open("out/status.tsv","w") as f:
+              for r in rows:
+                  f.write(f'{r["status"]}\t{r["size"]}\t{r["type"]}\t{r["name"]}\t{r["url"]}\n')
 
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 900             -onerror ignore -export script out/decompiled/Webkinz input/Webkinz.swf             > out/meta/webkinz-export.log 2>&1
-          echo "$?" > out/meta/webkinz-export.exit
+          # Search chunks and any source maps for game bootstrap logic.
+          pats=re.compile(rb'Webkinz|main2|\.swf|flashvars|ASSETSDomain|WAPIDomain|application\.v|service\.assets|service\.site|wconf|FlashVars|wkFlash',re.I)
+          with open("out/chunk-interesting.txt","w",encoding="utf-8") as out:
+              for p in list(Path("out/chunks").glob("*.body"))+list(Path("out/maps").glob("*.body")):
+                  b=p.read_bytes()
+                  for line in re.findall(rb'[ -~]{5,}',b):
+                      if pats.search(line):
+                          out.write(p.name+": "+line.decode("latin1","ignore")+"\n")
+          PY
 
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 900             -onerror ignore -export script out/decompiled/main2 input/main2.swf             > out/meta/main2-export.log 2>&1
-          echo "$?" > out/meta/main2-export.exit
-
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpSWF input/Webkinz.swf             > out/meta/Webkinz-dumpSWF.txt 2>&1 || true
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpAS3 input/Webkinz.swf             > out/meta/Webkinz-dumpAS3.txt 2>&1 || true
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpSWF input/main2.swf             > out/meta/main2-dumpSWF.txt 2>&1 || true
-          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpAS2 input/main2.swf             > out/meta/main2-dumpAS2.txt 2>&1 || true
-
-          find out/decompiled -type f -printf '%p\t%s\n' | sort > out/meta/decompiled-file-list.txt
-
-      - name: Build URL and dependency inventory
-        shell: bash
-        run: |
-          set +e
-          : > out/all-urls.txt
-          : > out/all-resource-refs.txt
-          : > out/all-webkinz-hosts.txt
-
-          grep -RhaoE 'https?://[^"'"'"' <>)]+' out/decompiled out/js out/resources input             >> out/all-urls.txt 2>/dev/null || true
-
-          grep -RhaoE '([A-Za-z0-9_.%+ -]+/)+[A-Za-z0-9_.%+?=&-]+\.(swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js)(\?[^"'"'"' <>)]*)?'             out/decompiled out/js out/resources input             >> out/all-resource-refs.txt 2>/dev/null || true
-
-          grep -RhaioE '([A-Za-z0-9.-]+\.)?webkinz\.com|([A-Za-z0-9.-]+\.)?ganz(world|estore)?\.com'             out/decompiled out/js out/resources input             >> out/all-webkinz-hosts.txt 2>/dev/null || true
-
-          sort -u -o out/all-urls.txt out/all-urls.txt
-          sort -u -o out/all-resource-refs.txt out/all-resource-refs.txt
-          sort -fu -o out/all-webkinz-hosts.txt out/all-webkinz-hosts.txt
-
-          {
-            echo "=== INPUT ==="
-            cat out/meta/input-files.txt
-            echo
-            echo "=== DECOMPILE COUNTS ==="
-            find out/decompiled/Webkinz -type f | wc -l
-            find out/decompiled/main2 -type f | wc -l
-            echo
-            echo "=== HOSTS ==="
-            cat out/all-webkinz-hosts.txt
-            echo
-            echo "=== URLS ==="
-            cat out/all-urls.txt
-            echo
-            echo "=== RESOURCE REFS ==="
-            cat out/all-resource-refs.txt
-          } > out/SUMMARY.txt
-
-      - name: Upload decompile
+      - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-decompile
+          name: webkinz-root-probe
           path: out/
-          if-no-files-found: error
           retention-days: 7
