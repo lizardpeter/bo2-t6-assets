@@ -1,4 +1,4 @@
-name: TEMP Webkinz preservation fetch
+name: TEMP Webkinz Mini Arcade quick fetch
 on:
   push:
     paths:
@@ -8,78 +8,58 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
-      - name: Fetch Webkinz live and archived resources
+      - name: Fetch Mini Arcade family
         shell: bash
         run: |
-          set -uo pipefail
-          mkdir -p /tmp/wk/live /tmp/wk/wayback /tmp/wk/meta
-          python3 - <<'PY'
-          import json, pathlib, ssl, urllib.parse, urllib.request, hashlib
-          root=pathlib.Path('/tmp/wk')
-          urls={
+          set -euo pipefail
+          mkdir -p /tmp/wkq
+          cat > /tmp/fetch.py <<'PY'
+          import concurrent.futures, hashlib, json, pathlib, ssl, urllib.parse, urllib.request
+          root=pathlib.Path('/tmp/wkq')
+          targets={
             'miniarcade.swf':'http://www.webkinz.com/SWF/miniarcade/miniarcade.swf',
-            'cashCow.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/cashCow.swf',
-            'bananza.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/bananza.swf',
-            'wheresWacky.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/wheresWacky.swf',
-            'Webkinz.swf':'https://www.webkinz.com/Webkinz.swf?v320_181',
-            'main2.swf':'https://www.webkinz.com/SWF/main2.swf?v=v320_181',
-            'TransList.xml':'https://www.webkinz.com/XML/L10N/TransList.xml',
-            'wconf.js.php':'https://play.webkinz.com/wconf.js.php',
-            'latest.yml':'https://downloads.webkinz.com/apps/latest.yml',
+            'cashCow.swf':'http://www.webkinz.com/SWF/ARCADE/GAMES/cashCow.swf',
+            'bananza.swf':'http://www.webkinz.com/SWF/ARCADE/GAMES/bananza.swf',
+            'wheresWacky.swf':'http://www.webkinz.com/SWF/ARCADE/GAMES/wheresWacky.swf',
           }
-          ctx=ssl.create_default_context()
-          ua={'User-Agent':'Mozilla/5.0 preservation-research'}
-          report={'resources':{}}
-          def get(url, timeout=40):
-              req=urllib.request.Request(url,headers=ua)
-              with urllib.request.urlopen(req,timeout=timeout,context=ctx) as r:
-                  return r.read(), dict(r.headers), r.geturl(), r.status
-          for name,url in urls.items():
-              ent={'url':url}
-              try:
-                  data,h,final,status=get(url)
-                  (root/'live'/name).write_bytes(data)
-                  ent['live']={'ok':True,'status':status,'final':final,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':h.get('Content-Type')}
-              except Exception as e:
-                  ent['live']={'ok':False,'error':repr(e)}
-              target=url.split('?',1)[0]
-              try:
-                  q=urllib.parse.urlencode({'url':target,'output':'json','filter':'statuscode:200','fl':'timestamp,original,digest,length,mimetype','collapse':'digest'})
-                  cdx='https://web.archive.org/cdx/search/cdx?'+q
-                  raw,h,final,status=get(cdx)
-                  (root/'meta'/(name+'.cdx.json')).write_bytes(raw)
-                  rows=json.loads(raw.decode('utf-8','replace'))
-                  ent['wayback_cdx']={'ok':True,'rows':max(0,len(rows)-1)}
-                  if len(rows)>1:
-                      header=rows[0]; records=[dict(zip(header,r)) for r in rows[1:]]
-                      ent['wayback_cdx']['records']=records
-                      for rec in reversed(records):
-                          ts=rec['timestamp']; orig=rec['original']
-                          wb=f'https://web.archive.org/web/{ts}id_/{orig}'
-                          try:
-                              data,h,final,status=get(wb,timeout=60)
-                              (root/'wayback'/name).write_bytes(data)
-                              ent['wayback']={'ok':True,'timestamp':ts,'original':orig,'url':wb,'status':status,'final':final,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':h.get('Content-Type')}
-                              break
-                          except Exception as e:
-                              ent.setdefault('wayback_attempt_errors',[]).append({'timestamp':ts,'error':repr(e)})
-                      if 'wayback' not in ent:
-                          ent['wayback']={'ok':False,'error':'all captures failed'}
-                  else:
-                      ent['wayback']={'ok':False,'error':'no CDX captures'}
-              except Exception as e:
-                  ent['wayback_cdx']={'ok':False,'error':repr(e)}
-              report['resources'][name]=ent
-              print(name, json.dumps(ent, sort_keys=True))
+          ctx=ssl.create_default_context(); headers={'User-Agent':'Mozilla/5.0 (Webkinz preservation research)'}
+          def get(url,t=20):
+            req=urllib.request.Request(url,headers=headers)
+            with urllib.request.urlopen(req,timeout=t,context=ctx) as r: return r.read(),r.geturl(),r.status,r.headers.get('Content-Type')
+          def one(item):
+            name,url=item; out={'url':url}
+            q=urllib.parse.urlencode({'url':url,'output':'json','filter':'statuscode:200','fl':'timestamp,original,digest,length,mimetype','collapse':'digest'})
+            try:
+              raw,final,status,ct=get('https://web.archive.org/cdx/search/cdx?'+q,20)
+              (root/(name+'.cdx.json')).write_bytes(raw)
+              rows=json.loads(raw)
+              out['captures']=max(0,len(rows)-1)
+              if len(rows)>1:
+                hdr=rows[0]; recs=[dict(zip(hdr,r)) for r in rows[1:]]; out['records']=recs
+                for rec in reversed(recs):
+                  wb=f"https://web.archive.org/web/{rec['timestamp']}id_/{rec['original']}"
+                  try:
+                    data,final,status,ct=get(wb,30)
+                    (root/name).write_bytes(data)
+                    out['download']={'ok':True,'url':wb,'final':final,'status':status,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':ct,'signature':data[:8].hex()}
+                    break
+                  except Exception as e: out.setdefault('download_errors',[]).append(repr(e))
+            except Exception as e: out['cdx_error']=repr(e)
+            return name,out
+          report={}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            for name,out in ex.map(one,targets.items()):
+              report[name]=out; print(name,json.dumps(out,sort_keys=True))
           (root/'report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           PY
-          find /tmp/wk -type f -maxdepth 3 -printf '%p %s bytes\n' | sort
-          sha256sum /tmp/wk/live/* /tmp/wk/wayback/* 2>/dev/null || true
+          python3 /tmp/fetch.py
+          file /tmp/wkq/*.swf 2>/dev/null || true
+          sha256sum /tmp/wkq/*.swf 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: WEBKINZ_PRESERVATION_FETCH
-          path: /tmp/wk
+          name: WEBKINZ_MINI_ARCADE_QUICK
+          path: /tmp/wkq
           if-no-files-found: error
