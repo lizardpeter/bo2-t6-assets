@@ -55,9 +55,6 @@ jobs:
           const SUPERBLOCK_SIZE: u64 = 0x1000;
           const SECTOR_SIZE: u64 = 0x200;
           const STFS_BLOCK: usize = 0x1000;
-          const deleted_profile_first_cluster: u32 = 17798;
-          const deleted_profile_size: usize = 225280;
-          const profile_name: &str = "E00001B3AEF799DA";
 
           fn align_up(v: u64, a: u64) -> u64 { (v + a - 1) & !(a - 1) }
 
@@ -345,7 +342,7 @@ jobs:
 
           cargo build --release --manifest-path /tmp/stfs-carver/Cargo.toml
 
-      - name: Download image and reconstruct profile
+      - name: Download image and reconstruct both profiles
         run: |
           set -euxo pipefail
           IMAGE="DRIVE3_TIME_FINAL.E01"
@@ -355,53 +352,53 @@ jobs:
           sudo mkdir -p /mnt/xbox-ewf
           sudo modprobe fuse || true
 
-          curl -fL --retry 8 --retry-all-errors --connect-timeout 30             --speed-time 120 --speed-limit 1024             "$URL" -o "/tmp/$IMAGE"
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
+            --speed-time 120 --speed-limit 1024 \
+            "$URL" -o "/tmp/$IMAGE"
           sha256sum "/tmp/$IMAGE" | tee "$OUT/source-image.sha256"
 
           sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
           sudo stat /mnt/xbox-ewf/ewf1
 
-          set +e
-          sudo /tmp/stfs-carver/target/release/stfs-carver             /mnt/xbox-ewf/ewf1 "$OUT" | tee "$OUT/carve.log"
-          RC=${PIPESTATUS[0]}
-          set -e
+          mkdir -p "$OUT/E00000FFAEF79876" "$OUT/E000014EAEF79876"
+
+          sudo /tmp/stfs-carver/target/release/stfs-carver \
+            /mnt/xbox-ewf/ewf1 "$OUT/E00000FFAEF79876" E00000FFAEF79876 17970 282624 \
+            | tee "$OUT/E00000FFAEF79876/carve.log"
+
+          sudo /tmp/stfs-carver/target/release/stfs-carver \
+            /mnt/xbox-ewf/ewf1 "$OUT/E000014EAEF79876" E000014EAEF79876 17993 229376 \
+            | tee "$OUT/E000014EAEF79876/carve.log"
 
           sudo fusermount3 -u /mnt/xbox-ewf || sudo umount /mnt/xbox-ewf || true
           sudo chown -R "$USER":"$USER" "$OUT"
 
-          cat "$OUT/carve_manifest.json" || true
-          exit "$RC"
+          find "$OUT" -name carve_manifest.json -print -exec cat {} \;
 
       - name: Extract reconstructed STFS contents
-        if: always()
         run: |
           set -euxo pipefail
           OUT="/tmp/stfs-carve-result"
-          mkdir -p "$OUT"
-          if [ ! -f "$OUT/reconstructed/E00001B3AEF799DA" ]; then
-            echo "No reconstructed profile to extract."
-            exit 0
-          fi
-
           git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
-          mkdir -p "$OUT/unpacked"
-          python3 /tmp/nxe-dashboard/tools/extract_stfs.py             "$OUT/reconstructed/E00001B3AEF799DA" "$OUT/unpacked"             | tee "$OUT/unpacked/extract.log"
 
-          find "$OUT/unpacked" -type f -printf '%p %s bytes\n' | sort
-          for g in "$OUT"/unpacked/*.gpd "$OUT"/unpacked/*.fit; do
-            [ -f "$g" ] || continue
-            python3 - "$g" <<'PY'
-          import sys
-          b=open(sys.argv[1],'rb').read(4)
-          print(sys.argv[1], b.hex(), repr(b))
-          PY
+          for D in "$OUT/E00000FFAEF79876" "$OUT/E000014EAEF79876"; do
+            PROFILE="$(basename "$D")"
+            PACKAGE="$D/reconstructed/$PROFILE"
+            if [ ! -f "$PACKAGE" ]; then
+              echo "Missing reconstructed package $PACKAGE"
+              exit 4
+            fi
+            mkdir -p "$D/unpacked"
+            python3 /tmp/nxe-dashboard/tools/extract_stfs.py "$PACKAGE" "$D/unpacked" \
+              | tee "$D/unpacked/extract.log"
+            find "$D/unpacked" -type f -printf '%p %s bytes\n' | sort
           done
 
       - name: Upload reconstruction research artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xbox360-labplayerone-full-reconstruction
+          name: xbox360-drive3-live-profile-reconstructions
           path: /tmp/stfs-carve-result
           if-no-files-found: warn
           retention-days: 7
