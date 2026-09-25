@@ -24,27 +24,7 @@ jobs:
           sudo apt-get install -y ewf-tools fuse3 pkg-config jq
           df -h
 
-      - name: Download Digital Corpora Xbox 360 image
-        run: |
-          set -euxo pipefail
-          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/DRIVE2_TIME_FINAL.E01"
-          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
-            --speed-time 120 --speed-limit 1024 \
-            "$URL" -o /tmp/DRIVE2_TIME_FINAL.E01
-          stat /tmp/DRIVE2_TIME_FINAL.E01
-          sha256sum /tmp/DRIVE2_TIME_FINAL.E01 | tee /tmp/DRIVE2_TIME_FINAL.E01.sha256
-          df -h
-
-      - name: Mount E01 read-only
-        run: |
-          set -euxo pipefail
-          sudo mkdir -p /mnt/xbox-ewf
-          sudo modprobe fuse || true
-          sudo ewfmount /tmp/DRIVE2_TIME_FINAL.E01 /mnt/xbox-ewf
-          sudo ls -lah /mnt/xbox-ewf
-          sudo stat /mnt/xbox-ewf/ewf1
-
-      - name: Build FATX/XTAF extraction helper
+      - name: Build Xbox FATX profile extractor
         run: |
           set -euxo pipefail
           git clone --depth 1 https://github.com/rdmrocha/xtafkit.git /tmp/xtafkit
@@ -53,12 +33,14 @@ jobs:
           cat > /tmp/xbox-profile-extractor/Cargo.toml <<'EOF'
           [package]
           name = "xbox-profile-extractor"
-          version = "0.1.0"
+          version = "0.2.0"
           edition = "2024"
 
           [dependencies]
           fatxlib = { path = "/tmp/xtafkit/fatxlib" }
           sha2 = "0.10"
+          sha1 = "0.11"
+          hmac = "0.13"
           hex = "0.4"
           serde_json = "1"
           EOF
@@ -71,220 +53,429 @@ jobs:
 
           use fatxlib::partition::detect_xbox_partitions;
           use fatxlib::stfs;
+          use fatxlib::types::DirectoryEntry;
           use fatxlib::volume::FatxVolume;
-          use fatxlib::xuids::account;
+          use hmac::{Hmac, Mac};
           use serde_json::json;
+          use sha1::Sha1;
           use sha2::{Digest, Sha256};
+
+          const ACCOUNT_LEN: usize = 0x194;
+          const KEY_PROD: [u8; 16] = [
+              0xE1,0xBC,0x15,0x9C,0x73,0xB1,0xEA,0xE9,0xAB,0x31,0x70,0xF3,0xAD,0x47,0xEB,0xF3
+          ];
+          const KEY_OTHER: [u8; 16] = [
+              0xDA,0xB6,0x9A,0xD9,0x8E,0x28,0x76,0x4F,0x97,0x7E,0xE2,0x48,0x7E,0x4F,0x3F,0x68
+          ];
 
           struct ReadOnlyFile(File);
 
           impl Read for ReadOnlyFile {
-              fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-                  self.0.read(buf)
-              }
+              fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> { self.0.read(buf) }
           }
-
           impl Seek for ReadOnlyFile {
-              fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-                  self.0.seek(pos)
-              }
+              fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> { self.0.seek(pos) }
           }
-
           impl Write for ReadOnlyFile {
               fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
                   Err(io::Error::new(io::ErrorKind::PermissionDenied, "read-only image"))
               }
+              fn flush(&mut self) -> io::Result<()> { Ok(()) }
+          }
 
-              fn flush(&mut self) -> io::Result<()> {
-                  Ok(())
+          #[derive(Debug, Clone)]
+          struct AccountInfo {
+              gamertag: String,
+              live_account: bool,
+              online_xuid: String,
+              membership: String,
+              account_type: String,
+              offset: usize,
+          }
+
+          fn arc4(key: &[u8], data: &mut [u8]) {
+              let mut s = [0u8; 256];
+              for (i, slot) in s.iter_mut().enumerate() { *slot = i as u8; }
+              let mut j: u8 = 0;
+              for i in 0..256 {
+                  j = j.wrapping_add(s[i]).wrapping_add(key[i % key.len()]);
+                  s.swap(i, j as usize);
+              }
+              let mut i: u8 = 0;
+              let mut j: u8 = 0;
+              for b in data.iter_mut() {
+                  i = i.wrapping_add(1);
+                  j = j.wrapping_add(s[i as usize]);
+                  s.swap(i as usize, j as usize);
+                  let k = s[(s[i as usize].wrapping_add(s[j as usize])) as usize];
+                  *b ^= k;
               }
           }
 
-          fn looks_like_profile_xuid(s: &str) -> bool {
-              s.len() == 16
-                  && s.starts_with(|c: char| c == 'E' || c == 'e')
-                  && s.chars().all(|c| c.is_ascii_hexdigit())
+          fn decrypt_account(block: &[u8], key: &[u8]) -> Option<Vec<u8>> {
+              if block.len() != ACCOUNT_LEN { return None; }
+              type HmacSha1 = Hmac<Sha1>;
+              let mut mac = HmacSha1::new_from_slice(key).ok()?;
+              mac.update(&block[..16]);
+              let digest = mac.finalize().into_bytes();
+              let mut data = block[16..].to_vec();
+              arc4(&digest[..16], &mut data);
+              Some(data)
           }
 
-          fn account_gamertag(bytes: &[u8]) -> Option<(String, usize)> {
+          fn decode_gamertag(data: &[u8]) -> Option<String> {
+              if data.len() < 0x2E { return None; }
+              let mut units = Vec::new();
+              for pair in data[0x10..0x2E].chunks_exact(2) {
+                  let u = u16::from_be_bytes([pair[0], pair[1]]);
+                  if u == 0 { break; }
+                  units.push(u);
+              }
+              let s = String::from_utf16(&units).ok()?.trim().to_string();
+              if s.is_empty() || s.chars().count() > 15 { return None; }
+              if !s.chars().all(|c| c.is_alphanumeric() || c == ' ') { return None; }
+              Some(s)
+          }
+
+          fn parse_account_at(block: &[u8], offset: usize) -> Option<AccountInfo> {
+              for key in [&KEY_PROD[..], &KEY_OTHER[..]] {
+                  let data = decrypt_account(block, key)?;
+                  let Some(gamertag) = decode_gamertag(&data) else { continue; };
+                  if data.len() < 0x40 { continue; }
+
+                  let live_account = ((data[0] >> 5) & 1) == 1;
+                  let online_xuid = if live_account {
+                      hex::encode_upper(&data[0x30..0x38])
+                  } else {
+                      "0000000000000000".to_string()
+                  };
+                  let membership = match data[0x39] {
+                      0x30 => "Silver/Free",
+                      0x60 => "Gold/Paid",
+                      _ => "Offline/Other",
+                  }.to_string();
+                  let account_type = String::from_utf8_lossy(&data[0x3C..0x40])
+                      .trim_matches(char::from(0))
+                      .to_string();
+
+                  return Some(AccountInfo {
+                      gamertag, live_account, online_xuid, membership, account_type, offset
+                  });
+              }
+              None
+          }
+
+          fn find_account(bytes: &[u8]) -> Option<AccountInfo> {
               let mut off = 0x1000usize;
-              while off + account::ACCOUNT_BLOCK_LEN <= bytes.len() {
-                  if let Some(tag) =
-                      account::extract_gamertag(&bytes[off..off + account::ACCOUNT_BLOCK_LEN])
-                  {
-                      return Some((tag, off));
+              while off + ACCOUNT_LEN <= bytes.len() {
+                  if let Some(info) = parse_account_at(&bytes[off..off + ACCOUNT_LEN], off) {
+                      return Some(info);
                   }
                   off += 0x1000;
               }
               None
           }
 
+          fn is_xuid(s: &str) -> bool {
+              s.len() == 16 && s.chars().all(|c| c.is_ascii_hexdigit())
+          }
+
+          fn is_stfs(bytes: &[u8]) -> bool {
+              matches!(bytes.get(0..4), Some(b"CON ") | Some(b"LIVE") | Some(b"PIRS"))
+          }
+
+          fn walk_tree<T: Read + Write + Seek>(
+              vol: &mut FatxVolume<T>,
+              path: &str,
+              first_cluster: u32,
+              depth: usize,
+              out: &mut String,
+          ) {
+              if depth == 0 { return; }
+              let entries = match vol.read_directory(first_cluster) {
+                  Ok(v) => v,
+                  Err(e) => {
+                      out.push_str(&format!("{path} <read error: {e}>\n"));
+                      return;
+                  }
+              };
+              for e in entries {
+                  let name = e.filename();
+                  let child = if path == "/" {
+                      format!("/{name}")
+                  } else {
+                      format!("{path}/{name}")
+                  };
+                  out.push_str(&format!(
+                      "{}\t{}\t{} bytes\tcluster={}\n",
+                      if e.is_directory() { "DIR " } else { "FILE" },
+                      child,
+                      e.file_size,
+                      e.first_cluster
+                  ));
+                  if e.is_directory() {
+                      walk_tree(vol, &child, e.first_cluster, depth - 1, out);
+                  }
+              }
+          }
+
+          fn candidate_files<T: Read + Write + Seek>(
+              vol: &mut FatxVolume<T>,
+              xuid: &str,
+          ) -> Vec<(String, DirectoryEntry)> {
+              let mut out = Vec::new();
+
+              let canonical = format!("/Content/{xuid}/FFFE07D1/00010000/{xuid}");
+              if let Ok(e) = vol.resolve_path(&canonical) {
+                  if !e.is_directory() {
+                      out.push((canonical, e));
+                  }
+              }
+
+              let base = format!("/Content/{xuid}/FFFE07D1/00010000");
+              if let Ok(dir) = vol.resolve_path(&base) {
+                  if dir.is_directory() {
+                      if let Ok(children) = vol.read_directory(dir.first_cluster) {
+                          for e in children {
+                              let p = format!("{base}/{}", e.filename());
+                              if !e.is_directory() && !out.iter().any(|(x, _)| x == &p) {
+                                  out.push((p, e));
+                              }
+                          }
+                      }
+                  }
+              }
+
+              out
+          }
+
           fn main() {
-              let image = env::args().nth(1).expect("usage: extractor <raw-image> <out-dir>");
-              let out = env::args().nth(2).expect("usage: extractor <raw-image> <out-dir>");
+              let image = env::args().nth(1).expect("usage: extractor <raw-image> <out-dir> <source-name>");
+              let out = env::args().nth(2).expect("usage: extractor <raw-image> <out-dir> <source-name>");
+              let source_name = env::args().nth(3).unwrap_or_else(|| "unknown".to_string());
+
               fs::create_dir_all(Path::new(&out).join("packages")).unwrap();
 
               let mut f = File::open(&image).expect("open raw EWF stream");
               let device_size = f.seek(SeekFrom::End(0)).expect("get image size");
               f.seek(SeekFrom::Start(0)).unwrap();
-
-              println!("raw image size: {} bytes (0x{:X})", device_size, device_size);
-
               let mut ro = ReadOnlyFile(f);
+
               let parts = detect_xbox_partitions(&mut ro, device_size).expect("detect Xbox partitions");
-
-              println!("partition probe:");
-              for p in &parts {
-                  println!(
-                      "  {} offset=0x{:X} size=0x{:X} valid={} magic={}",
-                      p.name, p.offset, p.size, p.has_valid_magic, p.magic
-                  );
-              }
-
-              let data = parts
-                  .iter()
+              let data = parts.iter()
                   .find(|p| p.name == "360 Data" && p.has_valid_magic)
                   .or_else(|| parts.iter().rev().find(|p| p.has_valid_magic))
                   .expect("no valid Xbox 360 data partition")
                   .clone();
 
-              println!(
-                  "using partition '{}' at 0x{:X}, size 0x{:X}",
-                  data.name, data.offset, data.size
-              );
+              println!("{}: raw={} bytes, 360 Data offset=0x{:X} size=0x{:X}",
+                  source_name, device_size, data.offset, data.size);
 
               let mut vol = FatxVolume::open(ro, data.offset, data.size).expect("open XTAF volume");
               let content = vol.resolve_path("/Content").expect("resolve /Content");
-              let entries = vol
-                  .read_directory(content.first_cluster)
-                  .expect("read /Content");
+              let owners = vol.read_directory(content.first_cluster).expect("read /Content");
 
               let mut manifest = Vec::new();
-              let mut found = 0usize;
+              let mut tree = String::new();
 
-              for owner in entries {
-                  if !owner.is_directory() {
-                      continue;
-                  }
+              for owner in owners {
+                  if !owner.is_directory() { continue; }
                   let xuid = owner.filename().to_uppercase();
-                  if !looks_like_profile_xuid(&xuid) {
-                      continue;
-                  }
+                  if !is_xuid(&xuid) || !xuid.starts_with('E') { continue; }
 
-                  let canonical =
-                      format!("/Content/{xuid}/FFFE07D1/00010000/{xuid}");
+                  tree.push_str(&format!("\n===== OWNER {xuid} =====\n"));
+                  walk_tree(
+                      &mut vol,
+                      &format!("/Content/{xuid}"),
+                      owner.first_cluster,
+                      6,
+                      &mut tree,
+                  );
 
-                  let entry = match vol.resolve_path(&canonical) {
-                      Ok(e) if !e.is_directory() => e,
-                      _ => {
-                          println!("no canonical profile package at {canonical}");
+                  let candidates = candidate_files(&mut vol, &xuid);
+                  println!("{source_name}: owner {xuid}: {} candidate file(s)", candidates.len());
+
+                  for (path, entry) in candidates {
+                      let bytes = match vol.read_file(&entry) {
+                          Ok(v) => v,
+                          Err(e) => {
+                              println!("  could not read {path}: {e}");
+                              continue;
+                          }
+                      };
+                      if !is_stfs(&bytes) {
+                          println!("  {path}: not STFS (first4={:02X?})",
+                              bytes.get(0..4).unwrap_or(&[]));
                           continue;
                       }
-                  };
 
-                  println!(
-                      "found profile candidate: {} ({} bytes, first cluster {})",
-                      canonical, entry.file_size, entry.first_cluster
-                  );
+                      let header = stfs::parse_header(&bytes);
+                      let title_id = header.as_ref().map(|h| h.title_id).unwrap_or(0);
+                      let account = find_account(&bytes);
 
-                  let bytes = vol.read_file(&entry).expect("read profile package");
-                  let magic = if bytes.len() >= 4 {
-                      String::from_utf8_lossy(&bytes[..4]).to_string()
-                  } else {
-                      String::new()
-                  };
+                      let is_profile_path = path.to_uppercase().contains("/FFFE07D1/00010000/");
+                      let is_dashboard_title = title_id == 0xFFFE07D1;
+                      if !is_profile_path && !is_dashboard_title && account.is_none() {
+                          continue;
+                      }
 
-                  if !matches!(bytes.get(0..4), Some(b"CON ") | Some(b"LIVE") | Some(b"PIRS")) {
-                      println!("  WARNING: unexpected STFS magic {:?}", magic);
+                      let basename = Path::new(&path)
+                          .file_name()
+                          .and_then(|s| s.to_str())
+                          .unwrap_or(&xuid);
+                      let safe_name = format!("{}__{}", xuid, basename);
+                      let package_path = Path::new(&out).join("packages").join(&safe_name);
+                      fs::write(&package_path, &bytes).expect("write STFS package");
+
+                      let sha256 = hex::encode(Sha256::digest(&bytes));
+                      let magic = String::from_utf8_lossy(&bytes[..4]).to_string();
+                      let display_name = header.as_ref().map(|h| h.display_name.clone()).unwrap_or_default();
+                      let title_name = header.as_ref().map(|h| h.title_name.clone()).unwrap_or_default();
+
+                      let (gamertag, live_account, online_xuid, membership, account_type, account_offset) =
+                          if let Some(a) = account {
+                              (
+                                  Some(a.gamertag),
+                                  a.live_account,
+                                  Some(a.online_xuid),
+                                  Some(a.membership),
+                                  Some(a.account_type),
+                                  Some(format!("0x{:X}", a.offset)),
+                              )
+                          } else {
+                              (None, false, None, None, None, None)
+                          };
+
+                      println!(
+                          "  EXTRACT {} magic={:?} title_id={:08X} gamertag={:?} live={} online_xuid={:?} membership={:?}",
+                          path, magic, title_id, gamertag, live_account, online_xuid, membership
+                      );
+
+                      manifest.push(json!({
+                          "source_image": source_name,
+                          "owner_xuid": xuid,
+                          "source_path": path,
+                          "saved_as": safe_name,
+                          "size": bytes.len(),
+                          "stfs_magic": magic,
+                          "title_id": format!("{:08X}", title_id),
+                          "sha256": sha256,
+                          "display_name": display_name,
+                          "title_name": title_name,
+                          "gamertag": gamertag,
+                          "live_account": live_account,
+                          "online_xuid": online_xuid,
+                          "membership": membership,
+                          "account_type": account_type,
+                          "account_block_offset": account_offset
+                      }));
                   }
-
-                  let sha256 = hex::encode(Sha256::digest(&bytes));
-                  let package_path = Path::new(&out).join("packages").join(&xuid);
-                  fs::write(&package_path, &bytes).expect("write extracted package");
-
-                  let (display_name, title_name) = stfs::parse_header(&bytes)
-                      .map(|h| (h.display_name, h.title_name))
-                      .unwrap_or_else(|| (String::new(), String::new()));
-
-                  let (gamertag, account_offset) = account_gamertag(&bytes)
-                      .map(|(g, o)| (Some(g), Some(format!("0x{o:X}"))))
-                      .unwrap_or((None, None));
-
-                  println!(
-                      "  magic={:?} sha256={} display={:?} title={:?} gamertag={:?}",
-                      magic, sha256, display_name, title_name, gamertag
-                  );
-
-                  manifest.push(json!({
-                      "xuid": xuid,
-                      "source_path": canonical,
-                      "size": bytes.len(),
-                      "stfs_magic": magic,
-                      "sha256": sha256,
-                      "display_name": display_name,
-                      "title_name": title_name,
-                      "gamertag": gamertag,
-                      "account_block_offset": account_offset
-                  }));
-                  found += 1;
               }
 
+              fs::write(Path::new(&out).join("tree.txt"), tree).unwrap();
               fs::write(
                   Path::new(&out).join("manifest.json"),
                   serde_json::to_vec_pretty(&manifest).unwrap(),
-              )
-              .unwrap();
+              ).unwrap();
 
-              fs::write(
-                  Path::new(&out).join("source.txt"),
-                  concat!(
-                      "Source: Digital Corpora nps-2014-xbox1\n",
-                      "Image: DRIVE2_TIME_FINAL.E01\n",
-                      "URL: https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/DRIVE2_TIME_FINAL.E01\n"
-                  ),
-              )
-              .unwrap();
-
-              println!("extracted {found} canonical Xbox 360 profile package(s)");
-              if found == 0 {
-                  std::process::exit(4);
-              }
+              let live_count = manifest.iter()
+                  .filter(|m| m.get("live_account").and_then(|v| v.as_bool()) == Some(true))
+                  .count();
+              println!("{}: extracted {} candidate package(s), {} verified Live account(s)",
+                  source_name, manifest.len(), live_count);
           }
           EOF
 
           cargo build --release --manifest-path /tmp/xbox-profile-extractor/Cargo.toml
 
-      - name: Extract real Xbox 360 profile package
+      - name: Search all Xbox 360 corpus snapshots
         run: |
           set -euxo pipefail
-          sudo mkdir -p /tmp/xbox-live-profiles
-          sudo /tmp/xbox-profile-extractor/target/release/xbox-profile-extractor \
-            /mnt/xbox-ewf/ewf1 /tmp/xbox-live-profiles
-          sudo cp /tmp/DRIVE2_TIME_FINAL.E01.sha256 /tmp/xbox-live-profiles/source-image.sha256
-          sudo chown -R "$USER":"$USER" /tmp/xbox-live-profiles
-          find /tmp/xbox-live-profiles -maxdepth 3 -type f -printf '%p %s bytes\n'
-          cat /tmp/xbox-live-profiles/manifest.json
 
-      - name: Unpack STFS profile contents
-        run: |
-          set -euxo pipefail
-          git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
-          mkdir -p /tmp/xbox-live-profiles/unpacked
-          for profile in /tmp/xbox-live-profiles/packages/E*; do
-            [ -f "$profile" ] || continue
-            xuid="$(basename "$profile")"
-            mkdir -p "/tmp/xbox-live-profiles/unpacked/$xuid"
-            python3 /tmp/nxe-dashboard/tools/extract_stfs.py \
-              "$profile" "/tmp/xbox-live-profiles/unpacked/$xuid" \
-              | tee "/tmp/xbox-live-profiles/unpacked/$xuid/extract.log" || true
+          BASE="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1"
+          OUT="/tmp/xbox-live-profiles"
+          mkdir -p "$OUT"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo modprobe fuse || true
+
+          IMAGES=(
+            "DRIVE2_TIME0.E01"
+            "DRIVE3_TIME0.E01"
+            "DRIVE2_TIME_FINAL.E01"
+            "DRIVE3_TIME_FINAL.E01"
+          )
+
+          FOUND_LIVE=0
+
+          for IMAGE in "${IMAGES[@]}"; do
+            echo "===== SEARCHING $IMAGE ====="
+            rm -f "/tmp/$IMAGE"
+            rm -rf "$OUT/$IMAGE"
+            mkdir -p "$OUT/$IMAGE"
+
+            curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
+              --speed-time 120 --speed-limit 1024 \
+              "$BASE/$IMAGE" -o "/tmp/$IMAGE"
+
+            sha256sum "/tmp/$IMAGE" | tee "$OUT/$IMAGE/source-image.sha256"
+
+            sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+            sudo stat /mnt/xbox-ewf/ewf1
+
+            set +e
+            sudo /tmp/xbox-profile-extractor/target/release/xbox-profile-extractor \
+              /mnt/xbox-ewf/ewf1 "$OUT/$IMAGE" "$IMAGE" \
+              | tee "$OUT/$IMAGE/extractor.log"
+            RC=${PIPESTATUS[0]}
+            set -e
+
+            sudo fusermount3 -u /mnt/xbox-ewf || sudo umount /mnt/xbox-ewf || true
+            rm -f "/tmp/$IMAGE"
+            sudo chown -R "$USER":"$USER" "$OUT/$IMAGE"
+
+            if [ "$RC" -ne 0 ]; then
+              echo "Extractor returned $RC for $IMAGE"
+            fi
+
+            cat "$OUT/$IMAGE/manifest.json" || true
+
+            LIVE_COUNT="$(jq '[.[] | select(.live_account == true)] | length' "$OUT/$IMAGE/manifest.json" 2>/dev/null || echo 0)"
+            if [ "$LIVE_COUNT" -gt 0 ]; then
+              echo "Found $LIVE_COUNT verified Xbox Live profile(s) in $IMAGE"
+              FOUND_LIVE=1
+              break
+            fi
+
+            df -h
           done
-          find /tmp/xbox-live-profiles/unpacked -type f -printf '%p %s bytes\n' | head -200
 
-      - name: Upload extracted Xbox Live profiles
+          echo "$FOUND_LIVE" > "$OUT/found_live.txt"
+          if [ "$FOUND_LIVE" -ne 1 ]; then
+            echo "No verified Live profile found in active filesystem entries of the searched snapshots."
+            exit 4
+          fi
+
+      - name: Unpack extracted STFS profile contents
+        if: always()
+        run: |
+          set -euxo pipefail
+          OUT="/tmp/xbox-live-profiles"
+          git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
+          find "$OUT" -type f -path '*/packages/*' -print0 | while IFS= read -r -d '' profile; do
+            image_dir="$(dirname "$(dirname "$profile")")"
+            name="$(basename "$profile")"
+            dest="$image_dir/unpacked/$name"
+            mkdir -p "$dest"
+            python3 /tmp/nxe-dashboard/tools/extract_stfs.py "$profile" "$dest" \
+              | tee "$dest/extract.log" || true
+          done
+          find "$OUT" -type f -printf '%p %s bytes\n' | head -400
+
+      - name: Upload extracted Xbox Live profile
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xbox360-live-profiles-drive2
+          name: xbox360-live-profile-research-corpus
           path: /tmp/xbox-live-profiles
           if-no-files-found: warn
           retention-days: 7
