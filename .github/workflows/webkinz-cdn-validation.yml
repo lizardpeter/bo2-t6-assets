@@ -21,35 +21,34 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p out
-          cat > out/candidates.txt <<'EOF'
-https://www.webkinz.com/subApplications/bathing/web-assets/bathing-assets.swf
-https://www.webkinz.com/subApplications/bathing/web-assets/shower-loop.mp3
-https://www.webkinz.com/subbAplications/kinz-chat-plus/web.json
-https://www.webkinz.com/subbAplications/kinz-chat-plus/kinz-chat-plus.swf
-https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/word-list-file.swf
-https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/phrase-list-file.swf
-https://assets.webkinz.com/swf/item/8/item.swf
-https://assets.webkinz.com/swf/item/8/icon.png
-https://assets.webkinz.com/swf/item/8/character.swf
-https://assets.webkinz.com/swf/item/47681/item.swf
-https://assets.webkinz.com/swf/item/47681/icon.png
-https://assets.webkinz.com/swf/item/47681/character.swf
-https://assets.webkinz.com/swf/item/47691/item.swf
-https://assets.webkinz.com/swf/item/47691/icon.png
-https://assets.webkinz.com/swf/item/47691/character.swf
-https://assets.webkinz.com/swf/pet/9655/skin.swf
-https://assets.webkinz.com/swf/pet/9655/emotions.swf
-https://assets.webkinz.com/swf/pet/9658/skin.swf
-https://assets.webkinz.com/swf/pet/9658/emotions.swf
-https://assets.webkinz.com/swf/pet/9668/skin.swf
-https://assets.webkinz.com/swf/pet/9668/emotions.swf
-https://assets.webkinz.com/swf/pet/10502/skin.swf
-https://assets.webkinz.com/swf/pet/10502/emotions.swf
-https://assets.webkinz.com/swf/pet/skeleton/5/skeleton.swf
-https://assets.webkinz.com/swf/pet/skeleton/31/skeleton.swf
-https://assets.webkinz.com/swf/pet/skeleton/33/skeleton.swf
-https://assets.webkinz.com/swf/pet/skeleton/37/skeleton.swf
-EOF
+          printf '%s\n' \
+            'https://www.webkinz.com/subApplications/bathing/web-assets/bathing-assets.swf' \
+            'https://www.webkinz.com/subApplications/bathing/web-assets/shower-loop.mp3' \
+            'https://www.webkinz.com/subbAplications/kinz-chat-plus/web.json' \
+            'https://www.webkinz.com/subbAplications/kinz-chat-plus/kinz-chat-plus.swf' \
+            'https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/word-list-file.swf' \
+            'https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/phrase-list-file.swf' \
+            'https://assets.webkinz.com/swf/item/8/item.swf' \
+            'https://assets.webkinz.com/swf/item/8/icon.png' \
+            'https://assets.webkinz.com/swf/item/8/character.swf' \
+            'https://assets.webkinz.com/swf/item/47681/item.swf' \
+            'https://assets.webkinz.com/swf/item/47681/icon.png' \
+            'https://assets.webkinz.com/swf/item/47681/character.swf' \
+            'https://assets.webkinz.com/swf/item/47691/item.swf' \
+            'https://assets.webkinz.com/swf/item/47691/icon.png' \
+            'https://assets.webkinz.com/swf/item/47691/character.swf' \
+            'https://assets.webkinz.com/swf/pet/9655/skin.swf' \
+            'https://assets.webkinz.com/swf/pet/9655/emotions.swf' \
+            'https://assets.webkinz.com/swf/pet/9658/skin.swf' \
+            'https://assets.webkinz.com/swf/pet/9658/emotions.swf' \
+            'https://assets.webkinz.com/swf/pet/9668/skin.swf' \
+            'https://assets.webkinz.com/swf/pet/9668/emotions.swf' \
+            'https://assets.webkinz.com/swf/pet/10502/skin.swf' \
+            'https://assets.webkinz.com/swf/pet/10502/emotions.swf' \
+            'https://assets.webkinz.com/swf/pet/skeleton/5/skeleton.swf' \
+            'https://assets.webkinz.com/swf/pet/skeleton/31/skeleton.swf' \
+            'https://assets.webkinz.com/swf/pet/skeleton/33/skeleton.swf' \
+            'https://assets.webkinz.com/swf/pet/skeleton/37/skeleton.swf' > out/candidates.txt
           cat out/candidates.txt | xargs -P16 -n1 bash -c '
             u="$1"
             r=$(curl -L -sS -o /dev/null --connect-timeout 8 --max-time 25 -w "%{http_code}\t%{size_download}\t%{content_type}\t%{url_effective}" "$u" 2>/dev/null || true)
