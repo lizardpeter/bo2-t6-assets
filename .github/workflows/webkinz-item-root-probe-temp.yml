@@ -8,16 +8,187 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  census:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - name: Probe item asset roots
-        run: python3 tools/webkinz_item_root_probe.py
-      - name: Upload probe
+      - name: Build current item database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/ffdec work/src out
+          python3 -m pip install -q aiohttp
+
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -o work/ffdec.zip             "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
+          unzip -q work/ffdec.zip -d work/ffdec
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -A "Mozilla/5.0" -o work/items.swf             "https://play.webkinz.com/SWF/staticdata/US_EN/items.swf?v=v390_249"
+          java -Xmx4g -jar work/ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 900 -onerror ignore             -export script work/src work/items.swf > out/items.ffdec.log 2>&1
+
+      - name: Probe modern and legacy per-item room assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > work/census.py <<'PY'
+from __future__ import annotations
+import asyncio, aiohttp, csv, json, re
+from collections import Counter, defaultdict
+from pathlib import Path
+from urllib.parse import urlsplit
+
+OUT=Path("out")
+UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
+BASE="https://assets.webkinz.com/swf/item/"
+
+src=max(Path("work/src").rglob("DoAction.as"),key=lambda p:p.stat().st_size)
+text=src.read_text(errors="ignore")
+
+def fields(body):
+    return dict(re.findall(r'(\w+):"([^"]*)"',body))
+
+items=[]
+for m in re.finditer(r'itemObject\.ITM(\d+)\s*=\s*\{([^}]*)\};',text):
+    d=fields(m.group(2))
+    d["id"]=int(m.group(1))
+    items.append(d)
+
+with (OUT/"items.tsv").open("w",newline="",encoding="utf-8") as f:
+    w=csv.writer(f,delimiter="\t")
+    w.writerow(["id","itemType_DbId","name","status","export","interactive","interaction"])
+    for d in items:
+        w.writerow([d["id"],d.get("itemType_DbId",""),d.get("name",""),d.get("status",""),d.get("export",""),d.get("interactive",""),d.get("interaction","")])
+
+# Item-local literal resource filenames present in current static metadata.
+literal_by_id=defaultdict(set)
+resource_value_rx=re.compile(r'(?i)([A-Za-z0-9_.%+() -]+\.(?:mp3|wav|flv|swf|png|jpg|jpeg|gif|xml|json|dat|bin))')
+for m in re.finditer(r'itemObject\.ITM(\d+)\s*=\s*\{([^}]*)\};',text):
+    iid=int(m.group(1))
+    for rm in resource_value_rx.finditer(m.group(2)):
+        literal_by_id[iid].add(rm.group(1))
+
+timeout=aiohttp.ClientTimeout(total=10,connect=5,sock_read=6)
+
+async def head_one(session,url,kind,iid,sem):
+    async with sem:
+        try:
+            async with session.head(url,allow_redirects=True,timeout=timeout) as r:
+                ct=(r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                cl=r.headers.get("Content-Length","")
+                return (url,kind,iid,r.status,ct,cl,str(r.url))
+        except Exception as e:
+            return (url,kind,iid,0,type(e).__name__,"",url)
+
+async def probe(rows,limit=32):
+    conn=aiohttp.TCPConnector(limit=limit,limit_per_host=limit,ttl_dns_cache=300,keepalive_timeout=30)
+    sem=asyncio.Semaphore(limit)
+    out=[]
+    async with aiohttp.ClientSession(headers={"User-Agent":UA},connector=conn) as s:
+        tasks=[asyncio.create_task(head_one(s,*row,sem)) for row in rows]
+        done=0
+        for fut in asyncio.as_completed(tasks):
+            out.append(await fut); done+=1
+            if done%10000==0: print("probed",done,flush=True)
+    return out
+
+# Phase 1: every descriptor gets icon.png. This cheaply identifies current modern-asset directories.
+phase1=[(f"{BASE}{d['id']}/icon.png","icon",d["id"]) for d in items]
+r1=asyncio.run(probe(phase1))
+valid_icon={r[2] for r in r1 if r[3] in (200,206) and r[4]=="image/png"}
+
+success=[r for r in r1 if r[2] in valid_icon]
+status=defaultdict(Counter)
+for r in r1: status[r[1]][str(r[3])]+=1
+
+by_id={d["id"]:d for d in items}
+phase2=[]
+directions=("sw","nw","ne","se")
+sizes=("large","medium","small")
+
+for iid in sorted(valid_icon):
+    d=by_id[iid]
+    typ=d.get("itemType_DbId","")
+    # Type 7 is current wallpaper/flooring family. Room engine requests room-size atlases.
+    if typ=="7":
+        for sz in sizes:
+            phase2.append((f"{BASE}{iid}/{sz}.png",f"roomsize_{sz}_png",iid))
+            phase2.append((f"{BASE}{iid}/{sz}.xml",f"roomsize_{sz}_xml",iid))
+    else:
+        for di in directions:
+            phase2.append((f"{BASE}{iid}/{di}.png",f"direction_{di}_png",iid))
+            phase2.append((f"{BASE}{iid}/{di}.xml",f"direction_{di}_xml",iid))
+
+    # Registry exposes these two legacy/special slots for every item descriptor.
+    phase2.append((f"{BASE}{iid}/item.swf","item_swf",iid))
+    phase2.append((f"{BASE}{iid}/character.swf","character_swf",iid))
+
+    for fn in sorted(literal_by_id.get(iid,())):
+        phase2.append((f"{BASE}{iid}/{fn}","metadata_literal",iid))
+
+r2=asyncio.run(probe(phase2))
+for r in r2:
+    status[r[1]][str(r[3])]+=1
+    st,ct=r[3],r[4]
+    kind=r[1]
+    ok=False
+    if st in (200,206):
+        if kind.endswith("_png") or kind=="icon": ok=(ct=="image/png")
+        elif kind.endswith("_xml"): ok=(ct in ("text/xml","application/xml","application/octet-stream"))
+        elif kind.endswith("_swf") or kind in ("item_swf","character_swf"): ok=(ct in ("application/x-shockwave-flash","application/octet-stream"))
+        else: ok=(ct!="text/html")
+    if ok: success.append(r)
+
+# De-duplicate exact URLs.
+best={}
+for r in success: best[r[0]]=r
+success=sorted(best.values())
+
+with (OUT/"room-asset-success.tsv").open("w",newline="",encoding="utf-8") as f:
+    w=csv.writer(f,delimiter="\t")
+    w.writerow(["url","kind","descriptor_id","status","content_type","content_length","final_url"])
+    w.writerows(success)
+
+(OUT/"room-asset-success-urls.txt").write_text("\n".join(r[0] for r in success)+"\n")
+
+by_kind=Counter(r[1] for r in success)
+by_type=Counter()
+ids_with_direction=set()
+ids_with_roomsize=set()
+ids_with_item_swf=set()
+ids_with_character_swf=set()
+for r in success:
+    typ=by_id[r[2]].get("itemType_DbId","")
+    by_type[typ]+=1
+    if r[1].startswith("direction_"): ids_with_direction.add(r[2])
+    if r[1].startswith("roomsize_"): ids_with_roomsize.add(r[2])
+    if r[1]=="item_swf": ids_with_item_swf.add(r[2])
+    if r[1]=="character_swf": ids_with_character_swf.add(r[2])
+
+summary={
+    "version":"v390_249",
+    "item_records":len(items),
+    "icon_probe_count":len(phase1),
+    "modern_item_directories":len(valid_icon),
+    "secondary_probe_count":len(phase2),
+    "validated_asset_urls":len(success),
+    "validated_by_kind":dict(by_kind),
+    "descriptors_with_directional_room_art":len(ids_with_direction),
+    "descriptors_with_roomsize_wall_floor_art":len(ids_with_roomsize),
+    "descriptors_with_item_swf":len(ids_with_item_swf),
+    "descriptors_with_character_swf":len(ids_with_character_swf),
+    "status_by_kind":{k:dict(v) for k,v in status.items()},
+}
+(OUT/"summary.json").write_text(json.dumps(summary,indent=2))
+(OUT/"valid-modern-descriptor-ids.txt").write_text("\n".join(map(str,sorted(valid_icon)))+"\n")
+(OUT/"directional-descriptor-ids.txt").write_text("\n".join(map(str,sorted(ids_with_direction)))+"\n")
+(OUT/"wall-floor-descriptor-ids.txt").write_text("\n".join(map(str,sorted(ids_with_roomsize)))+"\n")
+print(json.dumps(summary,indent=2))
+PY
+          python3 work/census.py 2>&1 | tee out/run.log
+
+      - name: Upload full room asset census
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-item-root-probe
+          name: webkinz-full-room-asset-census
           path: out/
+          if-no-files-found: error
           retention-days: 7
