@@ -95,11 +95,15 @@ struct DecodeResult {
 }
 
 fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
-    #[cfg(feature = "parallel")]
+    #[cfg(feature = "streaming-parallel")]
+    {
+        return decode_parallel_streaming(ff);
+    }
+    #[cfg(all(not(feature = "streaming-parallel"), feature = "parallel"))]
     {
         return decode_parallel(ff);
     }
-    #[cfg(not(feature = "parallel"))]
+    #[cfg(all(not(feature = "streaming-parallel"), not(feature = "parallel")))]
     {
         decode_serial(ff)
     }
@@ -211,6 +215,210 @@ fn decode_serial(ff: &[u8]) -> Result<DecodeResult, String> {
         records: record,
         sha256: expanded_sha,
     })
+}
+
+#[cfg(feature = "streaming-parallel")]
+fn decode_parallel_streaming(ff: &[u8]) -> Result<DecodeResult, String> {
+    use std::sync::mpsc::sync_channel;
+
+    validate_header(ff)?;
+    let zone = zone_name(ff)?;
+    let records = scan_records_streaming(ff)?;
+    let output_capacity = records
+        .len()
+        .checked_mul(MAX_RECORD)
+        .ok_or_else(|| "streaming parallel output capacity overflow".to_owned())?;
+
+    let output = std::thread::scope(|scope| -> Result<Vec<u8>, String> {
+        let mut receivers = Vec::with_capacity(STREAM_COUNT);
+        let mut handles = Vec::with_capacity(STREAM_COUNT);
+
+        for stream in 0..STREAM_COUNT {
+            // At most two decoded XChunks per stream may wait for the ordered
+            // consumer. With 0x8000-byte records this bounds queued expanded
+            // data to roughly 256 KiB across all four streams.
+            let (sender, receiver) = sync_channel::<Result<Vec<u8>, String>>(2);
+            receivers.push(receiver);
+            let records_ref = &records;
+            handles.push(scope.spawn(move || {
+                decode_one_stream_streaming(ff, zone, records_ref, stream, sender)
+            }));
+        }
+
+        let mut output = Vec::with_capacity(output_capacity);
+        for record_index in 0..records.len() {
+            let stream = record_index % STREAM_COUNT;
+            let chunk = receivers[stream]
+                .recv()
+                .map_err(|_| format!(
+                    "streaming parallel worker {stream} disconnected before record {record_index}"
+                ))??;
+            output.extend_from_slice(&chunk);
+        }
+
+        for (stream, handle) in handles.into_iter().enumerate() {
+            handle
+                .join()
+                .map_err(|_| format!("streaming parallel worker {stream} panicked"))??;
+        }
+
+        Ok(output)
+    })?;
+
+    #[cfg(feature = "encrypted-hash")]
+    {
+        black_box(Sha256::digest(ff));
+    }
+
+    #[cfg(not(feature = "nohash"))]
+    let expanded_sha = hex(Sha256::digest(&output).as_slice());
+    #[cfg(feature = "nohash")]
+    let expanded_sha = String::new();
+
+    Ok(DecodeResult {
+        output,
+        records: records.len(),
+        sha256: expanded_sha,
+    })
+}
+
+#[cfg(feature = "streaming-parallel")]
+fn decode_one_stream_streaming(
+    ff: &[u8],
+    zone: &[u8],
+    records: &[EncryptedRecordStreaming],
+    stream: usize,
+    sender: std::sync::mpsc::SyncSender<Result<Vec<u8>, String>>,
+) -> Result<(), String> {
+    let mut table = initial_table(zone)?;
+    let mut plaintext = Vec::with_capacity(MAX_RECORD);
+    let mut decompressed = vec![0u8; MAX_RECORD];
+    let mut inflater = Decompress::new(false);
+    let mut sha1 = Sha1::new();
+    let mut counter = 0usize;
+
+    for record_index in (stream..records.len()).step_by(STREAM_COUNT) {
+        let work = (|| -> Result<Vec<u8>, String> {
+            let record = records[record_index];
+            let ciphertext = ff
+                .get(record.start..record.end)
+                .ok_or_else(|| format!(
+                    "streaming parallel record {record_index} ciphertext is truncated"
+                ))?;
+
+            let table_index = (counter * STREAM_COUNT + stream) % TABLE_ENTRIES;
+            let table_offset = table_index * ENTRY_SIZE;
+            let nonce: [u8; 8] = table[table_offset..table_offset + 8]
+                .try_into()
+                .map_err(|_| "streaming parallel nonce slice".to_owned())?;
+
+            plaintext.resize(ciphertext.len(), 0);
+            decrypt_into(ciphertext, &nonce, plaintext.as_mut_slice());
+
+            let status = inflater
+                .decompress(&plaintext, &mut decompressed, FlushDecompress::Finish)
+                .map_err(|e| format!(
+                    "streaming parallel record {record_index} inflate failed: {e}"
+                ))?;
+            if status != Status::StreamEnd {
+                return Err(format!(
+                    "streaming parallel record {record_index} inflate status {status:?}"
+                ));
+            }
+            let expanded = inflater.total_out() as usize;
+            if expanded > decompressed.len() {
+                return Err(format!(
+                    "streaming parallel record {record_index} inflated beyond buffer"
+                ));
+            }
+            let chunk = decompressed[..expanded].to_vec();
+            inflater.reset(false);
+
+            sha1.update(&plaintext);
+            let digest = sha1.finalize_reset();
+            let next = counter + 1;
+            let next_index = (next * STREAM_COUNT + stream) % TABLE_ENTRIES;
+            let next_offset = next_index * ENTRY_SIZE;
+            for (i, byte) in digest.iter().enumerate() {
+                table[next_offset + i] ^= byte;
+            }
+            counter = next;
+
+            Ok(chunk)
+        })();
+
+        match work {
+            Ok(chunk) => sender
+                .send(Ok(chunk))
+                .map_err(|_| format!("streaming parallel consumer dropped stream {stream}"))?,
+            Err(error) => {
+                let _ = sender.send(Err(error.clone()));
+                return Err(error);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "streaming-parallel")]
+#[derive(Clone, Copy)]
+struct EncryptedRecordStreaming {
+    start: usize,
+    end: usize,
+}
+
+#[cfg(feature = "streaming-parallel")]
+fn scan_records_streaming(ff: &[u8]) -> Result<Vec<EncryptedRecordStreaming>, String> {
+    let mut records = Vec::new();
+    let mut pos = HEADER_SIZE;
+
+    while pos + 4 <= ff.len() {
+        let raw_mod = pos % VANILLA_BUFFER_SIZE;
+        if raw_mod + 4 > VANILLA_BUFFER_SIZE {
+            pos += VANILLA_BUFFER_SIZE - raw_mod;
+            if pos + 4 > ff.len() {
+                break;
+            }
+        }
+
+        let length_offset = pos;
+        let len = read_u32(ff, pos)? as usize;
+        pos += 4;
+        if len == 0 {
+            if ff[length_offset..].iter().any(|byte| *byte != 0) {
+                return Err(format!(
+                    "streaming parallel scan found nonzero bytes after terminator at 0x{length_offset:x}"
+                ));
+            }
+            break;
+        }
+        if len > MAX_RECORD {
+            return Err(format!(
+                "streaming parallel record {} length {len} exceeds {MAX_RECORD}",
+                records.len()
+            ));
+        }
+        let end = pos
+            .checked_add(len)
+            .ok_or_else(|| "streaming parallel record range overflow".to_owned())?;
+        if end > ff.len() {
+            return Err(format!(
+                "streaming parallel record {} escapes file",
+                records.len()
+            ));
+        }
+        records.push(EncryptedRecordStreaming { start: pos, end });
+        pos = end;
+    }
+
+    if pos < ff.len() && ff[pos..].iter().any(|byte| *byte != 0) {
+        return Err(format!(
+            "streaming parallel scan found nonzero trailing bytes at 0x{pos:x}"
+        ));
+    }
+
+    Ok(records)
 }
 
 #[cfg(feature = "parallel")]
