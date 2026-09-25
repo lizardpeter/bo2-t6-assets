@@ -10,7 +10,7 @@ This checkpoint is generated from the complete 31-map SHA-pinned retail MP targe
 - state: **zero strict-inline hits across all 31 MP maps; this is a bounded MP absence result only**
 - expected source-closed format-8 vd1 stride: **20 bytes**
 - census SHA-256: `48afedaf3877962d1334c9a7679b7db5883ffb5c6efb6eb33f7e9b6b94955781`
-- workflow run: `35290630098`
+- workflow run: `36150737953`
 
 ## Proof boundary
 
