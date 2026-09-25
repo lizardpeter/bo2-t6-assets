@@ -119,7 +119,6 @@ fn decode_serial(ff: &[u8]) -> Result<DecodeResult, String> {
     #[cfg(not(feature = "reserve"))]
     let mut output = Vec::new();
     let mut plaintext = Vec::with_capacity(MAX_RECORD);
-    let mut decompressed = vec![0u8; MAX_RECORD];
     let mut inflater = Decompress::new(false);
     let mut sha1 = Sha1::new();
     #[cfg(not(feature = "nohash"))]
@@ -233,27 +232,44 @@ fn decode_parallel_streaming(ff: &[u8]) -> Result<DecodeResult, String> {
         let mut receivers = Vec::with_capacity(STREAM_COUNT);
         let mut handles = Vec::with_capacity(STREAM_COUNT);
 
+        let mut recycle_senders = Vec::with_capacity(STREAM_COUNT);
         for stream in 0..STREAM_COUNT {
             // At most two decoded XChunks per stream may wait for the ordered
             // consumer. With 0x8000-byte records this bounds queued expanded
             // data to roughly 256 KiB across all four streams.
             let (sender, receiver) = sync_channel::<Result<Vec<u8>, String>>(2);
+            let (recycle_sender, recycle_receiver) = std::sync::mpsc::channel::<Vec<u8>>();
             receivers.push(receiver);
+            recycle_senders.push(recycle_sender);
             let records_ref = &records;
             handles.push(scope.spawn(move || {
-                decode_one_stream_streaming(ff, zone, records_ref, stream, sender)
+                decode_one_stream_streaming(
+                    ff,
+                    zone,
+                    records_ref,
+                    stream,
+                    sender,
+                    recycle_receiver,
+                )
             }));
         }
 
         let mut output = Vec::with_capacity(output_capacity);
         for record_index in 0..records.len() {
             let stream = record_index % STREAM_COUNT;
-            let chunk = receivers[stream]
+            let mut chunk = receivers[stream]
                 .recv()
                 .map_err(|_| format!(
                     "streaming parallel worker {stream} disconnected before record {record_index}"
                 ))??;
             output.extend_from_slice(&chunk);
+
+            // Return the allocation to the same stream worker. This turns the
+            // producer/consumer path from thousands of 0x8000 Vec allocations
+            // into a small steady-state buffer pool.
+            chunk.clear();
+            chunk.resize(MAX_RECORD, 0);
+            let _ = recycle_senders[stream].send(chunk);
         }
 
         for (stream, handle) in handles.into_iter().enumerate() {
@@ -289,6 +305,7 @@ fn decode_one_stream_streaming(
     records: &[EncryptedRecordStreaming],
     stream: usize,
     sender: std::sync::mpsc::SyncSender<Result<Vec<u8>, String>>,
+    recycle: std::sync::mpsc::Receiver<Vec<u8>>,
 ) -> Result<(), String> {
     let mut table = initial_table(zone)?;
     let mut plaintext = Vec::with_capacity(MAX_RECORD);
@@ -315,8 +332,15 @@ fn decode_one_stream_streaming(
             plaintext.resize(ciphertext.len(), 0);
             decrypt_into(ciphertext, &nonce, plaintext.as_mut_slice());
 
+            let mut chunk = recycle
+                .try_recv()
+                .unwrap_or_else(|_| vec![0u8; MAX_RECORD]);
+            if chunk.len() != MAX_RECORD {
+                chunk.resize(MAX_RECORD, 0);
+            }
+
             let status = inflater
-                .decompress(&plaintext, &mut decompressed, FlushDecompress::Finish)
+                .decompress(&plaintext, &mut chunk, FlushDecompress::Finish)
                 .map_err(|e| format!(
                     "streaming parallel record {record_index} inflate failed: {e}"
                 ))?;
@@ -326,12 +350,12 @@ fn decode_one_stream_streaming(
                 ));
             }
             let expanded = inflater.total_out() as usize;
-            if expanded > decompressed.len() {
+            if expanded > chunk.len() {
                 return Err(format!(
                     "streaming parallel record {record_index} inflated beyond buffer"
                 ));
             }
-            let chunk = decompressed[..expanded].to_vec();
+            chunk.truncate(expanded);
             inflater.reset(false);
 
             sha1.update(&plaintext);
