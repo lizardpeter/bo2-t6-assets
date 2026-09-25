@@ -1,0 +1,291 @@
+name: Temporary Webkinz recursive closure
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: webkinz-recursive-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  recursive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Recursive static-resource closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/downloads out
+
+          cat > work/seeds.txt <<'EOF'
+          https://play.webkinz.com/wconf.js.php
+          https://play.webkinz.com/
+          https://play.webkinz.com/SWF/staticdata/tips.swf?v=v390_249
+          https://play.webkinz.com/SWF/staticdata/US_EN/items.swf?v=v390_249
+          https://play.webkinz.com/SWF/staticdata/views.swf?v=v390_249
+          https://play.webkinz.com/SWF/staticdata/envMain.swf?v=v390_249
+          https://play.webkinz.com/SWF/server/webkinzXML.swf?v=v390_249
+          https://play.webkinz.com/SWF/EventDispatcherScopeResolver.swf?v=v390_249
+          https://play.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249
+          https://play.webkinz.com/SWF/server/adBridge.swf?v=v390_249
+          https://play.webkinz.com/SWF/TopBar.swf?v=v390_249
+          https://play.webkinz.com/SWF/SocialHub/SocialHub.swf?v=v390_249
+          https://play.webkinz.com/SWF/VIEWS/MU2/MAPI.swf?v=v390_249
+          https://play.webkinz.com/SWF/ClickTracker/WebkinzClickTracker.swf?v=v390_249
+          https://assets.webkinz.com/swf/pet/petclasses.swf?v=v390_249
+          https://assets.webkinz.com/swf/pet/crossAccess.swf?v=v390_249
+          https://play.webkinz.com/subApplications/subApplications.xml?v=v390_249
+          https://play.webkinz.com/SWF/VIEWS/Chat/xml/pdict.xml?v=v390_249
+          https://play.webkinz.com/SWF/VIEWS/Chat/xml/DictionaryIndexAS3.xml?v=v390_249
+          https://play.webkinz.com/lib/assets/word-bubble-service.swf?v=v390_249
+          https://play.webkinz.com/lib/web-assets/kinzchat-service/answer-button.swf?v=v390_249
+          https://play.webkinz.com/lib/web-assets/kinzchat-service/emoticons.swf?v=v390_249
+          https://play.webkinz.com/lib/web-assets/kinzchat-service/default-skin.swf?v=v390_249
+          EOF
+          sed -i 's/^          //' work/seeds.txt
+
+          cat > work/crawl.py <<'PY'
+          from __future__ import annotations
+          from pathlib import Path
+          from urllib.parse import urljoin, urlsplit, urlunsplit
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import hashlib, json, os, re, subprocess, zlib
+
+          ROOT = Path("work")
+          DL = ROOT / "downloads"
+          OUT = Path("out")
+          DL.mkdir(parents=True, exist_ok=True)
+          OUT.mkdir(parents=True, exist_ok=True)
+
+          allowed_hosts = {
+              "play.webkinz.com",
+              "assets.webkinz.com",
+              "www.webkinz.com",
+              "downloads.webkinz.com",
+              "api.webkinz.com",
+          }
+          static_exts = {".swf",".xml",".json",".js",".txt",".jpg",".jpeg",".png",".gif",".mp3",".wav",".flv",".css",".bin",".dat"}
+          record_exts = static_exts | {".php",".html",".htm"}
+          url_rx = re.compile(r'https?://[^\x00\s"\'<>\\)]+', re.I)
+          # Captures both bare filenames and paths.
+          file_rx = re.compile(
+              r'(?i)(?<![A-Za-z0-9_])((?:[A-Za-z0-9_.%+() -]+/)*[A-Za-z0-9_.%+() -]+'
+              r'\.(?:swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js|txt|css|bin|dat|html?|as)'
+              r'(?:\?[^\x00\s"\'<>\\)]*)?)'
+          )
+
+          def canonical(url: str) -> str:
+              url = url.strip().replace("&amp;", "&")
+              try:
+                  p = urlsplit(url)
+              except Exception:
+                  return url
+              if p.scheme not in ("http","https"):
+                  return url
+              # Fragments never affect resource identity.
+              return urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path, p.query, ""))
+
+          def ext_of(url: str) -> str:
+              try:
+                  return Path(urlsplit(url).path).suffix.lower()
+              except Exception:
+                  return ""
+
+          def name_for(url: str) -> Path:
+              h = hashlib.sha256(url.encode()).hexdigest()
+              ext = ext_of(url)
+              if not ext or len(ext) > 8:
+                  ext = ".bin"
+              return DL / (h + ext)
+
+          def fetch(url: str):
+              p = name_for(url)
+              hdr = p.with_suffix(p.suffix + ".headers")
+              if p.exists():
+                  return {"url":url,"path":str(p),"cached":True,"rc":0,"size":p.stat().st_size}
+              cmd = [
+                  "curl","-L","-sS","--retry","2","--retry-all-errors",
+                  "--connect-timeout","8","--max-time","55",
+                  "-A","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+                  "-D",str(hdr),"-o",str(p),url,
+              ]
+              cp = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+              if not p.exists():
+                  return {"url":url,"path":str(p),"rc":cp.returncode,"size":0,"error":cp.stderr.decode(errors="ignore")[-500:]}
+              hs = hdr.read_text(errors="ignore") if hdr.exists() else ""
+              statuses = re.findall(r'^HTTP/\S+\s+(\d+)',hs,re.M)
+              status = int(statuses[-1]) if statuses else None
+              return {"url":url,"path":str(p),"rc":cp.returncode,"status":status,"size":p.stat().st_size}
+
+          def swf_uncompress(raw: bytes) -> bytes:
+              if len(raw) >= 8 and raw[:3] == b"CWS":
+                  try:
+                      return b"FWS" + raw[3:8] + zlib.decompress(raw[8:])
+                  except Exception:
+                      return raw
+              return raw
+
+          def candidate_to_url(base: str, ref: str) -> str | None:
+              ref = ref.strip().strip('"\'')
+              if not ref or len(ref) > 1000:
+                  return None
+              if any(x in ref for x in ("{","}","[","]","*")):
+                  return None
+              if ref.lower().startswith(("javascript:","mailto:","file:")):
+                  return None
+              if ref.lower().startswith(("http://","https://")):
+                  return canonical(ref)
+              # Known Ganz split: lowercase /swf/pet lives on assets host.
+              low = ref.lower().lstrip("/")
+              if low.startswith("swf/pet/"):
+                  return canonical("https://assets.webkinz.com/" + ref.lstrip("/"))
+              # Root-ish Webkinz resources are on play host even when referenced from assets.
+              roots = ("SWF/","XML/","scripts/","subApplications/","subApplication/","Cheats/","_assets/","lib/")
+              if ref.lstrip("/").startswith(roots):
+                  return canonical("https://play.webkinz.com/" + ref.lstrip("/"))
+              return canonical(urljoin(base, ref))
+
+          seeds = [canonical(x) for x in Path("work/seeds.txt").read_text().splitlines() if x.strip()]
+          seen = set()
+          fetched = {}
+          discovered = set(seeds)
+          formulas = set()
+          source_edges = set()
+
+          # Known first-layer refs from the prior successful decompile are not embedded here;
+          # they will be rediscovered from the seed binaries/text. This validates closure independently.
+          for round_no in range(1, 7):
+              pending = sorted(u for u in discovered if u not in seen and urlsplit(u).hostname in allowed_hosts)
+              # Only fetch public/static resources, plus the known read-only bootstrap PHP.
+              to_fetch=[]
+              for u in pending:
+                  ex=ext_of(u)
+                  if ex in static_exts or u.endswith("/wconf.js.php") or u.rstrip("/")=="https://play.webkinz.com":
+                      to_fetch.append(u)
+                  else:
+                      seen.add(u)
+              if not to_fetch:
+                  break
+
+              results=[]
+              with ThreadPoolExecutor(max_workers=24) as pool:
+                  fs={pool.submit(fetch,u):u for u in to_fetch}
+                  for f in as_completed(fs):
+                      try: results.append(f.result())
+                      except Exception as e: results.append({"url":fs[f],"error":repr(e),"size":0})
+
+              round_new=set()
+              for r in results:
+                  u=r["url"]; seen.add(u); fetched[u]=r
+                  p=Path(r.get("path",""))
+                  if not p.exists() or not r.get("size") or (r.get("status") not in (None,200,206)):
+                      continue
+                  try: raw=p.read_bytes()
+                  except Exception: continue
+                  data=swf_uncompress(raw)
+                  # Use printable runs so regex does not get derailed by binary punctuation.
+                  chunks=[m.group().decode("latin1","ignore") for m in re.finditer(rb'[ -~]{4,}',data)]
+                  text="\n".join(chunks)
+                  # Text resources often contain UTF-8 beyond ASCII.
+                  if ext_of(u) in {".xml",".json",".js",".txt",".css",".html",".htm",".php"} or u.endswith("wconf.js.php"):
+                      try: text += "\n" + raw.decode("utf-8","ignore")
+                      except Exception: pass
+
+                  refs=[]
+                  refs.extend(url_rx.findall(text))
+                  refs.extend(m.group(1) for m in file_rx.finditer(text))
+                  for ref in refs:
+                      cu=candidate_to_url(u,ref)
+                      if not cu: continue
+                      source_edges.add((u,cu))
+                      discovered.add(cu)
+                      round_new.add(cu)
+
+                  # Retain strings that look like dynamic resource formulas.
+                  for line in text.splitlines():
+                      ll=line.lower()
+                      if any(k in ll for k in (".swf",".xml",".php","webkinz","/swf/","/api/")) and any(k in line for k in ("+","%s","{","}")):
+                          if len(line) <= 1200:
+                              formulas.add(line)
+
+              (OUT/f"round-{round_no}.json").write_text(json.dumps({
+                  "round":round_no,
+                  "attempted":len(to_fetch),
+                  "successful":sum(1 for r in results if r.get("size") and r.get("status") in (None,200,206)),
+                  "new_candidates":len(round_new),
+                  "total_discovered":len(discovered),
+              },indent=2))
+
+          # Write complete manifests.
+          all_urls=sorted(discovered)
+          static_urls=sorted(u for u in discovered if ext_of(u) in static_exts)
+          endpoint_urls=sorted(u for u in discovered if ext_of(u) in {".php",".html",".htm"} or not ext_of(u))
+          failures=[]
+          successes=[]
+          for u,r in fetched.items():
+              row={"url":u,**{k:v for k,v in r.items() if k!="url"}}
+              if r.get("size") and r.get("status") in (None,200,206): successes.append(row)
+              else: failures.append(row)
+
+          (OUT/"all-discovered-urls.txt").write_text("\n".join(all_urls)+"\n")
+          (OUT/"static-resource-urls.txt").write_text("\n".join(static_urls)+"\n")
+          (OUT/"endpoint-urls.txt").write_text("\n".join(endpoint_urls)+"\n")
+          (OUT/"dynamic-formulas.txt").write_text("\n".join(sorted(formulas))+"\n")
+          (OUT/"edges.tsv").write_text("\n".join(f"{a}\t{b}" for a,b in sorted(source_edges))+"\n")
+          (OUT/"success.json").write_text(json.dumps(successes,indent=2))
+          (OUT/"failures.json").write_text(json.dumps(failures,indent=2))
+          (OUT/"manifest.json").write_text(json.dumps({
+              "total_discovered":len(all_urls),
+              "static_urls":len(static_urls),
+              "endpoint_urls":len(endpoint_urls),
+              "fetch_attempts":len(fetched),
+              "fetch_successes":len(successes),
+              "fetch_failures":len(failures),
+              "edges":len(source_edges),
+              "dynamic_formula_lines":len(formulas),
+          },indent=2))
+
+          # Aggregate by host/path family for a quick answer.
+          from collections import Counter
+          hosts=Counter(urlsplit(u).hostname or "" for u in all_urls)
+          families=Counter()
+          for u in all_urls:
+              p=urlsplit(u).path.lstrip("/")
+              fam="/".join(p.split("/")[:3]) if p else "/"
+              families[fam]+=1
+          (OUT/"hosts.tsv").write_text("\n".join(f"{n}\t{h}" for h,n in hosts.most_common())+"\n")
+          (OUT/"families.tsv").write_text("\n".join(f"{n}\t{f}" for f,n in families.most_common())+"\n")
+          PY
+
+          python3 work/crawl.py
+
+          {
+            echo '=== MANIFEST ==='
+            cat out/manifest.json
+            echo
+            echo '=== ROUNDS ==='
+            cat out/round-*.json
+            echo
+            echo '=== HOSTS ==='
+            cat out/hosts.tsv
+            echo
+            echo '=== TOP FAMILIES ==='
+            head -100 out/families.tsv
+            echo
+            echo '=== ENDPOINTS ==='
+            cat out/endpoint-urls.txt
+          } > out/SUMMARY.txt
+
+      - name: Upload closure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-recursive-closure
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
