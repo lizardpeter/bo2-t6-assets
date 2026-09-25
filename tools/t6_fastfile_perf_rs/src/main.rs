@@ -44,20 +44,31 @@ fn run() -> Result<(), String> {
 
     let warm = decode(&ff)?;
     black_box(&warm.output);
-    let expected_sha = warm.sha256.clone();
+    let expected_sha = hex(Sha256::digest(&warm.output).as_slice());
 
     let start = Instant::now();
     let mut last = None;
     for _ in 0..iterations {
         let result = decode(black_box(&ff))?;
-        if result.sha256 != expected_sha || result.output.len() != warm.output.len() {
-            return Err("decode identity drift".to_owned());
+        if result.output.len() != warm.output.len() {
+            return Err("decode length drift".to_owned());
+        }
+        #[cfg(not(feature = "nohash"))]
+        if result.sha256 != expected_sha {
+            return Err("decode hash identity drift".to_owned());
         }
         black_box(&result.output);
         last = Some(result);
     }
     let elapsed = start.elapsed().as_secs_f64();
     let last = last.unwrap();
+    #[cfg(feature = "nohash")]
+    {
+        let actual = hex(Sha256::digest(&last.output).as_slice());
+        if actual != expected_sha {
+            return Err("untimed post-benchmark identity hash mismatch".to_owned());
+        }
+    }
     let encrypted_mib = ff.len() as f64 * iterations as f64 / 1048576.0;
     let expanded_mib = last.output.len() as f64 * iterations as f64 / 1048576.0;
 
@@ -96,6 +107,7 @@ fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
     let mut decompressed = vec![0u8; MAX_RECORD];
     let mut inflater = Decompress::new(false);
     let mut sha1 = Sha1::new();
+    #[cfg(not(feature = "nohash"))]
     let mut sha256 = Sha256::new();
 
     #[cfg(feature = "scalar")]
@@ -156,6 +168,7 @@ fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
         let expanded = inflater.total_out() as usize;
         let chunk = &decompressed[..expanded];
         output.extend_from_slice(chunk);
+        #[cfg(not(feature = "nohash"))]
         sha256.update(chunk);
         inflater.reset(false);
 
@@ -172,10 +185,20 @@ fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
         pos = end;
     }
 
+    #[cfg(feature = "encrypted-hash")]
+    {
+        black_box(Sha256::digest(ff));
+    }
+
+    #[cfg(not(feature = "nohash"))]
+    let expanded_sha = hex(sha256.finalize().as_slice());
+    #[cfg(feature = "nohash")]
+    let expanded_sha = String::new();
+
     Ok(DecodeResult {
         output,
         records: record,
-        sha256: hex(sha256.finalize().as_slice()),
+        sha256: expanded_sha,
     })
 }
 
