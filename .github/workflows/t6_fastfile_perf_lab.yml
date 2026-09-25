@@ -41,6 +41,10 @@ jobs:
         run: |
           cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/rustcrypto_zlibrs.txt
 
+      - name: Benchmark winning path with output reserve
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/rustcrypto_zlibrs_reserve.txt
+
       - name: Compare
         run: |
           python3 - <<'PY'
@@ -52,6 +56,7 @@ jobs:
               ("scalar+zlib-rs","/tmp/scalar_zlibrs.txt"),
               ("rustcrypto+miniz","/tmp/rustcrypto_miniz.txt"),
               ("rustcrypto+zlib-rs","/tmp/rustcrypto_zlibrs.txt"),
+              ("rustcrypto+zlib-rs+reserve","/tmp/rustcrypto_zlibrs_reserve.txt"),
           ]:
               t=Path(path).read_text()
               m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+) expanded_sha256=([0-9a-f]+)",t)
