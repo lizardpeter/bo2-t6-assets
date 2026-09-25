@@ -34,13 +34,13 @@ jobs:
       - name: Build exact retail LZO command corpus
         run: |
           set -euo pipefail
-          python3 tools/t6_ipak_lzo_corpus_v1.py             /tmp/mp_nuketown_2020.ipak /tmp/t6-lzo-corpus             --name-hash 3353894529 --data-hash 225863395 | tee /tmp/corpus.json
+          python3 tools/t6_ipak_lzo_corpus_v1.py /tmp/mp_nuketown_2020.ipak /tmp/t6-lzo-corpus --scan-limit 128 | tee /tmp/corpus.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/corpus.json'))
-          assert d['entryDecodedBytes'] == 174840, d
-          assert d['entryDecodedSha256'] == 'b0bdda7032e682e07970264e141e6521038e7e40b13354f5aafa767e203a2e40', d
-          assert d['lzoCommandCount'] > 0, d
+          assert d['sourceSha256'] == '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031', d
+          assert d['lzoCommandCount'] == 128, d
+          assert d['lzoCompressedBytes'] > 0 and d['lzoDecodedBytes'] > 0, d
           PY
 
       - name: Benchmark safe pure-Rust LZO decoders
@@ -67,7 +67,6 @@ jobs:
           base=next(r for r in rows if r[0]=='lzo-0.1.3')
           out=[
               f"source_sha256={corpus['sourceSha256']}",
-              f"entry_decoded_sha256={corpus['entryDecodedSha256']}",
               f"lzo_commands={corpus['lzoCommandCount']}",
               f"lzo_compressed_bytes={corpus['lzoCompressedBytes']}",
               f"lzo_decoded_bytes={corpus['lzoDecodedBytes']}",
