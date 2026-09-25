@@ -49,7 +49,7 @@ static void salsa20_xor(const uint8_t key[32], const uint8_t nonce[8], const uin
 }
 static const uint8_t key[32]={0x64,0x1D,0x8A,0x2F,0xE3,0x1D,0x3A,0xA6,0x36,0x22,0xBB,0xC9,0xCE,0x85,0x87,0x22,0x9D,0x42,0xB0,0xF8,0xED,0x9B,0x92,0x41,0x30,0xBF,0x88,0xB6,0x5E,0xDC,0x50,0xBE};
 int main(int argc,char**argv){
- if(argc<4){fprintf(stderr,"usage: %s in.ff out.bin zoneName\n",argv[0]);return 2;}
+ if(argc<4){fprintf(stderr,"usage: %s in.ff out.bin zoneName [final_hash_table.bin]\n",argv[0]);return 2;}
  FILE*f=fopen(argv[1],"rb");if(!f){perror("open in");return 1;} FILE*o=fopen(argv[2],"wb");if(!o){perror("open out");return 1;}
  fseek(f,0,SEEK_END); long flen=ftell(f); rewind(f); uint8_t*all=malloc(flen); if(fread(all,1,flen,f)!=(size_t)flen){fprintf(stderr,"read fail\n");return 1;} fclose(f);
  if(flen<312 || memcmp(all,"TAff0100",8)!=0){fprintf(stderr,"bad header\n");return 1;}
@@ -68,5 +68,11 @@ int main(int argc,char**argv){
    z_stream zs;memset(&zs,0,sizeof(zs));if(inflateInit2(&zs,-MAX_WBITS)!=Z_OK){fprintf(stderr,"inflate init\n");return 1;}zs.next_in=dec;zs.avail_in=cs;zs.next_out=decomp;zs.avail_out=0x8000;int zr=inflate(&zs,Z_FULL_FLUSH);if(zr!=Z_STREAM_END){fprintf(stderr,"inflate fail rec=%u stream=%u cs=%u zr=%d msg=%s\n",rec,s,cs,zr,zs.msg?zs.msg:"");return 1;}size_t outn=zs.total_out;inflateEnd(&zs);fwrite(decomp,1,outn,o);totalout+=outn;counts[s]++;
    off+=cs;rawmod=(rawmod+cs)%0x80000;rec++;
  }
- fclose(o);fprintf(stderr,"records=%u counts=%u/%u/%u/%u out=%zu raw_off=%zx\n",rec,counts[0],counts[1],counts[2],counts[3],totalout,off);free(dec);free(decomp);free(all);return 0;
+ fclose(o);
+ if(argc>=5){
+   FILE*h=fopen(argv[4],"wb");if(!h){perror("open hash table");return 1;}
+   if(fwrite(hashes,1,sizeof(hashes),h)!=sizeof(hashes)){fprintf(stderr,"hash table write fail\n");fclose(h);return 1;}
+   fclose(h);
+ }
+ fprintf(stderr,"records=%u counts=%u/%u/%u/%u out=%zu raw_off=%zx\n",rec,counts[0],counts[1],counts[2],counts[3],totalout,off);free(dec);free(decomp);free(all);return 0;
 }
