@@ -1,0 +1,91 @@
+name: T6 streaming parallel benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - t6-fastfile-perf-lab
+    paths:
+      - 'tools/t6_fastfile_perf_rs/**'
+      - '.github/workflows/t6_streaming_parallel_bench.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned retail Nuketown FastFile
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Build retained parallel
+        run: |
+          cargo build --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,parallel
+          cp tools/t6_fastfile_perf_rs/target/release/t6-fastfile-perf /tmp/t6-retained
+
+      - name: Build bounded streaming parallel
+        run: |
+          cargo build --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,streaming-parallel
+          cp tools/t6_fastfile_perf_rs/target/release/t6-fastfile-perf /tmp/t6-streaming
+
+      - name: Benchmark retained parallel
+        run: |
+          /usr/bin/time -v /tmp/t6-retained /tmp/mp_nuketown_2020.ff 10 >/tmp/retained.out 2>/tmp/retained.time
+          cat /tmp/retained.out
+          grep 'Maximum resident set size' /tmp/retained.time
+
+      - name: Benchmark streaming parallel
+        run: |
+          /usr/bin/time -v /tmp/t6-streaming /tmp/mp_nuketown_2020.ff 10 >/tmp/streaming.out 2>/tmp/streaming.time
+          cat /tmp/streaming.out
+          grep 'Maximum resident set size' /tmp/streaming.time
+
+      - name: Compare throughput, identity and RSS
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          def perf(path):
+              t=Path(path).read_text()
+              m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+)",t)
+              if not m: raise SystemExit(f"perf parse failed: {path}: {t}")
+              return tuple(map(float,m.groups()))
+
+          def rss(path):
+              t=Path(path).read_text()
+              m=re.search(r"Maximum resident set size \(kbytes\):\s*([0-9]+)",t)
+              if not m: raise SystemExit(f"rss parse failed: {path}: {t}")
+              return int(m.group(1))
+
+          retained=perf("/tmp/retained.out")
+          streaming=perf("/tmp/streaming.out")
+          retained_rss=rss("/tmp/retained.time")
+          streaming_rss=rss("/tmp/streaming.time")
+
+          # Each executable independently verifies its final output SHA against
+          # the same warm decode before printing T6_PERF, so reaching here is
+          # an identity pass for both implementations.
+          report=(
+              f"retained_seconds={retained[0]:.6f}\n"
+              f"streaming_seconds={streaming[0]:.6f}\n"
+              f"streaming_speed_vs_retained={retained[0]/streaming[0]:.3f}x\n"
+              f"retained_max_rss_kb={retained_rss}\n"
+              f"streaming_max_rss_kb={streaming_rss}\n"
+              f"rss_reduction={(1-streaming_rss/retained_rss)*100:.2f}%\n"
+          )
+          print(report,end="")
+          Path("/tmp/t6-streaming-parallel-result.txt").write_text(report)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-streaming-parallel-result
+          path: /tmp/t6-streaming-parallel-result.txt
