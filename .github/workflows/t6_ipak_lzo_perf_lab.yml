@@ -58,8 +58,8 @@ jobs:
               m=re.match(r'T6_LZO_PERF decoder=([^ ]+) rounds=([0-9]+) seconds=([0-9.]+) decoded_mib_s=([0-9.]+)',line)
               if m:
                   rows.append((m.group(1),int(m.group(2)),float(m.group(3)),float(m.group(4))))
-          if len(rows)!=3:
-              raise SystemExit(f'expected 3 decoder rows, got {rows!r}')
+          if len(rows)!=4:
+              raise SystemExit(f'expected 4 decoder rows, got {rows!r}')
           best=max(rows,key=lambda r:r[3])
           base=next(r for r in rows if r[0]=='lzo-0.1.3')
           out=[
