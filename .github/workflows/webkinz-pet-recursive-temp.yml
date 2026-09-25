@@ -1,0 +1,187 @@
+name: Temporary Webkinz pet recursive expansion
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: webkinz-pet-recursive-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Fetch pet database and recursively mine pet assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/ffdec work/src out
+          python3 -m pip install -q aiohttp
+
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -o work/ffdec.zip             "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
+          unzip -q work/ffdec.zip -d work/ffdec
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -A "Mozilla/5.0" -o work/petclasses.swf             "https://assets.webkinz.com/swf/pet/petclasses.swf?v=v390_249"
+          java -Xmx2g -jar work/ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 600 -onerror ignore             -export script work/src work/petclasses.swf >out/petclasses.ffdec.log 2>&1
+
+          cat > work/petmine.py <<'PY'
+          from __future__ import annotations
+          import asyncio, aiohttp, csv, json, re, zlib
+          from pathlib import Path
+          from urllib.parse import quote, urljoin, urlsplit
+
+          OUT=Path("out")
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
+
+          src=max(Path("work/src").rglob("DoAction.as"), key=lambda p:p.stat().st_size)
+          text=src.read_text(errors="ignore")
+          pets=[]
+          for m in re.finditer(r'petClassObject\.PC(\d+)\s*=\s*\{([^}]*)\};',text):
+              d=dict(re.findall(r'(\w+):"([^"]*)"',m.group(2)))
+              if d.get("description"):
+                  pets.append({"id":int(m.group(1)),**d})
+
+          with (OUT/"pets.tsv").open("w",newline="",encoding="utf-8") as f:
+              w=csv.writer(f,delimiter="\t")
+              w.writerow(["id","description","species","skeleton","retired","hidden"])
+              for d in pets:
+                  w.writerow([d["id"],d.get("description",""),d.get("petSpecies_DbId",""),d.get("skeleton_DbId",""),d.get("retired",""),d.get("hidden","")])
+
+          roots=[
+              (d["id"],f'https://assets.webkinz.com/swf/pets/{d["id"]}/{quote(d["description"],safe="")}.swf')
+              for d in pets
+          ]
+
+          def uncompress(raw):
+              if len(raw)>=8 and raw[:3]==b"CWS":
+                  try:return b"FWS"+raw[3:8]+zlib.decompress(raw[8:])
+                  except Exception:return raw
+              return raw
+
+          abs_rx=re.compile(rb'https?://[^\x00\s"\'<>\\)]+',re.I)
+          rel_rx=re.compile(
+              rb'(?i)(?:[A-Za-z0-9_.%+() -]+/)*[A-Za-z0-9_.%+() -]+\.'
+              rb'(?:swf|xml|json|js|css|jpg|jpeg|png|gif|mp3|wav|flv|txt|dat|bin)'
+              rb'(?:\?[^\x00\s"\'<>\\)]{0,120})?'
+          )
+
+          async def get_one(session,url,sem,max_bytes=6_000_000):
+              async with sem:
+                  try:
+                      async with session.get(url,allow_redirects=True,timeout=aiohttp.ClientTimeout(total=25,connect=7,sock_read=18)) as r:
+                          ctype=(r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                          if r.status!=200:
+                              return url,r.status,ctype,b"",str(r.url)
+                          cl=int(r.headers.get("Content-Length") or 0)
+                          if cl>max_bytes:
+                              return url,r.status,ctype,b"",str(r.url)
+                          return url,r.status,ctype,await r.read(),str(r.url)
+                  except Exception as e:
+                      return url,0,type(e).__name__,b"",url
+
+          def valid(url,status,ctype,raw):
+              if status!=200:return False
+              ext=Path(urlsplit(url).path).suffix.lower()
+              if ext==".swf":
+                  return ctype in ("application/x-shockwave-flash","application/octet-stream") or raw[:3] in (b"FWS",b"CWS",b"ZWS")
+              if ext in (".jpg",".jpeg"): return ctype=="image/jpeg"
+              if ext==".png": return ctype=="image/png"
+              if ext==".gif": return ctype=="image/gif"
+              if ext in (".xml",".json",".js",".css",".txt"): return ctype!="text/html"
+              return ctype!="text/html"
+
+          def refs_from(base,raw):
+              data=uncompress(raw)
+              refs=set()
+              for m in abs_rx.finditer(data):
+                  refs.add(m.group().decode("latin1","ignore"))
+              for m in rel_rx.finditer(data):
+                  refs.add(urljoin(base,m.group().decode("latin1","ignore").strip()))
+              return {
+                  u.split("#",1)[0] for u in refs
+                  if urlsplit(u).hostname in ("assets.webkinz.com","play.webkinz.com","www.webkinz.com")
+              }
+
+          async def fetch_batch(urls,limit=12):
+              conn=aiohttp.TCPConnector(limit=limit,limit_per_host=8,ttl_dns_cache=300)
+              sem=asyncio.Semaphore(limit)
+              rows=[]
+              async with aiohttp.ClientSession(headers={"User-Agent":UA},connector=conn) as s:
+                  tasks=[asyncio.create_task(get_one(s,u,sem)) for u in urls]
+                  for fut in asyncio.as_completed(tasks):
+                      rows.append(await fut)
+              return rows
+
+          root_id={u:i for i,u in roots}
+          root_rows=asyncio.run(fetch_batch([u for _,u in roots],12))
+          good=[]; bad=[]; discovered=set(); edges=set()
+          for u,status,ctype,raw,final in root_rows:
+              row=(u,status,ctype,len(raw),final,root_id[u])
+              if valid(u,status,ctype,raw):
+                  good.append(row)
+                  for child in refs_from(u,raw):
+                      discovered.add(child); edges.add((u,child))
+              else:
+                  bad.append(row)
+
+          def write_rows(path,rows,header):
+              with path.open("w",newline="",encoding="utf-8") as f:
+                  w=csv.writer(f,delimiter="\t"); w.writerow(header); w.writerows(sorted(rows))
+
+          write_rows(OUT/"pet-main-success.tsv",good,["url","status","content_type","bytes","final_url","pet_id"])
+          write_rows(OUT/"pet-main-misses.tsv",bad,["url","status","content_type","bytes","final_url","pet_id"])
+
+          all_success={r[0] for r in good}
+          seen=set(all_success)
+          rounds=[]
+          for rnd in range(1,4):
+              pending=sorted(discovered-seen)
+              if not pending:
+                  rounds.append({"round":rnd,"attempted":0,"success":0,"new_refs":0})
+                  break
+              rows=asyncio.run(fetch_batch(pending,12))
+              success=0; newrefs=0
+              for u,status,ctype,raw,final in rows:
+                  seen.add(u)
+                  if not valid(u,status,ctype,raw):
+                      continue
+                  success+=1; all_success.add(u)
+                  if Path(urlsplit(u).path).suffix.lower() in (".swf",".js",".xml",".json",".css"):
+                      for child in refs_from(u,raw):
+                          if child not in discovered:newrefs+=1
+                          discovered.add(child); edges.add((u,child))
+              rounds.append({"round":rnd,"attempted":len(pending),"success":success,"new_refs":newrefs})
+
+          (OUT/"pet-all-success-urls.txt").write_text("\n".join(sorted(all_success))+"\n")
+          (OUT/"pet-discovered-candidates.txt").write_text("\n".join(sorted(discovered))+"\n")
+          (OUT/"pet-edges.tsv").write_text("\n".join(f"{a}\t{b}" for a,b in sorted(edges))+"\n")
+          summary={
+              "version":"v390_249",
+              "pet_records":len(pets),
+              "pet_main_valid":len(good),
+              "pet_main_missing_or_invalid":len(bad),
+              "all_pet_success_urls":len(all_success),
+              "referenced_child_candidates":len(discovered),
+              "dependency_edges":len(edges),
+              "rounds":rounds,
+          }
+          (OUT/"summary.json").write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+
+          python3 work/petmine.py 2>&1 | tee out/run.log
+
+          curl -IL -sS --connect-timeout 15 --max-time 90 -A "Mozilla/5.0"             "https://bluepload.unstable.life/webkinzfiles.7z"             > out/webkinzfiles-head.txt 2>&1 || true
+
+      - name: Upload pet recursive report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-pet-recursive
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
