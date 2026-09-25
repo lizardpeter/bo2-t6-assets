@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
 
 use rsa::{pkcs1::DecodeRsaPublicKey, pss::Pss, RsaPublicKey};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 const SIGNATURE_OFFSET: usize = 56;
 const SIGNATURE_BYTES: usize = 256;
@@ -61,7 +61,8 @@ fn run() -> Result<(), String> {
     let key = RsaPublicKey::from_pkcs1_der(&TREYARCH_RSA_PUBLIC_KEY_DER)
         .map_err(|error| format!("failed to parse Treyarch RSA key: {error}"))?;
     let pss = Pss::new_with_salt::<Sha256>(PSS_SALT_BYTES);
-    key.verify(pss, &table, signature)
+    let digest = Sha256::digest(&table);
+    key.verify(pss, digest.as_slice(), signature)
         .map_err(|error| format!("RSA-PSS verification failed: {error}"))?;
 
     println!("T6_RSA_SIGNATURE_VALID hash_table_bytes={} signature_bytes={} salt_bytes={}", table.len(), signature.len(), PSS_SALT_BYTES);
