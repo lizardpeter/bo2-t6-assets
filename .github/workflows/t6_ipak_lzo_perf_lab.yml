@@ -56,8 +56,6 @@ jobs:
           corpus=json.loads(Path('/tmp/corpus.json').read_text())
           text=Path('/tmp/lzo_perf.txt').read_text()
           rows=[]
-          for decoder,seconds,mibs in re.findall(r'T6_LZO_PERF decoder=([^ ]+) rounds=([0-9]+) seconds=([0-9.]+) decoded_mib_s=([0-9.]+)', text):
-              pass
           # Keep parsing explicit to avoid silently accepting malformed output.
           for line in text.splitlines():
               m=re.match(r'T6_LZO_PERF decoder=([^ ]+) rounds=([0-9]+) seconds=([0-9.]+) decoded_mib_s=([0-9.]+)',line)
