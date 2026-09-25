@@ -307,7 +307,7 @@ jobs:
 
               let package_dir = Path::new(&out_dir).join("reconstructed");
               fs::create_dir_all(&package_dir).unwrap();
-              let rebuilt_path = package_dir.join(profile_name);
+              let rebuilt_path = package_dir.join(&profile_name);
               fs::write(&rebuilt_path, &rebuilt).unwrap();
 
               let manifest = json!({
