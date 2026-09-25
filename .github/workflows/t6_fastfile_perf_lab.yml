@@ -33,6 +33,10 @@ jobs:
         run: |
           cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,scalar -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/scalar_miniz.txt
 
+      - name: Benchmark original production-equivalent scalar + miniz + both hashes
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,scalar,encrypted-hash -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/original_full_hashes.txt
+
       - name: Benchmark scalar + zlib-rs
         run: |
           cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,scalar -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/scalar_zlibrs.txt
@@ -69,6 +73,7 @@ jobs:
           rows=[]
           for name,path in [
               ("scalar+miniz","/tmp/scalar_miniz.txt"),
+              ("original-production","/tmp/original_full_hashes.txt"),
               ("scalar+zlib-rs","/tmp/scalar_zlibrs.txt"),
               ("rustcrypto+miniz","/tmp/rustcrypto_miniz.txt"),
               ("rustcrypto+zlib-rs","/tmp/rustcrypto_zlibrs.txt"),
