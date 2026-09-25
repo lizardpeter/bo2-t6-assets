@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use rsa::{hazmat::rsa_encrypt, pkcs1::DecodeRsaPublicKey, traits::PublicKeyParts, BigUint, RsaPublicKey};
+use rsa::{pkcs1::DecodeRsaPublicKey, traits::PublicKeyParts, BigUint, RsaPublicKey};
 use sha2::{Digest, Sha256};
 
 const SIGNATURE_OFFSET: usize = 56;
@@ -85,8 +85,7 @@ fn verify_libtomcrypt_pss(
     if &sig_int >= key.n() {
         return Err("RSA signature representative is outside modulus".to_owned());
     }
-    let em_int = rsa_encrypt(key, &sig_int)
-        .map_err(|error| format!("raw RSA public operation failed: {error}"))?;
+    let em_int = sig_int.modpow(key.e(), key.n());
     let raw = em_int.to_bytes_be();
     if raw.len() > modulus_bytes {
         return Err("raw RSA result exceeds modulus width".to_owned());
