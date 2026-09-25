@@ -42,6 +42,20 @@ jobs:
           fetch angular_polyfills 'https://play.webkinz.com/polyfills.8ae21cca062f6f7f7c29.js'
           fetch angular_vendor 'https://play.webkinz.com/vendor.f9da5857a20f170f68a7.js'
           fetch angular_main 'https://play.webkinz.com/main.f0803e1f17ed9e88d9ce.js'
+          fetch angular_play_chunk 'https://play.webkinz.com/22.6dcadeecc981526283f8.js'
+
+          # Runtime paths recovered from decompiled current Webkinz.swf.
+          fetch subapplications_xml 'https://www.webkinz.com/subApplications/subApplications.xml'
+          fetch web_component_map_json 'https://www.webkinz.com/lib/web-assets/webkinz-component-utility.json'
+          fetch sfs_config_root 'https://www.webkinz.com/sfs-config.xml'
+          fetch sfs_config_subapps 'https://www.webkinz.com/subApplications/sfs-config.xml'
+          fetch items_us_en 'https://www.webkinz.com/SWF/staticdata/US_EN/items.swf?v=v390_249'
+          fetch petclasses_swf 'https://assets.webkinz.com/swf/pet/petclasses.swf?v=v390_249'
+          fetch pet_crossaccess_swf 'https://assets.webkinz.com/swf/pet/crossAccess.swf'
+          fetch chat_pdict_xml 'https://www.webkinz.com/SWF/VIEWS/Chat/xml/pdict.xml'
+          fetch chat_dictionary_index_xml 'https://www.webkinz.com/SWF/VIEWS/Chat/xml/DictionaryIndexAS3.xml'
+          fetch kinzchat_wordlist 'https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/word-list-file.swf'
+          fetch kinzchat_phraselist 'https://www.webkinz.com/subbAplications/kinz-chat-plus/web-assets/phrase-list-file.swf'
 
           # Current and old-version query variants for hash comparison.
           fetch webkinz_swf_current 'https://www.webkinz.com/Webkinz.swf?v390_249'
@@ -129,7 +143,7 @@ jobs:
                       if n and not n.startswith('http'):
                           swfs.append('https://www.webkinz.com/SWF/'+n.lstrip('/')+'?v=v390_249')
                       if tf:
-                          trans.append('https://www.webkinz.com/XML/L10N/'+tf.lstrip('/')+'?v=v390_249')
+                          trans.append('https://www.webkinz.com/XML/L10N/US_EN/'+tf.lstrip('/')+'?v=v390_249')
                   swfs=sorted(set(swfs));trans=sorted(set(trans))
                   Path('out/maps/translist_content_urls.txt').write_text('\n'.join(swfs)+'\n')
                   Path('out/maps/translist_translation_urls.txt').write_text('\n'.join(trans)+'\n')
