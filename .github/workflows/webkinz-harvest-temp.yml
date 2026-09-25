@@ -1,88 +1,155 @@
-name: Temporary Webkinz harvest
+name: Temporary Webkinz decompile
 
 on:
   pull_request:
     branches: [main]
 
 concurrency:
-  group: webkinz-harvest-${{ github.event.pull_request.number }}
+  group: webkinz-decompile-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  harvest:
+  decompile:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Parallel Webkinz endpoint probe
+      - name: Fetch tools and live Webkinz files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p input out/js out/resources out/meta out/decompiled
+          java -version 2>&1 | tee out/meta/java-version.txt
+
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180             -o ffdec.zip             "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
+          unzip -q ffdec.zip -d ffdec
+          java -jar ffdec/ffdec.jar -help > out/meta/ffdec-help.txt 2>&1 || true
+
+          curl -L --fail --retry 2 --connect-timeout 10 --max-time 120             -o input/Webkinz.swf "https://www.webkinz.com/Webkinz.swf?v390_249"
+          curl -L --fail --retry 2 --connect-timeout 10 --max-time 120             -o input/main2.swf "https://www.webkinz.com/SWF/main2.swf?v=v390_249"
+          curl -L --fail --retry 2 --connect-timeout 10 --max-time 60             -o input/wconf.json "https://play.webkinz.com/wconf.js.php"
+          curl -L --fail --retry 2 --connect-timeout 10 --max-time 60             -o input/play.html "https://play.webkinz.com/"
+
+          for f in input/*; do
+            sha256sum "$f"
+            file "$f"
+          done | tee out/meta/input-files.txt
+
+      - name: Fetch current web shell bundles
         shell: bash
         run: |
           set +e
-          mkdir -p out
+          base="https://play.webkinz.com"
+          for f in             styles.f5d1c9eecac4834891da.css             runtime.4fd09af43b6bc8d95a03.js             polyfills.8ae21cca062f6f7f7c29.js             vendor.f9da5857a20f170f68a7.js             main.f0803e1f17ed9e88d9ce.js
+          do
+            curl -L -sS --connect-timeout 8 --max-time 60 -A "Mozilla/5.0"               -D "out/js/$f.headers" -o "out/js/$f" "$base/$f"
+            echo "$?" > "out/js/$f.exit"
+          done
 
-          fetch() {
-            name="$1"
-            url="$2"
+      - name: Probe current v390_249 asset graph
+        shell: bash
+        run: |
+          set +e
+          base="https://assets.webkinz.com"
+          version="v390_249"
+
+          fetch_asset() {
+            label="$1"
+            path="$2"
             (
-              echo "$url" > "out/$name.url"
-              curl -L -sS --connect-timeout 6 --max-time 18                 -A "Mozilla/5.0"                 -D "out/$name.headers"                 -o "out/$name.body"                 "$url"
-              echo $? > "out/$name.exit"
-              wc -c "out/$name.body" > "out/$name.size" 2>/dev/null || true
-              file "out/$name.body" > "out/$name.file" 2>/dev/null || true
-              sha256sum "out/$name.body" > "out/$name.sha256" 2>/dev/null || true
+              url="$base$path"
+              echo "$url" > "out/resources/$label.url"
+              curl -L -sS --connect-timeout 8 --max-time 60 -A "Mozilla/5.0"                 -D "out/resources/$label.headers"                 -o "out/resources/$label.body" "$url"
+              echo "$?" > "out/resources/$label.exit"
+              wc -c "out/resources/$label.body" > "out/resources/$label.size" 2>/dev/null || true
+              file "out/resources/$label.body" > "out/resources/$label.file" 2>/dev/null || true
+              sha256sum "out/resources/$label.body" > "out/resources/$label.sha256" 2>/dev/null || true
             ) &
           }
 
-          fetch wconf "https://play.webkinz.com/wconf.js.php"
-          fetch latest "https://downloads.webkinz.com/apps/latest.yml"
-          fetch playroot "https://play.webkinz.com/"
-          fetch webkinz_swf "https://www.webkinz.com/Webkinz.swf?v320_181"
-          fetch main2_swf "https://www.webkinz.com/SWF/main2.swf?v=v320_181"
-          fetch translist "https://www.webkinz.com/XML/L10N/TransList.xml"
-          fetch flashpoint_browse "https://ooooooooo.ooo/browse?search=Webkinz"
-          fetch dbapi_query "https://db-api.unstable.life/search?query=Webkinz"
-          fetch dbapi_search "https://db-api.unstable.life/search?search=Webkinz"
-          fetch cdx_webkinz "https://web.archive.org/cdx/search/cdx?url=www.webkinz.com/Webkinz.swf&output=json&fl=timestamp,original,statuscode,mimetype,digest,length&filter=statuscode:200&limit=20"
-          fetch cdx_main2 "https://web.archive.org/cdx/search/cdx?url=www.webkinz.com/SWF/main2.swf&output=json&fl=timestamp,original,statuscode,mimetype,digest,length&filter=statuscode:200&limit=20"
-          fetch cdx_jazz "https://web.archive.org/cdx/search/cdx?url=www.webkinz.com/SWF/ARCADE/GAMES/jazz.swf&output=json&fl=timestamp,original,statuscode,mimetype,digest,length&filter=statuscode:200&limit=20"
+          fetch_asset views_xml "/xml/views.xml?v=$version"
+          fetch_asset translist_xml "/XML/L10N/TransList.xml?v=$version"
+          fetch_asset language_exception_xml "/XML/L10N/languageException.xml?v=$version"
+          fetch_asset main2_xml "/main2.xml?v=$version"
+          fetch_asset multitiered_xml "/multiTiered.xml?v=$version"
+          fetch_asset instance_factory_xml "/XML/InstanceFactory/InstanceFactoryData.xml?v=$version"
+          fetch_asset tips_swf "/SWF/staticdata/tips.swf?v=$version"
+          fetch_asset items_swf "/items.swf?v=$version"
+          fetch_asset petclasses_swf "/petclasses.swf?v=$version"
+          fetch_asset views_swf "/SWF/staticdata/views.swf?v=$version"
+          fetch_asset envmain_swf "/SWF/staticdata/envMain.swf?v=$version"
+          fetch_asset webkinzxml_swf "/SWF/server/webkinzXML.swf?v=$version"
+          fetch_asset eventdispatcher_swf "/SWF/EventDispatcherScopeResolver.swf?v=$version"
+          fetch_asset as3bridge_swf "/SWF/server/as3bridgeService.swf?v=$version"
+          fetch_asset adbridge_swf "/SWF/server/adBridge.swf?v=$version"
+          fetch_asset topbar_swf "/SWF/TopBar.swf?v=$version"
+          fetch_asset socialhub_swf "/SWF/SocialHub/SocialHub.swf?v=$version"
+          fetch_asset mapi_swf "/SWF/VIEWS/MU2/MAPI.swf?v=$version"
+          fetch_asset webkinz_clicktracker_swf "/SWF/ClickTracker/WebkinzClickTracker.swf?v=$version"
           wait
 
-          curl -I -L -sS --connect-timeout 6 --max-time 18 -A "Mozilla/5.0"             "https://bluepload.unstable.life/webkinzfiles.7z"             > out/bluepload_head.txt 2>&1 || true
+      - name: Decompile ActionScript with FFDec
+        shell: bash
+        run: |
+          set +e
+          mkdir -p out/decompiled/Webkinz out/decompiled/main2
 
-          : > out/all_urls.txt
-          : > out/all_uuids.txt
-          : > out/interesting_strings.txt
-          for f in out/*.body; do
-            [ -f "$f" ] || continue
-            strings -a -n 5 "$f" | grep -Eai 'https?://|webkinz|\.swf|\.xml|\.php|arcade|api/|loader|main2|assets'               >> out/interesting_strings.txt 2>/dev/null || true
-            strings -a -n 8 "$f" | grep -Eao 'https?://[^[:space:]<>"]+'               >> out/all_urls.txt 2>/dev/null || true
-            strings -a "$f" | grep -Eao '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'               >> out/all_uuids.txt 2>/dev/null || true
-          done
-          sort -u -o out/all_urls.txt out/all_urls.txt
-          sort -u -o out/all_uuids.txt out/all_uuids.txt
-          sort -u -o out/interesting_strings.txt out/interesting_strings.txt
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 900             -onerror ignore -export script out/decompiled/Webkinz input/Webkinz.swf             > out/meta/webkinz-export.log 2>&1
+          echo "$?" > out/meta/webkinz-export.exit
+
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 900             -onerror ignore -export script out/decompiled/main2 input/main2.swf             > out/meta/main2-export.log 2>&1
+          echo "$?" > out/meta/main2-export.exit
+
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpSWF input/Webkinz.swf             > out/meta/Webkinz-dumpSWF.txt 2>&1 || true
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpAS3 input/Webkinz.swf             > out/meta/Webkinz-dumpAS3.txt 2>&1 || true
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpSWF input/main2.swf             > out/meta/main2-dumpSWF.txt 2>&1 || true
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -dumpAS2 input/main2.swf             > out/meta/main2-dumpAS2.txt 2>&1 || true
+
+          find out/decompiled -type f -printf '%p\t%s\n' | sort > out/meta/decompiled-file-list.txt
+
+      - name: Build URL and dependency inventory
+        shell: bash
+        run: |
+          set +e
+          : > out/all-urls.txt
+          : > out/all-resource-refs.txt
+          : > out/all-webkinz-hosts.txt
+
+          grep -RhaoE 'https?://[^"'"'"' <>)]+' out/decompiled out/js out/resources input             >> out/all-urls.txt 2>/dev/null || true
+
+          grep -RhaoE '([A-Za-z0-9_.%+ -]+/)+[A-Za-z0-9_.%+?=&-]+\.(swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js)(\?[^"'"'"' <>)]*)?'             out/decompiled out/js out/resources input             >> out/all-resource-refs.txt 2>/dev/null || true
+
+          grep -RhaioE '([A-Za-z0-9.-]+\.)?webkinz\.com|([A-Za-z0-9.-]+\.)?ganz(world|estore)?\.com'             out/decompiled out/js out/resources input             >> out/all-webkinz-hosts.txt 2>/dev/null || true
+
+          sort -u -o out/all-urls.txt out/all-urls.txt
+          sort -u -o out/all-resource-refs.txt out/all-resource-refs.txt
+          sort -fu -o out/all-webkinz-hosts.txt out/all-webkinz-hosts.txt
 
           {
-            echo "=== FILES ==="
-            ls -lh out
+            echo "=== INPUT ==="
+            cat out/meta/input-files.txt
             echo
-            echo "=== UUIDS ==="
-            cat out/all_uuids.txt
+            echo "=== DECOMPILE COUNTS ==="
+            find out/decompiled/Webkinz -type f | wc -l
+            find out/decompiled/main2 -type f | wc -l
+            echo
+            echo "=== HOSTS ==="
+            cat out/all-webkinz-hosts.txt
             echo
             echo "=== URLS ==="
-            cat out/all_urls.txt
+            cat out/all-urls.txt
             echo
-            echo "=== BLUEPLOAD ==="
-            cat out/bluepload_head.txt
+            echo "=== RESOURCE REFS ==="
+            cat out/all-resource-refs.txt
           } > out/SUMMARY.txt
 
-      - name: Upload harvest
+      - name: Upload decompile
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-harvest
+          name: webkinz-decompile
           path: out/
           if-no-files-found: error
           retention-days: 7
