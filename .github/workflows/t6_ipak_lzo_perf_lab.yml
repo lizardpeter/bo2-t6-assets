@@ -1,0 +1,94 @@
+name: T6 IPAK pure-Rust LZO performance lab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - t6-ipak-lzo-perf-lab
+    paths:
+      - 'tools/t6_ipak_lzo_corpus_v1.py'
+      - 'tools/t6_ipak_lzo_perf_rs/**'
+      - '.github/workflows/t6_ipak_lzo_perf_lab.yml'
+
+concurrency:
+  group: t6-ipak-lzo-perf-lab
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned retail Nuketown IPAK
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ipak https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ipak
+          test "$(stat -c '%s' /tmp/mp_nuketown_2020.ipak)" = 165543936
+          echo '53269e39a9cba8c32a09a8ba56977c6483203d88a546cfc2fc66ec82fc383031  /tmp/mp_nuketown_2020.ipak' | sha256sum -c -
+
+      - name: Build exact retail LZO command corpus
+        run: |
+          set -euo pipefail
+          python3 tools/t6_ipak_lzo_corpus_v1.py             /tmp/mp_nuketown_2020.ipak /tmp/t6-lzo-corpus             --name-hash 3353894529 --data-hash 225863395 | tee /tmp/corpus.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/corpus.json'))
+          assert d['entryDecodedBytes'] == 174840, d
+          assert d['entryDecodedSha256'] == 'b0bdda7032e682e07970264e141e6521038e7e40b13354f5aafa767e203a2e40', d
+          assert d['lzoCommandCount'] > 0, d
+          PY
+
+      - name: Benchmark safe pure-Rust LZO decoders
+        run: |
+          set -euo pipefail
+          cargo run --quiet --release --manifest-path tools/t6_ipak_lzo_perf_rs/Cargo.toml -- /tmp/t6-lzo-corpus 2000 | tee /tmp/lzo_perf.txt
+
+      - name: Summarize
+        run: |
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          corpus=json.loads(Path('/tmp/corpus.json').read_text())
+          text=Path('/tmp/lzo_perf.txt').read_text()
+          rows=[]
+          for decoder,seconds,mibs in re.findall(r'T6_LZO_PERF decoder=([^ ]+) rounds=([0-9]+) seconds=([0-9.]+) decoded_mib_s=([0-9.]+)', text):
+              pass
+          # Keep parsing explicit to avoid silently accepting malformed output.
+          for line in text.splitlines():
+              m=re.match(r'T6_LZO_PERF decoder=([^ ]+) rounds=([0-9]+) seconds=([0-9.]+) decoded_mib_s=([0-9.]+)',line)
+              if m:
+                  rows.append((m.group(1),int(m.group(2)),float(m.group(3)),float(m.group(4))))
+          if len(rows)!=3:
+              raise SystemExit(f'expected 3 decoder rows, got {rows!r}')
+          best=max(rows,key=lambda r:r[3])
+          base=next(r for r in rows if r[0]=='lzo-0.1.3')
+          out=[
+              f"source_sha256={corpus['sourceSha256']}",
+              f"entry_decoded_sha256={corpus['entryDecodedSha256']}",
+              f"lzo_commands={corpus['lzoCommandCount']}",
+              f"lzo_compressed_bytes={corpus['lzoCompressedBytes']}",
+              f"lzo_decoded_bytes={corpus['lzoDecodedBytes']}",
+          ]
+          for name,rounds,seconds,mibs in rows:
+              out += [
+                  f"{name}_seconds={seconds:.6f}",
+                  f"{name}_decoded_mib_s={mibs:.3f}",
+                  f"{name}_speedup_vs_lzo_0_1_3={mibs/base[3]:.3f}x",
+              ]
+          out += [f"fastest={best[0]}",f"fastest_decoded_mib_s={best[3]:.3f}"]
+          report='\n'.join(out)+'\n'
+          print(report,end='')
+          Path('/tmp/t6-ipak-lzo-perf.txt').write_text(report)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-ipak-lzo-perf
+          path: |
+            /tmp/t6-ipak-lzo-perf.txt
+            /tmp/corpus.json
