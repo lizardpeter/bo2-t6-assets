@@ -119,6 +119,7 @@ fn decode_serial(ff: &[u8]) -> Result<DecodeResult, String> {
     #[cfg(not(feature = "reserve"))]
     let mut output = Vec::new();
     let mut plaintext = Vec::with_capacity(MAX_RECORD);
+    let mut decompressed = vec![0u8; MAX_RECORD];
     let mut inflater = Decompress::new(false);
     let mut sha1 = Sha1::new();
     #[cfg(not(feature = "nohash"))]
@@ -309,7 +310,6 @@ fn decode_one_stream_streaming(
 ) -> Result<(), String> {
     let mut table = initial_table(zone)?;
     let mut plaintext = Vec::with_capacity(MAX_RECORD);
-    let mut decompressed = vec![0u8; MAX_RECORD];
     let mut inflater = Decompress::new(false);
     let mut sha1 = Sha1::new();
     let mut counter = 0usize;
