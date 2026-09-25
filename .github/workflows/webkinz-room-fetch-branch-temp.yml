@@ -1,4 +1,4 @@
-name: Temporary Webkinz corrected room environment validation
+name: Temporary Webkinz house asset map fetch
 
 on:
   push:
@@ -9,44 +9,23 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  fetch:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Validate corrected room environment backgrounds
+      - name: Fetch house asset maps
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
-          base="https://play.webkinz.com/subApplications/"
-          check() {
-            rel="$1"
-            curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D "out/headers.tmp" -o "out/body.tmp" "$base$rel" || true
-            code=$(grep -E '^HTTP/' out/headers.tmp | tail -1 | awk '{print $2}')
-            type=$(grep -i '^content-type:' out/headers.tmp | tail -1 | tr -d '\r' | cut -d' ' -f2-)
-            size=$(wc -c < out/body.tmp)
-            printf "%s\t%s\t%s\t%s%s\n" "$code" "$type" "$size" "$base" "$rel"
-          }
-          check "webkinzHouse/assets/outdoor/fore/spring.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/fore/summer.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/fore/fall.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/fore/winter.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/back/dawn.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/back/afternoon.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/back/dusk.png" >> out/results.tsv
-          check "webkinzHouse/assets/outdoor/back/night.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/spring.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/summer.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/fall.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/winter.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/dawn.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/afternoon.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/dusk.png" >> out/results.tsv
-          check "webkinzHouse/assets/treetop/night.png" >> out/results.tsv
-          rm -f out/headers.tmp out/body.tmp
+          curl -L -sS --connect-timeout 10 --max-time 60 -A "Mozilla/5.0" -D out/web.headers -o out/web.json "https://play.webkinz.com/subApplications/webkinz-house/web.json" || true
+          curl -L -sS --connect-timeout 10 --max-time 60 -A "Mozilla/5.0" -D out/web1024.headers -o out/web1024.json "https://play.webkinz.com/subApplications/webkinz-house/web1024.json" || true
+          curl -L -sS --connect-timeout 10 --max-time 60 -A "Mozilla/5.0" -D out/web1280.headers -o out/web1280.json "https://play.webkinz.com/subApplications/webkinz-house/web1280.json" || true
+          file out/*.json > out/file.txt 2>&1 || true
+          wc -c out/*.json > out/size.txt 2>&1 || true
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-room-environment-corrected
+          name: webkinz-house-asset-map
           path: out/
           retention-days: 7
