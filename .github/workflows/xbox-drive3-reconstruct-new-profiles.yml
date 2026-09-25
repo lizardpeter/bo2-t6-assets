@@ -1,0 +1,407 @@
+name: Reconstruct DRIVE3 Xbox Live profiles
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  carve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EWF tools and Rust
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3 jq
+          df -h
+
+      - name: Build SHA-1 carve/reconstruction tool
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/stfs-carver/src
+          cat > /tmp/stfs-carver/Cargo.toml <<'EOF'
+          [package]
+          name = "stfs-carver"
+          version = "0.1.0"
+          edition = "2024"
+
+          [dependencies]
+          sha1 = "0.11"
+          sha2 = "0.10"
+          hex = "0.4"
+          serde_json = "1"
+          EOF
+
+          cat > /tmp/stfs-carver/src/main.rs <<'EOF'
+          use sha1::{Digest as Sha1Digest, Sha1};
+          use sha2::{Digest as Sha2Digest, Sha256};
+          use serde_json::json;
+          use std::collections::{HashMap, HashSet};
+          use std::env;
+          use std::fs::{self, File};
+          use std::io::{Read, Seek, SeekFrom};
+          use std::path::Path;
+
+          const DATA_PARTITION_OFFSET: u64 = 0x1_30EB_0000;
+          const SUPERBLOCK_SIZE: u64 = 0x1000;
+          const SECTOR_SIZE: u64 = 0x200;
+          const STFS_BLOCK: usize = 0x1000;
+          const deleted_profile_first_cluster: u32 = 17798;
+          const deleted_profile_size: usize = 225280;
+          const profile_name: &str = "E00001B3AEF799DA";
+
+          fn align_up(v: u64, a: u64) -> u64 { (v + a - 1) & !(a - 1) }
+
+          fn sha1_bytes(data: &[u8]) -> [u8; 20] {
+              let mut h = Sha1::new();
+              h.update(data);
+              h.finalize().into()
+          }
+
+          fn sha256_hex(data: &[u8]) -> String {
+              let mut h = Sha256::new();
+              h.update(data);
+              hex::encode(h.finalize())
+          }
+
+          fn be_u32(b: &[u8], off: usize) -> u32 {
+              u32::from_be_bytes(b[off..off + 4].try_into().unwrap())
+          }
+
+          fn package_data_offset(header_size: u32, logical: u32) -> usize {
+              let data_start = align_up(header_size as u64, 0x1000) as usize;
+              data_start + ((logical as usize) + 2) * STFS_BLOCK
+          }
+
+          fn main() {
+              let raw_path = env::args().nth(1).expect("usage: stfs-carver <raw> <out-dir>");
+              let out_dir = env::args().nth(2).expect("usage: stfs-carver <raw> <out-dir> <profile> <first-cluster> <size>");
+              let profile_name = env::args().nth(3).expect("profile");
+              let deleted_profile_first_cluster: u32 = env::args().nth(4).expect("first-cluster").parse().expect("first-cluster u32");
+              let deleted_profile_size: usize = env::args().nth(5).expect("size").parse().expect("size usize");
+              fs::create_dir_all(&out_dir).unwrap();
+
+              let mut raw = File::open(&raw_path).expect("open raw ewf stream");
+              let raw_size = raw.seek(SeekFrom::End(0)).expect("raw size");
+              assert!(raw_size > DATA_PARTITION_OFFSET + SUPERBLOCK_SIZE);
+              let part_size = raw_size - DATA_PARTITION_OFFSET;
+
+              raw.seek(SeekFrom::Start(DATA_PARTITION_OFFSET)).unwrap();
+              let mut sb = [0u8; 0x1000];
+              raw.read_exact(&mut sb).unwrap();
+              assert_eq!(&sb[0..4], b"XTAF", "360 Data partition is not XTAF");
+
+              let sectors_per_cluster = be_u32(&sb, 8) as u64;
+              let cluster_size = sectors_per_cluster * SECTOR_SIZE;
+              assert!(cluster_size >= 0x1000 && cluster_size % 0x1000 == 0);
+
+              let total_clusters = (part_size - SUPERBLOCK_SIZE) / cluster_size;
+              let total_sectors = (part_size / SECTOR_SIZE) - (SUPERBLOCK_SIZE / SECTOR_SIZE);
+              let cluster_estimate = total_sectors.saturating_sub(260) / sectors_per_cluster;
+              let fat_entry_size = if cluster_estimate >= 65520 { 4u64 } else { 2u64 };
+              let raw_fat_size = total_clusters * fat_entry_size;
+              let fat_size = align_up(raw_fat_size, 0x1000);
+              let data_abs = DATA_PARTITION_OFFSET + SUPERBLOCK_SIZE + fat_size;
+
+              println!(
+                  "XTAF layout: raw=0x{:X} part=0x{:X}+0x{:X} spc={} cluster_size={} total_clusters={} fat_entry={} fat_size=0x{:X} data_abs=0x{:X}",
+                  raw_size, DATA_PARTITION_OFFSET, part_size, sectors_per_cluster,
+                  cluster_size, total_clusters, fat_entry_size, fat_size, data_abs
+              );
+
+              let profile_start = data_abs
+                  + ((deleted_profile_first_cluster as u64 - 1) * cluster_size);
+              raw.seek(SeekFrom::Start(profile_start)).unwrap();
+              let mut partial = vec![0u8; deleted_profile_size];
+              raw.read_exact(&mut partial).expect("read contiguous deleted profile candidate");
+              assert_eq!(&partial[0..4], b"CON ", "recovered candidate is not CON");
+
+              let header_size = be_u32(&partial, 0x340);
+              let data_start = align_up(header_size as u64, 0x1000) as usize;
+              let vd = 0x379usize;
+              let root_active = (partial[vd + 2] >> 1) & 1;
+              let total_stfs_blocks = be_u32(&partial, vd + 0x1C) as usize;
+              assert!(total_stfs_blocks < 0xAA);
+              let active_hash_off = data_start + root_active as usize * STFS_BLOCK;
+              let root_hash = &partial[vd + 8..vd + 28];
+              let active_table_sha = sha1_bytes(&partial[active_hash_off..active_hash_off + STFS_BLOCK]);
+              assert_eq!(&active_table_sha[..], root_hash, "active hash table does not match root hash");
+
+              println!(
+                  "STFS: header=0x{:X} data_start=0x{:X} root_active={} active_hash=0x{:X} logical_blocks={}",
+                  header_size, data_start, root_active, active_hash_off, total_stfs_blocks
+              );
+
+              let mut expected: Vec<[u8; 20]> = Vec::with_capacity(total_stfs_blocks);
+              let mut validity = Vec::with_capacity(total_stfs_blocks);
+              let mut target_hashes: HashSet<[u8; 20]> = HashSet::new();
+              let zero_hash = sha1_bytes(&vec![0u8; STFS_BLOCK]);
+
+              for logical in 0..total_stfs_blocks {
+                  let ent = active_hash_off + logical * 24;
+                  let mut exp = [0u8; 20];
+                  exp.copy_from_slice(&partial[ent..ent + 20]);
+                  expected.push(exp);
+
+                  let poff = package_data_offset(header_size, logical as u32);
+                  let act = sha1_bytes(&partial[poff..poff + STFS_BLOCK]);
+                  let ok = act == exp;
+                  validity.push(ok);
+                  if !ok && exp != zero_hash {
+                      target_hashes.insert(exp);
+                  }
+              }
+
+              let initially_valid = validity.iter().filter(|&&x| x).count();
+              println!(
+                  "initial integrity: {}/{} valid; {} unique nonzero target hashes",
+                  initially_valid, total_stfs_blocks, target_hashes.len()
+              );
+
+              let mut found: HashMap<[u8; 20], (Vec<u8>, u64, &'static str)> = HashMap::new();
+              for off in (0..partial.len()).step_by(STFS_BLOCK) {
+                  if off + STFS_BLOCK > partial.len() { break; }
+                  let h = sha1_bytes(&partial[off..off + STFS_BLOCK]);
+                  if target_hashes.contains(&h) && !found.contains_key(&h) {
+                      found.insert(h, (partial[off..off + STFS_BLOCK].to_vec(), off as u64, "partial-package"));
+                  }
+              }
+
+              if expected.iter().any(|h| *h == zero_hash) {
+                  found.insert(zero_hash, (vec![0u8; STFS_BLOCK], 0, "synthetic-zero"));
+              }
+
+              let mut remaining: HashSet<[u8; 20]> = target_hashes
+                  .iter()
+                  .copied()
+                  .filter(|h| !found.contains_key(h))
+                  .collect();
+
+              println!("after package seeding: {} target hashes remain", remaining.len());
+
+              let radius_clusters: u64 = 262_144;
+              let start_cluster = (deleted_profile_first_cluster as u64)
+                  .saturating_sub(radius_clusters)
+                  .max(1);
+              let end_cluster = (deleted_profile_first_cluster as u64 + radius_clusters)
+                  .min(total_clusters);
+              let local_abs = data_abs + (start_cluster - 1) * cluster_size;
+              let local_bytes = (end_cluster - start_cluster + 1) * cluster_size;
+
+              println!(
+                  "local carve: clusters {}..{} ({} bytes) remaining={}",
+                  start_cluster, end_cluster, local_bytes, remaining.len()
+              );
+
+              raw.seek(SeekFrom::Start(local_abs)).unwrap();
+              let mut buf = vec![0u8; 8 * 1024 * 1024];
+              let mut processed = 0u64;
+              while processed < local_bytes && !remaining.is_empty() {
+                  let mut want = ((local_bytes - processed) as usize).min(buf.len());
+                  want -= want % STFS_BLOCK;
+                  if want == 0 { break; }
+                  raw.read_exact(&mut buf[..want]).unwrap();
+                  for o in (0..want).step_by(STFS_BLOCK) {
+                      let h = sha1_bytes(&buf[o..o + STFS_BLOCK]);
+                      if remaining.remove(&h) {
+                          let abs = local_abs + processed + o as u64;
+                          println!("FOUND local {} at raw 0x{:X}", hex::encode(h), abs);
+                          found.insert(h, (buf[o..o + STFS_BLOCK].to_vec(), abs, "disk-local"));
+                      }
+                  }
+                  processed += want as u64;
+              }
+
+              if !remaining.is_empty() {
+                  println!("full carve required: {} target hashes remain", remaining.len());
+                  raw.seek(SeekFrom::Start(data_abs)).unwrap();
+                  let data_bytes = total_clusters * cluster_size;
+                  let mut processed = 0u64;
+                  let mut next_report = 4u64 * 1024 * 1024 * 1024;
+                  while processed < data_bytes && !remaining.is_empty() {
+                      let mut want = ((data_bytes - processed) as usize).min(buf.len());
+                      want -= want % STFS_BLOCK;
+                      if want == 0 { break; }
+                      raw.read_exact(&mut buf[..want]).unwrap();
+                      for o in (0..want).step_by(STFS_BLOCK) {
+                          let h = sha1_bytes(&buf[o..o + STFS_BLOCK]);
+                          if remaining.remove(&h) {
+                              let abs = data_abs + processed + o as u64;
+                              println!("FOUND full {} at raw 0x{:X}", hex::encode(h), abs);
+                              found.insert(h, (buf[o..o + STFS_BLOCK].to_vec(), abs, "disk-full"));
+                          }
+                      }
+                      processed += want as u64;
+                      if processed >= next_report {
+                          println!(
+                              "scan progress: {:.1} GiB / {:.1} GiB, remaining={}",
+                              processed as f64 / 1073741824.0,
+                              data_bytes as f64 / 1073741824.0,
+                              remaining.len()
+                          );
+                          next_report += 4u64 * 1024 * 1024 * 1024;
+                      }
+                  }
+              }
+
+              println!("carve complete: found={} remaining={}", found.len(), remaining.len());
+              for h in &remaining {
+                  println!("MISSING {}", hex::encode(h));
+              }
+
+              let mut rebuilt = partial.clone();
+              let mut sources = Vec::new();
+              for logical in 0..total_stfs_blocks {
+                  let poff = package_data_offset(header_size, logical as u32);
+                  let exp = expected[logical];
+                  let cur = sha1_bytes(&rebuilt[poff..poff + STFS_BLOCK]);
+
+                  if cur == exp {
+                      sources.push(json!({
+                          "logical_block": logical,
+                          "expected_sha1": hex::encode(exp),
+                          "source": "contiguous-recovery",
+                          "raw_offset": format!("0x{:X}", profile_start + poff as u64)
+                      }));
+                  } else if exp == zero_hash {
+                      rebuilt[poff..poff + STFS_BLOCK].fill(0);
+                      sources.push(json!({
+                          "logical_block": logical,
+                          "expected_sha1": hex::encode(exp),
+                          "source": "synthetic-zero",
+                          "raw_offset": null
+                      }));
+                  } else if let Some((bytes, abs, kind)) = found.get(&exp) {
+                      rebuilt[poff..poff + STFS_BLOCK].copy_from_slice(bytes);
+                      sources.push(json!({
+                          "logical_block": logical,
+                          "expected_sha1": hex::encode(exp),
+                          "source": kind,
+                          "raw_offset": format!("0x{:X}", abs)
+                      }));
+                  } else {
+                      sources.push(json!({
+                          "logical_block": logical,
+                          "expected_sha1": hex::encode(exp),
+                          "source": "missing",
+                          "raw_offset": null
+                      }));
+                  }
+              }
+
+              let mut good = 0usize;
+              let mut bad = Vec::new();
+              for logical in 0..total_stfs_blocks {
+                  let poff = package_data_offset(header_size, logical as u32);
+                  let act = sha1_bytes(&rebuilt[poff..poff + STFS_BLOCK]);
+                  if act == expected[logical] { good += 1; } else { bad.push(logical); }
+              }
+
+              println!("rebuilt integrity: {}/{} valid; bad={:?}", good, total_stfs_blocks, bad);
+
+              let package_dir = Path::new(&out_dir).join("reconstructed");
+              fs::create_dir_all(&package_dir).unwrap();
+              let rebuilt_path = package_dir.join(profile_name);
+              fs::write(&rebuilt_path, &rebuilt).unwrap();
+
+              let manifest = json!({
+                  "profile": profile_name,
+                  "source_image": "DRIVE3_TIME_FINAL.E01",
+                  "deleted_first_cluster": deleted_profile_first_cluster,
+                  "deleted_file_size": deleted_profile_size,
+                  "xtaf_cluster_size": cluster_size,
+                  "xtaf_data_abs": format!("0x{:X}", data_abs),
+                  "profile_start_abs": format!("0x{:X}", profile_start),
+                  "header_size": header_size,
+                  "root_active_index": root_active,
+                  "active_hash_table_offset": active_hash_off,
+                  "logical_blocks": total_stfs_blocks,
+                  "initial_valid": initially_valid,
+                  "rebuilt_valid": good,
+                  "missing_logical_blocks": bad,
+                  "rebuilt_sha256": sha256_hex(&rebuilt),
+                  "sources": sources
+              });
+              fs::write(
+                  Path::new(&out_dir).join("carve_manifest.json"),
+                  serde_json::to_vec_pretty(&manifest).unwrap()
+              ).unwrap();
+
+              if good != total_stfs_blocks {
+                  eprintln!("reconstruction incomplete");
+                  std::process::exit(4);
+              }
+          }
+          EOF
+
+          cargo build --release --manifest-path /tmp/stfs-carver/Cargo.toml
+
+      - name: Download image and reconstruct profile
+        run: |
+          set -euxo pipefail
+          IMAGE="DRIVE3_TIME_FINAL.E01"
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/$IMAGE"
+          OUT="/tmp/stfs-carve-result"
+          mkdir -p "$OUT"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo modprobe fuse || true
+
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30             --speed-time 120 --speed-limit 1024             "$URL" -o "/tmp/$IMAGE"
+          sha256sum "/tmp/$IMAGE" | tee "$OUT/source-image.sha256"
+
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          sudo stat /mnt/xbox-ewf/ewf1
+
+          set +e
+          sudo /tmp/stfs-carver/target/release/stfs-carver             /mnt/xbox-ewf/ewf1 "$OUT" | tee "$OUT/carve.log"
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          sudo fusermount3 -u /mnt/xbox-ewf || sudo umount /mnt/xbox-ewf || true
+          sudo chown -R "$USER":"$USER" "$OUT"
+
+          cat "$OUT/carve_manifest.json" || true
+          exit "$RC"
+
+      - name: Extract reconstructed STFS contents
+        if: always()
+        run: |
+          set -euxo pipefail
+          OUT="/tmp/stfs-carve-result"
+          mkdir -p "$OUT"
+          if [ ! -f "$OUT/reconstructed/E00001B3AEF799DA" ]; then
+            echo "No reconstructed profile to extract."
+            exit 0
+          fi
+
+          git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
+          mkdir -p "$OUT/unpacked"
+          python3 /tmp/nxe-dashboard/tools/extract_stfs.py             "$OUT/reconstructed/E00001B3AEF799DA" "$OUT/unpacked"             | tee "$OUT/unpacked/extract.log"
+
+          find "$OUT/unpacked" -type f -printf '%p %s bytes\n' | sort
+          for g in "$OUT"/unpacked/*.gpd "$OUT"/unpacked/*.fit; do
+            [ -f "$g" ] || continue
+            python3 - "$g" <<'PY'
+          import sys
+          b=open(sys.argv[1],'rb').read(4)
+          print(sys.argv[1], b.hex(), repr(b))
+          PY
+          done
+
+      - name: Upload reconstruction research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-labplayerone-full-reconstruction
+          path: /tmp/stfs-carve-result
+          if-no-files-found: warn
+          retention-days: 7
