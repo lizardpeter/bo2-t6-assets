@@ -1,0 +1,48 @@
+name: FalkorDB native Windows POC v0.4
+
+on:
+  push:
+    branches:
+      - falkordb-native-windows-poc
+  workflow_dispatch:
+
+jobs:
+  native-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM and Ninja
+        shell: pwsh
+        run: |
+          choco install llvm ninja -y --no-progress
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Configure Rust MSVC
+        shell: pwsh
+        run: |
+          rustup default stable
+          rustup target add x86_64-pc-windows-msvc
+          rustc -Vv
+          cargo -V
+
+      - name: Extract POC
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force poc | Out-Null
+          Expand-Archive -LiteralPath .\falkordb-native-poc-v0.4.zip -DestinationPath .\poc -Force
+
+      - name: Build and run native smoke
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass -Force
+          .\poc\FalkorDB_Windows_Native_POC_v0.4\scripts\build_and_smoke_windows.ps1
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: falkordb-native-windows-v0.4-logs
+          path: poc/FalkorDB_Windows_Native_POC_v0.4/build/logs
+          if-no-files-found: ignore
