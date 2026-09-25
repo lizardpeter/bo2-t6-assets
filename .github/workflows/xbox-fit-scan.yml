@@ -1,0 +1,128 @@
+name: Scan Xbox 360 FIT snapshots
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EWF tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3
+
+      - name: Download and mount forensic image
+        run: |
+          set -euxo pipefail
+          IMAGE="DRIVE2_TIME_FINAL.E01"
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/$IMAGE"
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --speed-time 120 --speed-limit 1024 "$URL" -o "/tmp/$IMAGE"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          ls -lh /mnt/xbox-ewf/ewf1
+
+      - name: Scan raw image for FIT XDBF headers and payload snapshots
+        run: |
+          set -euxo pipefail
+          OUT=/tmp/fit-scan
+          mkdir -p "$OUT"
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+
+          raw_path = Path("/mnt/xbox-ewf/ewf1")
+          out = Path("/tmp/fit-scan")
+
+          # Exact invariant XDBF header/table prefix for FFFE07D1.fit.
+          header_sig = bytes.fromhex(
+              "584442460001000000000200000000040000020000000001"
+              "0001fffe07d101010008"
+          )
+
+          # First 36 bytes of the 0x193-byte FIT payload arena.
+          # This is record FFFE07D10101000A at arena offset 0x00.
+          payload_sig = bytes.fromhex(
+              "000100010000000c0000005000000008000000400000000000"
+              "000010470000000800000000"
+          )
+
+          # The arena layout is invariant in both hash-validated specimens:
+          # record A @0x000 len0x60; record 9 @0x060 len0x74;
+          # record 8 @0x0D4 len0x5F; record 0201000A @0x133 len0x60.
+          ARENA_LEN = 0x193
+          BOOL_OFF = 0x133 + 0x27
+
+          patterns = [("fit_header", header_sig), ("fit_payload", payload_sig)]
+          max_pat = max(map(lambda x: len(x[1]), patterns))
+          chunk_size = 64 * 1024 * 1024
+          hits = []
+          seen = set()
+
+          size = raw_path.stat().st_size
+          with raw_path.open("rb", buffering=0) as f:
+              base = 0
+              tail = b""
+              while True:
+                  chunk = f.read(chunk_size)
+                  if not chunk:
+                      break
+                  data = tail + chunk
+                  data_base = base - len(tail)
+                  for kind, pat in patterns:
+                      start = 0
+                      while True:
+                          idx = data.find(pat, start)
+                          if idx < 0:
+                              break
+                          abs_off = data_base + idx
+                          key = (kind, abs_off)
+                          if key not in seen:
+                              seen.add(key)
+                              hits.append({"kind": kind, "offset": abs_off})
+                          start = idx + 1
+                  base += len(chunk)
+                  tail = data[-(max_pat-1):]
+                  if base % (1024*1024*1024) < chunk_size:
+                      print(f"scanned {base/(1024**3):.1f}/{size/(1024**3):.1f} GiB, hits={len(hits)}", flush=True)
+
+          # Re-open and enrich payload hits. Capture only non-sensitive FIT bytes.
+          with raw_path.open("rb", buffering=0) as f:
+              for h in hits:
+                  if h["kind"] == "fit_payload":
+                      f.seek(h["offset"])
+                      arena = f.read(ARENA_LEN)
+                      h["arena_len"] = len(arena)
+                      h["arena_sha256"] = hashlib.sha256(arena).hexdigest()
+                      h["candidate_online_boolean"] = arena[BOOL_OFF] if len(arena) > BOOL_OFF else None
+                      h["record_0101000a_u32_24"] = int.from_bytes(arena[0x24:0x28], "big") if len(arena) >= 0x28 else None
+                      r4 = 0x133
+                      h["record_0201000a_u32_24"] = int.from_bytes(arena[r4+0x24:r4+0x28], "big") if len(arena) >= r4+0x28 else None
+                      h["arena_hex"] = arena.hex()
+
+          hits.sort(key=lambda h:(h["offset"], h["kind"]))
+          (out/"fit_scan.json").write_text(json.dumps({
+              "raw_size": size,
+              "header_signature": header_sig.hex(),
+              "payload_signature": payload_sig.hex(),
+              "hits": hits
+          }, indent=2))
+          print(json.dumps(hits, indent=2))
+          PY
+          sudo chown -R "$USER":"$USER" "$OUT"
+
+      - name: Upload FIT scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-fit-scan
+          path: /tmp/fit-scan
