@@ -1,109 +1,85 @@
-name: T6 Nuketown sprinkler FX decompile proof v1
+name: TEMP Webkinz preservation fetch
 on:
-  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/t6_nuketown_sprinkler_fx_decompile_v1.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
-  decompile:
+  fetch:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: Restore exactly pinned OAT
-        id: oat-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/oat-unlinker-cache
-          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
-      - name: Dump exact retail FX ScriptParseTree
+      - name: Fetch Webkinz live and archived resources
         shell: bash
         run: |
-          set -euo pipefail
-          test "${{ steps.oat-cache.outputs.cache-hit }}" = true
-          BIN=/tmp/oat-unlinker-cache/Unlinker; test -x "$BIN"
-          mkdir -p /tmp/source /tmp/oatout
-          curl -fL --retry 4 --retry-delay 2 -o /tmp/source/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
-          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/source/mp_nuketown_2020.ff' | sha256sum -c -
-          "$BIN" --no-color --include-assets script --output-folder /tmp/oatout /tmp/source/mp_nuketown_2020.ff >/tmp/unlinker.log 2>&1
-          echo 'c956a6033b2861812a1ccad9c4fd10d351bdc164d76b12bed0747564c6353668  /tmp/oatout/maps/mp/mp_nuketown_2020_fx.gsc' | sha256sum -c -
-      - name: Build pinned gsc-tool
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq clang-18 wget >/dev/null
-          git clone -q --recursive https://github.com/xensik/gsc-tool.git /tmp/gsc-tool
-          git -C /tmp/gsc-tool checkout -q cd304ac752fe52ae1cd6726e5edb56e5f838595c
-          git -C /tmp/gsc-tool submodule update -q --init --recursive
-          wget -q https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-linux.tar.gz -O /tmp/premake.tgz
-          mkdir -p /tmp/premake
-          tar -xzf /tmp/premake.tgz -C /tmp/premake
-          chmod +x /tmp/premake/premake5
-          cd /tmp/gsc-tool
-          /tmp/premake/premake5 gmake
-          CC=clang-18 CXX=clang++-18 make -C build config=release_amd64 -j2
-          test -x build/bin/amd64/release/gsc-tool
-          sha256sum build/bin/amd64/release/gsc-tool >/tmp/gsc_tool_sha256.txt
-      - name: Decompile and persist exact mapping evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/decompwork /tmp/decompwork/proof
-          cp /tmp/oatout/maps/mp/mp_nuketown_2020_fx.gsc /tmp/decompwork/mp_nuketown_2020_fx.gsc
-          cd /tmp/decompwork
-          /tmp/gsc-tool/build/bin/amd64/release/gsc-tool -m decomp -g t6 -s pc mp_nuketown_2020_fx.gsc | tee /tmp/decompile.log
-          OUT=$(find decompiled -type f -name 'mp_nuketown_2020_fx.gsc' | head -1)
-          test -n "$OUT"; test -s "$OUT"
-          cp "$OUT" /tmp/mp_nuketown_2020_fx.decompiled.gsc
-          grep -n -F 'fx_water_fire_sprinkler_thin' /tmp/mp_nuketown_2020_fx.decompiled.gsc | tee /tmp/sprinkler_lines.txt
-          test -s /tmp/sprinkler_lines.txt
+          set -uo pipefail
+          mkdir -p /tmp/wk/live /tmp/wk/wayback /tmp/wk/meta
           python3 - <<'PY'
-          import hashlib,json,pathlib,re
-          p=pathlib.Path('/tmp/mp_nuketown_2020_fx.decompiled.gsc')
-          text=p.read_text(errors='replace')
-          key='fx_water_fire_sprinkler_thin'
-          qualified='water/fx_water_fire_sprinkler_thin'
-          lines=text.splitlines()
-          hits=[{'line':i+1,'text':line.strip()} for i,line in enumerate(lines) if key in line]
-          explicit=[h for h in hits if key in h['text'] and qualified in h['text']]
-          doc={
-            'format':'t6-nuketown-sprinkler-fx-decompile-proof-v1',
-            'authority':'SHA-pinned retail mp_nuketown_2020.ff -> pinned OAT ScriptParseTree bytes -> pinned xensik/gsc-tool T6 PC decompiler',
-            'sourceFastFileSha256':'6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0',
-            'scriptBinary':{'path':'maps/mp/mp_nuketown_2020_fx.gsc','sha256':'c956a6033b2861812a1ccad9c4fd10d351bdc164d76b12bed0747564c6353668','bytes':3956},
-            'gscTool':{'commit':'cd304ac752fe52ae1cd6726e5edb56e5f838595c','binarySha256':pathlib.Path('/tmp/gsc_tool_sha256.txt').read_text().split()[0]},
-            'decompiledSha256':hashlib.sha256(p.read_bytes()).hexdigest(),
-            'sprinklerLines':hits,
-            'explicitSameLineMappingCount':len(explicit),
-            'proofBoundary':'Decompiler output is a transformation of exact retail ScriptParseTree bytes. Promotion of the alias mapping requires an explicit decompiled expression associating the unqualified key with the qualified loadfx target; mere string co-presence is insufficient.'
+          import json, pathlib, ssl, urllib.parse, urllib.request, hashlib
+          root=pathlib.Path('/tmp/wk')
+          urls={
+            'miniarcade.swf':'http://www.webkinz.com/SWF/miniarcade/miniarcade.swf',
+            'cashCow.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/cashCow.swf',
+            'bananza.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/bananza.swf',
+            'wheresWacky.swf':'https://www.webkinz.com/SWF/ARCADE/GAMES/wheresWacky.swf',
+            'Webkinz.swf':'https://www.webkinz.com/Webkinz.swf?v320_181',
+            'main2.swf':'https://www.webkinz.com/SWF/main2.swf?v=v320_181',
+            'TransList.xml':'https://www.webkinz.com/XML/L10N/TransList.xml',
+            'wconf.js.php':'https://play.webkinz.com/wconf.js.php',
+            'latest.yml':'https://downloads.webkinz.com/apps/latest.yml',
           }
-          if not explicit:
-              raise SystemExit('no explicit same-line unqualified/qualified mapping in decompiled output')
-          pathlib.Path('proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
-          print(json.dumps({'explicitSameLineMappingCount':len(explicit),'sprinklerLines':hits},indent=2))
+          ctx=ssl.create_default_context()
+          ua={'User-Agent':'Mozilla/5.0 preservation-research'}
+          report={'resources':{}}
+          def get(url, timeout=40):
+              req=urllib.request.Request(url,headers=ua)
+              with urllib.request.urlopen(req,timeout=timeout,context=ctx) as r:
+                  return r.read(), dict(r.headers), r.geturl(), r.status
+          for name,url in urls.items():
+              ent={'url':url}
+              try:
+                  data,h,final,status=get(url)
+                  (root/'live'/name).write_bytes(data)
+                  ent['live']={'ok':True,'status':status,'final':final,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':h.get('Content-Type')}
+              except Exception as e:
+                  ent['live']={'ok':False,'error':repr(e)}
+              target=url.split('?',1)[0]
+              try:
+                  q=urllib.parse.urlencode({'url':target,'output':'json','filter':'statuscode:200','fl':'timestamp,original,digest,length,mimetype','collapse':'digest'})
+                  cdx='https://web.archive.org/cdx/search/cdx?'+q
+                  raw,h,final,status=get(cdx)
+                  (root/'meta'/(name+'.cdx.json')).write_bytes(raw)
+                  rows=json.loads(raw.decode('utf-8','replace'))
+                  ent['wayback_cdx']={'ok':True,'rows':max(0,len(rows)-1)}
+                  if len(rows)>1:
+                      header=rows[0]; records=[dict(zip(header,r)) for r in rows[1:]]
+                      ent['wayback_cdx']['records']=records
+                      for rec in reversed(records):
+                          ts=rec['timestamp']; orig=rec['original']
+                          wb=f'https://web.archive.org/web/{ts}id_/{orig}'
+                          try:
+                              data,h,final,status=get(wb,timeout=60)
+                              (root/'wayback'/name).write_bytes(data)
+                              ent['wayback']={'ok':True,'timestamp':ts,'original':orig,'url':wb,'status':status,'final':final,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':h.get('Content-Type')}
+                              break
+                          except Exception as e:
+                              ent.setdefault('wayback_attempt_errors',[]).append({'timestamp':ts,'error':repr(e)})
+                      if 'wayback' not in ent:
+                          ent['wayback']={'ok':False,'error':'all captures failed'}
+                  else:
+                      ent['wayback']={'ok':False,'error':'no CDX captures'}
+              except Exception as e:
+                  ent['wayback_cdx']={'ok':False,'error':repr(e)}
+              report['resources'][name]=ent
+              print(name, json.dumps(ent, sort_keys=True))
+          (root/'report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           PY
-          cd "$GITHUB_WORKSPACE"
-          cp /tmp/decompwork/proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json proof/
-          git diff --check
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json
-          if ! git diff --cached --quiet; then
-            git commit -m 'Persist exact sprinkler FX script mapping proof'
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          find /tmp/wk -type f -maxdepth 3 -printf '%p %s bytes\n' | sort
+          sha256sum /tmp/wk/live/* /tmp/wk/wayback/* 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_V1
-          path: |
-            /tmp/mp_nuketown_2020_fx.decompiled.gsc
-            /tmp/decompile.log
-            /tmp/sprinkler_lines.txt
-            /tmp/gsc_tool_sha256.txt
-            /tmp/decompwork/proof/T6_NUKETOWN_SPRINKLER_FX_DECOMPILE_PROOF_V1.json
-          if-no-files-found: warn
+          name: WEBKINZ_PRESERVATION_FETCH
+          path: /tmp/wk
+          if-no-files-found: error
