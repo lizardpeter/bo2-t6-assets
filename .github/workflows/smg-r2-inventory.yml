@@ -1,0 +1,118 @@
+name: smg r2 inventory
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe and inventory R2 tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import json, urllib.request, urllib.parse, urllib.error, html.parser, hashlib, sys, re
+          BASE='https://r2.houseofkublai.com/super-mario-galaxy/'
+          roots=['DATA/','UPDATE/']
+
+          class Links(html.parser.HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.links=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag.lower()!='a': return
+                  for k,v in attrs:
+                      if k.lower()=='href' and v: self.links.append(v)
+
+          def fetch(url, method='GET'):
+              req=urllib.request.Request(url, method=method, headers={'User-Agent':'uregraph-smg-inventory/1'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return dict(r.headers), (b'' if method=='HEAD' else r.read())
+
+          report={'base':BASE,'roots':{},'known_probes':[],'errors':[]}
+          # Root probes, also save response snippets.
+          for p in ['', *roots]:
+              url=urllib.parse.urljoin(BASE,p)
+              try:
+                  h,b=fetch(url)
+                  report['roots'][p or '/']={'status':'ok','headers':h,'bytes':len(b),'snippet':b[:1000].decode('utf-8','replace')}
+              except Exception as e:
+                  report['roots'][p or '/']={'status':'error','error':repr(e)}
+
+          # Known WIT extraction paths.
+          probes=[
+            'DATA/sys/boot.bin','DATA/sys/bi2.bin','DATA/sys/apploader.img','DATA/sys/main.dol','DATA/sys/fst.bin',
+            'UPDATE/sys/boot.bin','UPDATE/sys/bi2.bin','UPDATE/sys/apploader.img','UPDATE/sys/main.dol','UPDATE/sys/fst.bin',
+          ]
+          for p in probes:
+              url=urllib.parse.urljoin(BASE,p)
+              row={'path':p,'url':url}
+              try:
+                  h,_=fetch(url,'HEAD')
+                  row.update(status='ok',headers=h)
+              except Exception as e:
+                  row.update(status='error',error=repr(e))
+              report['known_probes'].append(row)
+
+          # Recursively crawl directory listings if the origin provides them.
+          files=[]
+          seen=set()
+          q=[urllib.parse.urljoin(BASE,r) for r in roots]
+          basep=urllib.parse.urlparse(BASE)
+          while q:
+              u=q.pop(0)
+              if u in seen: continue
+              seen.add(u)
+              try:
+                  h,b=fetch(u)
+              except Exception as e:
+                  report['errors'].append({'url':u,'error':repr(e)}); continue
+              ctype=(h.get('Content-Type') or h.get('content-type') or '').lower()
+              # if direct object, record it
+              rel=urllib.parse.unquote(urllib.parse.urlparse(u).path[len(basep.path):]).lstrip('/')
+              if not (u.endswith('/') or 'text/html' in ctype):
+                  files.append({'path':rel,'url':u,'size':int(h.get('Content-Length','0') or 0),
+                                'etag':h.get('ETag'),'last_modified':h.get('Last-Modified'),'content_type':ctype})
+                  continue
+              p=Links(); p.feed(b.decode('utf-8','replace'))
+              for href in p.links:
+                  nu=urllib.parse.urljoin(u,href)
+                  pu=urllib.parse.urlparse(nu)
+                  if pu.scheme not in ('http','https') or pu.netloc!=basep.netloc: continue
+                  if not pu.path.startswith(basep.path): continue
+                  nrel=urllib.parse.unquote(pu.path[len(basep.path):]).lstrip('/')
+                  if not (nrel.startswith('DATA/') or nrel.startswith('UPDATE/')): continue
+                  if nu.rstrip('/')==u.rstrip('/'): continue
+                  if nu.endswith('/'):
+                      if nu not in seen: q.append(nu)
+                  else:
+                      try:
+                          hh,_=fetch(nu,'HEAD')
+                          files.append({'path':nrel,'url':nu,'size':int(hh.get('Content-Length','0') or 0),
+                                        'etag':hh.get('ETag'),'last_modified':hh.get('Last-Modified'),
+                                        'content_type':hh.get('Content-Type')})
+                      except Exception as e:
+                          report['errors'].append({'url':nu,'error':repr(e)})
+          # deterministic unique path list
+          by={x['path']:x for x in files}
+          files=[by[k] for k in sorted(by)]
+          inv={'format':'uregraph-smg-r2-inventory-v1','base':BASE,'file_count':len(files),
+               'total_bytes':sum(x.get('size',0) for x in files),'files':files,'probe':report}
+          with open('out/inventory.json','w') as f: json.dump(inv,f,indent=2,sort_keys=True)
+          with open('out/paths.txt','w') as f:
+              for x in files: f.write(x['path']+'\n')
+          print(json.dumps({'file_count':inv['file_count'],'total_bytes':inv['total_bytes'],
+                            'root_status':report['roots'],'known_probes':report['known_probes']}, indent=2))
+          PY
+      - name: Upload inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: smg-r2-inventory
+          path: out/
+          retention-days: 3
