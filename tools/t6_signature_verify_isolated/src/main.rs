@@ -1,7 +1,7 @@
 use std::{env, fs, path::PathBuf};
 
-use rsa::{pkcs1::DecodeRsaPublicKey, pss::Pss, RsaPublicKey};
-use sha2::Sha256;
+use rsa::{pkcs1::DecodeRsaPublicKey, traits::PublicKeyParts, BigUint, RsaPublicKey};
+use sha2::{Digest, Sha256};
 
 const SIGNATURE_OFFSET: usize = 56;
 const SIGNATURE_BYTES: usize = 256;
@@ -60,10 +60,109 @@ fn run() -> Result<(), String> {
 
     let key = RsaPublicKey::from_pkcs1_der(&TREYARCH_RSA_PUBLIC_KEY_DER)
         .map_err(|error| format!("failed to parse Treyarch RSA key: {error}"))?;
-    let pss = Pss::new_with_salt::<Sha256>(PSS_SALT_BYTES);
-    key.verify(pss, &table, signature)
-        .map_err(|error| format!("RSA-PSS verification failed: {error}"))?;
+    verify_libtomcrypt_pss_sha256(&key, signature, &table)?;
 
     println!("T6_RSA_SIGNATURE_VALID hash_table_bytes={} signature_bytes={} salt_bytes={}", table.len(), signature.len(), PSS_SALT_BYTES);
     Ok(())
+}
+
+fn verify_libtomcrypt_pss_sha256(
+    public_key: &RsaPublicKey,
+    signature: &[u8],
+    captured_data: &[u8],
+) -> Result<(), String> {
+    let signature_value = BigUint::from_bytes_be(signature);
+    if &signature_value >= public_key.n() {
+        return Err("signature integer is outside the public modulus".to_owned());
+    }
+
+    let recovered = signature_value.modpow(public_key.e(), public_key.n());
+    let recovered_bytes = recovered.to_bytes_be();
+    let key_bytes = public_key.size();
+    if recovered_bytes.len() > key_bytes {
+        return Err("recovered RSA block exceeds modulus size".to_owned());
+    }
+    let mut encoded = vec![0u8; key_bytes];
+    encoded[key_bytes - recovered_bytes.len()..].copy_from_slice(&recovered_bytes);
+
+    let modulus_bits = public_key.n().bits() as usize;
+    let em_bits = modulus_bits
+        .checked_sub(1)
+        .ok_or_else(|| "invalid RSA modulus".to_owned())?;
+    let em_len = (em_bits + 7) / 8;
+    if em_len != encoded.len() {
+        return Err(format!("encoded message length {em_len} != RSA block {}", encoded.len()));
+    }
+
+    const HASH_BYTES: usize = 32;
+    if em_len < HASH_BYTES + PSS_SALT_BYTES + 2 {
+        return Err("RSA modulus is too small for T6 PSS parameters".to_owned());
+    }
+    if encoded[em_len - 1] != 0xbc {
+        return Err("RSA-PSS trailer byte is not 0xBC".to_owned());
+    }
+
+    let db_len = em_len - HASH_BYTES - 1;
+    let (masked_db, suffix) = encoded.split_at(db_len);
+    let (encoded_hash, trailer) = suffix.split_at(HASH_BYTES);
+    if trailer != [0xbc] {
+        return Err("RSA-PSS trailer is malformed".to_owned());
+    }
+
+    let unused_bits = 8 * em_len - em_bits;
+    if unused_bits > 8 {
+        return Err("invalid RSA-PSS modulus bit geometry".to_owned());
+    }
+    if unused_bits != 0 {
+        let forbidden_mask = 0xffu8 << (8 - unused_bits);
+        if masked_db[0] & forbidden_mask != 0 {
+            return Err("RSA-PSS masked DB has nonzero unused bits".to_owned());
+        }
+    }
+
+    let mask = mgf1_sha256(encoded_hash, db_len);
+    let mut db = Vec::with_capacity(db_len);
+    for (&value, &mask_byte) in masked_db.iter().zip(mask.iter()) {
+        db.push(value ^ mask_byte);
+    }
+    if unused_bits != 0 {
+        db[0] &= 0xffu8 >> unused_bits;
+    }
+
+    let ps_len = em_len - PSS_SALT_BYTES - HASH_BYTES - 2;
+    if db[..ps_len].iter().any(|byte| *byte != 0) {
+        return Err("RSA-PSS zero padding is malformed".to_owned());
+    }
+    if db[ps_len] != 0x01 {
+        return Err("RSA-PSS separator byte is missing".to_owned());
+    }
+    let salt = &db[ps_len + 1..];
+    if salt.len() != PSS_SALT_BYTES {
+        return Err(format!("RSA-PSS salt is {} bytes; expected {PSS_SALT_BYTES}", salt.len()));
+    }
+
+    let mut hash = Sha256::new();
+    hash.update([0u8; 8]);
+    hash.update(captured_data);
+    hash.update(salt);
+    let expected_hash = hash.finalize();
+    if expected_hash.as_slice() != encoded_hash {
+        return Err("Treyarch T6 RSA-PSS signature is invalid".to_owned());
+    }
+    Ok(())
+}
+
+fn mgf1_sha256(seed: &[u8], output_len: usize) -> Vec<u8> {
+    let mut output = Vec::with_capacity(output_len);
+    let mut counter = 0u32;
+    while output.len() < output_len {
+        let mut hash = Sha256::new();
+        hash.update(seed);
+        hash.update(counter.to_be_bytes());
+        let digest = hash.finalize();
+        let remaining = output_len - output.len();
+        output.extend_from_slice(&digest[..remaining.min(digest.len())]);
+        counter = counter.checked_add(1).expect("MGF1 counter overflow");
+    }
+    output
 }
