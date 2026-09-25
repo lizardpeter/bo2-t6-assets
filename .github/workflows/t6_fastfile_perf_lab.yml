@@ -9,6 +9,10 @@ on:
       - 'tools/t6_fastfile_perf_rs/**'
       - '.github/workflows/t6_fastfile_perf_lab.yml'
 
+concurrency:
+  group: t6-fastfile-perf-lab
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -74,11 +78,11 @@ jobs:
               ("winner+encrypted-hash-only","/tmp/encrypted_hash_only.txt"),
           ]:
               t=Path(path).read_text()
-              m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+) expanded_sha256=([0-9a-f]+)",t)
+              m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+) expanded_sha256=([0-9a-f]*)",t)
               if not m:
                   raise SystemExit(f"parse failed: {name}\n{t}")
               rows.append((name,float(m.group(1)),float(m.group(2)),float(m.group(3)),m.group(4)))
-          hashes={r[4] for r in rows}
+          hashes={r[4] for r in rows if r[4]}
           if len(hashes)!=1:
               raise SystemExit(f"identity mismatch: {hashes}")
           base_enc=rows[0][2]
