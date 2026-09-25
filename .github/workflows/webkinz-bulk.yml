@@ -1,0 +1,195 @@
+name: Webkinz bulk preserve
+
+on:
+  push:
+    branches:
+      - webkinz-harvest
+    paths:
+      - webkinz-bulk-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download reachable Classic module tree
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p archive meta
+
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, os, re, struct, urllib.parse, urllib.request, zlib
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140 Safari/537.36'
+          WWW='https://www.webkinz.com/'
+          PLAY='https://play.webkinz.com/'
+          OUT=Path('archive')
+          META=Path('meta')
+          TIMEOUT=35
+
+          def request_bytes(url):
+              req=urllib.request.Request(url,headers={'User-Agent':UA})
+              try:
+                  with urllib.request.urlopen(req,timeout=TIMEOUT) as r:
+                      return r.status, r.geturl(), r.headers.get('Content-Type',''), r.read()
+              except urllib.error.HTTPError as e:
+                  try: body=e.read()
+                  except: body=b''
+                  return e.code, url, e.headers.get('Content-Type','') if e.headers else '', body
+              except Exception as e:
+                  return 0, url, type(e).__name__+': '+str(e), b''
+
+          # Discover current version.
+          code,_,_,wconf=request_bytes(PLAY+'wconf.js.php')
+          version='v390_249'
+          if code==200:
+              try: version=json.loads(wconf.decode())['application']['v']
+              except: pass
+          (META/'version.txt').write_text(version+'\n')
+          (META/'wconf.json').write_bytes(wconf)
+
+          # Fetch canonical manifests first.
+          manifest_urls={
+              'TransList.xml': WWW+'XML/L10N/TransList.xml?v='+urllib.parse.quote(version),
+              'subApplications.xml': WWW+'subApplications/subApplications.xml',
+          }
+          manifests={}
+          for name,url in manifest_urls.items():
+              code,eff,ct,data=request_bytes(url)
+              manifests[name]=(code,data,url)
+              (META/(name+'.status.txt')).write_text(f'{code}\t{len(data)}\t{eff}\t{ct}\n')
+              if code==200:
+                  (META/name).write_bytes(data)
+
+          candidates={}
+
+          def add(url, rel, source):
+              rel=rel.lstrip('/').replace('\\','/')
+              if not rel or '..' in Path(rel).parts: return
+              candidates.setdefault(url, {'url':url,'rel':rel,'sources':set()})['sources'].add(source)
+
+          # Bootstrap/runtime files.
+          fixed=[
+            (WWW+'Webkinz.swf?'+version,'www.webkinz.com/Webkinz.swf','bootstrap'),
+            (WWW+'SWF/main2.swf?v='+version,'www.webkinz.com/SWF/main2.swf','bootstrap'),
+            (WWW+'SWF/staticdata/views.swf?v='+version,'www.webkinz.com/SWF/staticdata/views.swf','bootstrap'),
+            (WWW+'SWF/staticdata/US_EN/items.swf?v='+version,'www.webkinz.com/SWF/staticdata/US_EN/items.swf','bootstrap'),
+            (WWW+'SWF/staticdata/envMain.swf?v='+version,'www.webkinz.com/SWF/staticdata/envMain.swf','bootstrap'),
+            (WWW+'SWF/staticdata/tips.swf?v='+version,'www.webkinz.com/SWF/staticdata/tips.swf','bootstrap'),
+            (WWW+'SWF/server/webkinzXML.swf?v='+version,'www.webkinz.com/SWF/server/webkinzXML.swf','bootstrap'),
+            (WWW+'SWF/server/as3bridgeService.swf?v='+version,'www.webkinz.com/SWF/server/as3bridgeService.swf','bootstrap'),
+            (WWW+'SWF/VIEWS/MU2/MAPI.swf?rnd='+version,'www.webkinz.com/SWF/VIEWS/MU2/MAPI.swf','bootstrap'),
+            (WWW+'lib/web-assets/webkinz-component-utility.json','www.webkinz.com/lib/web-assets/webkinz-component-utility.json','bootstrap'),
+          ]
+          for x in fixed:add(*x)
+
+          # TransList declared content and localized XML.
+          if manifests.get('TransList.xml',(0,b'',None))[0]==200:
+              try:
+                  tr=ET.fromstring(manifests['TransList.xml'][1])
+                  for e in tr.findall('.//file'):
+                      n=(e.attrib.get('n') or '').strip().lstrip('/')
+                      tf=(e.attrib.get('tf') or '').strip().lstrip('/')
+                      if n and not n.lower().startswith(('http:','https:')):
+                          enc=urllib.parse.quote(n,safe='/')
+                          add(WWW+'SWF/'+enc+'?v='+urllib.parse.quote(version),
+                              'www.webkinz.com/SWF/'+n,'TransList')
+                      if tf:
+                          enc=urllib.parse.quote(tf,safe='/')
+                          add(WWW+'XML/L10N/US_EN/'+enc+'?v='+urllib.parse.quote(version),
+                              'www.webkinz.com/XML/L10N/US_EN/'+tf,'TransList-translation')
+              except Exception as e:
+                  (META/'translist_parse_error.txt').write_text(repr(e))
+
+          # Parse subApplications.xml for obvious resource paths.
+          if manifests.get('subApplications.xml',(0,b'',None))[0]==200:
+              text=manifests['subApplications.xml'][1].decode('utf-8','ignore')
+              for m in re.finditer(r'''(?i)([A-Za-z0-9_./ -]+\.(?:swf|xml|json|png|jpg|mp3|wav))''',text):
+                  p=m.group(1).strip().lstrip('/')
+                  if p.startswith('subApplications/'):
+                      rel=p
+                  else:
+                      rel='subApplications/'+p
+                  add(WWW+urllib.parse.quote(rel,safe='/'),
+                      'www.webkinz.com/'+rel,'subApplications.xml')
+
+          # Fetch initial candidates.
+          results=[]
+          def fetch_one(item):
+              url=item['url']; rel=item['rel']
+              code,eff,ct,data=request_bytes(url)
+              rec={'url':url,'effective_url':eff,'status':code,'size':len(data),'content_type':ct,'rel':rel,'sources':sorted(item['sources'])}
+              if code==200 and data:
+                  dest=OUT/rel
+                  dest.parent.mkdir(parents=True,exist_ok=True)
+                  dest.write_bytes(data)
+                  rec['sha256']=hashlib.sha256(data).hexdigest()
+              return rec
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              futs=[ex.submit(fetch_one,x) for x in candidates.values()]
+              for f in concurrent.futures.as_completed(futs):
+                  results.append(f.result())
+
+          # Mine downloaded SWFs for additional same-site SWF/XML/PHP/JSON dependencies.
+          def normalize_swf(data):
+              if len(data)>=8 and data[:3]==b'CWS':
+                  try:return b'FWS'+data[3:8]+zlib.decompress(data[8:])
+                  except:return data
+              return data
+
+          dep_candidates={}
+          path_re=re.compile(rb'(?i)(?:\.?\.?/)?(?:SWF|XML|subApplications|subbAplications|lib)/[A-Za-z0-9_ ./()&+,-]+\.(?:swf|xml|json|php)')
+          for p in OUT.rglob('*'):
+              if not p.is_file(): continue
+              data=p.read_bytes()
+              if data[:3] in (b'FWS',b'CWS'): data=normalize_swf(data)
+              for m in path_re.finditer(data):
+                  s=m.group(0).decode('latin1','ignore').strip()
+                  while s.startswith('../'): s=s[3:]
+                  while s.startswith('./'): s=s[2:]
+                  s=s.lstrip('/')
+                  if not s:continue
+                  url=WWW+urllib.parse.quote(s,safe='/')
+                  rel='www.webkinz.com/'+s
+                  if url not in candidates:
+                      dep_candidates.setdefault(url,{'url':url,'rel':rel,'sources':set()})['sources'].add('mined:'+str(p.relative_to(OUT)))
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              futs=[ex.submit(fetch_one,x) for x in dep_candidates.values()]
+              for f in concurrent.futures.as_completed(futs):
+                  results.append(f.result())
+
+          results.sort(key=lambda x:(x['status']!=200,x['rel']))
+          (META/'download_manifest.json').write_text(json.dumps(results,indent=2))
+          live=[r for r in results if r['status']==200]
+          (META/'live_urls.txt').write_text('\n'.join(r['url'] for r in live)+'\n')
+          (META/'missing_urls.txt').write_text('\n'.join(r['url'] for r in results if r['status']==404)+'\n')
+          summary={
+              'version':version,
+              'candidate_count':len(results),
+              'live_count':len(live),
+              'not_found_count':sum(r['status']==404 for r in results),
+              'other_count':sum(r['status'] not in (200,404) for r in results),
+              'live_bytes':sum(r['size'] for r in live),
+          }
+          (META/'summary.json').write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - name: Upload bulk archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-classic-live-tree
+          path: |
+            archive/
+            meta/
+          if-no-files-found: error
+          retention-days: 7
