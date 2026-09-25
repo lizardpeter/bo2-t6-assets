@@ -1,0 +1,101 @@
+name: Webkinz SWF decompile
+
+on:
+  push:
+    branches:
+      - webkinz-harvest
+    paths:
+      - webkinz-decompile-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download current Webkinz SWFs and JPEXS
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p swfs decompiled meta
+          fetch() {
+            name="$1"; url="$2"
+            curl -L --fail --retry 2 --connect-timeout 15 --max-time 180               -A 'Mozilla/5.0' -o "swfs/$name" "$url"
+            sha256sum "swfs/$name" >> meta/swf_sha256.txt
+            file "swfs/$name" >> meta/swf_filetypes.txt
+          }
+
+          fetch Webkinz.swf 'https://www.webkinz.com/Webkinz.swf?v390_249'
+          fetch main2.swf 'https://assets.webkinz.com/SWF/main2.swf?v=v390_249'
+          fetch webkinzXML.swf 'https://assets.webkinz.com/SWF/server/webkinzXML.swf?v=v390_249'
+          fetch as3bridgeService.swf 'https://assets.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249'
+          fetch envMain.swf 'https://assets.webkinz.com/SWF/staticdata/envMain.swf?v=v390_249'
+          fetch views.swf 'https://assets.webkinz.com/SWF/staticdata/views.swf?v=v390_249'
+          fetch tips.swf 'https://assets.webkinz.com/SWF/staticdata/tips.swf?v=v390_249'
+          fetch MAPI.swf 'https://assets.webkinz.com/SWF/VIEWS/MU2/MAPI.swf?rnd=v390_249'
+
+          curl -L --fail --retry 2             -o ffdec.zip             'https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip'
+          unzip -q ffdec.zip -d ffdec
+          find ffdec -maxdepth 3 -type f -name 'ffdec.jar' -print
+
+      - name: Export ActionScript
+        shell: bash
+        run: |
+          set -uo pipefail
+          JAR=$(find ffdec -type f -name 'ffdec.jar' | head -1)
+          if [ -z "$JAR" ]; then
+            echo "ffdec.jar not found" >&2
+            exit 1
+          fi
+          echo "$JAR" > meta/ffdec_jar.txt
+          java -jar "$JAR" -help export > meta/ffdec_export_help.txt 2>&1 || true
+
+          for f in swfs/*.swf; do
+            n=$(basename "$f" .swf)
+            mkdir -p "decompiled/$n"
+            echo "=== $n ===" | tee -a meta/decompile.log
+            timeout 300 java -Xmx4g -jar "$JAR"               -export script "decompiled/$n" "$f"               >> meta/decompile.log 2>&1 || true
+          done
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+
+          roots=Path('decompiled')
+          url_re=re.compile(r'https?://[^\s"\'<>]+',re.I)
+          path_re=re.compile(r'(?:(?:\.{0,2}/|/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.%?=&+~{}^-]+\.(?:swf|xml|php|json|js|jpg|jpeg|png|gif|mp3|wav|flv)(?:\?[^\s"\'<>]*)?)',re.I)
+          findings=[]
+          urls=set(); paths=set()
+          for p in roots.rglob('*'):
+              if not p.is_file(): continue
+              try:t=p.read_text(errors='ignore')
+              except:continue
+              pu=sorted(set(url_re.findall(t)))
+              pp=sorted(set(path_re.findall(t)))
+              if pu or pp:
+                  findings.append({'file':str(p),'urls':pu,'paths':pp})
+                  urls.update(pu); paths.update(pp)
+          Path('meta/decompiled_findings.json').write_text(json.dumps(findings,indent=2))
+          Path('meta/decompiled_urls.txt').write_text('\n'.join(sorted(urls))+'\n')
+          Path('meta/decompiled_paths.txt').write_text('\n'.join(sorted(paths))+'\n')
+          Path('meta/decompiled_file_count.txt').write_text(str(sum(1 for p in roots.rglob('*') if p.is_file()))+'\n')
+          PY
+
+      - name: Upload decompile
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-decompiled
+          path: |
+            swfs/
+            decompiled/
+            meta/
+          if-no-files-found: error
+          retention-days: 7
