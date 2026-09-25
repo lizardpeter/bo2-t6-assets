@@ -88,6 +88,9 @@ fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
     let zone = zone_name(ff)?;
     let mut table = initial_table(zone)?;
     let mut counters = [0usize; STREAM_COUNT];
+    #[cfg(feature = "reserve")]
+    let mut output = Vec::with_capacity(max_output_capacity(ff)?);
+    #[cfg(not(feature = "reserve"))]
     let mut output = Vec::new();
     let mut plaintext = Vec::with_capacity(MAX_RECORD);
     let mut decompressed = vec![0u8; MAX_RECORD];
@@ -255,6 +258,37 @@ fn salsa20_block_words(k: &[u32; 8], n: &[u32; 2], c: &[u32; 4], counter: u64) -
         out[i * 4..i * 4 + 4].copy_from_slice(&x[i].wrapping_add(initial[i]).to_le_bytes());
     }
     out
+}
+
+#[cfg(feature = "reserve")]
+fn max_output_capacity(ff: &[u8]) -> Result<usize, String> {
+    let mut pos = HEADER_SIZE;
+    let mut records = 0usize;
+    while pos + 4 <= ff.len() {
+        let raw_mod = pos % VANILLA_BUFFER_SIZE;
+        if raw_mod + 4 > VANILLA_BUFFER_SIZE {
+            pos += VANILLA_BUFFER_SIZE - raw_mod;
+            if pos + 4 > ff.len() {
+                break;
+            }
+        }
+        let len = read_u32(ff, pos)? as usize;
+        pos += 4;
+        if len == 0 {
+            break;
+        }
+        if len > MAX_RECORD {
+            return Err(format!("pre-scan record {records} length {len} exceeds {MAX_RECORD}"));
+        }
+        pos = pos.checked_add(len).ok_or_else(|| "pre-scan range overflow".to_owned())?;
+        if pos > ff.len() {
+            return Err(format!("pre-scan record {records} escapes file"));
+        }
+        records = records.checked_add(1).ok_or_else(|| "pre-scan record count overflow".to_owned())?;
+    }
+    records
+        .checked_mul(MAX_RECORD)
+        .ok_or_else(|| "pre-scan output capacity overflow".to_owned())
 }
 
 fn validate_header(ff: &[u8]) -> Result<(), String> {
