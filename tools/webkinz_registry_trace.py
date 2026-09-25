@@ -21,6 +21,8 @@ URLS = {
     "chunk22.js": "https://play.webkinz.com/22.6dcadeecc981526283f8.js",
     "main2.swf": "https://play.webkinz.com/SWF/main2.swf?v=v390_249",
     "Webkinz.swf": "https://play.webkinz.com/Webkinz.swf?v=v390_249",
+    "item_bucket_list.xml": "https://assets.webkinz.com/?list-type=2&prefix=swf%2Fitem%2F&max-keys=20",
+    "pet_bucket_list.xml": "https://assets.webkinz.com/?list-type=2&prefix=swf%2Fpet%2F&max-keys=20",
 }
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
 
