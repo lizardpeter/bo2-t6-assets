@@ -1,0 +1,77 @@
+name: T6 FastFile performance lab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - t6-fastfile-perf-lab
+    paths:
+      - 'tools/t6_fastfile_perf_rs/**'
+      - '.github/workflows/t6_fastfile_perf_lab.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned retail Nuketown FastFile
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Benchmark scalar + miniz
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,scalar -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/scalar_miniz.txt
+
+      - name: Benchmark scalar + zlib-rs
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,scalar -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/scalar_zlibrs.txt
+
+      - name: Benchmark RustCrypto Salsa20 + miniz
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features miniz,rustcrypto -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/rustcrypto_miniz.txt
+
+      - name: Benchmark RustCrypto Salsa20 + zlib-rs
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto -- /tmp/mp_nuketown_2020.ff 5 | tee /tmp/rustcrypto_zlibrs.txt
+
+      - name: Compare
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          rows=[]
+          for name,path in [
+              ("scalar+miniz","/tmp/scalar_miniz.txt"),
+              ("scalar+zlib-rs","/tmp/scalar_zlibrs.txt"),
+              ("rustcrypto+miniz","/tmp/rustcrypto_miniz.txt"),
+              ("rustcrypto+zlib-rs","/tmp/rustcrypto_zlibrs.txt"),
+          ]:
+              t=Path(path).read_text()
+              m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+) expanded_sha256=([0-9a-f]+)",t)
+              if not m:
+                  raise SystemExit(f"parse failed: {name}\n{t}")
+              rows.append((name,float(m.group(1)),float(m.group(2)),float(m.group(3)),m.group(4)))
+          hashes={r[4] for r in rows}
+          if len(hashes)!=1:
+              raise SystemExit(f"identity mismatch: {hashes}")
+          base=rows[0][1]
+          lines=[]
+          for name,sec,enc,exp,h in rows:
+              lines.append(f"{name}: seconds={sec:.6f} speedup_vs_scalar_miniz={base/sec:.3f}x encrypted_mib_s={enc:.3f} expanded_mib_s={exp:.3f}")
+          lines.append(f"expanded_sha256={rows[0][4]}")
+          report="\n".join(lines)+"\n"
+          print(report,end="")
+          Path("/tmp/t6-fastfile-perf.txt").write_text(report)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-fastfile-perf
+          path: /tmp/t6-fastfile-perf.txt
