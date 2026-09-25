@@ -1,0 +1,290 @@
+name: Extract Xbox 360 Live profile
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EWF/FUSE tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3 pkg-config jq
+          df -h
+
+      - name: Download Digital Corpora Xbox 360 image
+        run: |
+          set -euxo pipefail
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/DRIVE2_TIME_FINAL.E01"
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
+            --speed-time 120 --speed-limit 1024 \
+            "$URL" -o /tmp/DRIVE2_TIME_FINAL.E01
+          stat /tmp/DRIVE2_TIME_FINAL.E01
+          sha256sum /tmp/DRIVE2_TIME_FINAL.E01 | tee /tmp/DRIVE2_TIME_FINAL.E01.sha256
+          df -h
+
+      - name: Mount E01 read-only
+        run: |
+          set -euxo pipefail
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo modprobe fuse || true
+          sudo ewfmount /tmp/DRIVE2_TIME_FINAL.E01 /mnt/xbox-ewf
+          sudo ls -lah /mnt/xbox-ewf
+          sudo stat /mnt/xbox-ewf/ewf1
+
+      - name: Build FATX/XTAF extraction helper
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/rdmrocha/xtafkit.git /tmp/xtafkit
+
+          mkdir -p /tmp/xbox-profile-extractor/src
+          cat > /tmp/xbox-profile-extractor/Cargo.toml <<'EOF'
+          [package]
+          name = "xbox-profile-extractor"
+          version = "0.1.0"
+          edition = "2024"
+
+          [dependencies]
+          fatxlib = { path = "/tmp/xtafkit/fatxlib" }
+          sha2 = "0.10"
+          hex = "0.4"
+          serde_json = "1"
+          EOF
+
+          cat > /tmp/xbox-profile-extractor/src/main.rs <<'EOF'
+          use std::env;
+          use std::fs::{self, File};
+          use std::io::{self, Read, Seek, SeekFrom, Write};
+          use std::path::Path;
+
+          use fatxlib::partition::detect_xbox_partitions;
+          use fatxlib::stfs;
+          use fatxlib::volume::FatxVolume;
+          use fatxlib::xuids::account;
+          use serde_json::json;
+          use sha2::{Digest, Sha256};
+
+          struct ReadOnlyFile(File);
+
+          impl Read for ReadOnlyFile {
+              fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                  self.0.read(buf)
+              }
+          }
+
+          impl Seek for ReadOnlyFile {
+              fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+                  self.0.seek(pos)
+              }
+          }
+
+          impl Write for ReadOnlyFile {
+              fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                  Err(io::Error::new(io::ErrorKind::PermissionDenied, "read-only image"))
+              }
+
+              fn flush(&mut self) -> io::Result<()> {
+                  Ok(())
+              }
+          }
+
+          fn looks_like_profile_xuid(s: &str) -> bool {
+              s.len() == 16
+                  && s.starts_with(|c: char| c == 'E' || c == 'e')
+                  && s.chars().all(|c| c.is_ascii_hexdigit())
+          }
+
+          fn account_gamertag(bytes: &[u8]) -> Option<(String, usize)> {
+              let mut off = 0x1000usize;
+              while off + account::ACCOUNT_BLOCK_LEN <= bytes.len() {
+                  if let Some(tag) =
+                      account::extract_gamertag(&bytes[off..off + account::ACCOUNT_BLOCK_LEN])
+                  {
+                      return Some((tag, off));
+                  }
+                  off += 0x1000;
+              }
+              None
+          }
+
+          fn main() {
+              let image = env::args().nth(1).expect("usage: extractor <raw-image> <out-dir>");
+              let out = env::args().nth(2).expect("usage: extractor <raw-image> <out-dir>");
+              fs::create_dir_all(Path::new(&out).join("packages")).unwrap();
+
+              let mut f = File::open(&image).expect("open raw EWF stream");
+              let device_size = f.seek(SeekFrom::End(0)).expect("get image size");
+              f.seek(SeekFrom::Start(0)).unwrap();
+
+              println!("raw image size: {} bytes (0x{:X})", device_size, device_size);
+
+              let mut ro = ReadOnlyFile(f);
+              let parts = detect_xbox_partitions(&mut ro, device_size).expect("detect Xbox partitions");
+
+              println!("partition probe:");
+              for p in &parts {
+                  println!(
+                      "  {} offset=0x{:X} size=0x{:X} valid={} magic={}",
+                      p.name, p.offset, p.size, p.has_valid_magic, p.magic
+                  );
+              }
+
+              let data = parts
+                  .iter()
+                  .find(|p| p.name == "360 Data" && p.has_valid_magic)
+                  .or_else(|| parts.iter().rev().find(|p| p.has_valid_magic))
+                  .expect("no valid Xbox 360 data partition")
+                  .clone();
+
+              println!(
+                  "using partition '{}' at 0x{:X}, size 0x{:X}",
+                  data.name, data.offset, data.size
+              );
+
+              let mut vol = FatxVolume::open(ro, data.offset, data.size).expect("open XTAF volume");
+              let content = vol.resolve_path("/Content").expect("resolve /Content");
+              let entries = vol
+                  .read_directory(content.first_cluster)
+                  .expect("read /Content");
+
+              let mut manifest = Vec::new();
+              let mut found = 0usize;
+
+              for owner in entries {
+                  if !owner.is_directory() {
+                      continue;
+                  }
+                  let xuid = owner.filename().to_uppercase();
+                  if !looks_like_profile_xuid(&xuid) {
+                      continue;
+                  }
+
+                  let canonical =
+                      format!("/Content/{xuid}/FFFE07D1/00010000/{xuid}");
+
+                  let entry = match vol.resolve_path(&canonical) {
+                      Ok(e) if !e.is_directory() => e,
+                      _ => {
+                          println!("no canonical profile package at {canonical}");
+                          continue;
+                      }
+                  };
+
+                  println!(
+                      "found profile candidate: {} ({} bytes, first cluster {})",
+                      canonical, entry.file_size, entry.first_cluster
+                  );
+
+                  let bytes = vol.read_file(&entry).expect("read profile package");
+                  let magic = if bytes.len() >= 4 {
+                      String::from_utf8_lossy(&bytes[..4]).to_string()
+                  } else {
+                      String::new()
+                  };
+
+                  if !matches!(bytes.get(0..4), Some(b"CON ") | Some(b"LIVE") | Some(b"PIRS")) {
+                      println!("  WARNING: unexpected STFS magic {:?}", magic);
+                  }
+
+                  let sha256 = hex::encode(Sha256::digest(&bytes));
+                  let package_path = Path::new(&out).join("packages").join(&xuid);
+                  fs::write(&package_path, &bytes).expect("write extracted package");
+
+                  let (display_name, title_name) = stfs::parse_header(&bytes)
+                      .map(|h| (h.display_name, h.title_name))
+                      .unwrap_or_else(|| (String::new(), String::new()));
+
+                  let (gamertag, account_offset) = account_gamertag(&bytes)
+                      .map(|(g, o)| (Some(g), Some(format!("0x{o:X}"))))
+                      .unwrap_or((None, None));
+
+                  println!(
+                      "  magic={:?} sha256={} display={:?} title={:?} gamertag={:?}",
+                      magic, sha256, display_name, title_name, gamertag
+                  );
+
+                  manifest.push(json!({
+                      "xuid": xuid,
+                      "source_path": canonical,
+                      "size": bytes.len(),
+                      "stfs_magic": magic,
+                      "sha256": sha256,
+                      "display_name": display_name,
+                      "title_name": title_name,
+                      "gamertag": gamertag,
+                      "account_block_offset": account_offset
+                  }));
+                  found += 1;
+              }
+
+              fs::write(
+                  Path::new(&out).join("manifest.json"),
+                  serde_json::to_vec_pretty(&manifest).unwrap(),
+              )
+              .unwrap();
+
+              fs::write(
+                  Path::new(&out).join("source.txt"),
+                  concat!(
+                      "Source: Digital Corpora nps-2014-xbox1\n",
+                      "Image: DRIVE2_TIME_FINAL.E01\n",
+                      "URL: https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/DRIVE2_TIME_FINAL.E01\n"
+                  ),
+              )
+              .unwrap();
+
+              println!("extracted {found} canonical Xbox 360 profile package(s)");
+              if found == 0 {
+                  std::process::exit(4);
+              }
+          }
+          EOF
+
+          cargo build --release --manifest-path /tmp/xbox-profile-extractor/Cargo.toml
+
+      - name: Extract real Xbox 360 profile package
+        run: |
+          set -euxo pipefail
+          sudo mkdir -p /tmp/xbox-live-profiles
+          sudo /tmp/xbox-profile-extractor/target/release/xbox-profile-extractor \
+            /mnt/xbox-ewf/ewf1 /tmp/xbox-live-profiles
+          sudo cp /tmp/DRIVE2_TIME_FINAL.E01.sha256 /tmp/xbox-live-profiles/source-image.sha256
+          sudo chown -R "$USER":"$USER" /tmp/xbox-live-profiles
+          find /tmp/xbox-live-profiles -maxdepth 3 -type f -printf '%p %s bytes\n'
+          cat /tmp/xbox-live-profiles/manifest.json
+
+      - name: Unpack STFS profile contents
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe-dashboard
+          mkdir -p /tmp/xbox-live-profiles/unpacked
+          for profile in /tmp/xbox-live-profiles/packages/E*; do
+            [ -f "$profile" ] || continue
+            xuid="$(basename "$profile")"
+            mkdir -p "/tmp/xbox-live-profiles/unpacked/$xuid"
+            python3 /tmp/nxe-dashboard/tools/extract_stfs.py \
+              "$profile" "/tmp/xbox-live-profiles/unpacked/$xuid" \
+              | tee "/tmp/xbox-live-profiles/unpacked/$xuid/extract.log" || true
+          done
+          find /tmp/xbox-live-profiles/unpacked -type f -printf '%p %s bytes\n' | head -200
+
+      - name: Upload extracted Xbox Live profiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-live-profiles-drive2
+          path: /tmp/xbox-live-profiles
+          if-no-files-found: warn
+          retention-days: 7
