@@ -69,6 +69,22 @@ jobs:
         run: |
           cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,parallel -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/parallel_runtime.txt
 
+      - name: Benchmark bounded streaming parallel runtime path
+        run: |
+          cargo run --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,streaming-parallel -- /tmp/mp_nuketown_2020.ff 10 | tee /tmp/streaming_parallel_runtime.txt
+
+      - name: Measure retained vs streaming parallel peak RSS
+        run: |
+          set -euo pipefail
+          cargo build --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,parallel
+          cp tools/t6_fastfile_perf_rs/target/release/t6-fastfile-perf /tmp/t6-retained
+          cargo build --quiet --release --manifest-path tools/t6_fastfile_perf_rs/Cargo.toml --no-default-features --features zlib-rs,rustcrypto,reserve,nohash,streaming-parallel
+          cp tools/t6_fastfile_perf_rs/target/release/t6-fastfile-perf /tmp/t6-streaming
+          /usr/bin/time -v /tmp/t6-retained /tmp/mp_nuketown_2020.ff 3 >/tmp/retained_rss_out.txt 2>/tmp/retained_rss.txt
+          /usr/bin/time -v /tmp/t6-streaming /tmp/mp_nuketown_2020.ff 3 >/tmp/streaming_rss_out.txt 2>/tmp/streaming_rss.txt
+          grep 'Maximum resident set size' /tmp/retained_rss.txt
+          grep 'Maximum resident set size' /tmp/streaming_rss.txt
+
       - name: Compare
         run: |
           python3 - <<'PY'
@@ -86,6 +102,7 @@ jobs:
               ("winner+no-expanded-hash","/tmp/no_expanded_hash.txt"),
               ("winner+encrypted-hash-only","/tmp/encrypted_hash_only.txt"),
               ("parallel-runtime","/tmp/parallel_runtime.txt"),
+              ("streaming-parallel-runtime","/tmp/streaming_parallel_runtime.txt"),
           ]:
               t=Path(path).read_text()
               m=re.search(r"T6_PERF .*seconds=([0-9.]+) encrypted_mib_s=([0-9.]+) expanded_mib_s=([0-9.]+) expanded_sha256=([0-9a-f]*)",t)
@@ -99,6 +116,17 @@ jobs:
           lines=[]
           for name,sec,enc,exp,h in rows:
               lines.append(f"{name}: seconds={sec:.6f} speedup_vs_scalar_miniz={enc/base_enc:.3f}x encrypted_mib_s={enc:.3f} expanded_mib_s={exp:.3f}")
+          def rss_kb(path):
+              text=Path(path).read_text()
+              m=re.search(r"Maximum resident set size \(kbytes\):\s*([0-9]+)", text)
+              if not m:
+                  raise SystemExit(f"could not parse RSS from {path}: {text}")
+              return int(m.group(1))
+          retained_rss=rss_kb("/tmp/retained_rss.txt")
+          streaming_rss=rss_kb("/tmp/streaming_rss.txt")
+          lines.append(f"retained_parallel_max_rss_kb={retained_rss}")
+          lines.append(f"streaming_parallel_max_rss_kb={streaming_rss}")
+          lines.append(f"streaming_rss_reduction={(1.0-streaming_rss/retained_rss)*100.0:.2f}%")
           lines.append(f"expanded_sha256={rows[0][4]}")
           report="\n".join(lines)+"\n"
           print(report,end="")
