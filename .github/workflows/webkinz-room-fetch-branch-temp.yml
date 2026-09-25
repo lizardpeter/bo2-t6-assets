@@ -1,4 +1,4 @@
-name: Temporary Webkinz item asset base probe
+name: Temporary Webkinz item base check
 
 on:
   push:
@@ -9,55 +9,21 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Probe candidate room item roots
+      - name: Check two candidate roots
         shell: bash
         run: |
-          set -euo pipefail
           mkdir -p out
-          cat > out/candidates.tsv <<'EOF'
-furniture_lower_flat	https://assets.webkinz.com/swf/items/178/sw.png
-furniture_upper_flat	https://assets.webkinz.com/SWF/ITEMS/178/sw.png
-furniture_lower_typed	https://assets.webkinz.com/swf/items/2/178/sw.png
-furniture_upper_typed	https://assets.webkinz.com/SWF/ITEMS/2/178/sw.png
-furniture_play_flat	https://play.webkinz.com/SWF/ITEMS/178/sw.png
-furniture_play_typed	https://play.webkinz.com/SWF/ITEMS/2/178/sw.png
-furniture_xml_lower_flat	https://assets.webkinz.com/swf/items/178/sw.xml
-furniture_xml_upper_flat	https://assets.webkinz.com/SWF/ITEMS/178/sw.xml
-wall_lower_flat	https://assets.webkinz.com/swf/items/184/large.png
-wall_upper_flat	https://assets.webkinz.com/SWF/ITEMS/184/large.png
-wall_lower_typed	https://assets.webkinz.com/swf/items/7/184/large.png
-wall_upper_typed	https://assets.webkinz.com/SWF/ITEMS/7/184/large.png
-floor_lower_flat	https://assets.webkinz.com/swf/items/160/large.png
-floor_upper_flat	https://assets.webkinz.com/SWF/ITEMS/160/large.png
-EOF
-          while IFS=$'\t' read -r name url; do
-            echo "$url" > "out/$name.url"
-            curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D "out/$name.headers" -o "out/$name.body" "$url" || true
-            file "out/$name.body" > "out/$name.file" 2>&1 || true
-            wc -c "out/$name.body" > "out/$name.size" 2>/dev/null || true
-          done < out/candidates.tsv
-          python3 - <<'PY'
-from pathlib import Path
-import json,re
-rows=[]
-for uf in sorted(Path("out").glob("*.url")):
-    n=uf.stem
-    h=Path("out")/(n+".headers")
-    b=Path("out")/(n+".body")
-    hdr=h.read_text(errors="ignore") if h.exists() else ""
-    sts=re.findall(r'^HTTP/\S+\s+(\d+)',hdr,re.M)
-    ct=re.findall(r'^content-type:\s*(.+)$',hdr,re.I|re.M)
-    rows.append({"name":n,"url":uf.read_text().strip(),"status":int(sts[-1]) if sts else None,"content_type":ct[-1].strip() if ct else "","size":b.stat().st_size if b.exists() else 0,"sig":b.read_bytes()[:16].hex() if b.exists() else ""})
-Path("out/summary.json").write_text(json.dumps(rows,indent=2))
-print(json.dumps(rows,indent=2))
-PY
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/lower.headers -o out/lower.body "https://assets.webkinz.com/swf/items/178/sw.png" || true
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/upper.headers -o out/upper.body "https://assets.webkinz.com/SWF/ITEMS/178/sw.png" || true
+          file out/lower.body out/upper.body > out/file.txt 2>&1 || true
+          wc -c out/lower.body out/upper.body > out/size.txt 2>&1 || true
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-item-base-probe
+          name: webkinz-item-base-check
           path: out/
           retention-days: 7
