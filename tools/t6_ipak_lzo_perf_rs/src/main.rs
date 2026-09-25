@@ -1,3 +1,5 @@
+mod fast_lzo;
+
 use std::{
     env,
     fs,
@@ -49,6 +51,7 @@ fn run() -> Result<(), String> {
     );
 
     bench_lzo(&source, rounds, total_decoded)?;
+    bench_fast_lzo(&source, rounds, total_decoded)?;
     bench_lzokay(&source, rounds, total_decoded)?;
     bench_lzo1x(&source, rounds, total_decoded)?;
     Ok(())
@@ -92,6 +95,13 @@ fn verify_all(source: &[Block]) -> Result<(), String> {
             .map_err(|e| format!("lzokay block {index}: {e:?}"))?;
         if n != block.expected.len() || out != block.expected {
             return Err(format!("lzokay block {index} identity mismatch"));
+        }
+
+        out.fill(0);
+        let n = fast_lzo::decompress_into(&block.compressed, &mut out)
+            .map_err(|e| format!("fast-lzo block {index}: {e:?}"))?;
+        if n != block.expected.len() || out[..n] != block.expected {
+            return Err(format!("fast-lzo block {index} identity mismatch"));
         }
 
         out.fill(0);
@@ -140,6 +150,31 @@ fn bench_lzo(source: &[Block], rounds: usize, decoded_per_round: usize) -> Resul
         }
     }
     report("lzo-0.1.3", start.elapsed().as_secs_f64(), rounds, decoded_per_round);
+    Ok(())
+}
+
+fn bench_fast_lzo(source: &[Block], rounds: usize, decoded_per_round: usize) -> Result<(), String> {
+    let mut blocks = fresh(source);
+    let start = Instant::now();
+    for _ in 0..rounds {
+        for block in &mut blocks {
+            let n = fast_lzo::decompress_into(
+                black_box(&block.compressed),
+                black_box(&mut block.out),
+            )
+            .map_err(|e| format!("fast-lzo benchmark: {e:?}"))?;
+            if n != block.expected.len() {
+                return Err("fast-lzo benchmark output length drift".to_owned());
+            }
+            black_box(&block.out[..n]);
+        }
+    }
+    report(
+        "t6-apache-bulk-copy",
+        start.elapsed().as_secs_f64(),
+        rounds,
+        decoded_per_round,
+    );
     Ok(())
 }
 
