@@ -1,0 +1,170 @@
+name: smg r2 yaz0 full archive census
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download, decompress and inventory every DATA archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, struct, json, collections, concurrent.futures, hashlib, time
+          from pathlib import Path
+
+          BASE='https://r2.houseofkublai.com/super-mario-galaxy/'
+          UA={'User-Agent':'uregraph-smg-yaz0/1'}
+
+          def get(url, range_=None):
+              h=dict(UA)
+              if range_: h['Range']=range_
+              with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=120) as r: return r.read()
+
+          def cstr(b,o):
+              z=b.find(b'\0',o)
+              if z<0: raise ValueError(f'unterminated string {o}')
+              return b[o:z].decode('utf-8','surrogateescape')
+
+          def parse_fst(b):
+              n=struct.unpack_from('>I',b,8)[0]; st=n*12; stack=[(n,'')]; out=[]
+              for i in range(1,n):
+                  while stack and i>=stack[-1][0]: stack.pop()
+                  pre=stack[-1][1] if stack else ''
+                  w0,w1,w2=struct.unpack_from('>III',b,i*12); nm=cstr(b,st+(w0&0xffffff))
+                  if w0>>24: stack.append((w2,pre+nm+'/'))
+                  else: out.append({'path':pre+nm,'size':w2})
+              return out
+
+          def yaz0(src):
+              if src[:4]!=b'Yaz0': return src
+              size=struct.unpack_from('>I',src,4)[0]; out=bytearray(); p=16; bits=0; code=0
+              while len(out)<size:
+                  if bits==0: code=src[p]; p+=1; bits=8
+                  if code&0x80:
+                      out.append(src[p]); p+=1
+                  else:
+                      b1,b2=src[p],src[p+1]; p+=2
+                      cp=len(out)-((((b1&0xf)<<8)|b2)+1)
+                      ln=b1>>4
+                      if ln==0: ln=src[p]+0x12; p+=1
+                      else: ln+=2
+                      for _ in range(ln): out.append(out[cp]); cp+=1
+                  code=(code<<1)&0xff; bits-=1
+              return bytes(out[:size])
+
+          def parse_rarc(b):
+              if b[:4]!=b'RARC': raise ValueError('not RARC')
+              data_base=0x20+struct.unpack_from('>I',b,0x0c)[0]
+              n_nodes,node_rel,n_ent,ent_rel,str_sz,str_rel=struct.unpack_from('>6I',b,0x20)
+              nb=0x20+node_rel; eb=0x20+ent_rel; sb=0x20+str_rel
+              nodes=[]
+              for i in range(n_nodes):
+                  o=nb+i*16; noff,hsh,cnt,first=struct.unpack_from('>IHHI',b,o+4)
+                  nodes.append((cstr(b,sb+noff),cnt,first))
+              ents=[]
+              for i in range(n_ent):
+                  o=eb+i*20; fid,hsh,an,do,sz,unk=struct.unpack_from('>HHIIII',b,o)
+                  ents.append((fid,(an>>24)&0xff,cstr(b,sb+(an&0xffffff)),do,sz))
+              files=[]; seen=set()
+              def walk(ni,pre):
+                  if ni in seen: return
+                  seen.add(ni); name,cnt,first=nodes[ni]
+                  for j in range(first,first+cnt):
+                      fid,attr,nm,do,sz=ents[j]
+                      if nm in ('.','..'): continue
+                      if fid==0xffff or (attr&2):
+                          if 0<=do<len(nodes): walk(do,pre+nm+'/')
+                      else:
+                          ao=data_base+do
+                          files.append({'path':pre+nm,'offset':ao,'size':sz,'data':b[ao:ao+sz]})
+              walk(0,''); return files
+
+          def parse_u8(b):
+              if len(b)<0x20 or struct.unpack_from('>I',b,0)[0]!=0x55AA382D: raise ValueError('not U8')
+              ro,hs,doff=struct.unpack_from('>III',b,4); n=struct.unpack_from('>I',b,ro+8)[0]; st=ro+n*12
+              stack=[(n,'')]; files=[]
+              for i in range(1,n):
+                  while stack and i>=stack[-1][0]: stack.pop()
+                  pre=stack[-1][1] if stack else ''
+                  w0,w1,w2=struct.unpack_from('>III',b,ro+i*12); nm=cstr(b,st+(w0&0xffffff))
+                  if w0>>24: stack.append((w2,pre+nm+'/'))
+                  else: files.append({'path':pre+nm,'offset':w1,'size':w2,'data':b[w1:w1+w2]})
+              return files
+
+          def magic_kind(b):
+              if b[:4]==b'RARC': return 'RARC'
+              if b[:4]==b'Yaz0': return 'Yaz0'
+              if len(b)>=4 and struct.unpack_from('>I',b,0)[0]==0x55AA382D: return 'U8'
+              m=b[:8]
+              known={b'J3D2bmd3':'BMD',b'J3D2bdl4':'BDL',b'J3D1bck1':'BCK',b'J3D1bca1':'BCA',
+                     b'J3D1btk1':'BTK',b'J3D1brk1':'BRK',b'J3D1btp1':'BTP',b'J3D1bpk1':'BPK',
+                     b'J3D1bpa1':'BPA',b'J3D1bva1':'BVA',b'J3D1blk1':'BLK',b'J3D1bla1':'BLA',
+                     b'J3D1bxk1':'BXK',b'J3D1bxa1':'BXA',b'JPAC2-10':'JPC',b'MESGbmg1':'BMG'}
+              if m in known:return known[m]
+              if b[:4]==b'RLYT':return 'BRLYT'
+              if b[:4]==b'RLAN':return 'BRLAN'
+              if b[:4]==b'RFNT':return 'BRFNT'
+              if b[:4]==b'THP\x00':return 'THP'
+              if b[:4]==b'STRM':return 'AST'
+              return 'unknown'
+
+          fst=get(BASE+'DATA/sys/fst.bin'); files=parse_fst(fst)
+          targets=[e for e in files if Path(e['path']).suffix.lower() in ('.arc','.szs')]
+          extc=collections.Counter(); kindc=collections.Counter(); containerc=collections.Counter()
+          nestedc=collections.Counter(); records=[]; errs=[]
+
+          def one(e):
+              path=e['path']; url=BASE+'DATA/files/'+urllib.parse.quote(path,safe='/')
+              try:
+                  raw=get(url); raw_sha=hashlib.sha256(raw).hexdigest(); transform=[]
+                  cur=raw
+                  if cur[:4]==b'Yaz0':
+                      cur=yaz0(cur); transform.append({'kind':'Yaz0','input_size':len(raw),'output_size':len(cur),
+                                                      'output_sha256':hashlib.sha256(cur).hexdigest()})
+                  fmt=magic_kind(cur)
+                  if fmt=='RARC': inner=parse_rarc(cur)
+                  elif fmt=='U8': inner=parse_u8(cur)
+                  else: inner=[]
+                  outfiles=[]
+                  for f in inner:
+                      dat=f.pop('data'); k=magic_kind(dat); ext=Path(f['path']).suffix.lower() or '<none>'
+                      outfiles.append({**f,'extension':ext,'kind':k,'sha256':hashlib.sha256(dat).hexdigest(),
+                                       'magic_hex':dat[:16].hex()})
+                  return {'path':path,'outer_size':len(raw),'outer_sha256':raw_sha,'transforms':transform,
+                          'container_format':fmt,'decoded_size':len(cur),'inner_files':outfiles}
+              except Exception as ex:
+                  return {'path':path,'error':repr(ex)}
+
+          t=time.time()
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              for r in ex.map(one,targets,chunksize=1):
+                  if 'error' in r: errs.append(r); continue
+                  records.append(r); containerc[r['container_format']]+=1
+                  for f in r['inner_files']:
+                      extc[f['extension']]+=1; kindc[f['kind']]+=1
+          records.sort(key=lambda r:r['path'])
+          out={'format':'uregraph-smg-r2-yaz0-full-census-v1','base':BASE,'archive_count':len(targets),
+               'seconds':time.time()-t,'containers':containerc,'inner_extensions':extc.most_common(),
+               'inner_kinds':kindc.most_common(),'errors':errs,'archives':records}
+          Path('out/full_archive_census.json').write_text(json.dumps(out,indent=2,sort_keys=True),encoding='utf-8')
+          summary={'archive_count':len(targets),'parsed':len(records),'errors':len(errs),'seconds':out['seconds'],
+                   'containers':dict(containerc),'inner_files':sum(len(x['inner_files']) for x in records),
+                   'inner_extensions':extc.most_common(80),'inner_kinds':kindc.most_common(80)}
+          Path('out/summary.json').write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+      - name: Upload census
+        uses: actions/upload-artifact@v4
+        with:
+          name: smg-r2-yaz0-full-archive-census
+          path: out/
+          retention-days: 3
