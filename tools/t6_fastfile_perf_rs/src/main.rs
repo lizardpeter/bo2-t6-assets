@@ -95,6 +95,17 @@ struct DecodeResult {
 }
 
 fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
+    #[cfg(feature = "parallel")]
+    {
+        return decode_parallel(ff);
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        decode_serial(ff)
+    }
+}
+
+fn decode_serial(ff: &[u8]) -> Result<DecodeResult, String> {
     validate_header(ff)?;
     let zone = zone_name(ff)?;
     let mut table = initial_table(zone)?;
@@ -200,6 +211,194 @@ fn decode(ff: &[u8]) -> Result<DecodeResult, String> {
         records: record,
         sha256: expanded_sha,
     })
+}
+
+#[cfg(feature = "parallel")]
+#[derive(Clone, Copy)]
+struct EncryptedRecord {
+    start: usize,
+    end: usize,
+}
+
+#[cfg(feature = "parallel")]
+struct ParallelStream {
+    bytes: Vec<u8>,
+    lengths: Vec<usize>,
+}
+
+#[cfg(feature = "parallel")]
+fn decode_parallel(ff: &[u8]) -> Result<DecodeResult, String> {
+    validate_header(ff)?;
+    let zone = zone_name(ff)?;
+    let records = scan_records(ff)?;
+
+    let streams = std::thread::scope(|scope| -> Result<Vec<ParallelStream>, String> {
+        let mut handles = Vec::with_capacity(STREAM_COUNT);
+        for stream in 0..STREAM_COUNT {
+            let records_ref = &records;
+            handles.push(scope.spawn(move || decode_one_stream(ff, zone, records_ref, stream)));
+        }
+
+        let mut decoded = Vec::with_capacity(STREAM_COUNT);
+        for handle in handles {
+            let result = handle
+                .join()
+                .map_err(|_| "parallel T6 stream worker panicked".to_owned())??;
+            decoded.push(result);
+        }
+        Ok(decoded)
+    })?;
+
+    let total_output: usize = streams.iter().map(|stream| stream.bytes.len()).sum();
+    let mut output = Vec::with_capacity(total_output);
+    let mut offsets = [0usize; STREAM_COUNT];
+    let mut local_indices = [0usize; STREAM_COUNT];
+
+    for record_index in 0..records.len() {
+        let stream = record_index % STREAM_COUNT;
+        let local_index = local_indices[stream];
+        let length = *streams[stream]
+            .lengths
+            .get(local_index)
+            .ok_or_else(|| format!("parallel stream {stream} missing record {local_index} length"))?;
+        let start = offsets[stream];
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| "parallel output range overflow".to_owned())?;
+        let chunk = streams[stream]
+            .bytes
+            .get(start..end)
+            .ok_or_else(|| format!("parallel stream {stream} output is truncated"))?;
+        output.extend_from_slice(chunk);
+        offsets[stream] = end;
+        local_indices[stream] += 1;
+    }
+
+    #[cfg(feature = "encrypted-hash")]
+    {
+        black_box(Sha256::digest(ff));
+    }
+
+    #[cfg(not(feature = "nohash"))]
+    let expanded_sha = hex(Sha256::digest(&output).as_slice());
+    #[cfg(feature = "nohash")]
+    let expanded_sha = String::new();
+
+    Ok(DecodeResult {
+        output,
+        records: records.len(),
+        sha256: expanded_sha,
+    })
+}
+
+#[cfg(feature = "parallel")]
+fn decode_one_stream(
+    ff: &[u8],
+    zone: &[u8],
+    records: &[EncryptedRecord],
+    stream: usize,
+) -> Result<ParallelStream, String> {
+    let mut table = initial_table(zone)?;
+    let local_count = (records.len() + STREAM_COUNT - 1 - stream) / STREAM_COUNT;
+    let mut bytes = Vec::with_capacity(local_count.saturating_mul(MAX_RECORD));
+    let mut lengths = Vec::with_capacity(local_count);
+    let mut plaintext = Vec::with_capacity(MAX_RECORD);
+    let mut decompressed = vec![0u8; MAX_RECORD];
+    let mut inflater = Decompress::new(false);
+    let mut sha1 = Sha1::new();
+    let mut counter = 0usize;
+
+    for record_index in (stream..records.len()).step_by(STREAM_COUNT) {
+        let record = records[record_index];
+        let ciphertext = ff
+            .get(record.start..record.end)
+            .ok_or_else(|| format!("parallel record {record_index} ciphertext is truncated"))?;
+
+        let table_index = (counter * STREAM_COUNT + stream) % TABLE_ENTRIES;
+        let table_offset = table_index * ENTRY_SIZE;
+        let nonce: [u8; 8] = table[table_offset..table_offset + 8]
+            .try_into()
+            .map_err(|_| "parallel T6 nonce slice".to_owned())?;
+
+        plaintext.resize(ciphertext.len(), 0);
+        decrypt_into(ciphertext, &nonce, plaintext.as_mut_slice());
+
+        let status = inflater
+            .decompress(&plaintext, &mut decompressed, FlushDecompress::Finish)
+            .map_err(|e| format!("parallel record {record_index} inflate failed: {e}"))?;
+        if status != Status::StreamEnd {
+            return Err(format!(
+                "parallel record {record_index} inflate status {status:?}"
+            ));
+        }
+        let expanded = inflater.total_out() as usize;
+        if expanded > decompressed.len() {
+            return Err(format!("parallel record {record_index} inflated beyond buffer"));
+        }
+        bytes.extend_from_slice(&decompressed[..expanded]);
+        lengths.push(expanded);
+        inflater.reset(false);
+
+        sha1.update(&plaintext);
+        let digest = sha1.finalize_reset();
+        let next = counter + 1;
+        let next_index = (next * STREAM_COUNT + stream) % TABLE_ENTRIES;
+        let next_offset = next_index * ENTRY_SIZE;
+        for (i, byte) in digest.iter().enumerate() {
+            table[next_offset + i] ^= byte;
+        }
+        counter = next;
+    }
+
+    Ok(ParallelStream { bytes, lengths })
+}
+
+#[cfg(feature = "parallel")]
+fn scan_records(ff: &[u8]) -> Result<Vec<EncryptedRecord>, String> {
+    let mut records = Vec::new();
+    let mut pos = HEADER_SIZE;
+
+    while pos + 4 <= ff.len() {
+        let raw_mod = pos % VANILLA_BUFFER_SIZE;
+        if raw_mod + 4 > VANILLA_BUFFER_SIZE {
+            pos += VANILLA_BUFFER_SIZE - raw_mod;
+            if pos + 4 > ff.len() {
+                break;
+            }
+        }
+
+        let length_offset = pos;
+        let len = read_u32(ff, pos)? as usize;
+        pos += 4;
+        if len == 0 {
+            if ff[length_offset..].iter().any(|byte| *byte != 0) {
+                return Err(format!(
+                    "parallel scan found nonzero bytes after terminator at 0x{length_offset:x}"
+                ));
+            }
+            break;
+        }
+        if len > MAX_RECORD {
+            return Err(format!(
+                "parallel scan record {} length {len} exceeds {MAX_RECORD}",
+                records.len()
+            ));
+        }
+        let end = pos
+            .checked_add(len)
+            .ok_or_else(|| "parallel record range overflow".to_owned())?;
+        if end > ff.len() {
+            return Err(format!("parallel scan record {} escapes file", records.len()));
+        }
+        records.push(EncryptedRecord { start: pos, end });
+        pos = end;
+    }
+
+    if pos < ff.len() && ff[pos..].iter().any(|byte| *byte != 0) {
+        return Err(format!("parallel scan found nonzero trailing bytes at 0x{pos:x}"));
+    }
+
+    Ok(records)
 }
 
 #[cfg(feature = "rustcrypto")]
