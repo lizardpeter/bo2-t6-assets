@@ -1,0 +1,250 @@
+name: Scan DRIVE3 deleted Xbox 360 profiles
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3 jq
+          git clone --depth 1 https://github.com/rdmrocha/xtafkit.git /tmp/xtafkit
+
+      - name: Add forensic directory-slot helpers
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("/tmp/xtafkit/fatxlib/src/volume.rs")
+          s=p.read_text()
+          needle="    /// Read all valid directory entries from a directory cluster chain.\n"
+          helper=r'''    /// Forensic helper: read all raw directory slots from a single cluster,
+              /// preserving entries marked deleted (filename_len == 0xE5).
+              pub fn recovery_read_directory_cluster_all(&mut self, cluster: u32) -> Result<Vec<DirectoryEntry>> {
+                  let cluster_size = self.superblock.cluster_size() as usize;
+                  let mut buf = vec![0u8; cluster_size];
+                  self.read_cluster(cluster, &mut buf)?;
+                  let mut entries = Vec::new();
+                  for slot in 0..(cluster_size / DIRENT_SIZE) {
+                      let mut raw = [0u8; DIRENT_SIZE];
+                      raw.copy_from_slice(&buf[slot * DIRENT_SIZE..(slot + 1) * DIRENT_SIZE]);
+                      let entry = self.parse_dirent_buf(&raw);
+                      if entry.is_end() { break; }
+                      entries.push(entry);
+                  }
+                  Ok(entries)
+              }
+
+              /// Forensic helper for an active directory whose FAT chain still exists:
+              /// return all slots from every cluster, including deleted entries.
+              pub fn recovery_read_directory_chain_all(&mut self, first_cluster: u32) -> Result<Vec<DirectoryEntry>> {
+                  let chain = self.cluster_chain(first_cluster)?;
+                  let mut out = Vec::new();
+                  for c in chain {
+                      out.extend(self.recovery_read_directory_cluster_all(c)?);
+                  }
+                  Ok(out)
+              }
+
+              /// Recover a deleted file assuming the original allocation was contiguous.
+              pub fn recovery_read_contiguous(&mut self, start_cluster: u32, file_size: usize) -> Result<Vec<u8>> {
+                  let cluster_size = self.superblock.cluster_size() as usize;
+                  let needed = (file_size + cluster_size - 1) / cluster_size;
+                  let mut out = Vec::with_capacity(needed * cluster_size);
+                  for i in 0..needed {
+                      let cluster = start_cluster.checked_add(i as u32)
+                          .ok_or_else(|| FatxError::Other("cluster overflow".to_string()))?;
+                      let mut buf = vec![0u8; cluster_size];
+                      self.read_cluster(cluster, &mut buf)?;
+                      out.extend_from_slice(&buf);
+                  }
+                  out.truncate(file_size);
+                  Ok(out)
+              }
+
+          '''
+          if needle not in s:
+              raise SystemExit("insertion point not found")
+          p.write_text(s.replace(needle,helper+needle,1))
+          PY
+
+      - name: Build deleted profile scanner
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/drive3scan/src
+          cat > /tmp/drive3scan/Cargo.toml <<'EOF'
+          [package]
+          name = "drive3scan"
+          version = "0.1.0"
+          edition = "2024"
+
+          [dependencies]
+          fatxlib = { path = "/tmp/xtafkit/fatxlib" }
+          serde_json = "1"
+          sha2 = "0.10"
+          hex = "0.4"
+          EOF
+
+          cat > /tmp/drive3scan/src/main.rs <<'EOF'
+          use std::env;
+          use std::fs::{self,File};
+          use std::io::{self,Read,Seek,SeekFrom,Write};
+          use std::path::Path;
+          use fatxlib::partition::detect_xbox_partitions;
+          use fatxlib::types::DirectoryEntry;
+          use fatxlib::volume::FatxVolume;
+          use serde_json::json;
+          use sha2::{Digest,Sha256};
+
+          struct RO(File);
+          impl Read for RO { fn read(&mut self,b:&mut[u8])->io::Result<usize>{self.0.read(b)} }
+          impl Seek for RO { fn seek(&mut self,p:SeekFrom)->io::Result<u64>{self.0.seek(p)} }
+          impl Write for RO {
+              fn write(&mut self,_:&[u8])->io::Result<usize>{Err(io::Error::new(io::ErrorKind::PermissionDenied,"ro"))}
+              fn flush(&mut self)->io::Result<()> {Ok(())}
+          }
+
+          fn raw_name(e:&DirectoryEntry)->String {
+              let end=e.filename_raw.iter().position(|&b| b==0 || b==0xFF).unwrap_or(e.filename_raw.len());
+              String::from_utf8_lossy(&e.filename_raw[..end]).to_string()
+          }
+          fn xuid(s:&str)->bool {
+              s.len()==16 && s.starts_with(|c:char| c=='E'||c=='e') && s.chars().all(|c|c.is_ascii_hexdigit())
+          }
+          fn show(e:&DirectoryEntry)->serde_json::Value {
+              json!({
+                "raw_name":raw_name(e),
+                "deleted":e.is_deleted(),
+                "attributes":format!("0x{:02X}",e.attributes.bits()),
+                "first_cluster":e.first_cluster,
+                "file_size":e.file_size
+              })
+          }
+          fn find_slot<T:Read+Write+Seek>(vol:&mut FatxVolume<T>,cluster:u32,name:&str)->Option<DirectoryEntry>{
+              let slots=vol.recovery_read_directory_cluster_all(cluster).ok()?;
+              for e in slots {
+                  if raw_name(&e).eq_ignore_ascii_case(name) { return Some(e); }
+              }
+              None
+          }
+
+          fn main(){
+              let raw=env::args().nth(1).expect("raw");
+              let out=env::args().nth(2).expect("out");
+              fs::create_dir_all(Path::new(&out).join("candidates")).unwrap();
+
+              let mut f=File::open(&raw).unwrap();
+              let sz=f.seek(SeekFrom::End(0)).unwrap();
+              f.seek(SeekFrom::Start(0)).unwrap();
+              let mut ro=RO(f);
+              let parts=detect_xbox_partitions(&mut ro,sz).unwrap();
+              let data=parts.iter().find(|p|p.name=="360 Data"&&p.has_valid_magic)
+                  .or_else(||parts.iter().rev().find(|p|p.has_valid_magic)).unwrap().clone();
+              println!("raw={} data_offset=0x{:X} data_size=0x{:X}",sz,data.offset,data.size);
+              let mut vol=FatxVolume::open(ro,data.offset,data.size).unwrap();
+              let content=vol.resolve_path("/Content").unwrap();
+              println!("/Content cluster={}",content.first_cluster);
+
+              let root=vol.recovery_read_directory_chain_all(content.first_cluster).unwrap();
+              let mut root_json=Vec::new();
+              let mut candidates=Vec::new();
+
+              for e in root {
+                  let n=raw_name(&e);
+                  root_json.push(show(&e));
+                  if !e.is_directory() || !xuid(&n) || e.first_cluster<1 { continue; }
+                  let owner=n.to_uppercase();
+                  println!("OWNER {} deleted={} cluster={}",owner,e.is_deleted(),e.first_cluster);
+
+                  let fffe=find_slot(&mut vol,e.first_cluster,"FFFE07D1");
+                  if fffe.is_none(){println!("  no FFFE07D1");continue;}
+                  let fffe=fffe.unwrap();
+                  println!("  FFFE07D1 deleted={} cluster={}",fffe.is_deleted(),fffe.first_cluster);
+
+                  let ty=find_slot(&mut vol,fffe.first_cluster,"00010000");
+                  if ty.is_none(){println!("  no 00010000");continue;}
+                  let ty=ty.unwrap();
+                  println!("  00010000 deleted={} cluster={}",ty.is_deleted(),ty.first_cluster);
+
+                  let pkg=find_slot(&mut vol,ty.first_cluster,&owner);
+                  if pkg.is_none(){println!("  no package slot");continue;}
+                  let pkg=pkg.unwrap();
+                  println!("  PACKAGE deleted={} cluster={} size={}",pkg.is_deleted(),pkg.first_cluster,pkg.file_size);
+
+                  let bytes=match vol.recovery_read_contiguous(pkg.first_cluster,pkg.file_size as usize){
+                    Ok(v)=>v,Err(err)=>{println!("  contiguous read failed {}",err);continue;}
+                  };
+                  let first4=bytes.get(0..4).map(hex::encode).unwrap_or_default();
+                  let magic=bytes.get(0..4).map(|b|String::from_utf8_lossy(b).to_string()).unwrap_or_default();
+                  let sha=hex::encode(Sha256::digest(&bytes));
+                  let saved=Path::new(&out).join("candidates").join(&owner);
+                  fs::write(&saved,&bytes).unwrap();
+                  println!("  saved magic={:?} sha256={}",magic,sha);
+                  candidates.push(json!({
+                    "owner":owner,
+                    "owner_deleted":e.is_deleted(),
+                    "fffe_deleted":fffe.is_deleted(),
+                    "type_deleted":ty.is_deleted(),
+                    "package_deleted":pkg.is_deleted(),
+                    "first_cluster":pkg.first_cluster,
+                    "size":pkg.file_size,
+                    "first4_hex":first4,
+                    "magic":magic,
+                    "sha256_contiguous":sha
+                  }));
+              }
+
+              fs::write(Path::new(&out).join("content_slots.json"),
+                  serde_json::to_vec_pretty(&root_json).unwrap()).unwrap();
+              fs::write(Path::new(&out).join("candidates.json"),
+                  serde_json::to_vec_pretty(&candidates).unwrap()).unwrap();
+              println!("candidate packages={}",candidates.len());
+          }
+          EOF
+          cargo build --release --manifest-path /tmp/drive3scan/Cargo.toml
+
+      - name: Download and scan DRIVE3 final
+        run: |
+          set -euxo pipefail
+          IMAGE="DRIVE3_TIME_FINAL.E01"
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/$IMAGE"
+          OUT="/tmp/drive3-profile-scan"
+          mkdir -p "$OUT"
+          sudo mkdir -p /mnt/xbox-ewf
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --speed-time 120 --speed-limit 1024 "$URL" -o "/tmp/$IMAGE"
+          sha256sum "/tmp/$IMAGE" | tee "$OUT/source-image.sha256"
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          sudo /tmp/drive3scan/target/release/drive3scan /mnt/xbox-ewf/ewf1 "$OUT" | tee "$OUT/scan.log"
+          sudo fusermount3 -u /mnt/xbox-ewf || sudo umount /mnt/xbox-ewf || true
+          sudo chown -R "$USER":"$USER" "$OUT"
+          cat "$OUT/candidates.json"
+          python3 - <<'PY'
+          import json
+          p="/tmp/drive3-profile-scan/content_slots.json"
+          rows=json.load(open(p))
+          for r in rows:
+              n=r["raw_name"]
+              if (len(n)==16 and n[:1].upper()=="E") or r["deleted"]:
+                  print(r)
+          PY
+
+      - name: Upload DRIVE3 scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-drive3-deleted-profile-scan
+          path: /tmp/drive3-profile-scan
+          retention-days: 7
