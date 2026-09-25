@@ -107,10 +107,8 @@ jobs:
 
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
           timeout=aiohttp.ClientTimeout(total=12,connect=6,sock_read=8)
-          connector=aiohttp.TCPConnector(limit=24,limit_per_host=12,ttl_dns_cache=300)
-          sem=asyncio.Semaphore(24)
 
-          async def head_one(session,url,kind,entity):
+          async def head_one(session,url,kind,entity,sem):
               async with sem:
                   try:
                       async with session.head(url,allow_redirects=True,timeout=timeout) as r:
@@ -125,8 +123,10 @@ jobs:
 
           async def main_probe():
               headers={"User-Agent":UA}
+              connector=aiohttp.TCPConnector(limit=24,limit_per_host=12,ttl_dns_cache=300)
+              sem=asyncio.Semaphore(24)
               async with aiohttp.ClientSession(headers=headers,connector=connector) as s:
-                  tasks=[asyncio.create_task(head_one(s,u,k,e)) for u,(k,e) in candidates.items()]
+                  tasks=[asyncio.create_task(head_one(s,u,k,e,sem)) for u,(k,e) in candidates.items()]
                   rows=[]
                   done=0
                   for fut in asyncio.as_completed(tasks):
@@ -163,8 +163,7 @@ jobs:
                   except Exception:return raw
               return raw
 
-          async def get_bytes(session,url):
-              async with sem:
+          async def get_bytes(session,url,sem):
                   try:
                       async with session.get(url,allow_redirects=True,timeout=aiohttp.ClientTimeout(total=30,connect=7,sock_read=20)) as r:
                           if r.status!=200:return None
@@ -175,8 +174,9 @@ jobs:
 
           async def mine_pets():
               conn=aiohttp.TCPConnector(limit=12,limit_per_host=8,ttl_dns_cache=300)
+              sem2=asyncio.Semaphore(12)
               async with aiohttp.ClientSession(headers={"User-Agent":UA},connector=conn) as s:
-                  tasks={asyncio.create_task(get_bytes(s,r[0])):r for r in pet_main}
+                  tasks={asyncio.create_task(get_bytes(s,r[0],sem2)):r for r in pet_main}
                   for fut in asyncio.as_completed(tasks):
                       row=tasks[fut]; raw=await fut
                       if not raw:continue
@@ -195,8 +195,9 @@ jobs:
           async def probe_children():
               if not child_candidates:return []
               conn=aiohttp.TCPConnector(limit=20,limit_per_host=10,ttl_dns_cache=300)
+              sem3=asyncio.Semaphore(20)
               async with aiohttp.ClientSession(headers={"User-Agent":UA},connector=conn) as s:
-                  tasks=[asyncio.create_task(head_one(s,u,k,e)) for u,(k,e) in child_candidates.items()]
+                  tasks=[asyncio.create_task(head_one(s,u,k,e,sem3)) for u,(k,e) in child_candidates.items()]
                   return [await f for f in asyncio.as_completed(tasks)]
 
           child_rows=asyncio.run(probe_children())
@@ -244,7 +245,7 @@ jobs:
           print(json.dumps(summary,indent=2))
           PY
 
-          python3 work/probe.py | tee out/run.log
+          python3 work/probe.py 2>&1 | tee out/run.log
 
       - name: Upload dynamic asset report
         if: always()
