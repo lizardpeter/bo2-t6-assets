@@ -1,0 +1,18 @@
+[package]
+name = "t6-fastfile-perf"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+default = ["miniz", "scalar"]
+miniz = ["flate2/rust_backend"]
+zlib-rs = ["flate2/zlib-rs"]
+scalar = []
+rustcrypto = ["dep:salsa20"]
+
+[dependencies]
+flate2 = { version = "1", default-features = false }
+sha1 = "0.10"
+sha2 = "0.10"
+salsa20 = { version = "0.10", optional = true }
