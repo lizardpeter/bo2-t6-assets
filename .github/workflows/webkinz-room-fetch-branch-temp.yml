@@ -1,4 +1,4 @@
-name: Temporary Webkinz item base check
+name: Temporary Webkinz singular item root check
 
 on:
   push:
@@ -13,17 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check two candidate roots
+      - name: Check authoritative singular room item root
         shell: bash
         run: |
           mkdir -p out
-          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/lower.headers -o out/lower.body "https://assets.webkinz.com/swf/items/178/sw.png" || true
-          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/upper.headers -o out/upper.body "https://assets.webkinz.com/SWF/ITEMS/178/sw.png" || true
-          file out/lower.body out/upper.body > out/file.txt 2>&1 || true
-          wc -c out/lower.body out/upper.body > out/size.txt 2>&1 || true
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/furniture.headers -o out/furniture.body "https://assets.webkinz.com/swf/item/178/sw.png" || true
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/furniturexml.headers -o out/furniturexml.body "https://assets.webkinz.com/swf/item/178/sw.xml" || true
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/wall.headers -o out/wall.body "https://assets.webkinz.com/swf/item/184/large.png" || true
+          curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -D out/wallxml.headers -o out/wallxml.body "https://assets.webkinz.com/swf/item/184/large.xml" || true
+          file out/*.body > out/file.txt 2>&1 || true
+          wc -c out/*.body > out/size.txt 2>&1 || true
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-item-base-check
+          name: webkinz-singular-item-root-check
           path: out/
           retention-days: 7
