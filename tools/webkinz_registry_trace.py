@@ -19,6 +19,8 @@ URLS = {
     "chunk1.js": "https://play.webkinz.com/1.bed31ad6b74769d0989b.js",
     "chunk11.js": "https://play.webkinz.com/11.b248ee40ed2bc7ca5fb2.js",
     "chunk22.js": "https://play.webkinz.com/22.6dcadeecc981526283f8.js",
+    "main2.swf": "https://play.webkinz.com/SWF/main2.swf?v=v390_249",
+    "Webkinz.swf": "https://play.webkinz.com/Webkinz.swf?v=v390_249",
 }
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
 
