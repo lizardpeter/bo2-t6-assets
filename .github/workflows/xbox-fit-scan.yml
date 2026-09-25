@@ -30,7 +30,7 @@ jobs:
           curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --speed-time 120 --speed-limit 1024 "$URL" -o "/tmp/$IMAGE"
           sudo mkdir -p /mnt/xbox-ewf
           sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
-          ls -lh /mnt/xbox-ewf/ewf1
+          sudo ls -lh /mnt/xbox-ewf/ewf1
 
       - name: Scan raw image for FIT XDBF headers and payload snapshots
         run: |
