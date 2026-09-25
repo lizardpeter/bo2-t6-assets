@@ -43,7 +43,7 @@ jobs:
           set -euxo pipefail
           OUT="/tmp/profile-lowlevel-scan"
           mkdir -p "$OUT"
-          sudo python3 - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import datetime, hashlib, json, os
 
