@@ -10,21 +10,33 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Fetch known public room resources
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/webkinz-house.swf "https://play.webkinz.com/subApplications/webkinz-house/webkinz-house.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession1.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession1.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomSession2.swf "https://play.webkinz.com/SWF/VIEWS/Room/RoomSession2.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/buildmap1024.swf "https://play.webkinz.com/SWF/ROOM/buildmap1024.swf"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/RoomInter.xml "https://play.webkinz.com/SWF/ROOM/RoomInter.xml"
-          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/subApplications.xml "https://play.webkinz.com/subApplications/subApplications.xml?v=v390_249"
-          sha256sum out/* > out/SHA256SUMS.txt
+          mkdir -p out/input out/source out/meta ffdec
+          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180 -o ffdec.zip "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
+          unzip -q ffdec.zip -d ffdec
+          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/input/webkinz-house.swf "https://play.webkinz.com/subApplications/webkinz-house/webkinz-house.swf"
+          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/input/RoomInter.xml "https://play.webkinz.com/SWF/ROOM/RoomInter.xml"
+          curl -L --fail --retry 3 --connect-timeout 10 --max-time 90 -A "Mozilla/5.0" -o out/input/subApplications.xml "https://play.webkinz.com/subApplications/subApplications.xml?v=v390_249"
+          sha256sum out/input/* > out/SHA256SUMS.txt
+          mkdir -p out/source/webkinz-house
+          java -Xmx4g -jar ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 600 -onerror ignore -export script out/source/webkinz-house out/input/webkinz-house.swf > out/meta/ffdec.log 2>&1 || true
+          grep -RniE 'ITEMS_FOLDER|SWF/ITEMS|itemUrl|sprite(sheet)?|wallpaper|flooring|assetDeliveryBaseURL|itemClass|itemType|load(File|Movie|Clip)|AssetLoader|requestItem|itemPath|itemAsset' out/source/webkinz-house > out/room-item-formulas.txt || true
+          grep -RhaoE 'https?://[^"'"'"' <>)]+' out/source/webkinz-house | sort -u > out/absolute-urls.txt || true
+          grep -RhaoE '([A-Za-z0-9_.%+ -]+/)+[A-Za-z0-9_.%+?=&-]+\.(swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js|txt)(\?[^"'"'"' <>)]*)?' out/source/webkinz-house | sort -u > out/resource-refs.txt || true
+          find out/source/webkinz-house -type f -printf '%p\t%s\n' | sort > out/source-files.tsv
+          {
+            echo "=== source files ==="
+            wc -l out/source-files.tsv
+            echo "=== formulas/hits ==="
+            wc -l out/room-item-formulas.txt
+            echo "=== refs ==="
+            wc -l out/resource-refs.txt
+          } > out/SUMMARY.txt
 
       - name: Upload room resources
         uses: actions/upload-artifact@v4
