@@ -1,4 +1,4 @@
-name: Temporary Webkinz full room asset validation
+name: Temporary Webkinz room environment validation
 
 on:
   push:
@@ -11,33 +11,39 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
-      - name: Checkout temporary probe
-        uses: actions/checkout@v4
-
-      - name: Prepare current item database
+      - name: Validate room environment backgrounds
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p work/items-source out
-          python3 -m pip install -q aiohttp
-          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180 -o work/ffdec.zip "https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip"
-          unzip -q work/ffdec.zip -d work/ffdec
-          curl -L --fail --retry 3 --connect-timeout 15 --max-time 180 -A "Mozilla/5.0" -o work/items.swf "https://play.webkinz.com/SWF/staticdata/US_EN/items.swf?v=v390_249"
-          java -Xmx3g -jar work/ffdec/ffdec.jar -cli -timeout 60 -exportTimeout 600 -onerror ignore -export script work/items-source work/items.swf > out/items-ffdec.log 2>&1
-
-      - name: Validate current room render assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 tmp_webkinz_room_asset_probe.py 2>&1 | tee out/run.log
-
-      - name: Upload room asset validation
-        if: always()
+          mkdir -p out
+          base="https://play.webkinz.com/subApplications/webkinz-house/"
+          check() {
+            rel="$1"
+            code=$(curl -L -sS --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" -o /dev/null -w "%{http_code}" "$base$rel" || true)
+            type=$(curl -L -sS -I --connect-timeout 8 --max-time 30 -A "Mozilla/5.0" "$base$rel" | grep -i '^content-type:' | tail -1 | tr -d '\r' | cut -d' ' -f2- || true)
+            printf "%s\t%s\t%s%s\n" "$code" "$type" "$base" "$rel"
+          }
+          check "webkinzHouse/assets/outdoor/fore/spring.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/fore/summer.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/fore/fall.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/fore/winter.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/back/dawn.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/back/afternoon.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/back/dusk.png" >> out/results.tsv
+          check "webkinzHouse/assets/outdoor/back/night.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/spring.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/summer.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/fall.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/winter.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/dawn.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/afternoon.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/dusk.png" >> out/results.tsv
+          check "webkinzHouse/assets/treetop/night.png" >> out/results.tsv
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: webkinz-full-room-assets
+          name: webkinz-room-environment
           path: out/
-          if-no-files-found: error
           retention-days: 7
