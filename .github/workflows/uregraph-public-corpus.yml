@@ -1,0 +1,86 @@
+name: uregraph public corpus stress
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: source-sdk-2013
+            repo: ValveSoftware/source-sdk-2013
+            ref: master
+          - name: petari
+            repo: SMGCommunity/Petari
+            ref: master
+          - name: ilspy
+            repo: icsharpcode/ILSpy
+            ref: master
+          - name: jadx
+            repo: skylot/jadx
+            ref: master
+          - name: wabt
+            repo: WebAssembly/wabt
+            ref: main
+          - name: yosys
+            repo: YosysHQ/yosys
+            ref: main
+          - name: solidity
+            repo: ethereum/solidity
+            ref: develop
+    steps:
+      - name: Clone public corpus
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --no-tags --branch "${{ matrix.ref }}" "https://github.com/${{ matrix.repo }}.git" corpus
+          git -C corpus rev-parse HEAD > commit.txt
+          rm -rf corpus/.git
+      - name: Inventory corpus
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import collections, hashlib, json
+          root=Path('corpus')
+          exts=collections.Counter(); total=0; size=0; files=[]
+          for p in sorted(root.rglob('*')):
+              if not p.is_file(): continue
+              rel=p.relative_to(root).as_posix(); st=p.stat(); total+=1; size+=st.st_size
+              ext=(p.suffix.lower() or '<none>'); exts[ext]+=1
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+              files.append({'path':rel,'size':st.st_size,'sha256':h.hexdigest()})
+          out={'repository':'${{ matrix.repo }}','ref':'${{ matrix.ref }}','commit':Path('commit.txt').read_text().strip(),
+               'file_count':total,'total_bytes':size,'extensions':exts.most_common(),'files':files}
+          Path('inventory.json').write_text(json.dumps(out,sort_keys=True,separators=(',',':')))
+          print(json.dumps({k:out[k] for k in ('repository','commit','file_count','total_bytes')},indent=2))
+          PY
+      - name: Pack corpus
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf corpus.tar corpus inventory.json commit.txt
+          zstd -T0 -10 corpus.tar -o "${{ matrix.name }}.tar.zst"
+          sha256sum "${{ matrix.name }}.tar.zst" > "${{ matrix.name }}.tar.zst.sha256"
+      - name: Upload corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}.tar.zst
+            ${{ matrix.name }}.tar.zst.sha256
+            inventory.json
+            commit.txt
+          compression-level: 0
+          retention-days: 3
