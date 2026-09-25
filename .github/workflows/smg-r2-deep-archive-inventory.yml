@@ -1,0 +1,197 @@
+name: smg r2 deep archive inventory
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deep-scan RARC/U8/Yaz0 structure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, struct, json, collections, concurrent.futures, hashlib, time
+          from pathlib import Path
+
+          BASE='https://r2.houseofkublai.com/super-mario-galaxy/'
+          UA={'User-Agent':'uregraph-smg-deep/1'}
+
+          def req(url,start=None,end=None,method='GET'):
+              headers=dict(UA)
+              if start is not None:
+                  headers['Range']=f'bytes={start}-{end if end is not None else ""}'
+              r=urllib.request.urlopen(urllib.request.Request(url,headers=headers,method=method),timeout=60)
+              b=b'' if method=='HEAD' else r.read()
+              h=dict(r.headers); r.close(); return h,b
+
+          def cstr(b,o):
+              z=b.find(b'\0',o)
+              if z<0: raise ValueError(f'unterminated string at {o}')
+              return b[o:z].decode('utf-8','surrogateescape')
+
+          def parse_fst(b):
+              n=struct.unpack_from('>I',b,8)[0]; st=n*12
+              stack=[(n,'')]; out=[]
+              for i in range(1,n):
+                  while stack and i>=stack[-1][0]: stack.pop()
+                  parent=stack[-1][1] if stack else ''
+                  w0,w1,w2=struct.unpack_from('>III',b,i*12)
+                  typ=w0>>24; name=cstr(b,st+(w0&0xffffff)); p=parent+name
+                  if typ: stack.append((w2,p+'/'))
+                  else: out.append({'index':i,'path':p,'offset':w1,'size':w2})
+              return out
+
+          # Fetch the outer DATA FST and build file list.
+          _,fstb=req(BASE+'DATA/sys/fst.bin')
+          outer=parse_fst(fstb)
+
+          def rarc_meta(url):
+              _,head=req(url,0,0x3f)
+              if len(head)<0x40 or head[:4]!=b'RARC': raise ValueError('not RARC')
+              total,dh_off,data_rel,data_len,mram,aram,dvd=struct.unpack_from('>7I',head,4)
+              ib=0x20
+              n_nodes,node_rel,n_ent,ent_rel,str_sz,str_rel=struct.unpack_from('>6I',head,ib)
+              node_base=ib+node_rel; ent_base=ib+ent_rel; str_base=ib+str_rel
+              mend=max(node_base+n_nodes*0x10, ent_base+n_ent*0x14, str_base+str_sz)
+              _,meta=req(url,0,mend-1)
+              data_base=0x20+data_rel
+              nodes=[]
+              for i in range(n_nodes):
+                  o=node_base+i*0x10
+                  ident=meta[o:o+4].decode('ascii','replace')
+                  noff,hsh,count,first=struct.unpack_from('>IHHI',meta,o+4)
+                  nodes.append({'index':i,'ident':ident,'name':cstr(meta,str_base+noff),'hash':hsh,'count':count,'first':first})
+              ents=[]
+              for i in range(n_ent):
+                  o=ent_base+i*0x14
+                  fid,hsh,attr_name,data_or_node,size,unk=struct.unpack_from('>HHIIII',meta,o)
+                  attr=(attr_name>>24)&0xff; noff=attr_name&0x00ffffff
+                  ents.append({'index':i,'file_id':fid,'hash':hsh,'attr':attr,'name':cstr(meta,str_base+noff),
+                               'data_or_node':data_or_node,'size':size,'unknown':unk})
+              files=[]; dirs=[]
+              seen=set()
+              def walk(ni,prefix):
+                  if ni in seen: return
+                  seen.add(ni)
+                  n=nodes[ni]
+                  for j in range(n['first'],n['first']+n['count']):
+                      e=ents[j]; nm=e['name']
+                      if nm in ('.','..'): continue
+                      # Directory attribute is normally 0x02; file attrs carry 0x01/0x10/etc.
+                      if e['file_id']==0xffff or (e['attr']&0x02):
+                          child=e['data_or_node']
+                          dirs.append({'path':prefix+nm+'/','entry_index':j,'node_index':child,'attr':e['attr']})
+                          if 0<=child<len(nodes): walk(child,prefix+nm+'/')
+                      else:
+                          abs_off=data_base+e['data_or_node']
+                          files.append({'path':prefix+nm,'entry_index':j,'file_id':e['file_id'],'attr':e['attr'],
+                                        'data_offset':e['data_or_node'],'absolute_offset':abs_off,'size':e['size']})
+              walk(0,'')
+              return {'format':'RARC','file_size_header':total,'data_header_offset':dh_off,'data_base':data_base,'data_length':data_len,
+                      'mram_size':mram,'aram_size':aram,'dvd_size':dvd,'node_count':n_nodes,'entry_count':n_ent,
+                      'string_table_size':str_sz,'directories':dirs,'files':files}
+
+          def u8_meta(url):
+              _,head=req(url,0,0x3f)
+              if len(head)<0x20 or struct.unpack_from('>I',head,0)[0]!=0x55AA382D: raise ValueError('not U8')
+              root_off,header_sz,data_off=struct.unpack_from('>III',head,4)
+              # root entry determines node count
+              need=root_off+12
+              if len(head)<need:
+                  _,r0=req(url,root_off,root_off+11)
+              else:r0=head[root_off:root_off+12]
+              w0,w1,n=struct.unpack('>III',r0)
+              mend=root_off+n*12
+              # string table extends until data_off
+              _,meta=req(url,0,data_off-1)
+              st=root_off+n*12
+              stack=[(n,'')]; files=[]; dirs=[]
+              for i in range(1,n):
+                  while stack and i>=stack[-1][0]: stack.pop()
+                  prefix=stack[-1][1] if stack else ''
+                  w0,w1,w2=struct.unpack_from('>III',meta,root_off+i*12)
+                  typ=w0>>24; nm=cstr(meta,st+(w0&0xffffff)); p=prefix+nm
+                  if typ:
+                      dirs.append({'path':p+'/','index':i,'parent_index':w1,'next_index':w2}); stack.append((w2,p+'/'))
+                  else:
+                      files.append({'path':p,'index':i,'absolute_offset':w1,'size':w2})
+              return {'format':'U8','root_offset':root_off,'header_size':header_sz,'data_offset':data_off,
+                      'entry_count':n,'directories':dirs,'files':files}
+
+          def yaz0_decompress(src):
+              if src[:4]!=b'Yaz0': raise ValueError('not Yaz0')
+              size=struct.unpack_from('>I',src,4)[0]; out=bytearray(); p=16
+              valid=0; code=0
+              while len(out)<size:
+                  if valid==0:
+                      code=src[p]; p+=1; valid=8
+                  if code&0x80:
+                      out.append(src[p]); p+=1
+                  else:
+                      b1,b2=src[p],src[p+1]; p+=2
+                      dist=((b1&0x0f)<<8)|b2; cp=len(out)-(dist+1)
+                      ln=b1>>4
+                      if ln==0: ln=src[p]+0x12; p+=1
+                      else: ln+=2
+                      for _ in range(ln): out.append(out[cp]); cp+=1
+                  code=(code<<1)&0xff; valid-=1
+              return bytes(out[:size])
+
+          def inspect_outer(e):
+              path=e['path']; url=BASE+'DATA/files/'+urllib.parse.quote(path,safe='/')
+              try:
+                  _,h=req(url,0,63)
+                  magic=h[:16]
+                  row={'path':path,'outer_size':e['size'],'magic_hex':magic.hex(),'magic_ascii':''.join(chr(x) if 32<=x<127 else '.' for x in magic)}
+                  if h[:4]==b'RARC': row['archive']=rarc_meta(url)
+                  elif len(h)>=4 and struct.unpack_from('>I',h,0)[0]==0x55AA382D: row['archive']=u8_meta(url)
+                  elif h[:4]==b'Yaz0':
+                      # only one SZS here and it is small enough for a full decode.
+                      _,raw=req(url)
+                      dec=yaz0_decompress(raw)
+                      row['yaz0']={'compressed_size':len(raw),'decompressed_size':len(dec),'inner_magic_hex':dec[:16].hex(),
+                                   'inner_magic_ascii':''.join(chr(x) if 32<=x<127 else '.' for x in dec[:16])}
+                  return row
+              except Exception as ex:
+                  return {'path':path,'outer_size':e['size'],'error':repr(ex)}
+
+          targets=[e for e in outer if Path(e['path']).suffix.lower() in ('.arc','.szs','.rso','.sel','.bnr','.ast','.aw','.thp','.txt','.csv') or not Path(e['path']).suffix]
+          t0=time.time(); rows=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=32) as ex:
+              for r in ex.map(inspect_outer,targets,chunksize=1): rows.append(r)
+          rows.sort(key=lambda x:x['path'])
+
+          outer_magic=collections.Counter(); inner_ext=collections.Counter(); inner_files=0; archive_formats=collections.Counter(); errs=[]
+          for r in rows:
+              if 'error' in r: errs.append(r); continue
+              outer_magic[r['magic_hex'][:8]]+=1
+              a=r.get('archive')
+              if a:
+                  archive_formats[a['format']]+=1
+                  inner_files+=len(a['files'])
+                  for f in a['files']:
+                      inner_ext[Path(f['path']).suffix.lower() or '<none>']+=1
+
+          out={'format':'uregraph-smg-r2-deep-archive-inventory-v1','base':BASE,'target_count':len(targets),
+               'scan_seconds':time.time()-t0,'archive_formats':archive_formats,'outer_magic_counts':outer_magic,
+               'inner_file_count':inner_files,'inner_extensions':inner_ext.most_common(),'errors':errs,'objects':rows}
+          Path('out/deep_inventory.json').write_text(json.dumps(out,indent=2,sort_keys=True),encoding='utf-8')
+          summary={'target_count':len(targets),'scan_seconds':out['scan_seconds'],'archive_formats':dict(archive_formats),
+                   'inner_file_count':inner_files,'inner_extensions':inner_ext.most_common(60),'errors':len(errs)}
+          Path('out/summary.json').write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+      - name: Upload deep inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: smg-r2-deep-archive-inventory
+          path: out/
+          retention-days: 3
