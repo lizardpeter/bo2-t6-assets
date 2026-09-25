@@ -12,19 +12,19 @@ permissions:
 jobs:
   harvest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - name: Probe and fetch Webkinz endpoints
+      - name: Fetch current Webkinz bootstrap and map assets
         shell: bash
         run: |
           set -uo pipefail
-          mkdir -p out/files out/meta
+          mkdir -p out/files out/meta out/maps
 
           fetch() {
             local name="$1"
             local url="$2"
             echo "$url" > "out/meta/$name.url"
-            curl -L --fail-with-body --retry 2 --retry-all-errors               --connect-timeout 20 --max-time 180               -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'               -D "out/meta/$name.headers"               -o "out/files/$name"               "$url"               >"out/meta/$name.stdout" 2>"out/meta/$name.stderr" || true
+            curl -L --fail-with-body --retry 2 --retry-all-errors               --connect-timeout 15 --max-time 180               -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'               -D "out/meta/$name.headers"               -o "out/files/$name"               "$url"               >"out/meta/$name.stdout" 2>"out/meta/$name.stderr" || true
             if [ -f "out/files/$name" ]; then
               wc -c "out/files/$name" > "out/meta/$name.size"
               file "out/files/$name" > "out/meta/$name.file"
@@ -32,76 +32,140 @@ jobs:
             fi
           }
 
-          for h in play.webkinz.com downloads.webkinz.com www.webkinz.com assets.webkinz.com bluepload.unstable.life db-api.unstable.life ooooooooo.ooo; do
-            {
-              echo "### $h"
-              getent ahosts "$h" || true
-            } >> out/meta/dns.txt 2>&1
-          done
-
+          # Core live config/updater.
           fetch wconf_js_php 'https://play.webkinz.com/wconf.js.php'
           fetch latest_yml 'https://downloads.webkinz.com/apps/latest.yml'
           fetch play_root 'https://play.webkinz.com/'
-          fetch webkinz_swf 'https://www.webkinz.com/Webkinz.swf?v320_181'
-          fetch main2_swf 'https://www.webkinz.com/SWF/main2.swf?v=v320_181'
-          fetch translist_xml 'https://www.webkinz.com/XML/L10N/TransList.xml'
+
+          # Angular shell discovered from play root.
+          fetch angular_runtime 'https://play.webkinz.com/runtime.4fd09af43b6bc8d95a03.js'
+          fetch angular_polyfills 'https://play.webkinz.com/polyfills.8ae21cca062f6f7f7c29.js'
+          fetch angular_vendor 'https://play.webkinz.com/vendor.f9da5857a20f170f68a7.js'
+          fetch angular_main 'https://play.webkinz.com/main.f0803e1f17ed9e88d9ce.js'
+
+          # Current and old-version query variants for hash comparison.
+          fetch webkinz_swf_current 'https://www.webkinz.com/Webkinz.swf?v390_249'
+          fetch webkinz_swf_oldquery 'https://www.webkinz.com/Webkinz.swf?v320_181'
+          fetch main2_www_current 'https://www.webkinz.com/SWF/main2.swf?v=v390_249'
+          fetch main2_assets_current 'https://assets.webkinz.com/SWF/main2.swf?v=v390_249'
+
+          # Current bootstrap children recovered from ActionScript strings.
+          fetch webkinzXML_swf 'https://assets.webkinz.com/SWF/server/webkinzXML.swf?v=v390_249'
+          fetch as3bridgeService_swf 'https://assets.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249'
+          fetch adBridge_swf 'https://assets.webkinz.com/SWF/server/adBridge.swf?v=v390_249'
+          fetch envMain_swf 'https://assets.webkinz.com/SWF/staticdata/envMain.swf?v=v390_249'
+          fetch tips_swf 'https://assets.webkinz.com/SWF/staticdata/tips.swf?v=v390_249'
+          fetch views_swf 'https://assets.webkinz.com/SWF/staticdata/views.swf?v=v390_249'
+          fetch mapi_swf 'https://assets.webkinz.com/SWF/VIEWS/MU2/MAPI.swf?rnd=v390_249'
+          fetch event_dispatcher_swf 'https://assets.webkinz.com/SWF/EventDispatcherScopeResolver.swf?v=v390_249'
+          fetch click_tracker_swf 'https://assets.webkinz.com/SWF/ClickTracker/WebkinzClickTracker.swf?v=v390_249'
+          fetch social_hub_swf 'https://assets.webkinz.com/SWF/SocialHub/SocialHub.swf?v=v390_249'
+          fetch fclicky_swf 'https://assets.webkinz.com/SWF/FLOATOBJECT/FClickyManager.swf?v=v390_249'
+
+          # XML/config children.
+          fetch instance_factory_xml 'https://assets.webkinz.com/XML/InstanceFactory/InstanceFactoryData.xml?v=v390_249'
+          fetch translist_xml 'https://assets.webkinz.com/XML/L10N/TransList.xml?v=v390_249'
+          fetch language_exception_xml 'https://assets.webkinz.com/XML/L10N/languageException.xml?v=v390_249'
+          fetch main2_xml 'https://assets.webkinz.com/XML/L10N/main2.xml?v=v390_249'
+          fetch multi_tiered_xml 'https://assets.webkinz.com/XML/multiTiered.xml?v=v390_249'
+          fetch views_xml 'https://assets.webkinz.com/xml/views.xml?v=v390_249'
+          fetch feature_errors_xml 'https://assets.webkinz.com/featureErrors.xml?v=v390_249'
+          fetch ka_course_xml 'https://assets.webkinz.com/SWF/VIEWS/Kinzville/Academy/Data/KaCourseDetails.xml?v=v390_249'
+
+          # Server discovery/config.
+          fetch hydra_servers_xml 'https://es4aws.webkinz.com/servers.xml'
+
+          # Preservation/catalog probes.
           fetch flashpoint_search 'https://ooooooooo.ooo/browse?search=Webkinz'
           fetch dbapi_search_q 'https://db-api.unstable.life/search?query=Webkinz'
-          fetch dbapi_search_s 'https://db-api.unstable.life/search?search=Webkinz'
 
-          curl -IL --connect-timeout 20 --max-time 120             -A 'Mozilla/5.0'             'https://bluepload.unstable.life/webkinzfiles.7z'             > out/meta/webkinzfiles_7z_head.txt 2>&1 || true
-
+          # Decompress SWFs and harvest strings/paths.
           python3 - <<'PY'
           from pathlib import Path
-          import re, zlib, json
+          import re, zlib, lzma, struct, json, xml.etree.ElementTree as ET
 
-          root = Path("out/files")
-          report = {}
-          url_re = re.compile(rb'https?://[^\x00\s\x22\x27<>\\]+', re.I)
-          path_re = re.compile(rb'(?:[A-Za-z0-9_.-]+/)+(?:[A-Za-z0-9_.%?=&+-]+\.(?:swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js))(?:\?[^\x00\s\x22\x27<>\\]*)?', re.I)
+          root=Path('out/files')
+          report={}
+          url_re=re.compile(rb'https?://[^\x00\s\x22\x27<>\\]+',re.I)
+          path_re=re.compile(rb'(?:[A-Za-z0-9_.-]+/)+(?:[A-Za-z0-9_.%?=&+~-]+\.(?:swf|xml|php|jpg|jpeg|png|gif|mp3|wav|flv|json|js))(?:\?[^\x00\s\x22\x27<>\\]*)?',re.I)
 
-          def normalize(data):
-              if len(data) >= 8 and data[:3] == b'CWS':
+          def swf_norm(b):
+              if len(b)<8:return b
+              if b[:3]==b'CWS':
+                  try:return b'FWS'+b[3:8]+zlib.decompress(b[8:])
+                  except:return b
+              if b[:3]==b'ZWS' and len(b)>=17:
                   try:
-                      return b'FWS' + data[3:8] + zlib.decompress(data[8:])
-                  except Exception:
-                      pass
-              return data
+                      prop=b[12]; ds=struct.unpack_from('<I',b,13)[0]
+                      lc=prop%9; t=prop//9; lp=t%5; pb=t//5
+                      raw=lzma.decompress(b[17:],format=lzma.FORMAT_RAW,filters=[{'id':lzma.FILTER_LZMA1,'dict_size':ds,'lc':lc,'lp':lp,'pb':pb}])
+                      return b'FWS'+b[3:8]+raw
+                  except:return b
+              return b
 
-          for p in root.iterdir():
-              if not p.is_file():
-                  continue
-              raw = p.read_bytes()
-              data = normalize(raw)
-              urls = sorted(set(m.group(0).decode("latin1","ignore") for m in url_re.finditer(data)))
-              paths = sorted(set(m.group(0).decode("latin1","ignore") for m in path_re.finditer(data)))
-              report[p.name] = {
-                  "raw_size": len(raw),
-                  "normalized_size": len(data),
-                  "urls": urls,
-                  "paths": paths,
-              }
-              if data != raw:
-                  (Path("out/files") / (p.name + ".uncompressed.swf")).write_bytes(data)
+          for p in list(root.iterdir()):
+              if not p.is_file():continue
+              raw=p.read_bytes(); data=swf_norm(raw)
+              if data!=raw:
+                  (root/(p.name+'.uncompressed.swf')).write_bytes(data)
+              urls=sorted(set(m.group(0).decode('latin1','ignore') for m in url_re.finditer(data)))
+              paths=sorted(set(m.group(0).decode('latin1','ignore') for m in path_re.finditer(data)))
+              strings=[s.decode('latin1','ignore') for s in re.findall(rb'[ -~]{6,}',data)]
+              interesting=sorted(set(s for s in strings if any(k in s.lower() for k in ['.swf','.xml','.php','webkinz','assets','api.','server','loader','arcade','main2','wconf'])))
+              report[p.name]={'raw_size':len(raw),'normalized_size':len(data),'signature':raw[:3].decode('latin1','ignore'),'urls':urls,'paths':paths,'interesting_strings':interesting[:25000]}
 
-          Path("out/report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-          Path("out/urls.txt").write_text("\n".join(sorted({u for v in report.values() for u in v["urls"]})) + "\n")
-          Path("out/paths.txt").write_text("\n".join(sorted({u for v in report.values() for u in v["paths"]})) + "\n")
+          Path('out/report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+          Path('out/urls.txt').write_text('\n'.join(sorted({u for v in report.values() for u in v['urls']}))+'\n')
+          Path('out/paths.txt').write_text('\n'.join(sorted({u for v in report.values() for u in v['paths']}))+'\n')
+
+          # Build live URLs from TransList.
+          tp=root/'translist_xml'
+          if tp.exists():
+              try:
+                  xr=ET.parse(tp).getroot()
+                  swfs=[]; trans=[]
+                  for e in xr.findall('.//file'):
+                      n=e.attrib.get('n'); tf=e.attrib.get('tf')
+                      if n and not n.startswith('http'):
+                          swfs.append('https://assets.webkinz.com/SWF/'+n.lstrip('/')+'?v=v390_249')
+                      if tf:
+                          trans.append('https://assets.webkinz.com/XML/L10N/'+tf.lstrip('/')+'?v=v390_249')
+                  swfs=sorted(set(swfs));trans=sorted(set(trans))
+                  Path('out/maps/translist_content_urls.txt').write_text('\n'.join(swfs)+'\n')
+                  Path('out/maps/translist_translation_urls.txt').write_text('\n'.join(trans)+'\n')
+              except Exception as e:
+                  Path('out/maps/translist_parse_error.txt').write_text(repr(e))
           PY
 
+          # Parallel existence maps for TransList content/translation files.
+          probe_list() {
+            local infile="$1"
+            local outfile="$2"
+            if [ ! -f "$infile" ]; then return; fi
+            cat "$infile" | xargs -P24 -n1 bash -c '
+              u="$1"
+              r=$(curl -L -sS -o /dev/null --connect-timeout 8 --max-time 20 -w "%{http_code}\t%{size_download}\t%{url_effective}" "$u" 2>/dev/null || true)
+              printf "%s\t%s\n" "$r" "$u"
+            ' _ | sort > "$outfile"
+          }
+          probe_list out/maps/translist_content_urls.txt out/maps/translist_content_status.tsv
+          probe_list out/maps/translist_translation_urls.txt out/maps/translist_translation_status.tsv
+
           {
-            echo '# Webkinz harvest'
+            echo '# Webkinz current harvest'
             echo
+            echo '## Downloaded'
             find out/files -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+            echo
+            echo '## Hash comparison'
+            grep -H . out/meta/*sha256 2>/dev/null || true
             echo
             echo '## URLs'
             cat out/urls.txt 2>/dev/null || true
             echo
-            echo '## Paths'
-            cat out/paths.txt 2>/dev/null || true
-            echo
-            echo '## Dump HEAD'
-            cat out/meta/webkinzfiles_7z_head.txt 2>/dev/null || true
+            echo '## TransList status counts'
+            if [ -f out/maps/translist_content_status.tsv ]; then cut -f1 out/maps/translist_content_status.tsv | sort | uniq -c; fi
+            if [ -f out/maps/translist_translation_status.tsv ]; then cut -f1 out/maps/translist_translation_status.tsv | sort | uniq -c; fi
           } > out/SUMMARY.md
 
       - name: Upload harvest
