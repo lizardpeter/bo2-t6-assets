@@ -1,0 +1,165 @@
+name: Xbox profile low-level signature scan
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - DRIVE2_TIME_FINAL.E01
+          - DRIVE3_TIME_FINAL.E01
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EWF tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3
+
+      - name: Download and mount image
+        run: |
+          set -euxo pipefail
+          IMAGE="${{ matrix.image }}"
+          BASE="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1"
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --speed-time 120 --speed-limit 1024 "$BASE/$IMAGE" -o "/tmp/$IMAGE"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          sudo ls -lh /mnt/xbox-ewf/ewf1
+
+      - name: Scan profile signatures
+        run: |
+          set -euxo pipefail
+          OUT="/tmp/profile-lowlevel-scan"
+          mkdir -p "$OUT"
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import datetime, hashlib, json, os
+
+          raw = Path("/mnt/xbox-ewf/ewf1")
+          out = Path("/tmp/profile-lowlevel-scan")
+          image = os.environ["IMAGE_NAME"]
+
+          fit_header = bytes.fromhex(
+              "584442460001000000000200000000040000020000000001"
+              "0001fffe07d101010008"
+          )
+          # FFFE07D10201000A payload bytes 0x00..0x26.
+          # The next byte (+0x27) is 0x01 in verified Live ForumDecorum238
+          # and 0x00 in local LabPlayerOne.
+          fit_r4_prefix = bytes.fromhex(
+              "000100010000000c0000005000000008000000400000000000"
+              "0010470000000800000000000000"
+          )
+          phc3 = b"phc3"
+
+          pats = [
+              ("fit_header", fit_header),
+              ("fit_record4_prefix", fit_r4_prefix),
+              ("phc3", phc3),
+          ]
+          max_pat = max(len(p) for _,p in pats)
+          chunk_size = 64 * 1024 * 1024
+          size = raw.stat().st_size
+          hits=[]
+          seen=set()
+
+          with raw.open("rb",buffering=0) as f:
+              base=0
+              tail=b""
+              while True:
+                  chunk=f.read(chunk_size)
+                  if not chunk: break
+                  data=tail+chunk
+                  data_base=base-len(tail)
+                  for kind,pat in pats:
+                      pos=0
+                      while True:
+                          i=data.find(pat,pos)
+                          if i<0: break
+                          off=data_base+i
+                          key=(kind,off)
+                          if key not in seen:
+                              seen.add(key)
+                              hits.append({"kind":kind,"offset":off})
+                          pos=i+1
+                  base += len(chunk)
+                  tail=data[-(max_pat-1):]
+                  if base % (1024**3) < chunk_size:
+                      print(f"{image}: {base/(1024**3):.1f}/{size/(1024**3):.1f} GiB hits={len(hits)}",flush=True)
+
+          EPOCH=116444736000000000
+          with raw.open("rb",buffering=0) as f:
+              for h in hits:
+                  f.seek(h["offset"])
+                  if h["kind"]=="fit_record4_prefix":
+                      b=f.read(0x60)
+                      h["record_len"]=len(b)
+                      h["candidate_byte_0x27"]=b[0x27] if len(b)>0x27 else None
+                      h["record_sha256"]=hashlib.sha256(b).hexdigest()
+                      h["record_hex"]=b.hex()
+                  elif h["kind"]=="fit_header":
+                      b=f.read(0x80)
+                      h["prefix_sha256"]=hashlib.sha256(b).hexdigest()
+                      h["prefix_hex"]=b.hex()
+                  elif h["kind"]=="phc3":
+                      b=f.read(71)
+                      h["sha256_71"]=hashlib.sha256(b).hexdigest()
+                      h["raw_71_hex"]=b.hex()
+                      if len(b)>=71:
+                          ft=int.from_bytes(b[0x0c:0x14],"big")
+                          title=int.from_bytes(b[0x20:0x24],"big")
+                          h["u32_04"]=int.from_bytes(b[4:8],"big")
+                          h["u32_08"]=int.from_bytes(b[8:12],"big")
+                          h["u32_14"]=int.from_bytes(b[0x14:0x18],"big")
+                          h["u32_18"]=f"{int.from_bytes(b[0x18:0x1c],'big'):08X}"
+                          h["u32_1c"]=f"{int.from_bytes(b[0x1c:0x20],'big'):08X}"
+                          h["title_id_20"]=f"{title:08X}"
+                          try:
+                              sec=(ft-EPOCH)/10_000_000
+                              d=datetime.datetime.fromtimestamp(sec,datetime.timezone.utc)
+                              h["utc_0c"]=d.isoformat()
+                              h["plausible_time"]=2005<=d.year<=2020
+                          except Exception:
+                              h["utc_0c"]=None
+                              h["plausible_time"]=False
+
+          hits.sort(key=lambda x:(x["offset"],x["kind"]))
+          summary={
+              "image":image,
+              "raw_size":size,
+              "counts":{k:sum(1 for h in hits if h["kind"]==k) for k,_ in pats},
+              "fit_candidate_values":[h["candidate_byte_0x27"] for h in hits if h["kind"]=="fit_record4_prefix"],
+              "hits":hits
+          }
+          (out/f"{image}.json").write_text(json.dumps(summary,indent=2))
+          print(json.dumps({
+              "image":image,
+              "counts":summary["counts"],
+              "fit_candidate_values":summary["fit_candidate_values"],
+              "phc3":[
+                  {"offset":h["offset"],"title":h.get("title_id_20"),"utc":h.get("utc_0c"),"sha256":h.get("sha256_71")}
+                  for h in hits if h["kind"]=="phc3" and h.get("plausible_time")
+              ]
+          },indent=2))
+          PY
+        env:
+          IMAGE_NAME: ${{ matrix.image }}
+
+      - name: Upload scan result
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-lowlevel-${{ matrix.image }}
+          path: /tmp/profile-lowlevel-scan
+          retention-days: 14
