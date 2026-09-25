@@ -1,0 +1,280 @@
+name: Recover DRIVE3 Forum lifecycle by root hash
+
+on:
+  push:
+    branches:
+      - tmp-xbox-live-profile-extract
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install EWF tools and Rust
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ewf-tools fuse3 jq
+
+      - name: Build root-hash STFS carver
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/forum-carver/src
+          cat > /tmp/forum-carver/Cargo.toml <<'EOF'
+          [package]
+          name = "forum-carver"
+          version = "0.1.0"
+          edition = "2024"
+          [dependencies]
+          sha1 = "0.11"
+          sha2 = "0.10"
+          hex = "0.4"
+          serde_json = "1"
+          EOF
+
+          cat > /tmp/forum-carver/src/main.rs <<'EOF'
+          use sha1::{Digest as Sha1Digest,Sha1};
+          use sha2::{Digest as Sha2Digest,Sha256};
+          use serde_json::json;
+          use std::collections::{HashMap,HashSet};
+          use std::env;
+          use std::fs::{self,File};
+          use std::io::{Read,Seek,SeekFrom};
+          use std::path::Path;
+
+          const PART:u64=0x1_30EB_0000;
+          const SB:u64=0x1000;
+          const SECTOR:u64=0x200;
+          const B:usize=0x1000;
+          const CLUSTER:u32=17803;
+          const SIZE:usize=176128;
+          const PROFILE:&str="E0000255AEF799DA";
+
+          fn align(v:u64,a:u64)->u64{(v+a-1)&!(a-1)}
+          fn s1(x:&[u8])->[u8;20]{let mut h=Sha1::new();h.update(x);h.finalize().into()}
+          fn s256(x:&[u8])->String{let mut h=Sha256::new();h.update(x);hex::encode(h.finalize())}
+          fn u32be(x:&[u8],o:usize)->u32{u32::from_be_bytes(x[o..o+4].try_into().unwrap())}
+          fn poff(header:u32,n:usize)->usize{align(header as u64,0x1000) as usize+(n+2)*B}
+
+          fn scan_for_hash(
+              f:&mut File,start:u64,end:u64,target:[u8;20],label:&str
+          )->Option<(Vec<u8>,u64)>{
+              let mut buf=vec![0u8;8*1024*1024];
+              let mut pos=start-(start%B as u64);
+              f.seek(SeekFrom::Start(pos)).unwrap();
+              while pos<end{
+                  let mut want=((end-pos) as usize).min(buf.len());
+                  want-=want%B;
+                  if want==0{break;}
+                  if f.read_exact(&mut buf[..want]).is_err(){break;}
+                  for o in (0..want).step_by(B){
+                      if s1(&buf[o..o+B])==target{
+                          let abs=pos+o as u64;
+                          println!("FOUND {label} SHA1={} raw=0x{abs:X}",hex::encode(target));
+                          return Some((buf[o..o+B].to_vec(),abs));
+                      }
+                  }
+                  pos+=want as u64;
+              }
+              None
+          }
+
+          fn main(){
+              let rawp=env::args().nth(1).unwrap();
+              let out=env::args().nth(2).unwrap();
+              fs::create_dir_all(&out).unwrap();
+              let mut f=File::open(&rawp).unwrap();
+              let raw_size=f.seek(SeekFrom::End(0)).unwrap();
+
+              f.seek(SeekFrom::Start(PART)).unwrap();
+              let mut sb=[0u8;0x1000]; f.read_exact(&mut sb).unwrap();
+              assert_eq!(&sb[..4],b"XTAF");
+              let spc=u32be(&sb,8) as u64;
+              let cs=spc*SECTOR;
+              let part_size=raw_size-PART;
+              let tc=(part_size-SB)/cs;
+              let total_sectors=(part_size/SECTOR)-(SB/SECTOR);
+              let est=total_sectors.saturating_sub(260)/spc;
+              let fat_entry=if est>=65520{4}else{2};
+              let fat_size=align(tc*fat_entry,0x1000);
+              let data_abs=PART+SB+fat_size;
+              let start=data_abs+((CLUSTER as u64-1)*cs);
+
+              f.seek(SeekFrom::Start(start)).unwrap();
+              let mut partial=vec![0u8;SIZE]; f.read_exact(&mut partial).unwrap();
+              assert_eq!(&partial[..4],b"CON ");
+              assert_eq!(hex::encode_upper(&partial[0x371..0x379]),PROFILE);
+              assert_eq!(u32be(&partial,0x344),0x00010000);
+              assert_eq!(u32be(&partial,0x360),0xFFFE07D1);
+
+              let header=u32be(&partial,0x340);
+              let ds=align(header as u64,0x1000) as usize;
+              let vd=0x379usize;
+              let stored_active=((partial[vd+2]>>1)&1) as usize;
+              let blocks=u32be(&partial,vd+0x1C) as usize;
+              assert!(blocks>0 && blocks<0xAA);
+              let mut root=[0u8;20]; root.copy_from_slice(&partial[vd+8..vd+28]);
+              println!("header=0x{header:X} data_start=0x{ds:X} blocks={blocks} stored_active={stored_active} root={}",hex::encode(root));
+
+              let mut table:Option<(Vec<u8>,u64,String)>=None;
+              for idx in 0..2usize{
+                  let off=ds+idx*B;
+                  let h=s1(&partial[off..off+B]);
+                  println!("slot{idx} sha1={}",hex::encode(h));
+                  if h==root{table=Some((partial[off..off+B].to_vec(),start+off as u64,format!("package-slot-{idx}")));}
+              }
+
+              if table.is_none(){
+                  let radius=4u64*1024*1024*1024;
+                  let lo=start.saturating_sub(radius).max(PART);
+                  let hi=(start+radius).min(raw_size);
+                  if let Some((b,a))=scan_for_hash(&mut f,lo,hi,root,"root-table-local"){
+                      table=Some((b,a,"disk-local".into()));
+                  }
+              }
+              if table.is_none(){
+                  if let Some((b,a))=scan_for_hash(&mut f,data_abs,raw_size,root,"root-table-full"){
+                      table=Some((b,a,"disk-full".into()));
+                  }
+              }
+              let (table_bytes,table_abs,table_source)=table.expect("authoritative L0 table not found");
+              assert_eq!(s1(&table_bytes),root);
+
+              // Restore the authoritative L0 into the slot selected by the header.
+              let active_off=ds+stored_active*B;
+              partial[active_off..active_off+B].copy_from_slice(&table_bytes);
+
+              let zero=s1(&vec![0u8;B]);
+              let mut expected=Vec::new();
+              let mut missing_hashes=HashSet::new();
+              let mut initial=0usize;
+              for n in 0..blocks{
+                  let e=n*24;
+                  let mut h=[0u8;20]; h.copy_from_slice(&table_bytes[e..e+20]);
+                  expected.push(h);
+                  let p=poff(header,n);
+                  if p+B<=partial.len() && s1(&partial[p..p+B])==h{initial+=1;}
+                  else if h!=zero{missing_hashes.insert(h);}
+              }
+              println!("initial valid={initial}/{blocks}; missing unique={}",missing_hashes.len());
+
+              let mut found:HashMap<[u8;20],(Vec<u8>,u64,&'static str)>=HashMap::new();
+              if expected.iter().any(|x|*x==zero){found.insert(zero,(vec![0u8;B],0,"zero"));}
+              // Seed any 4K block in partial.
+              for o in (0..partial.len()).step_by(B){
+                  if o+B>partial.len(){break;}
+                  let h=s1(&partial[o..o+B]);
+                  if missing_hashes.contains(&h){found.entry(h).or_insert((partial[o..o+B].to_vec(),start+o as u64,"package-seed"));}
+              }
+              let mut remain:HashSet<[u8;20]>=missing_hashes.iter().copied().filter(|h|!found.contains_key(h)).collect();
+
+              let mut buf=vec![0u8;8*1024*1024];
+              let radius=4u64*1024*1024*1024;
+              let lo=start.saturating_sub(radius).max(data_abs);
+              let hi=(start+radius).min(raw_size);
+              f.seek(SeekFrom::Start(lo-(lo%B as u64))).unwrap();
+              let mut pos=lo-(lo%B as u64);
+              while pos<hi && !remain.is_empty(){
+                  let mut want=((hi-pos) as usize).min(buf.len()); want-=want%B; if want==0{break;}
+                  f.read_exact(&mut buf[..want]).unwrap();
+                  for o in (0..want).step_by(B){
+                      let h=s1(&buf[o..o+B]);
+                      if remain.remove(&h){found.insert(h,(buf[o..o+B].to_vec(),pos+o as u64,"disk-local"));}
+                  }
+                  pos+=want as u64;
+              }
+              if !remain.is_empty(){
+                  f.seek(SeekFrom::Start(data_abs)).unwrap();
+                  let mut pos=data_abs;
+                  while pos<raw_size && !remain.is_empty(){
+                      let mut want=((raw_size-pos) as usize).min(buf.len()); want-=want%B; if want==0{break;}
+                      f.read_exact(&mut buf[..want]).unwrap();
+                      for o in (0..want).step_by(B){
+                          let h=s1(&buf[o..o+B]);
+                          if remain.remove(&h){found.insert(h,(buf[o..o+B].to_vec(),pos+o as u64,"disk-full"));}
+                      }
+                      pos+=want as u64;
+                  }
+              }
+
+              let need_len=ds+(blocks+2)*B;
+              if partial.len()<need_len{partial.resize(need_len,0);}
+              let mut sources=Vec::new();
+              for n in 0..blocks{
+                  let p=poff(header,n); let h=expected[n];
+                  let cur=s1(&partial[p..p+B]);
+                  let (kind,abs)=if cur==h{
+                      ("contiguous",Some(start+p as u64))
+                  }else if h==zero{
+                      partial[p..p+B].fill(0);("zero",None)
+                  }else if let Some((b,a,k))=found.get(&h){
+                      partial[p..p+B].copy_from_slice(b);(*k,Some(*a))
+                  }else{("missing",None)};
+                  sources.push(json!({"logical_block":n,"sha1":hex::encode(h),"source":kind,"raw_offset":abs.map(|x|format!("0x{x:X}"))}));
+              }
+              let bad:Vec<usize>=(0..blocks).filter(|n|{
+                  let p=poff(header,*n);s1(&partial[p..p+B])!=expected[*n]
+              }).collect();
+              println!("rebuilt valid={}/{} bad={:?}",blocks-bad.len(),blocks,bad);
+              assert!(bad.is_empty());
+              assert_eq!(s1(&partial[active_off..active_off+B]),root);
+
+              let rdir=Path::new(&out).join("reconstructed");fs::create_dir_all(&rdir).unwrap();
+              fs::write(rdir.join(PROFILE),&partial).unwrap();
+              let manifest=json!({
+                "profile":PROFILE,"source_image":"DRIVE3_TIME_FINAL.E01",
+                "deleted_first_cluster":CLUSTER,"deleted_file_size":SIZE,
+                "profile_start_abs":format!("0x{start:X}"),"header_size":header,
+                "logical_blocks":blocks,"initial_valid":initial,"rebuilt_valid":blocks,
+                "root_hash":hex::encode(root),"root_table_source":table_source,
+                "root_table_raw_offset":format!("0x{table_abs:X}"),
+                "stored_active_index":stored_active,
+                "rebuilt_sha256":s256(&partial),"sources":sources
+              });
+              fs::write(Path::new(&out).join("manifest.json"),serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+              println!("{}",serde_json::to_string_pretty(&manifest).unwrap());
+          }
+          EOF
+          cargo build --release --manifest-path /tmp/forum-carver/Cargo.toml
+
+      - name: Download DRIVE3 and recover Forum lifecycle copy
+        run: |
+          set -euxo pipefail
+          IMAGE=DRIVE3_TIME_FINAL.E01
+          URL="https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2014-xbox1/$IMAGE"
+          OUT=/tmp/forum-drive3-lifecycle
+          mkdir -p "$OUT"
+          sudo mkdir -p /mnt/xbox-ewf
+          sudo modprobe fuse || true
+          curl -fL --retry 8 --retry-all-errors --connect-timeout 30 \
+            --speed-time 120 --speed-limit 1024 "$URL" -o "/tmp/$IMAGE"
+          sha256sum "/tmp/$IMAGE" | tee "$OUT/source-image.sha256"
+          sudo ewfmount "/tmp/$IMAGE" /mnt/xbox-ewf
+          sudo /tmp/forum-carver/target/release/forum-carver /mnt/xbox-ewf/ewf1 "$OUT" | tee "$OUT/recover.log"
+          sudo fusermount3 -u /mnt/xbox-ewf || sudo umount /mnt/xbox-ewf || true
+          sudo chown -R "$USER":"$USER" "$OUT"
+
+      - name: Extract recovered package
+        run: |
+          set -euxo pipefail
+          OUT=/tmp/forum-drive3-lifecycle
+          git clone --depth 1 https://github.com/MVEALNG/NXE-Dashboard-Recomp.git /tmp/nxe
+          mkdir -p "$OUT/unpacked"
+          python3 /tmp/nxe/tools/extract_stfs.py \
+            "$OUT/reconstructed/E0000255AEF799DA" "$OUT/unpacked" | tee "$OUT/unpacked/extract.log"
+          find "$OUT/unpacked" -type f -printf '%p %s bytes\n' | sort
+
+      - name: Upload recovered lifecycle profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xbox360-forum-drive3-root-hash-recovery
+          path: /tmp/forum-drive3-lifecycle
+          if-no-files-found: warn
+          retention-days: 7
