@@ -1,0 +1,54 @@
+name: uregraph t6 repo corpus
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Pack exact repository tree and metadata
+        shell: bash
+        run: |
+          set -euxo pipefail
+          COMMIT=$(git rev-parse HEAD)
+          printf '%s\n' "$COMMIT" > commit.txt
+          git ls-files -z | python3 - <<'PY'
+          import sys,hashlib,json,os
+          from pathlib import Path
+          raw=sys.stdin.buffer.read().split(b'\0')
+          files=[]; total=0
+          for rb in raw:
+              if not rb: continue
+              p=Path(os.fsdecode(rb))
+              if not p.is_file(): continue
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for c in iter(lambda:f.read(1024*1024),b''): h.update(c)
+              s=p.stat().st_size; total+=s
+              files.append({'path':p.as_posix(),'size':s,'sha256':h.hexdigest()})
+          Path('inventory.json').write_text(json.dumps({'commit':Path('commit.txt').read_text().strip(),'file_count':len(files),'total_bytes':total,'files':files},separators=(',',':'),sort_keys=True))
+          PY
+          rm -rf .git
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf t6-repo.tar .
+          zstd -T0 -12 t6-repo.tar -o t6-repo.tar.zst
+          sha256sum t6-repo.tar.zst > t6-repo.tar.zst.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-repo-corpus
+          path: |
+            t6-repo.tar.zst
+            t6-repo.tar.zst.sha256
+            inventory.json
+            commit.txt
+          compression-level: 0
+          retention-days: 3
