@@ -1,0 +1,108 @@
+name: uregraph t6 ordinal xasset stage5
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: uregraph-corpus-stress
+      - name: Build exact FastFile expander
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+      - name: Expand verified zones and emit ordinal XAsset tables
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/raw /tmp/expanded /tmp/out
+          cat > /tmp/zones.tsv <<'EOF'
+          code_post_gfx.ff|670407ecdbc6aedbfff7eb9961e403780798af6394aec46be1249650e54d9cd3|e9773571e1a8d282fb0309a9b77a61455cc65a2d10f6b6426586d4b84e0ef16f|all
+          code_post_gfx_mp.ff|b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3|a80936d857642cefa5d68c59a539408c3f10c5169ce0af0b6ecae94ffa79c0ab|all
+          common_patch_mp.ff|95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9|486ac8742cafad195c4e2f997fb55c77ffd49fdbec78ba516a477f78d577420c|all
+          en_code_post_gfx.ff|f4b25c8aef7fc59644775ba974051641d74b35a6117e6cb48e471629bc2577a8|538d0236c5d0ffd5c7b846ff713a1fb14978b516e98a47d9839efb89a0f0ade8|english
+          en_code_post_gfx_mp.ff|7534d3ae7ceaabacbea23576f89a78c15e5ff881e542e8fc38ed740070ab2940|e9e1c4223b5685dd3dc1d47b972ec41a8005cd1d60c4102d5cf8aa9404a306cb|english
+          patch_mp.ff|459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e|1bd82b0e99fcea3a9cb1c2342634f1da0d699b3fdadfa9f7c7fe15595952a7b9|all
+          common_mp.ff|93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77|fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce|all
+          EOF
+          while IFS='|' read -r name rawsha expsha lang; do
+            url="https://r2.houseofkublai.com/bo2/zone/$lang/$name"
+            raw="/tmp/raw/$name"
+            exp="/tmp/expanded/${name%.ff}.expanded.bin"
+            curl -fL --retry 5 --retry-delay 2 -o "$raw" "$url"
+            echo "$rawsha  $raw" | sha256sum -c -
+            /tmp/t6_expand "$raw" "$exp" "${name%.ff}"
+            echo "$expsha  $exp" | sha256sum -c -
+            python3 - "$name" "$url" "$rawsha" "$expsha" "$exp" "/tmp/out/${name%.ff}.xassets.json" <<'PY'
+          import sys,struct,json,hashlib,collections
+          name,url,rawsha,expsha,epath,out=sys.argv[1:]
+          data=open(epath,'rb').read()
+          TYPES=[
+          "XMODELPIECES","PHYSPRESET","PHYSCONSTRAINTS","DESTRUCTIBLEDEF","XANIMPARTS","XMODEL","MATERIAL","TECHNIQUE_SET","IMAGE","SOUND",
+          "SOUND_PATCH","CLIPMAP","CLIPMAP_PVS","COMWORLD","GAMEWORLD_SP","GAMEWORLD_MP","MAP_ENTS","GFXWORLD","LIGHT_DEF","UI_MAP","FONT",
+          "FONTICON","MENULIST","MENU","LOCALIZE_ENTRY","WEAPON","WEAPONDEF","WEAPON_VARIANT","WEAPON_FULL","ATTACHMENT","ATTACHMENT_UNIQUE",
+          "WEAPON_CAMO","SNDDRIVER_GLOBALS","FX","IMPACT_FX","AITYPE","MPTYPE","MPBODY","MPHEAD","CHARACTER","XMODELALIAS","RAWFILE","STRINGTABLE",
+          "LEADERBOARD","XGLOBALS","DDL","GLASSES","EMBLEMSET","SCRIPTPARSETREE","KEYVALUEPAIRS","VEHICLEDEF","MEMORYBLOCK","ADDON_MAP_ENTS","TRACER",
+          "SKINNEDVERTS","QDB","SLUG","FOOTSTEP_TABLE","FOOTSTEPFX_TABLE","ZBARRIER"]
+          FOLLOW=0xffffffff; INSERT=0xfffffffe
+          if hashlib.sha256(data).hexdigest()!=expsha: raise SystemExit('expanded hash drift')
+          blocks=list(struct.unpack_from('<8I',data,8))
+          sc,sp,dc,dp,ac,ap=struct.unpack_from('<6I',data,40)
+          if sc and sp!=FOLLOW: raise SystemExit('script list not following')
+          if dc and dp!=FOLLOW: raise SystemExit('dep list not following')
+          if ac and ap!=FOLLOW: raise SystemExit('asset array not following')
+          pos=64
+          def cend(p):
+            z=data.find(b'\0',p)
+            if z<0: raise SystemExit('unterminated inline string')
+            return z+1
+          for count,label in [(sc,'script'),(dc,'dep')]:
+            ptrs=struct.unpack_from(f'<{count}I',data,pos) if count else ()
+            pos+=count*4
+            for p in ptrs:
+              if p in (FOLLOW,INSERT): pos=cend(pos)
+          arr=pos
+          rows=[]; counts=collections.Counter()
+          for i in range(ac):
+            off=arr+i*8; typ,ptr=struct.unpack_from('<II',data,off)
+            if typ>=60: raise SystemExit(f'bad type {typ} at {i}')
+            counts[TYPES[typ]]+=1
+            rows.append({'xasset_index':i,'asset_type':typ,'asset_type_name':TYPES[typ],
+                         'raw_pointer':f'0x{ptr:08X}','table_source_offset':off})
+          obj={'format':'uregraph-t6-xasset-ordinal-inventory-v1','zone':name,'url':url,
+               'raw_sha256':rawsha,'expanded_sha256':expsha,'expanded_bytes':len(data),
+               'block_sizes':blocks,'script_string_count':sc,'dependency_count':dc,
+               'asset_count':ac,'asset_array_source_offset':arr,'asset_body_source_offset':arr+ac*8,
+               'asset_type_counts':dict(sorted(counts.items())),'rows':rows,
+               'proof_boundary':'Rows are direct little-endian reads of the exact verified expanded retail XAsset array; no names or semantic pointer targets are inferred.'}
+          open(out,'w').write(json.dumps(obj,separators=(',',':')))
+          print(name,ac,dict(counts))
+          PY
+          done < /tmp/zones.tsv
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          rows=[]
+          for p in sorted(Path('/tmp/out').glob('*.xassets.json')):
+              d=json.loads(p.read_text())
+              rows.append({'zone':d['zone'],'raw_sha256':d['raw_sha256'],'expanded_sha256':d['expanded_sha256'],
+                           'asset_count':d['asset_count'],'asset_type_counts':d['asset_type_counts'],
+                           'inventory_sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          Path('/tmp/out/summary.json').write_text(json.dumps({'format':'uregraph-t6-xasset-stage5-summary-v1','zones':rows},indent=2,sort_keys=True))
+          print(json.dumps(rows,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-xasset-ordinal-stage5
+          path: /tmp/out/
+          compression-level: 6
+          retention-days: 3
