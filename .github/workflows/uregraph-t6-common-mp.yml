@@ -28,7 +28,7 @@ jobs:
           /tmp/t6_fastfile_expand out/common_mp.ff out/common_mp.expanded.bin common_mp --hash-out out/common_mp.final_hash.bin 2>out/expand.log
           EXP_SHA=$(sha256sum out/common_mp.expanded.bin | awk '{print $1}')
           EXP_SIZE=$(stat -c%s out/common_mp.expanded.bin)
-          python3 tools/t6_raw_xasset_inventory.py out/common_mp.expanded.bin --zone common_mp --out out/common_mp.xassets.json
+          python3 tools/t6_raw_xasset_inventory.py out/common_mp.expanded.bin --out out/common_mp.xassets.json
           python3 - <<'PY'
           import json,hashlib,pathlib,os
           root=pathlib.Path('out')
