@@ -22,10 +22,10 @@ jobs:
           set -euxo pipefail
           COMMIT=$(git rev-parse HEAD)
           printf '%s\n' "$COMMIT" > commit.txt
-          git ls-files -z | python3 - <<'PY'
-          import sys,hashlib,json,os
+          python3 - <<'PY'
+          import subprocess,hashlib,json,os
           from pathlib import Path
-          raw=sys.stdin.buffer.read().split(b'\0')
+          raw=subprocess.check_output(['git','ls-files','-z']).split(b'\0')
           files=[]; total=0
           for rb in raw:
               if not rb: continue
