@@ -1,0 +1,76 @@
+name: uregraph t6 r2 inventory
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Extract and probe House of Kublai T6 URLs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          python3 - <<'PY'
+          import pathlib,re,json,urllib.request,urllib.error,hashlib,concurrent.futures
+          root=pathlib.Path('.')
+          pat=re.compile(rb'https://r2\.houseofkublai\.com/bo2/[A-Za-z0-9_./()%+\-]+')
+          urls=set()
+          for p in root.rglob('*'):
+              if not p.is_file() or '.git' in p.parts: continue
+              try:b=p.read_bytes()
+              except:continue
+              for m in pat.finditer(b):
+                  u=m.group().decode('utf-8','ignore').rstrip('.,);\"\'')
+                  urls.add(u)
+          # Known retail executable candidates from the exact-identity probe.
+          bases=['https://r2.houseofkublai.com/bo2','https://r2.houseofkublai.com/bo2/pluto_t6_full_game','https://r2.houseofkublai.com/bo2/Plutonium/pluto_t6_full_game','https://r2.houseofkublai.com/bo2/game']
+          names=['t6mp.exe','t6mp(1)(1).exe','t6mpv43.exe']
+          urls.update(f'{b}/{n}' for b in bases for n in names)
+          expected_sha='11c7542fc571379da5b3dbb8967372c2f8283e8457ae4a78070e16d51824d5d1'
+          expected_bytes=12850328
+          def probe(u):
+              row={'url':u}
+              try:
+                  req=urllib.request.Request(u,method='HEAD',headers={'User-Agent':'uregraph-t6-r2/1'})
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      h=dict(r.headers)
+                      row.update(status=r.status,content_length=int(h.get('Content-Length','0') or 0),etag=h.get('ETag'),last_modified=h.get('Last-Modified'),accept_ranges=h.get('Accept-Ranges'),content_type=h.get('Content-Type'))
+              except urllib.error.HTTPError as e:
+                  row.update(status=e.code,error='HTTPError')
+              except Exception as e:
+                  # Retry one-byte GET because some origins reject HEAD.
+                  try:
+                      req=urllib.request.Request(u,headers={'Range':'bytes=0-0','User-Agent':'uregraph-t6-r2/1'})
+                      with urllib.request.urlopen(req,timeout=30) as r:
+                          h=dict(r.headers); cr=h.get('Content-Range'); total=int(cr.rsplit('/',1)[1]) if cr and '/' in cr else int(h.get('Content-Length','0') or 0)
+                          row.update(status=r.status,content_length=total,etag=h.get('ETag'),last_modified=h.get('Last-Modified'),accept_ranges=h.get('Accept-Ranges'),content_type=h.get('Content-Type'))
+                  except Exception as e2: row.update(status='error',error=repr(e2))
+              if row.get('content_length')==expected_bytes and u.lower().endswith('.exe'):
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'uregraph-t6-r2/1'}),timeout=90) as r: raw=r.read()
+                      row['sha256']=hashlib.sha256(raw).hexdigest(); row['exact_retail_t6mp']=row['sha256']==expected_sha and len(raw)==expected_bytes
+                  except Exception as e:row['hash_error']=repr(e)
+              return row
+          with concurrent.futures.ThreadPoolExecutor(max_workers=32) as ex:
+              rows=list(ex.map(probe,sorted(urls)))
+          exact=[r for r in rows if r.get('exact_retail_t6mp')]
+          out={'format':'uregraph-t6-r2-inventory-v1','url_count':len(rows),'reachable_count':sum(isinstance(r.get('status'),int) and r['status'] in (200,206) for r in rows),'exact_retail_t6mp':exact,'objects':rows}
+          pathlib.Path('out/t6_r2_inventory.json').write_text(json.dumps(out,indent=2,sort_keys=True))
+          print(json.dumps({'url_count':out['url_count'],'reachable_count':out['reachable_count'],'exact_retail_t6mp':exact},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-r2-inventory
+          path: out/
+          retention-days: 3
