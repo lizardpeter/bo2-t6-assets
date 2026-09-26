@@ -1,0 +1,53 @@
+name: uregraph t6 common mp hydrate
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  common:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Hydrate, expand, and inventory common_mp.ff
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          curl -fL --retry 4 -o out/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          RAW_SHA=$(sha256sum out/common_mp.ff | awk '{print $1}')
+          RAW_SIZE=$(stat -c%s out/common_mp.ff)
+          gcc -O2 -std=c11 tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_fastfile_expand -lz -lcrypto
+          /tmp/t6_fastfile_expand out/common_mp.ff out/common_mp.expanded.bin common_mp --hash-out out/common_mp.final_hash.bin 2>out/expand.log
+          EXP_SHA=$(sha256sum out/common_mp.expanded.bin | awk '{print $1}')
+          EXP_SIZE=$(stat -c%s out/common_mp.expanded.bin)
+          python3 tools/t6_raw_xasset_inventory.py out/common_mp.expanded.bin --zone common_mp --out out/common_mp.xassets.json
+          python3 - <<'PY'
+          import json,hashlib,pathlib,os
+          root=pathlib.Path('out')
+          inv=json.loads((root/'common_mp.xassets.json').read_text())
+          result={
+            'format':'uregraph-t6-common-mp-hydration-v1',
+            'url':'https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff',
+            'raw':{'bytes':(root/'common_mp.ff').stat().st_size,'sha256':hashlib.sha256((root/'common_mp.ff').read_bytes()).hexdigest()},
+            'expanded':{'bytes':(root/'common_mp.expanded.bin').stat().st_size,'sha256':hashlib.sha256((root/'common_mp.expanded.bin').read_bytes()).hexdigest()},
+            'final_hash':{'bytes':(root/'common_mp.final_hash.bin').stat().st_size,'sha256':hashlib.sha256((root/'common_mp.final_hash.bin').read_bytes()).hexdigest()},
+            'xasset_count':inv.get('xassetCount') or inv.get('xasset_count') or len(inv.get('xassets',[])),
+            'inventory_keys':list(inv.keys())
+          }
+          (root/'manifest.json').write_text(json.dumps(result,indent=2,sort_keys=True))
+          print(json.dumps(result,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-common-mp
+          path: out/
+          compression-level: 0
+          retention-days: 3
