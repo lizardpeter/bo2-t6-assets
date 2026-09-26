@@ -1,0 +1,52 @@
+name: uregraph t6 hydrate fastfiles
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hydrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download selected verified T6 FastFiles
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out/files
+          python3 - <<'PY'
+          import urllib.request, hashlib, json, pathlib
+          base='https://r2.houseofkublai.com/bo2/'
+          paths=[
+            'zone/all/code_post_gfx.ff',
+            'zone/all/code_post_gfx_mp.ff',
+            'zone/all/common_patch_mp.ff',
+            'zone/all/patch_mp.ff',
+            'zone/english/en_code_post_gfx.ff',
+            'zone/english/en_code_post_gfx_mp.ff',
+            'zone/all/mp_nuketown_2020.ff',
+          ]
+          rows=[]
+          for p in paths:
+              url=base+p
+              dst=pathlib.Path('out/files')/p
+              dst.parent.mkdir(parents=True,exist_ok=True)
+              h=hashlib.sha256(); n=0
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'uregraph-t6-hydrate/1'}),timeout=120) as r, dst.open('wb') as f:
+                  while True:
+                      b=r.read(1024*1024)
+                      if not b: break
+                      f.write(b); h.update(b); n+=len(b)
+                  rows.append({'path':p,'url':url,'size':n,'sha256':h.hexdigest(),'etag':r.headers.get('ETag'),'last_modified':r.headers.get('Last-Modified')})
+          pathlib.Path('out/manifest.json').write_text(json.dumps({'format':'uregraph-t6-fastfile-hydration-v1','files':rows},indent=2,sort_keys=True))
+          print(json.dumps(rows,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-hydrated-fastfiles
+          path: out/
+          compression-level: 0
+          retention-days: 3
