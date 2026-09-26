@@ -1,0 +1,66 @@
+name: uregraph t6 retail hydrate stage2
+
+on:
+  push:
+    branches: [uregraph-corpus-stress]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hydrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: uregraph-corpus-stress
+      - name: Build FastFile expander
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+      - name: Hydrate small retail containers
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/raw /tmp/expanded /tmp/proof/ipak
+          urls=(
+            "https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx.ff"
+            "https://r2.houseofkublai.com/bo2/zone/english/en_code_post_gfx_mp.ff"
+            "https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx_mp.ff"
+            "https://r2.houseofkublai.com/bo2/zone/all/code_post_gfx.ff"
+            "https://r2.houseofkublai.com/bo2/zone/all/common_patch_mp.ff"
+            "https://r2.houseofkublai.com/bo2/zone/all/patch_mp.ff"
+          )
+          for u in "${urls[@]}"; do
+            f=/tmp/raw/$(basename "$u")
+            curl -fL --retry 4 -o "$f" "$u"
+            sha256sum "$f"
+            z=$(basename "$f" .ff)
+            /tmp/t6_expand "$f" "/tmp/expanded/$z.expanded.bin" "$z"
+            sha256sum "/tmp/expanded/$z.expanded.bin"
+          done
+          PYTHONPATH=tools python tools/t6_ipak_http_range_v2.py info https://r2.houseofkublai.com/bo2/zone/all/dlc0_load_mp.ipak > /tmp/proof/ipak/dlc0_load_mp.json
+          PYTHONPATH=tools python tools/t6_ipak_http_range_v2.py info https://r2.houseofkublai.com/bo2/zone/english/en_base.ipak > /tmp/proof/ipak/en_base.json
+      - name: Build proof manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          out={'format':'uregraph-t6-retail-hydrate-stage2-v1','fastfiles':[],'ipaks':[]}
+          for p in sorted(Path('/tmp/raw').glob('*.ff')):
+              z=p.stem; e=Path('/tmp/expanded')/(z+'.expanded.bin')
+              H=lambda q: hashlib.sha256(q.read_bytes()).hexdigest()
+              out['fastfiles'].append({'name':p.name,'raw_size':p.stat().st_size,'raw_sha256':H(p),'expanded_size':e.stat().st_size,'expanded_sha256':H(e)})
+          for p in sorted(Path('/tmp/proof/ipak').glob('*.json')):
+              out['ipaks'].append({'name':p.stem,'info':json.loads(p.read_text())})
+          Path('/tmp/proof/manifest.json').write_text(json.dumps(out,indent=2,sort_keys=True))
+          print(json.dumps(out,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uregraph-t6-retail-hydrate-stage2
+          path: /tmp/proof/
+          retention-days: 3
