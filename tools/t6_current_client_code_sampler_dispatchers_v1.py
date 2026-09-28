@@ -122,34 +122,31 @@ def disassemble_range(raw: bytes, section: dict, start: int, end: int, *, detail
     return list(md.disasm(blob, start))
 
 
-def int3_runs(instructions) -> list[tuple[int, int]]:
+def raw_int3_runs(raw: bytes, section: dict, start: int, end: int) -> list[tuple[int, int]]:
+    require(section["va"] <= start < end <= section["va"] + section["rawSize"], "INT3 scan escapes section")
+    off = va_to_offset(section, start)
+    data = raw[off : off + end - start]
     runs = []
-    start = None
-    last_end = None
-    count = 0
-    for insn in instructions:
-        if insn.mnemonic == "int3":
-            if start is None:
-                start = insn.address
-                count = 0
-            count += 1
-            last_end = insn.address + insn.size
+    index = 0
+    while index < len(data):
+        if data[index] != 0xCC:
+            index += 1
             continue
-        if start is not None and count >= MIN_INT3_RUN:
-            runs.append((start, last_end))
-        start = None
-        last_end = None
-        count = 0
-    if start is not None and count >= MIN_INT3_RUN:
-        runs.append((start, last_end))
+        run_start = index
+        while index < len(data) and data[index] == 0xCC:
+            index += 1
+        if index - run_start >= MIN_INT3_RUN:
+            runs.append((start + run_start, start + index))
     return runs
 
 
 def discover_bounds(raw: bytes, section: dict, anchor: int) -> tuple[int, int, list]:
     lo = max(section["va"], anchor - SEARCH_RADIUS)
     hi = min(section["va"] + section["rawSize"], anchor + SEARCH_RADIUS)
-    instructions = disassemble_range(raw, section, lo, hi)
-    runs = int3_runs(instructions)
+    # Scan raw bytes for padding first. Starting an x86 disassembler at
+    # anchor-SEARCH_RADIUS could begin in the middle of an instruction and
+    # fabricate or miss a boundary.
+    runs = raw_int3_runs(raw, section, lo, hi)
     before = [run for run in runs if run[1] <= anchor]
     after = [run for run in runs if run[0] > anchor]
     require(before, f"0x{anchor:08x}: no preceding INT3 boundary")
