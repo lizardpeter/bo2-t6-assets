@@ -1,0 +1,124 @@
+{
+  "format": "t6-current-client-custom-sampler-state-semantics-v1",
+  "authority": "SHA-pinned current T6 client machine code joined to independent retail shader sampler-register closure",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "samplers": [
+    {
+      "accessor": "lightmapSamplerSecondary",
+      "samplerRegister": 13,
+      "packedStateByte": 98,
+      "packedStateByteHex": "0x62",
+      "decodedState": {
+        "filter": "linear",
+        "mipMap": "disabled",
+        "clampU": true,
+        "clampV": true,
+        "clampW": false
+      },
+      "retailBinding": {
+        "textureRegister": 13,
+        "textureName": "lightmapSamplerSecondary",
+        "samplerRegister": 13,
+        "samplerName": "lightmapSamplerSecondary"
+      },
+      "currentClientEvidence": {
+        "stateInstruction": {
+          "address": "0x007439c3",
+          "bytes": "b862000000",
+          "mnemonic": "mov",
+          "opStr": "eax, 0x62"
+        },
+        "stateCacheInstructions": [
+          {
+            "address": "0x007439c8",
+            "bytes": "394244",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [edx + 0x44], eax"
+          },
+          {
+            "address": "0x007439cd",
+            "bytes": "894244",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [edx + 0x44], eax"
+          }
+        ],
+        "samplerRegisterInstruction": {
+          "address": "0x007439d9",
+          "bytes": "6a0d",
+          "mnemonic": "push",
+          "opStr": "0xd"
+        },
+        "bindCallInstruction": {
+          "address": "0x007439dc",
+          "bytes": "e81fcbffff",
+          "mnemonic": "call",
+          "opStr": "0x740500"
+        }
+      }
+    },
+    {
+      "accessor": "reflectionProbeSampler",
+      "samplerRegister": 15,
+      "packedStateByte": 114,
+      "packedStateByteHex": "0x72",
+      "decodedState": {
+        "filter": "linear",
+        "mipMap": "linear",
+        "clampU": true,
+        "clampV": true,
+        "clampW": false
+      },
+      "retailBinding": {
+        "textureRegister": 15,
+        "textureName": "reflectionProbeSampler",
+        "samplerRegister": 15,
+        "samplerName": "reflectionProbeSampler"
+      },
+      "currentClientEvidence": {
+        "stateInstruction": {
+          "address": "0x00743b80",
+          "bytes": "b872000000",
+          "mnemonic": "mov",
+          "opStr": "eax, 0x72"
+        },
+        "stateCacheInstructions": [
+          {
+            "address": "0x00743b85",
+            "bytes": "39414c",
+            "mnemonic": "cmp",
+            "opStr": "dword ptr [ecx + 0x4c], eax"
+          },
+          {
+            "address": "0x00743b8a",
+            "bytes": "89414c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [ecx + 0x4c], eax"
+          }
+        ],
+        "samplerRegisterInstruction": {
+          "address": "0x00743b96",
+          "bytes": "6a0f",
+          "mnemonic": "push",
+          "opStr": "0xf"
+        },
+        "bindCallInstruction": {
+          "address": "0x00743b99",
+          "bytes": "e862c9ffff",
+          "mnemonic": "call",
+          "opStr": "0x740500"
+        }
+      }
+    }
+  ],
+  "summary": {
+    "samplerCount": 2,
+    "secondaryLightmapStateByte": 98,
+    "reflectionProbeStateByte": 114
+  },
+  "proofBoundary": "Closes packed state byte and sampler register for lightmapSamplerSecondary and reflectionProbeSampler only. Packed-byte bit meanings are independently pinned by the T6 sampler-state layout. No other code sampler or resource semantics are inferred."
+}
