@@ -1,0 +1,53 @@
+name: T6 owner 5DAC sampler join census one-shot
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_owner_5dac_sampler_join_census_one_shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover exact current client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 tools/t6_current_client_fetch_exact_v1.py --out-exe /tmp/client/t6mp.exe --out-identity /tmp/client/identity.json
+      - name: Census 5DAC and generic sampler callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rev=$(python3 -c "import json;print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])")
+          python3 tools/t6_current_client_owner_5dac_code_sampler_join_census_v1.py             /tmp/client/t6mp.exe --revision "$rev"             --out proof/current_client/T6_CURRENT_CLIENT_OWNER_5DAC_CODE_SAMPLER_JOIN_CENSUS_V1.json
+          python3 - <<'PY'
+          import json
+          p='proof/current_client/T6_CURRENT_CLIENT_OWNER_5DAC_CODE_SAMPLER_JOIN_CENSUS_V1.json'
+          d=json.load(open(p))
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_OWNER_5DAC_CODE_SAMPLER_JOIN_CENSUS_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Census T6 owner+5DAC sampler joins"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          rm -f /tmp/client/t6mp.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_OWNER_5DAC_CODE_SAMPLER_JOIN_CENSUS_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_OWNER_5DAC_CODE_SAMPLER_JOIN_CENSUS_V1.json
+          if-no-files-found: error
