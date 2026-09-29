@@ -1,0 +1,33 @@
+name: T6 Ghidra UREGraph projection v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_ghidra_uregraph_projection_v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build v2 graph-ready projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/ghidra_low_hanging_v2/uregraph
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          python3 tools/t6_ghidra_batch_to_uregraph_v1.py             --selection proof/current_client/ghidra_low_hanging_v2/selection.tsv             --results proof/current_client/ghidra_low_hanging_v2/results.tsv             --summary proof/current_client/ghidra_low_hanging_v2/summary.json             --corpus-id urn:ure:t6:re_Evidence:current-client-ghidra-low-hanging-v2             --corpus-name "T6 current-client Ghidra low-hanging corpus v2"             --repo-commit 1a2de7c05b8fdffd55a3610bc817e09189f47e76             --bundle-sha256 0e94403bd8c2db0f20c177403fdff2da0c5f0a4009d2fd14f2a16c4de9b412d9             --bundle-path proof/current_client/ghidra_low_hanging_v2/bundle.tar.zst.part-000             --out-dir "$OUT"             --chunk-size 500
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "Add graph-ready T6 Ghidra projection v2"
+          git pull --rebase origin main
+          git push origin HEAD:main
