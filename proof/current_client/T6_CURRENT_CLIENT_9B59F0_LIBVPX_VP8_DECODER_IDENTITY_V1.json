@@ -1,0 +1,193 @@
+{
+  "adjacentFamilyContext": {
+    "encoderName": "WebM Project VP8 Encoder v1.1.0",
+    "encoderNameVa": "0x00CB5BC4"
+  },
+  "authority": "SHA-pinned current-client exact vpx_codec_iface table joined to exact libvpx v1.1.0 source layout",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "decoderName": {
+    "section": ".rdata",
+    "text": "WebM Project VP8 Decoder v1.1.0",
+    "uniqueOccurrence": true,
+    "va": "0x00CB5AD4"
+  },
+  "format": "t6-current-client-9b59f0-libvpx-vp8-decoder-identity-v1",
+  "historicalLibvpx": {
+    "decoder_iface": "vp8/vp8_dx_iface.c",
+    "decoder_iface_blob_sha": "37773dba5e19dd187080b5188e001249eb17df1e",
+    "internal_header": "vpx/internal/vpx_codec_internal.h",
+    "internal_header_blob_sha": "0703d6a4f2c02adc6ea8eca7145fcb15819e7e02",
+    "ref": "v1.1.0",
+    "repo": "webmproject/libvpx"
+  },
+  "interfaceTable": {
+    "fields": [
+      {
+        "field": "name",
+        "offset": 0,
+        "offsetHex": "0x00",
+        "pointsIntoSection": ".rdata",
+        "value": 13327060,
+        "valueHex": "0x00CB5AD4"
+      },
+      {
+        "field": "abi_version",
+        "offset": 4,
+        "offsetHex": "0x04",
+        "value": 4,
+        "valueHex": "0x00000004"
+      },
+      {
+        "field": "caps",
+        "offset": 8,
+        "offsetHex": "0x08",
+        "value": 1310721,
+        "valueHex": "0x00140001"
+      },
+      {
+        "field": "init",
+        "offset": 12,
+        "offsetHex": "0x0C",
+        "pointsIntoSection": ".text",
+        "value": 10180592,
+        "valueHex": "0x009B57F0"
+      },
+      {
+        "field": "destroy",
+        "offset": 16,
+        "offsetHex": "0x10",
+        "pointsIntoSection": ".text",
+        "value": 10180704,
+        "valueHex": "0x009B5860"
+      },
+      {
+        "field": "ctrl_maps",
+        "offset": 20,
+        "offsetHex": "0x14",
+        "pointsIntoSection": ".rdata",
+        "value": 13327136,
+        "valueHex": "0x00CB5B20"
+      },
+      {
+        "field": "get_mmap",
+        "offset": 24,
+        "offsetHex": "0x18",
+        "pointsIntoSection": ".text",
+        "value": 10181824,
+        "valueHex": "0x009B5CC0"
+      },
+      {
+        "field": "set_mmap",
+        "offset": 28,
+        "offsetHex": "0x1C",
+        "pointsIntoSection": ".text",
+        "value": 10181952,
+        "valueHex": "0x009B5D40"
+      },
+      {
+        "field": "dec.peek_si",
+        "offset": 32,
+        "offsetHex": "0x20",
+        "pointsIntoSection": ".text",
+        "value": 10180752,
+        "valueHex": "0x009B5890"
+      },
+      {
+        "field": "dec.get_si",
+        "offset": 36,
+        "offsetHex": "0x24",
+        "pointsIntoSection": ".text",
+        "value": 10180896,
+        "valueHex": "0x009B5920"
+      },
+      {
+        "field": "dec.decode",
+        "offset": 40,
+        "offsetHex": "0x28",
+        "pointsIntoSection": ".text",
+        "value": 10181104,
+        "valueHex": "0x009B59F0"
+      },
+      {
+        "field": "dec.get_frame",
+        "offset": 44,
+        "offsetHex": "0x2C",
+        "pointsIntoSection": ".text",
+        "value": 10181792,
+        "valueHex": "0x009B5CA0"
+      },
+      {
+        "field": "enc.cfg_maps",
+        "offset": 48,
+        "offsetHex": "0x30",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.encode",
+        "offset": 52,
+        "offsetHex": "0x34",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.get_cx_data",
+        "offset": 56,
+        "offsetHex": "0x38",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.cfg_set",
+        "offset": 60,
+        "offsetHex": "0x3C",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.get_glob_hdrs",
+        "offset": 64,
+        "offsetHex": "0x40",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.get_preview",
+        "offset": 68,
+        "offsetHex": "0x44",
+        "value": 0,
+        "valueHex": "0x00000000"
+      },
+      {
+        "field": "enc.mr_get_mem_loc",
+        "offset": 72,
+        "offsetHex": "0x48",
+        "value": 0,
+        "valueHex": "0x00000000"
+      }
+    ],
+    "namePointerUnique": true,
+    "section": ".rdata",
+    "va": "0x00CB5B78"
+  },
+  "proofBoundary": "Proves the current-client data-table identity and callback slot exactly. It does not by itself assign every transitive callee of the decode callback to libvpx; those require exact call/dataflow joins from the callback path.",
+  "summary": {
+    "abiVersion": 4,
+    "capsHex": "0x00140001",
+    "decodeCallbackVa": "0x009B59F0",
+    "decoderNameVa": "0x00CB5AD4",
+    "identity": "0x009B59F0 is vpx_codec_vp8_dx.dec.decode for embedded libvpx v1.1.0",
+    "interfaceTableVa": "0x00CB5B78",
+    "zeroEncoderSlotCount": 7
+  },
+  "target": {
+    "field": "dec.decode",
+    "fieldOffsetHex": "0x28",
+    "va": "0x009B59F0"
+  }
+}
