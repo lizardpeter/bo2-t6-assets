@@ -41,6 +41,8 @@ Do not duplicate these paths:
 - `tools/t6_ghidra_catalog_to_uregraph_v1.py` — Ghidra catalog/decompile evidence projection.
 - `tools/select_t6_current_client_low_hanging_v1.py` — throughput-oriented decompile selection.
 - `tools/join_t6_current_client_pdb_exact_hashes_v1.py` — exact instruction-byte hash bridge from current client into server/PDB variants.
+- `tools/join_t6_current_client_pdb_exact_hashes_v2.py` — graph-ready successor; unique exact hashes become evidence-backed accepted correspondence witnesses, while duplicate hashes remain candidate-only.
+- `tools/test_join_t6_current_client_pdb_exact_hashes_v2.py` — regression locking the unique-versus-ambiguous hash policy.
 - `proof/current_client/ghidra_low_hanging_v1/uregraph/` — graph-ready catalog chunks.
 - `proof/current_client/ghidra_low_hanging_v3/` — later sharded Ghidra evidence.
 
