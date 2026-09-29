@@ -1,0 +1,88 @@
+name: T6 current-client to server PDB/MAP cross-build census v1
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_server_symbol_join_v1.yml'
+permissions:
+  contents: write
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: client
+      - uses: actions/checkout@v4
+        with:
+          repository: lizardpeter/bo2-pc-server-decompile
+          path: server
+      - name: Inspect and join inventories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p client/proof/current_client/server_symbol_join_v1
+          python3 - <<'PY'
+          import csv,gzip,json,pathlib,collections
+          root=pathlib.Path('.')
+          cat=root/'client/proof/current_client/ghidra_low_hanging_v1/catalog.tsv'
+          generated=root/'server/analysis/generated'
+          out=root/'client/proof/current_client/server_symbol_join_v1'
+          with cat.open(encoding='utf-8',newline='') as f:
+              cc=list(csv.DictReader(f,dialect='excel-tab'))
+          def readgz(name):
+              p=generated/name
+              with gzip.open(p,'rt',encoding='utf-8',newline='') as f:
+                  return list(csv.DictReader(f))
+          files=['canonical_functions.csv.gz','CoDMPServer_PC.functions.csv.gz','CoDMPServer_PC.procedures.csv.gz','cross_build_symbols.csv.gz']
+          inventories={}
+          schemas={}
+          for name in files:
+              rows=readgz(name); inventories[name]=rows
+              schemas[name]=list(rows[0]) if rows else []
+          # Preserve a deterministic, compact census first. Exact byte hash joins are
+          # only attempted where the server inventory actually exposes a hash column.
+          hash_cols={}
+          for name,cols in schemas.items():
+              hash_cols[name]=[c for c in cols if 'sha256' in c.lower() or ('hash' in c.lower() and 'name' not in c.lower())]
+          cc_by_hash=collections.defaultdict(list)
+          for r in cc:
+              h=(r.get('instruction_bytes_sha256') or '').lower()
+              if h: cc_by_hash[h].append(r)
+          exact=[]
+          for name,rows in inventories.items():
+              for hc in hash_cols[name]:
+                  for r in rows:
+                      h=(r.get(hc) or '').strip().lower()
+                      if len(h)==64 and h in cc_by_hash:
+                          for c in cc_by_hash[h]:
+                              exact.append({
+                                'inventory':name,'hash_column':hc,'sha256':h,
+                                'current_client_va':c['entry_va'],'current_client_ghidra_name':c['name'],
+                                'server_row':r
+                              })
+          doc={
+            'format':'t6-current-client-server-symbol-cross-build-census-v1',
+            'current_client_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
+            'current_client_catalog_functions':len(cc),
+            'server_inventory_rows':{k:len(v) for k,v in inventories.items()},
+            'server_inventory_schemas':schemas,
+            'server_hash_columns':hash_cols,
+            'exact_hash_match_rows':len(exact),
+            'exact_hash_current_client_functions':len({x['current_client_va'] for x in exact}),
+            'exact_hash_matches':exact,
+            'proof_boundary':'Cross-build census only. Exact 64-hex hash equality is emitted as strong identity evidence when the server inventory exposes a function-byte hash. Names/addresses are never treated as identity by themselves.'
+          }
+          (out/'census.json').write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps({k:doc[k] for k in ['current_client_catalog_functions','server_inventory_rows','server_hash_columns','exact_hash_match_rows','exact_hash_current_client_functions']},indent=2))
+          PY
+      - name: Commit census
+        shell: bash
+        working-directory: client
+        run: |
+          set -euo pipefail
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add proof/current_client/server_symbol_join_v1/census.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Add current-client server PDB MAP cross-build census"
+          git push
