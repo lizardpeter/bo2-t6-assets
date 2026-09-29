@@ -1,0 +1,32 @@
+name: T6 Ghidra UREGraph projection v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_ghidra_uregraph_projection_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build graph-ready Ghidra projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf proof/current_client/ghidra_low_hanging_v1/uregraph
+          mkdir -p proof/current_client/ghidra_low_hanging_v1/uregraph
+          python3 tools/t6_ghidra_catalog_to_uregraph_v1.py             --catalog proof/current_client/ghidra_low_hanging_v1/catalog.tsv             --selection proof/current_client/ghidra_low_hanging_v1/low_hanging.tsv             --summary proof/current_client/ghidra_low_hanging_v1/summary.json             --out-dir proof/current_client/ghidra_low_hanging_v1/uregraph             --chunk-size 500
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/ghidra_low_hanging_v1/uregraph
+          git commit -m "Add graph-ready T6 Ghidra projection v1"
+          git pull --rebase origin main
+          git push origin HEAD:main
