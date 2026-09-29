@@ -1,0 +1,132 @@
+{
+  "authority": "SHA-pinned current-client exact stack geometry, local dataflow, and sole decoded direct-caller argument propagation",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-primary-lightmap-writer-9c2a88-base-expression-v1",
+  "function": {
+    "baseDataflow": [
+      "0x009C264E EAX=[ESP+0x38]=arg1",
+      "0x009C2658 EAX=arg1+0xF00",
+      "0x009C2673 [ESP+0x10]=arg1+0xF00",
+      "no later decoded direct [ESP+0x10] write before 0x009C2A81",
+      "0x009C2A81 EDX=[ESP+0x10]=arg1+0xF00",
+      "0x009C2A88 [EDX+0x1610]=1 on the proven writer branch"
+    ],
+    "diagnosticEndVaExclusive": "0x009C3109",
+    "entryStackSymbol": "S",
+    "prologueStackArithmetic": [
+      "0x009C1EF0 sub esp,0x24 => ESP=S-0x24",
+      "0x009C1EF3 push ebx => ESP=S-0x28; [esp+0x2C]=[S+4]=arg1",
+      "0x009C1F04/0x009C1F07/0x009C1F29 push ebp/esi/edi => steady ESP=S-0x34; [esp+0x38]=[S+4]=arg1"
+    ],
+    "startVa": "0x009C1EF0"
+  },
+  "gatedInstructions": [
+    {
+      "address": "0x009C1EF0",
+      "bytes": "83ec24",
+      "mnemonic": "sub",
+      "opStr": "esp, 0x24"
+    },
+    {
+      "address": "0x009C1EF3",
+      "bytes": "53",
+      "mnemonic": "push",
+      "opStr": "ebx"
+    },
+    {
+      "address": "0x009C1EF4",
+      "bytes": "8b5c242c",
+      "mnemonic": "mov",
+      "opStr": "ebx, dword ptr [esp + 0x2c]"
+    },
+    {
+      "address": "0x009C1F04",
+      "bytes": "55",
+      "mnemonic": "push",
+      "opStr": "ebp"
+    },
+    {
+      "address": "0x009C1F07",
+      "bytes": "56",
+      "mnemonic": "push",
+      "opStr": "esi"
+    },
+    {
+      "address": "0x009C1F29",
+      "bytes": "57",
+      "mnemonic": "push",
+      "opStr": "edi"
+    },
+    {
+      "address": "0x009C264E",
+      "bytes": "8b442438",
+      "mnemonic": "mov",
+      "opStr": "eax, dword ptr [esp + 0x38]"
+    },
+    {
+      "address": "0x009C2658",
+      "bytes": "05000f0000",
+      "mnemonic": "add",
+      "opStr": "eax, 0xf00"
+    },
+    {
+      "address": "0x009C2673",
+      "bytes": "89442410",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [esp + 0x10], eax"
+    },
+    {
+      "address": "0x009C2A81",
+      "bytes": "8b542410",
+      "mnemonic": "mov",
+      "opStr": "edx, dword ptr [esp + 0x10]"
+    },
+    {
+      "address": "0x009C2A88",
+      "bytes": "899a10160000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [edx + 0x1610], ebx"
+    },
+    {
+      "address": "0x009B80DA",
+      "bytes": "8b7508",
+      "mnemonic": "mov",
+      "opStr": "esi, dword ptr [ebp + 8]"
+    },
+    {
+      "address": "0x009B80E2",
+      "bytes": "56",
+      "mnemonic": "push",
+      "opStr": "esi"
+    },
+    {
+      "address": "0x009B80E9",
+      "bytes": "e8029e0000",
+      "mnemonic": "call",
+      "opStr": "0x9c1ef0"
+    }
+  ],
+  "proofBoundary": "Closes the exact base-address expression for the decoded direct-call occurrence of writer 0x009C2A88. It does not identify caller arg1 or arg1+0xF00 as GfxCmdBufSourceState and does not exclude indirect entries/calls.",
+  "soleDecodedDirectCaller": {
+    "argumentFlow": "0x009B80DA ESI=[EBP+8] (caller arg1); 0x009B80E2 push ESI; therefore callee arg1 = caller arg1",
+    "callVa": "0x009B80E9",
+    "targetVa": "0x009C1EF0"
+  },
+  "summary": {
+    "destinationBaseExpression": "callee_arg1 + 0xF00",
+    "laterDirectStackSlotOverwriteBeforeWriter": false,
+    "observedDirectCallDestinationBaseExpression": "caller_arg1 + 0xF00",
+    "soleDecodedDirectCallerPropagatesCallerArg1": true
+  },
+  "writer": {
+    "baseRegister": "EDX",
+    "destination": "[EDX+0x1610]",
+    "slot4Value": 1,
+    "va": "0x009C2A88"
+  }
+}
