@@ -63,7 +63,7 @@ SET e.kind='re:Evidence',
     e.match_rows={len(matches)},
     e.current_client_functions_with_match={len(set(x["current_client_va"] for x in matches))},
     e.ambiguous_current_client_hashes={len(set(x["current_client_va"] for x in matches if x["server_hash_multiplicity"]>1))},
-    e.proof_boundary='Exact instruction-byte hash equality is strong cross-build identity evidence. Duplicate server hashes remain candidates and are not auto-corresponded. No address/name-only identity is admitted.'
+    e.proof_boundary='Exact instruction-byte hash equality is strong cross-build identity evidence. Hashes duplicated on either side remain candidates and are not auto-corresponded. No address/name-only identity is admitted.'
 MERGE (e)-[:TARGETS_BUILD]->(b)
 MERGE (e)-[:EVIDENCE_FOR]->(a)
 RETURN e.id
@@ -84,9 +84,10 @@ RETURN e.id
           "server_object_name":m["server_object_name"],
           "server_address_start":m["server_address_start"],
           "server_size_bytes":int(m["server_size_bytes"]) if str(m["server_size_bytes"]).strip() else None,
-          "multiplicity":int(m["server_hash_multiplicity"]),
+          "server_multiplicity":int(m["server_hash_multiplicity"]),
+          "client_multiplicity":int(m["client_hash_multiplicity"]),
           "state":m["state"],
-          "accepted":int(m["server_hash_multiplicity"])==1,
+          "accepted":int(m["server_hash_multiplicity"])==1 and int(m["client_hash_multiplicity"])==1,
         })
     files=[]
     for start in range(0,len(rows),chunk_size):
@@ -111,7 +112,8 @@ SET e.kind='re:Evidence',
     e.server_object_name=row.server_object_name,
     e.server_address_start=row.server_address_start,
     e.server_size_bytes=row.server_size_bytes,
-    e.server_hash_multiplicity=row.multiplicity,
+    e.server_hash_multiplicity=row.server_multiplicity,
+    e.client_hash_multiplicity=row.client_multiplicity,
     e.identity_basis='exact-function-instruction-bytes-sha256-across-builds',
     e.proof_boundary=CASE WHEN row.accepted THEN 'Unique exact server-function instruction-byte hash witness; correspondence is accepted at the machine-body level but does not by itself prove all source-level type or ABI details.' ELSE 'Exact byte hash is duplicated among server variants; candidate evidence only and no correspondence edge is created.' END
 MERGE (corpus)-[:CONTAINS_EVIDENCE]->(e)
@@ -140,7 +142,7 @@ FOREACH (_ IN CASE WHEN row.accepted THEN [1] ELSE [] END |
       "matchRows":len(rows),
       "acceptedRows":sum(1 for x in rows if x["accepted"]),
       "candidateAmbiguousRows":sum(1 for x in rows if not x["accepted"]),
-      "proofBoundary":"Every exact hit is retained as evidence. CROSSBUILD_CORRESPONDS_TO is emitted only for a unique server-side exact instruction-byte hash."
+      "proofBoundary":"Every exact hit is retained as evidence. CROSSBUILD_CORRESPONDS_TO is emitted only when the exact instruction-byte hash is unique on both the current-client and server-variant sides."
     }
     (out_dir/"manifest.json").write_text(json.dumps(manifest,indent=2,sort_keys=True)+"\n",encoding="utf-8")
 
@@ -157,16 +159,21 @@ def main():
     with a.pdb_hashes.open(encoding="utf-8",newline="") as f:
         sv=list(csv.DictReader(f,dialect="excel-tab"))
     by=defaultdict(list)
+    client_by=defaultdict(list)
     for r in sv:
         h=r["exact_bytes_sha256"].lower()
         if h: by[h].append(r)
+    for r in cc:
+        h=r["instruction_bytes_sha256"].lower()
+        if h: client_by[h].append(r)
     matches=[]
     ambiguous=0
     for c in cc:
         h=c["instruction_bytes_sha256"].lower()
         hits=by.get(h,[])
+        client_mult=len(client_by.get(h,[]))
         if not hits: continue
-        if len(hits)>1: ambiguous+=1
+        if len(hits)>1 or client_mult>1: ambiguous+=1
         for s in hits:
             matches.append({
               "current_client_va":"0x"+c["entry_va"].lower().removeprefix("0x"),
@@ -179,8 +186,9 @@ def main():
               "server_address_start":s["exact_address_start"],
               "server_size_bytes":s["exact_size_bytes"],
               "server_hash_multiplicity":len(hits),
+              "client_hash_multiplicity":client_mult,
               "identity_basis":"exact-function-instruction-bytes-sha256-across-builds",
-              "state":"accepted-exact-byte-identity-witness" if len(hits)==1 else "candidate-ambiguous-exact-byte-hash",
+              "state":"accepted-exact-byte-identity-witness" if len(hits)==1 and client_mult==1 else "candidate-ambiguous-exact-byte-hash",
             })
     doc={
       "format":FORMAT,
@@ -190,7 +198,7 @@ def main():
       "current_client_functions_with_match":len(set(x["current_client_va"] for x in matches)),
       "ambiguous_current_client_hashes":ambiguous,
       "matches":matches,
-      "proof_boundary":"Exact instruction-byte hash equality is strong cross-build identity evidence. Duplicate hashes remain candidate/ambiguous and are not auto-merged. No address/name-only identity is admitted."
+      "proof_boundary":"Exact instruction-byte hash equality is strong cross-build identity evidence. Hashes duplicated on either the current-client or server side remain candidate/ambiguous and are not auto-merged. No address/name-only identity is admitted."
     }
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+"\n",encoding="utf-8")
