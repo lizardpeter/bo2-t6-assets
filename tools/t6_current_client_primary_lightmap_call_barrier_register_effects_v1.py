@@ -63,8 +63,12 @@ def main():
     rows=[]
     for t in TARGETS:
         h=t["helper"];req(h in ix,f"missing helper {h:x}")
-        si,ei=region(ins,ix[h]);body=ins[si:ei]
-        req(body and body[0].address==h,f"diagnostic region for {h:x} starts at {body[0].address:x}, not helper")
+        si,ei=region(ins,ix[h])
+        # A direct call target may be a valid internal/shared entry within a larger
+        # INT3-delimited compiler region. Analyze from the exact call target forward
+        # to the diagnostic region end rather than requiring the region to begin there.
+        body=ins[ix[h]:ei]
+        req(body and body[0].address==h,f"failed to start helper analysis at {h:x}")
         writes=[];pushes=[];pops=[];rets=[]
         for i in body:
             _r,w=i.regs_access()
