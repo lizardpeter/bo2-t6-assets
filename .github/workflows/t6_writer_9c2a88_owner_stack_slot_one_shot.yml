@@ -41,8 +41,12 @@ jobs:
           git add proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json
           if ! git diff --cached --quiet; then
             git commit -m "Resolve T6 9C2A88 upstream stack slot"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            for i in 1 2 3 4; do
+              git pull --rebase origin main
+              if git push origin HEAD:main; then break; fi
+              test "$i" != 4
+              sleep 2
+            done
           fi
           rm -f /tmp/client/t6mp.exe
       - uses: actions/upload-artifact@v4
@@ -51,3 +55,5 @@ jobs:
           name: T6_WRITER_9C2A88_OWNER_STACK_SLOT_V1
           path: proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json
           if-no-files-found: error
+
+# retry-after-concurrent-push-v2
