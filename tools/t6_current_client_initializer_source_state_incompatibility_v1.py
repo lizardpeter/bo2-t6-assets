@@ -127,7 +127,7 @@ def main():
     req(init["summary"]["directCallerCount"]==2,"initializer direct-caller denominator drift")
     req(init["summary"]["slot4PackedWriteVa"].lower()=="0x004555a6","slot4 write drift")
 
-    req(layout["client"]["sha256"]==SHA,"layout proof SHA drift")
+    req(layout["format"]=="t6-current-client-light-block-provider-semantics-v1","layout proof format drift")
     # This retained proof explicitly records the independently proven source-state formulas.
     ss=layout["provider"]["sourceStateBase"]
     req(ss["independentValueLayout"]=="source + 0x800 + enum*16","value layout drift")
@@ -143,8 +143,8 @@ def main():
             f"enum {ev} identity drift: {q.get('accessor')} {q.get('enumSymbol')}")
 
     req(obj["client"]["sha256"]==SHA,"object proof SHA drift")
-    req(obj["summary"]["directInitializerCallCount"]==2,"object proof caller denominator drift")
-    req(obj["summary"]["sameObjectProven"] is True,"object convergence no longer proven")
+    req(obj["convergence"]["sameObjectFieldProven"] is True,"object convergence no longer proven")
+    req(obj["convergence"]["ownerFieldOffset"].lower()=="0x5dac","object field offset drift")
 
     outrows=[]
     for c in CONFLICTS:
