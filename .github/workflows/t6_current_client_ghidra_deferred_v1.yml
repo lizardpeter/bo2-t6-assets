@@ -1,0 +1,168 @@
+name: T6 current-client Ghidra deferred v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_ghidra_deferred_v1.yml'
+
+permissions:
+  contents: write
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  GHIDRA_CACHE_KEY: t6-current-client-ghidra-12.1.3-77031817-v1
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: a
+            skip: 0
+            limit: 1000
+          - shard: b
+            skip: 1000
+            limit: 1000
+          - shard: c
+            skip: 2000
+            limit: 1000
+          - shard: d
+            skip: 3000
+            limit: 923
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download verified Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors             -o /tmp/ghidra.zip             https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+
+      - name: Restore analyzed current-client project
+        id: ghidra-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-ghidra/projects
+          key: ${{ env.GHIDRA_CACHE_KEY }}
+
+      - name: Require analyzed project cache
+        run: test "${{ steps.ghidra-cache.outputs.cache-hit }}" = true
+
+      - name: Select deferred shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-deferred/batch
+          python3 tools/select_t6_current_client_low_hanging_v1.py             proof/current_client/ghidra_low_hanging_v1/catalog.tsv             --out /tmp/t6-deferred/selection.tsv             --tier defer             --skip ${{ matrix.skip }}             --limit ${{ matrix.limit }}
+
+      - name: Export exact disassembly and bounded decompilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-ghidra/config /tmp/t6-ghidra/cache
+          export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless"             /tmp/t6-ghidra/projects t6-current-client             -process t6mp.exe -noanalysis -readOnly             -postScript ExportT6CurrentClientBatch.java               /tmp/t6-deferred/selection.tsv /tmp/t6-deferred/batch 3             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+
+      - name: Package deferred shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=/tmp/out-${{ matrix.shard }}
+          mkdir -p "$OUT"
+          cp /tmp/t6-deferred/selection.tsv "$OUT/selection.tsv"
+          cp /tmp/t6-deferred/batch/results.tsv "$OUT/results.tsv"
+          python3 - <<'PY'
+          import csv,json,pathlib,os
+          root=pathlib.Path('/tmp/t6-deferred')
+          with (root/'selection.tsv').open(encoding='utf-8',newline='') as f:
+              sel=list(csv.DictReader(f,dialect='excel-tab'))
+          with (root/'batch/results.tsv').open(encoding='utf-8',newline='') as f:
+              res=list(csv.DictReader(f,dialect='excel-tab'))
+          summary={
+            'format':'t6-current-client-ghidra-deferred-v1-shard',
+            'shard':os.environ['SHARD_ID'],
+            'skip':int(os.environ['SHARD_SKIP']),
+            'selected_functions':len(sel),
+            'exact_functions_found':sum(r['found_exact']=='true' for r in res),
+            'decompile_completed':sum(r['decompile_completed']=='true' for r in res),
+            'decompile_failed_or_timed_out':sum(r['decompile_completed']!='true' for r in res),
+            'decompile_timeout_seconds':3,
+            'proof_boundary':'Exact Ghidra disassembly/reference evidence for every selected function; generated C is unreviewed and may be absent for bounded-time failures.'
+          }
+          pathlib.Path(os.environ['OUT_DIR'],'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+          tar -C /tmp/t6-deferred -cf - batch | zstd -19 -T0 -o "$OUT/bundle.tar.zst"
+          sha256sum "$OUT/bundle.tar.zst" | sed 's#  .*/#  #' > "$OUT/bundle.sha256"
+        env:
+          SHARD_ID: ${{ matrix.shard }}
+          SHARD_SKIP: ${{ matrix.skip }}
+          OUT_DIR: /tmp/out-${{ matrix.shard }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-ghidra-deferred-${{ matrix.shard }}
+          path: /tmp/out-${{ matrix.shard }}
+          if-no-files-found: error
+          retention-days: 30
+
+  collect:
+    needs: shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: t6-ghidra-deferred-*
+          path: /tmp/t6-deferred-all
+      - name: Commit durable deferred evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/ghidra_deferred_v1
+          rm -rf "$OUT"; mkdir -p "$OUT"
+          for shard in a b c d; do
+            mkdir -p "$OUT/shard-$shard"
+            cp -a "/tmp/t6-deferred-all/t6-ghidra-deferred-$shard/." "$OUT/shard-$shard/"
+          done
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('proof/current_client/ghidra_deferred_v1')
+          ss=[json.loads((root/f'shard-{x}'/'summary.json').read_text()) for x in 'abcd']
+          total={
+            'format':'t6-current-client-ghidra-deferred-v1',
+            'client_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
+            'selected_functions':sum(s['selected_functions'] for s in ss),
+            'exact_functions_found':sum(s['exact_functions_found'] for s in ss),
+            'decompile_completed':sum(s['decompile_completed'] for s in ss),
+            'decompile_failed_or_timed_out':sum(s['decompile_failed_or_timed_out'] for s in ss),
+            'decompile_timeout_seconds':3,
+            'proof_boundary':'All deferred current-client Ghidra catalog functions receive exact disassembly/reference evidence; generated C remains unreviewed.'
+          }
+          (root/'summary.json').write_text(json.dumps(total,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(total,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "Add T6 current-client Ghidra deferred evidence v1"
+          git pull --rebase origin main
+          git push origin HEAD:main
