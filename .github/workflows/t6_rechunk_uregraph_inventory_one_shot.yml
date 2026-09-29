@@ -1,0 +1,40 @@
+name: Rechunk T6 UREGraph inventory one-shot
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_rechunk_uregraph_inventory_one_shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rechunk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rechunk graph transactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf proof/current_client/whole_image_inventory_v1_transport
+          mkdir -p proof/current_client/whole_image_inventory_v1_transport/cypher
+          python3 tools/rechunk_uregraph_cypher_v1.py             proof/current_client/whole_image_inventory_v1/cypher             proof/current_client/whole_image_inventory_v1_transport/cypher             --functions 1000 --strings 1000 --calls 750 --default 500
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/whole_image_inventory_v1_transport
+          if ! git diff --cached --quiet; then
+            git commit -m "Rechunk T6 UREGraph inventory transactions"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_UREGRAPH_TRANSPORT_RECHUNK_V1
+          path: proof/current_client/whole_image_inventory_v1_transport
+          if-no-files-found: error
