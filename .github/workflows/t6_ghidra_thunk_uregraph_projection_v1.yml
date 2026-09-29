@@ -1,0 +1,31 @@
+name: T6 Ghidra thunk UREGraph projection v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_ghidra_thunk_uregraph_projection_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build thunk graph-ready projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/ghidra_thunks_v1/uregraph
+          rm -rf "$OUT"; mkdir -p "$OUT"
+          python3 tools/t6_ghidra_batch_to_uregraph_v1.py             --selection proof/current_client/ghidra_thunks_v1/selection.tsv             --results proof/current_client/ghidra_thunks_v1/results.tsv             --summary proof/current_client/ghidra_thunks_v1/summary.json             --corpus-id urn:ure:t6:re_Evidence:current-client-ghidra-thunks-v1             --corpus-name "T6 current-client Ghidra thunk corpus v1"             --repo-commit ae56f3519a9c55895d0efdb3c00d5f6aee4062bb             --bundle-sha256 0a6d913400b723d2324d692ee28acf4639470df21e6eb3d24372059cac67610f             --bundle-path proof/current_client/ghidra_thunks_v1/bundle.tar.zst             --out-dir "$OUT"             --chunk-size 250
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "Add graph-ready T6 Ghidra thunk projection v1"
+          git pull --rebase origin main
+          git push origin HEAD:main
