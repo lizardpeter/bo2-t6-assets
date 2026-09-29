@@ -60,7 +60,8 @@ class ExactHashJoinTests(unittest.TestCase):
             self.assertEqual(doc["server_pdb_exact_hash_variants"],4)
             self.assertEqual(doc["match_rows"],5)
             self.assertEqual(doc["current_client_functions_with_match"],4)
-            self.assertEqual(doc["ambiguous_current_client_hashes"],3)
+            self.assertEqual(doc["ambiguous_current_client_hashes"],2)
+            self.assertEqual(doc["ambiguous_current_client_functions"],3)
 
             manifest=json.loads((cy/"manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["acceptedRows"],1)
