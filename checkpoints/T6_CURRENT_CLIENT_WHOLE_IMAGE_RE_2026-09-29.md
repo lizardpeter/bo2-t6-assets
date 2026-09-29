@@ -10,7 +10,7 @@ Exact current client:
 - All 26,778 mechanical function entries were loaded into `uregraph` and checkpointed.
 - Ghidra catalog: 24,617 recognized functions.
 - All 24,617 Ghidra catalog rows were projected to current-client FunctionOccurrence nodes with exact instruction-byte SHA-256 and generated body metadata.
-- Whole-catalog generated C attempts: 24,609 completed in the first passes; 8 initially failed/timed out.
+- Whole-catalog generated C attempts: 24,609 completed in the first passes; 8 initially failed/timed out. A focused 120-second retry recovered the 3 timeout-only giant functions, bringing generated C completion to 24,612 / 24,617. Five genuine Ghidra pathology cases remain.
 - Strict current-client <-> server PDB exact-hash join was regenerated with two-sided uniqueness:
   - 321 current-client functions have at least one exact server/PDB full-function hash hit.
   - 269 exact hash match rows are accepted one-to-one machine-body identity witnesses.
@@ -33,3 +33,16 @@ Exact current client:
 
 ## Proof boundary
 Ghidra output is generated/unreviewed evidence, not reconstructed source. Exact complete function-byte equality is a strong implementation-identity witness but does not automatically transfer every server-side type/global/source/ABI property to the current client.
+
+
+## Anchor-delta structural propagation
+- Strict exact-byte anchors: 269.
+- First propagation against the 7,180 retained exact-hash PDB starts parsed all 140,674 client direct calls.
+- 301 translated call observations resolved to known unique server/PDB starts.
+- 86 candidate current-target <-> server-variant pairs resulted:
+  - 35 independently rediscovered existing strict exact-hash identities (method sanity check).
+  - 9 new multi-anchor corroborated candidates.
+  - 42 new single-anchor candidates.
+- These first new targets were library-heavy because the 7,180 exact-hash server target dictionary is library-biased.
+- Full-MAP propagation is the next active pass, using CoDMPServer_PC.symbols.csv.gz to widen target resolution to the complete linker MAP function-start universe.
+- Propagated targets remain evidence/candidates; no address/name-only or call-geometry-only semantic merge is permitted.
