@@ -27,7 +27,7 @@ import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolTable;
 
 public class ExportT6CurrentClientBatch extends GhidraScript {
-    private static final int DECOMPILE_TIMEOUT_SECONDS=15;
+    private static final int DEFAULT_DECOMPILE_TIMEOUT_SECONDS=15;
 
     @Override
     protected void run() throws Exception {
@@ -77,7 +77,7 @@ public class ExportT6CurrentClientBatch extends GhidraScript {
 
                 Evidence ev=exportDisassembly(row.id,f,listing,symbols,asmDir,refs);
                 long start=System.nanoTime();
-                DecompileResults dr=dc.decompileFunction(f,DECOMPILE_TIMEOUT_SECONDS,monitor);
+                DecompileResults dr=dc.decompileFunction(f,decompileTimeout,monitor);
                 long elapsed=(System.nanoTime()-start)/1_000_000L;
                 boolean done=dr.decompileCompleted();
                 String msg=dr.getErrorMessage();
@@ -107,7 +107,7 @@ public class ExportT6CurrentClientBatch extends GhidraScript {
             }
         }
         dc.dispose();
-        println("Exported "+rows.size()+" current-client Ghidra batch rows");
+        println("Exported "+rows.size()+" current-client Ghidra batch rows with timeout "+decompileTimeout+"s");
     }
 
     private List<Row> readRows(Path p) throws Exception {
