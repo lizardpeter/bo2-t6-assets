@@ -3,14 +3,19 @@ WITH b,a,[{id:"urn:ure:t6:occ:callsite:current-client:004f5cf6",call_va:"0x004F5
 UNWIND rows AS row
 MATCH (target:KGNode {id:row.target_id})
 MERGE (c:KGNode {id:row.id})
+ON CREATE SET c._mechanical_inventory_new=true
 SET c.kind='core:Occurrence', c.occurrence_type='direct-callsite', c.namespace='t6', c.build_id=b.id, c.artifact_id=a.id,
     c.address_space='va', c.address_start=row.call_va, c.target_va=row.target_va, c.section_name=row.section,
     c.instruction_bytes=row.bytes, c.caller_assignment_state=CASE WHEN row.caller_id IS NULL THEN 'unassigned' ELSE 'nearest-preceding-entry-candidate' END,
     c.producer='t6-current-client-whole-image-mechanical-inventory-v1'
-MERGE (b)-[:HAS_OCCURRENCE]->(c)
-MERGE (c)-[:DEFINED_IN]->(a)
-MERGE (c)-[:CALLS_TARGET]->(target)
-FOREACH (_ IN CASE WHEN row.caller_id IS NULL THEN [] ELSE [1] END |
-  MERGE (caller:KGNode {id:row.caller_id})
-  MERGE (caller)-[:HAS_CALLSITE]->(c)
+WITH b,a,row,target,c,coalesce(c._mechanical_inventory_new,false) AS is_new
+OPTIONAL MATCH (caller:KGNode {id:row.caller_id})
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(c)
+  CREATE (c)-[:DEFINED_IN]->(a)
+  CREATE (c)-[:CALLS_TARGET]->(target)
 )
+FOREACH (_ IN CASE WHEN is_new AND caller IS NOT NULL THEN [1] ELSE [] END |
+  CREATE (caller)-[:HAS_CALLSITE]->(c)
+)
+REMOVE c._mechanical_inventory_new
