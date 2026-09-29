@@ -42,6 +42,7 @@ def main():
     ap.add_argument("catalog",type=Path)
     ap.add_argument("--out",type=Path,required=True)
     ap.add_argument("--limit",type=int,default=3000)
+    ap.add_argument("--skip",type=int,default=0)
     ap.add_argument("--include-thunks",action="store_true")
     ap.add_argument("--exclude",type=Path,action="append",default=[])
     ap.add_argument("--tier",action="append",choices=["thunk","leaf","simple","moderate"],default=[])
@@ -65,6 +66,7 @@ def main():
         eligible_counts[t]=eligible_counts.get(t,0)+1
         chosen.append((score(r,t),t,r,fid,va))
     chosen.sort(key=lambda x:x[0])
+    if a.skip>0: chosen=chosen[a.skip:]
     if a.limit>0: chosen=chosen[:a.limit]
 
     a.out.parent.mkdir(parents=True,exist_ok=True)
@@ -83,6 +85,6 @@ def main():
                 "body_address_count":r["body_address_count"],
                 "instruction_bytes_sha256":r["instruction_bytes_sha256"],
             })
-    print({"catalog":len(rows),"tier_counts":counts,"excluded":len(excluded),"eligible_counts":eligible_counts,"selected":len(chosen),"output":str(a.out)})
+    print({"catalog":len(rows),"tier_counts":counts,"excluded":len(excluded),"eligible_counts":eligible_counts,"skip":a.skip,"selected":len(chosen),"output":str(a.out)})
 
 if __name__=="__main__": main()
