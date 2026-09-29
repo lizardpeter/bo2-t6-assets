@@ -300,7 +300,7 @@ FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
   CREATE (b)-[:HAS_OCCURRENCE]->(n)
   CREATE (n)-[:DEFINED_IN]->(a)
 )
-REMOVE n._mechanical_inventory_new""",5000)
+REMOVE n._mechanical_inventory_new""",2000)
 
     files["imports"]=write_chunks(cy,"imports",improws,header,
       """MERGE (n:KGNode {id:row.id})
@@ -313,7 +313,7 @@ FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
   CREATE (b)-[:HAS_OCCURRENCE]->(n)
   CREATE (n)-[:DEFINED_IN]->(a)
 )
-REMOVE n._mechanical_inventory_new""",5000)
+REMOVE n._mechanical_inventory_new""",2000)
 
     files["strings"]=write_chunks(cy,"strings",strrows,header,
       """MERGE (n:KGNode {id:row.id})
@@ -327,7 +327,7 @@ FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
   CREATE (b)-[:HAS_OCCURRENCE]->(n)
   CREATE (n)-[:DEFINED_IN]->(a)
 )
-REMOVE n._mechanical_inventory_new""",5000)
+REMOVE n._mechanical_inventory_new""",2000)
 
     files["functions"]=write_chunks(cy,"functions",fnrows,header,
       """MERGE (n:KGNode {id:row.id})
@@ -342,7 +342,7 @@ FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
   CREATE (b)-[:HAS_OCCURRENCE]->(n)
   CREATE (n)-[:DEFINED_IN]->(a)
 )
-REMOVE n._mechanical_inventory_new""",5000)
+REMOVE n._mechanical_inventory_new""",2000)
 
     call_header=f"MATCH (b:KGNode {{id:{q(BUILD_ID)}}}) MATCH (a:KGNode {{id:{q(ARTIFACT_ID)}}})"
     files["calls"]=write_chunks(cy,"calls",callrows,call_header,
@@ -363,7 +363,7 @@ FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
 FOREACH (_ IN CASE WHEN is_new AND caller IS NOT NULL THEN [1] ELSE [] END |
   CREATE (caller)-[:HAS_CALLSITE]->(c)
 )
-REMOVE c._mechanical_inventory_new""",5000)
+REMOVE c._mechanical_inventory_new""",2000)
 
     graph_manifest={
       "format":"uregraph-cypher-chunk-manifest-v1",
