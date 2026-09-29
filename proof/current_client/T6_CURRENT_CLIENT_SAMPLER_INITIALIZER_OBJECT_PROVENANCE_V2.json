@@ -1,0 +1,344 @@
+{
+  "authority": "SHA-pinned exact caller/helper register and memory dataflow",
+  "callerA": {
+    "initializerCall": "0x004819AB -> 0x00455100",
+    "initializerObject": "ECX = EDI",
+    "objectFieldLoad": "EDI = [ESI+0x5DAC]",
+    "ownerAlias": "ESI = incoming ECX",
+    "range": [
+      "0x00481990",
+      "0x00481A12"
+    ],
+    "sha256": "b3682556c82fd674d12e17971e7657d41fea113b7f5982550926b748f42979c0"
+  },
+  "callerB": {
+    "helperCall": "0x00565AB5 -> 0x0065B430",
+    "helperThis": "ECX = ESI+0x3A8",
+    "initializerCall": "0x00565AC6 -> 0x00455100",
+    "initializerObject": "ECX = EAX helper return",
+    "ownerAlias": "ESI = incoming ECX",
+    "range": [
+      "0x00565A90",
+      "0x00565AE5"
+    ],
+    "sha256": "18cd4f90e59f7a4eb1454698d861ae4d85a539a5981b1701712beb619d8fc66d"
+  },
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "convergence": {
+    "callerAExpression": "*(owner+0x5DAC)",
+    "callerBExpression": "*(owner+0x3A8+0x5A04)",
+    "conclusion": "Both decoded direct initializer callers pass the same owner-relative pointer field at +0x5DAC.",
+    "offsetArithmetic": "0x3A8 + 0x5A04 = 0x5DAC",
+    "ownerFieldOffset": "0x5DAC",
+    "sameObjectFieldProven": true
+  },
+  "format": "t6-current-client-sampler-initializer-object-provenance-v2",
+  "helper": {
+    "bytes": 170,
+    "ediWritersThroughReturnValue": [
+      {
+        "address": "0x0065B43A",
+        "bytes": "8bbe045a0000",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esi + 0x5a04]"
+      }
+    ],
+    "endVaExclusive": "0x0065B4DA",
+    "entryThisAlias": {
+      "address": "0x0065B431",
+      "bytes": "8bf1",
+      "mnemonic": "mov",
+      "opStr": "esi, ecx"
+    },
+    "esiWritersThroughReturnValue": [
+      {
+        "address": "0x0065B431",
+        "bytes": "8bf1",
+        "mnemonic": "mov",
+        "opStr": "esi, ecx"
+      }
+    ],
+    "fieldLoad": {
+      "address": "0x0065B43A",
+      "bytes": "8bbe045a0000",
+      "mnemonic": "mov",
+      "opStr": "edi, dword ptr [esi + 0x5a04]"
+    },
+    "followingPadBytes": "cccccccccccc",
+    "instructionCount": 42,
+    "instructions": [
+      {
+        "address": "0x0065B430",
+        "bytes": "56",
+        "mnemonic": "push",
+        "opStr": "esi"
+      },
+      {
+        "address": "0x0065B431",
+        "bytes": "8bf1",
+        "mnemonic": "mov",
+        "opStr": "esi, ecx"
+      },
+      {
+        "address": "0x0065B433",
+        "bytes": "8b8efc590000",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [esi + 0x59fc]"
+      },
+      {
+        "address": "0x0065B439",
+        "bytes": "57",
+        "mnemonic": "push",
+        "opStr": "edi"
+      },
+      {
+        "address": "0x0065B43A",
+        "bytes": "8bbe045a0000",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esi + 0x5a04]"
+      },
+      {
+        "address": "0x0065B440",
+        "bytes": "8d8778160000",
+        "mnemonic": "lea",
+        "opStr": "eax, [edi + 0x1678]"
+      },
+      {
+        "address": "0x0065B446",
+        "bytes": "89be005a0000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x5a00], edi"
+      },
+      {
+        "address": "0x0065B44C",
+        "bytes": "8986045a0000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x5a04], eax"
+      },
+      {
+        "address": "0x0065B452",
+        "bytes": "8b91e0590000",
+        "mnemonic": "mov",
+        "opStr": "edx, dword ptr [ecx + 0x59e0]"
+      },
+      {
+        "address": "0x0065B458",
+        "bytes": "81c2e0590000",
+        "mnemonic": "add",
+        "opStr": "edx, 0x59e0"
+      },
+      {
+        "address": "0x0065B45E",
+        "bytes": "3bc2",
+        "mnemonic": "cmp",
+        "opStr": "eax, edx"
+      },
+      {
+        "address": "0x0065B460",
+        "bytes": "726d",
+        "mnemonic": "jb",
+        "opStr": "0x65b4cf"
+      },
+      {
+        "address": "0x0065B462",
+        "bytes": "8b89e4590000",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [ecx + 0x59e4]"
+      },
+      {
+        "address": "0x0065B468",
+        "bytes": "85c9",
+        "mnemonic": "test",
+        "opStr": "ecx, ecx"
+      },
+      {
+        "address": "0x0065B46A",
+        "bytes": "7408",
+        "mnemonic": "je",
+        "opStr": "0x65b474"
+      },
+      {
+        "address": "0x0065B46C",
+        "bytes": "898efc590000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x59fc], ecx"
+      },
+      {
+        "address": "0x0065B472",
+        "bytes": "eb49",
+        "mnemonic": "jmp",
+        "opStr": "0x65b4bd"
+      },
+      {
+        "address": "0x0065B474",
+        "bytes": "8b06",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [esi]"
+      },
+      {
+        "address": "0x0065B476",
+        "bytes": "6a21",
+        "mnemonic": "push",
+        "opStr": "0x21"
+      },
+      {
+        "address": "0x0065B478",
+        "bytes": "68f0590000",
+        "mnemonic": "push",
+        "opStr": "0x59f0"
+      },
+      {
+        "address": "0x0065B47D",
+        "bytes": "50",
+        "mnemonic": "push",
+        "opStr": "eax"
+      },
+      {
+        "address": "0x0065B47E",
+        "bytes": "e88d9edaff",
+        "mnemonic": "call",
+        "opStr": "0x405310"
+      },
+      {
+        "address": "0x0065B483",
+        "bytes": "83c40c",
+        "mnemonic": "add",
+        "opStr": "esp, 0xc"
+      },
+      {
+        "address": "0x0065B486",
+        "bytes": "85c0",
+        "mnemonic": "test",
+        "opStr": "eax, eax"
+      },
+      {
+        "address": "0x0065B488",
+        "bytes": "7424",
+        "mnemonic": "je",
+        "opStr": "0x65b4ae"
+      },
+      {
+        "address": "0x0065B48A",
+        "bytes": "8b8efc590000",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [esi + 0x59fc]"
+      },
+      {
+        "address": "0x0065B490",
+        "bytes": "8980e0590000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [eax + 0x59e0], eax"
+      },
+      {
+        "address": "0x0065B496",
+        "bytes": "c780e459000000000000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [eax + 0x59e4], 0"
+      },
+      {
+        "address": "0x0065B4A0",
+        "bytes": "8988e8590000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [eax + 0x59e8], ecx"
+      },
+      {
+        "address": "0x0065B4A6",
+        "bytes": "8981e4590000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x59e4], eax"
+      },
+      {
+        "address": "0x0065B4AC",
+        "bytes": "eb02",
+        "mnemonic": "jmp",
+        "opStr": "0x65b4b0"
+      },
+      {
+        "address": "0x0065B4AE",
+        "bytes": "33c0",
+        "mnemonic": "xor",
+        "opStr": "eax, eax"
+      },
+      {
+        "address": "0x0065B4B0",
+        "bytes": "83860c5a000004",
+        "mnemonic": "add",
+        "opStr": "dword ptr [esi + 0x5a0c], 4"
+      },
+      {
+        "address": "0x0065B4B7",
+        "bytes": "8986fc590000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x59fc], eax"
+      },
+      {
+        "address": "0x0065B4BD",
+        "bytes": "8b86fc590000",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [esi + 0x59fc]"
+      },
+      {
+        "address": "0x0065B4C3",
+        "bytes": "8b88e0590000",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [eax + 0x59e0]"
+      },
+      {
+        "address": "0x0065B4C9",
+        "bytes": "898e045a0000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x5a04], ecx"
+      },
+      {
+        "address": "0x0065B4CF",
+        "bytes": "ff86085a0000",
+        "mnemonic": "inc",
+        "opStr": "dword ptr [esi + 0x5a08]"
+      },
+      {
+        "address": "0x0065B4D5",
+        "bytes": "8bc7",
+        "mnemonic": "mov",
+        "opStr": "eax, edi"
+      },
+      {
+        "address": "0x0065B4D7",
+        "bytes": "5f",
+        "mnemonic": "pop",
+        "opStr": "edi"
+      },
+      {
+        "address": "0x0065B4D8",
+        "bytes": "5e",
+        "mnemonic": "pop",
+        "opStr": "esi"
+      },
+      {
+        "address": "0x0065B4D9",
+        "bytes": "c3",
+        "mnemonic": "ret",
+        "opStr": ""
+      }
+    ],
+    "returnInstruction": {
+      "address": "0x0065B4D9",
+      "bytes": "c3",
+      "mnemonic": "ret",
+      "opStr": ""
+    },
+    "returnValueDefinition": {
+      "address": "0x0065B4D5",
+      "bytes": "8bc7",
+      "mnemonic": "mov",
+      "opStr": "eax, edi"
+    },
+    "sha256": "c272c9b37c9bcd96f96e1a5e3ab68c87fdcc196a4483843c7b5b9cfaafc3258f",
+    "startVa": "0x0065B430"
+  },
+  "proofBoundary": "Proves exact current-client convergence of the two decoded direct 0x00455100 caller object arguments to owner+0x5DAC. It does not yet assign the owner or +0x5DAC field a source-level type/name, prove indirect initializer callers absent, or prove this field is the generic GfxCmdBufSource object used by the code-sampler consumers."
+}
