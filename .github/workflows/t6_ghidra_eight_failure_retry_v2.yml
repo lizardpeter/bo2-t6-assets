@@ -1,0 +1,110 @@
+name: T6 Ghidra eight-failure retry v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_ghidra_eight_failure_retry_v2.yml'
+
+permissions:
+  contents: write
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  GHIDRA_CACHE_KEY: t6-current-client-ghidra-12.1.3-77031817-v1
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download verified Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip             https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+      - name: Restore analyzed project
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-ghidra/projects
+          key: ${{ env.GHIDRA_CACHE_KEY }}
+          fail-on-cache-miss: true
+      - name: Write exact retry selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/retry proof/current_client/ghidra_retry_v2
+          cat > /tmp/retry/selection.tsv <<'EOF'
+          function_id	requested_va	tier
+          urn:ure:t6:occ:function:current-client:009f6c0f	0x009f6c0f	retry-varnode
+          urn:ure:t6:occ:function:current-client:009f6cf9	0x009f6cf9	retry-varnode
+          urn:ure:t6:occ:function:current-client:009f6d72	0x009f6d72	retry-varnode
+          urn:ure:t6:occ:function:current-client:00413b00	0x00413b00	retry-input-varnode
+          urn:ure:t6:occ:function:current-client:008ba870	0x008ba870	retry-flow-limit
+          urn:ure:t6:occ:function:current-client:00529ac0	0x00529ac0	retry-timeout
+          urn:ure:t6:occ:function:current-client:00718c20	0x00718c20	retry-timeout
+          urn:ure:t6:occ:function:current-client:008f5620	0x008f5620	retry-timeout
+          EOF
+          sed -i 's/^          //' /tmp/retry/selection.tsv
+          cp /tmp/retry/selection.tsv proof/current_client/ghidra_retry_v2/selection.tsv
+      - name: Retry all eight with 120-second decompiler timeout
+        shell: bash
+        run: |
+          set -euo pipefail
+          export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=10G
+          mkdir -p /tmp/retry/out
+          "$GHIDRA_HOME/support/analyzeHeadless"             /tmp/t6-ghidra/projects t6-current-client             -process t6mp.exe -noanalysis -readOnly             -postScript ExportT6CurrentClientBatch.java /tmp/retry/selection.tsv /tmp/retry/out 120             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 2
+      - name: Summarize and retain evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/retry/out/results.tsv proof/current_client/ghidra_retry_v2/results.tsv
+          cp /tmp/retry/out/references.tsv proof/current_client/ghidra_retry_v2/references.tsv
+          tar -C /tmp/retry/out -cf - unreviewed disassembly | zstd -12 -T0             -o proof/current_client/ghidra_retry_v2/evidence.tar.zst
+          sha256sum proof/current_client/ghidra_retry_v2/evidence.tar.zst             > proof/current_client/ghidra_retry_v2/evidence.sha256
+          python3 - <<'PY'
+          import csv,json,pathlib
+          p=pathlib.Path("proof/current_client/ghidra_retry_v2/results.tsv")
+          with p.open(encoding="utf-8",newline="") as f:
+              rows=list(csv.DictReader(f,dialect="excel-tab"))
+          doc={
+            "format":"t6-current-client-ghidra-eight-failure-retry-v2",
+            "selected":len(rows),
+            "decompile_completed":sum(r["decompile_completed"]=="true" for r in rows),
+            "still_failed":sum(r["decompile_completed"]!="true" for r in rows),
+            "timeout_seconds":120,
+            "failures":[
+              {"va":r["requested_va"],"message":r["decompiler_message"],
+               "instruction_count":int(r["instruction_count"])}
+              for r in rows if r["decompile_completed"]!="true"
+            ],
+            "proof_boundary":"Generated/unreviewed Ghidra output only; success does not imply semantic reconstruction."
+          }
+          pathlib.Path("proof/current_client/ghidra_retry_v2/summary.json").write_text(
+              json.dumps(doc,indent=2,sort_keys=True)+"\n"
+          )
+          print(json.dumps(doc,indent=2,sort_keys=True))
+          PY
+      - name: Commit retry evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/ghidra_retry_v2
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: retry eight T6 Ghidra decompile failures"
+          git pull --rebase origin main
+          git push origin HEAD:main
