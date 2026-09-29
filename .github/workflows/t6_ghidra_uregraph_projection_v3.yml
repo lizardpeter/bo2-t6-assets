@@ -1,0 +1,37 @@
+name: T6 Ghidra UREGraph projection v3
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_ghidra_uregraph_projection_v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build graph-ready projections for all v3 shards
+        shell: bash
+        run: |
+          set -euo pipefail
+          for shard in a b c; do
+            BASE="proof/current_client/ghidra_low_hanging_v3/shard-$shard"
+            OUT="$BASE/uregraph"
+            rm -rf "$OUT"
+            mkdir -p "$OUT"
+            BUNDLE_SHA="$(cut -d' ' -f1 "$BASE/bundle.sha256")"
+            python3 tools/t6_ghidra_batch_to_uregraph_v1.py               --selection "$BASE/selection.tsv"               --results "$BASE/results.tsv"               --summary "$BASE/summary.json"               --corpus-id "urn:ure:t6:re_Evidence:current-client-ghidra-low-hanging-v3-shard-$shard"               --corpus-name "T6 current-client Ghidra low-hanging corpus v3 shard $shard"               --repo-commit 4e9e2cb2ad28c08e000de2b8742654522f48ab9c               --bundle-sha256 "$BUNDLE_SHA"               --bundle-path "$BASE/bundle.tar.zst"               --out-dir "$OUT"               --chunk-size 500
+          done
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/ghidra_low_hanging_v3
+          git commit -m "Add graph-ready T6 Ghidra projection v3"
+          git pull --rebase origin main
+          git push origin HEAD:main
