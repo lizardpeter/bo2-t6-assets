@@ -43,11 +43,28 @@ def q(s: str) -> str:
 def hx(x: int) -> str:
     return f"0x{x:08X}"
 
+def cypher_literal(v):
+    if v is None:
+        return "null"
+    if v is True:
+        return "true"
+    if v is False:
+        return "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, list):
+        return "[" + ",".join(cypher_literal(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{" + ",".join(f"{k}:{cypher_literal(val)}" for k,val in v.items()) + "}"
+    raise TypeError(type(v))
+
 def write_chunks(out_dir: Path, prefix: str, rows: list[dict], header: str, row_expr: str, chunk=250):
     paths=[]
     for ci in range(0,len(rows),chunk):
         batch=rows[ci:ci+chunk]
-        payload=json.dumps(batch,separators=(",",":"),ensure_ascii=False)
+        payload=cypher_literal(batch)
         cypher=header + "\nWITH " + payload + " AS rows\nUNWIND rows AS row\n" + row_expr + "\n"
         p=out_dir / f"{prefix}_{ci//chunk:04d}.cypher"
         p.write_text(cypher,encoding="utf-8")
