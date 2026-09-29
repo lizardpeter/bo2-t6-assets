@@ -1,0 +1,68 @@
+{
+  "argFlow": {
+    "call": {
+      "address": "0x009B5C0A",
+      "bytes": "e871220000",
+      "mnemonic": "call",
+      "opStr": "0x9b7e80"
+    },
+    "conclusion": "0x009B7E80 arg1 = *(EDI+0x110) on this decoded call occurrence",
+    "ecxWritesBetweenLoadAndPush": [],
+    "ownerFieldLoad": {
+      "address": "0x009B5B8C",
+      "bytes": "8b8f10010000",
+      "mnemonic": "mov",
+      "opStr": "ecx, dword ptr [edi + 0x110]"
+    },
+    "push": {
+      "address": "0x009B5C09",
+      "bytes": "51",
+      "mnemonic": "push",
+      "opStr": "ecx"
+    }
+  },
+  "authority": "SHA-pinned current-client bounded caller dataflow",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "edi": {
+    "definitionsBeforeOwnerFieldLoad": [
+      {
+        "address": "0x009B59F6",
+        "bytes": "8b7c247c",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esp + 0x7c]"
+      }
+    ],
+    "lastDefinitionBeforeOwnerFieldLoad": {
+      "address": "0x009B59F6",
+      "bytes": "8b7c247c",
+      "mnemonic": "mov",
+      "opStr": "edi, dword ptr [esp + 0x7c]"
+    }
+  },
+  "format": "t6-current-client-writer-9c2a88-caller-owner-field-v1",
+  "frameSetupPairs": [],
+  "proofBoundary": "Closes the exact caller argument expression for the decoded 0x009B5C0A -> 0x009B7E80 occurrence. EDI semantic owner identity is only promoted if its reaching definition proves it; indirect callers remain outside this proof.",
+  "region": {
+    "diagnosticEndVaExclusive": "0x009B5C93",
+    "diagnosticStartVa": "0x009B5960",
+    "instructionCount": 228,
+    "sha256": "5516dceeaddd8e00960d2b1c6a333989a895c539d6132305a691406ee0faa30a"
+  },
+  "summary": {
+    "arg1Expression": "*(EDI+0x110)",
+    "callerRegionStart": "0x009B5960",
+    "ecxRedefinitionCountAfterFieldLoad": 0,
+    "lastEdiDefinitionBeforeFieldLoad": {
+      "address": "0x009B59F6",
+      "bytes": "8b7c247c",
+      "mnemonic": "mov",
+      "opStr": "edi, dword ptr [esp + 0x7c]"
+    },
+    "writerDestinationBaseExpression": "*(EDI+0x110)+0xF00"
+  }
+}
