@@ -45,7 +45,7 @@ def main():
     ap.add_argument("--skip",type=int,default=0)
     ap.add_argument("--include-thunks",action="store_true")
     ap.add_argument("--exclude",type=Path,action="append",default=[])
-    ap.add_argument("--tier",action="append",choices=["thunk","leaf","simple","moderate"],default=[])
+    ap.add_argument("--tier",action="append",choices=["thunk","leaf","simple","moderate","defer"],default=[])
     a=ap.parse_args()
 
     excluded=load_excluded(a.exclude)
