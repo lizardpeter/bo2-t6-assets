@@ -1,0 +1,241 @@
+{
+  "arg1ToSource": {
+    "arg1Load": "0x009BCD06 EAX=[EBP+8]",
+    "ownerReload": "0x009BCD48 EBX=[EBP+8]",
+    "sourceFormation": "0x009BCD19 ECX=EAX+0x19660",
+    "sourceSave": "0x009BCD26 [EBP-8]=ECX"
+  },
+  "arithmetic": {
+    "identity": "0x19660 + 0x160C = 0x1AC6C",
+    "ownerFlattenedSamplerBaseHex": "0x1AC6C",
+    "ownerToSourceOffsetHex": "0x19660",
+    "sourceSamplerBaseHex": "0x160C"
+  },
+  "authority": "join of exact SHA-pinned base provenance and exact helper register/body evidence",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-primary-lightmap-value0-source-state-join-v1",
+  "gatedInstructions": {
+    "helper": [
+      {
+        "address": "0x009BAA50",
+        "bytes": "83b8e89e010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x19ee8], 0"
+      },
+      {
+        "address": "0x009BAA59",
+        "bytes": "83b86cac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac6c], 0"
+      },
+      {
+        "address": "0x009BAA62",
+        "bytes": "83b870ac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac70], 0"
+      },
+      {
+        "address": "0x009BAA6B",
+        "bytes": "83b874ac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac74], 0"
+      },
+      {
+        "address": "0x009BAA74",
+        "bytes": "83b878ac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac78], 0"
+      },
+      {
+        "address": "0x009BAA7D",
+        "bytes": "83b87cac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac7c], 0"
+      },
+      {
+        "address": "0x009BAA86",
+        "bytes": "83b880ac010000",
+        "mnemonic": "cmp",
+        "opStr": "dword ptr [eax + 0x1ac80], 0"
+      }
+    ],
+    "main": [
+      {
+        "address": "0x009BCD06",
+        "bytes": "8b4508",
+        "mnemonic": "mov",
+        "opStr": "eax, dword ptr [ebp + 8]"
+      },
+      {
+        "address": "0x009BCD19",
+        "bytes": "8d8860960100",
+        "mnemonic": "lea",
+        "opStr": "ecx, [eax + 0x19660]"
+      },
+      {
+        "address": "0x009BCD26",
+        "bytes": "894df8",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ebp - 8], ecx"
+      },
+      {
+        "address": "0x009BCD48",
+        "bytes": "8b5d08",
+        "mnemonic": "mov",
+        "opStr": "ebx, dword ptr [ebp + 8]"
+      },
+      {
+        "address": "0x009BD331",
+        "bytes": "8b4df8",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [ebp - 8]"
+      },
+      {
+        "address": "0x009BD356",
+        "bytes": "8b4df8",
+        "mnemonic": "mov",
+        "opStr": "ecx, dword ptr [ebp - 8]"
+      },
+      {
+        "address": "0x009BD365",
+        "bytes": "8bc3",
+        "mnemonic": "mov",
+        "opStr": "eax, ebx"
+      },
+      {
+        "address": "0x009BD367",
+        "bytes": "e8e4d6ffff",
+        "mnemonic": "call",
+        "opStr": "0x9baa50"
+      },
+      {
+        "address": "0x009BD37C",
+        "bytes": "898120160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1620], eax"
+      },
+      {
+        "address": "0x009BD382",
+        "bytes": "899114160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1614], edx"
+      },
+      {
+        "address": "0x009BD388",
+        "bytes": "899110160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1610], edx"
+      },
+      {
+        "address": "0x009BD38E",
+        "bytes": "89810c160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x160c], eax"
+      }
+    ],
+    "sibling": [
+      {
+        "address": "0x009BCD5F",
+        "bytes": "8b75f8",
+        "mnemonic": "mov",
+        "opStr": "esi, dword ptr [ebp - 8]"
+      },
+      {
+        "address": "0x009BCDDD",
+        "bytes": "c7861416000001000000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x1614], 1"
+      },
+      {
+        "address": "0x009BCDE7",
+        "bytes": "89be10160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x1610], edi"
+      },
+      {
+        "address": "0x009BCDED",
+        "bytes": "89be0c160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x160c], edi"
+      }
+    ]
+  },
+  "helperJoin": {
+    "call": "0x009BD367 -> 0x009BAA50",
+    "equivalentSourceRead": "[arg1+0x19660+0x160C]",
+    "flattenedRead": "0x009BAA59 [EAX+0x1AC6C]",
+    "preCall": "0x009BD365 EAX=EBX=arg1"
+  },
+  "proofBoundary": "Accepts arg1+0x19660 as a current-client GfxCmdBufSourceState occurrence for the observed decoded 0x009BCD00 path by exact intra-build address identity plus the established generic source-state sampler layout. Does not generalize every +0x19660 field in unrelated owner types or exclude indirect/internal entries.",
+  "sourceSamplerWrites": {
+    "siblingWrites": [
+      {
+        "address": "0x009BCD5F",
+        "bytes": "8b75f8",
+        "mnemonic": "mov",
+        "opStr": "esi, dword ptr [ebp - 8]"
+      },
+      {
+        "address": "0x009BCDDD",
+        "bytes": "c7861416000001000000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x1614], 1"
+      },
+      {
+        "address": "0x009BCDE7",
+        "bytes": "89be10160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x1610], edi"
+      },
+      {
+        "address": "0x009BCDED",
+        "bytes": "89be0c160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [esi + 0x160c], edi"
+      }
+    ],
+    "writer9BCDE7Base": "ESI=[EBP-8]=arg1+0x19660",
+    "writer9BD388Base": "ECX=[EBP-8]=arg1+0x19660",
+    "writes": [
+      {
+        "address": "0x009BD37C",
+        "bytes": "898120160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1620], eax"
+      },
+      {
+        "address": "0x009BD382",
+        "bytes": "899114160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1614], edx"
+      },
+      {
+        "address": "0x009BD388",
+        "bytes": "899110160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x1610], edx"
+      },
+      {
+        "address": "0x009BD38E",
+        "bytes": "89810c160000",
+        "mnemonic": "mov",
+        "opStr": "dword ptr [ecx + 0x160c], eax"
+      }
+    ]
+  },
+  "summary": {
+    "basis": "exact flattened owner+0x1AC6C read equals exact source+0x160C sampler base, joined to exact arg1+0x19660 formation and same-object sampler writes",
+    "slot4Value": 0,
+    "sourceStateOccurrenceAccepted": true,
+    "value0WriterBase": "arg1+0x19660",
+    "writerVAs": [
+      "0x009BCDE7",
+      "0x009BD388"
+    ]
+  }
+}
