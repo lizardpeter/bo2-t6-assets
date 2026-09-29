@@ -1,0 +1,181 @@
+{
+  "acceptedSourceStateContract": {
+    "constantValueFormula": "source + 0x800 + enum*16 + lane*4",
+    "constantVersionFormula": "source + 0x17E0 + enum*2",
+    "samplerStateBaseOffset": "0x160C",
+    "slot4PackedOverlapOffset": "0x1610"
+  },
+  "authority": "SHA-pinned current-client machine code + accepted current-client source-state constant-cache layout + exact static code-input identities + exact direct-caller object convergence",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "conclusion": "For both decoded direct calls to 0x00455100, the passed object is structurally incompatible with the accepted current-client GfxCmdBufSourceState code-constant layout. Therefore the observed direct occurrences of 0x004555A6 cannot be admitted to the generic sampler-source writer denominator merely because they write +0x1610.",
+  "conflicts": [
+    {
+      "contradiction": "Observed object stores a self-relative pointer where accepted renderer source-state layout requires a code-constant float lane.",
+      "destinationOffset": "0xAA8",
+      "sourceStateInterpretation": {
+        "accessor": "sunDiffuse",
+        "enumSymbol": "CONST_SRC_CODE_SUN_DIFFUSE",
+        "enumValue": 42,
+        "formula": "source + 0x800 + enum*16 + lane*4",
+        "lane": 2,
+        "staticIdentityStatus": "unique-exact-row",
+        "typedRole": "float4 code-constant lane"
+      },
+      "storeVa": "0x00455234",
+      "storedValue": "self-relative pointer",
+      "storedValueExpression": "self+0x6A8"
+    },
+    {
+      "contradiction": "Observed object stores a self-relative pointer where accepted renderer source-state layout requires a code-constant float lane.",
+      "destinationOffset": "0xAB8",
+      "sourceStateInterpretation": {
+        "accessor": "lightingLookupScale",
+        "enumSymbol": "CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE",
+        "enumValue": 43,
+        "formula": "source + 0x800 + enum*16 + lane*4",
+        "lane": 2,
+        "staticIdentityStatus": "unique-exact-row",
+        "typedRole": "float4 code-constant lane"
+      },
+      "storeVa": "0x0045523A",
+      "storedValue": "self-relative pointer",
+      "storedValueExpression": "self+0x6A8"
+    },
+    {
+      "contradiction": "Observed object stores a self-relative pointer where accepted renderer source-state layout requires a code-constant float lane.",
+      "destinationOffset": "0xABC",
+      "sourceStateInterpretation": {
+        "accessor": "lightingLookupScale",
+        "enumSymbol": "CONST_SRC_CODE_LIGHTING_LOOKUP_SCALE",
+        "enumValue": 43,
+        "formula": "source + 0x800 + enum*16 + lane*4",
+        "lane": 3,
+        "staticIdentityStatus": "unique-exact-row",
+        "typedRole": "float4 code-constant lane"
+      },
+      "storeVa": "0x00455240",
+      "storedValue": "self-relative pointer",
+      "storedValueExpression": "self+0x6A8"
+    },
+    {
+      "contradiction": "Observed object stores a self-relative pointer where accepted renderer source-state layout requires a code-constant float lane.",
+      "destinationOffset": "0xAC4",
+      "sourceStateInterpretation": {
+        "accessor": "debugBumpmap",
+        "enumSymbol": "CONST_SRC_CODE_DEBUG_BUMPMAP",
+        "enumValue": 44,
+        "formula": "source + 0x800 + enum*16 + lane*4",
+        "lane": 1,
+        "staticIdentityStatus": "unique-exact-row",
+        "typedRole": "float4 code-constant lane"
+      },
+      "storeVa": "0x00455264",
+      "storedValue": "self-relative pointer",
+      "storedValueExpression": "self+0x6A8"
+    },
+    {
+      "contradiction": "Observed object stores a self-relative pointer where accepted renderer source-state layout requires a code-constant float lane.",
+      "destinationOffset": "0xB08",
+      "sourceStateInterpretation": {
+        "accessor": "fogConsts2",
+        "enumSymbol": "CONST_SRC_CODE_FOG2",
+        "enumValue": 48,
+        "formula": "source + 0x800 + enum*16 + lane*4",
+        "lane": 2,
+        "staticIdentityStatus": "unique-exact-row",
+        "typedRole": "float4 code-constant lane"
+      },
+      "storeVa": "0x004552A2",
+      "storedValue": "self-relative pointer",
+      "storedValueExpression": "self+0xAE8"
+    }
+  ],
+  "format": "t6-current-client-initializer-source-state-incompatibility-v1",
+  "gatedInstructions": [
+    {
+      "address": "0x0045522E",
+      "bytes": "8d90a8060000",
+      "mnemonic": "lea",
+      "opStr": "edx, [eax + 0x6a8]"
+    },
+    {
+      "address": "0x00455234",
+      "bytes": "899200040000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [edx + 0x400], edx"
+    },
+    {
+      "address": "0x0045523A",
+      "bytes": "8990b80a0000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [eax + 0xab8], edx"
+    },
+    {
+      "address": "0x00455240",
+      "bytes": "8990bc0a0000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [eax + 0xabc], edx"
+    },
+    {
+      "address": "0x0045525E",
+      "bytes": "8b9200040000",
+      "mnemonic": "mov",
+      "opStr": "edx, dword ptr [edx + 0x400]"
+    },
+    {
+      "address": "0x00455264",
+      "bytes": "8990c40a0000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [eax + 0xac4], edx"
+    },
+    {
+      "address": "0x0045529C",
+      "bytes": "8d90e80a0000",
+      "mnemonic": "lea",
+      "opStr": "edx, [eax + 0xae8]"
+    },
+    {
+      "address": "0x004552A2",
+      "bytes": "895220",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [edx + 0x20], edx"
+    },
+    {
+      "address": "0x004555A6",
+      "bytes": "898810160000",
+      "mnemonic": "mov",
+      "opStr": "dword ptr [eax + 0x1610], ecx"
+    }
+  ],
+  "initializer": {
+    "decodedDirectCallerCount": 2,
+    "endVaExclusive": "0x00455613",
+    "observedDirectCallerObject": "same owner-relative field [owner+0x5DAC], proven by object-provenance v2",
+    "samplerOverlapWriteVa": "0x004555A6",
+    "startVa": "0x00455100"
+  },
+  "proofBoundary": "This proof excludes the two decoded direct-call occurrences of 0x00455100/0x004555A6 from the accepted GfxCmdBufSourceState sampler-writer denominator. It does not prove that an unobserved indirect call can never invoke 0x00455100 with a different object. Accordingly the instruction has no accepted source-state occurrence, rather than a universal claim that the instruction could never operate on such an object.",
+  "sources": {
+    "initializerProof": "proof/current_client/T6_CURRENT_CLIENT_SAMPLER_STATE_INITIALIZER_BOUNDARY_FIX_V2.json",
+    "inputTableProof": "proof/current_client/T6_CURRENT_CLIENT_CODE_INPUT_TABLE_JOIN_V1.json",
+    "layoutProof": "proof/current_client/T6_CURRENT_CLIENT_LIGHT_BLOCK_PROVIDER_SEMANTICS_V1.json",
+    "objectProof": "proof/current_client/T6_CURRENT_CLIENT_SAMPLER_INITIALIZER_OBJECT_PROVENANCE_V2.json"
+  },
+  "summary": {
+    "allConflictRowsUseUniqueExactStaticIdentity": true,
+    "conflictCount": 5,
+    "directObservedInitializerOccurrencesStructurallyIncompatibleWithGenericSourceState": true,
+    "distinctConflictingEnums": [
+      42,
+      43,
+      44,
+      48
+    ],
+    "samplerOverlapInstructionHasAcceptedDirectSourceStateOccurrence": false
+  }
+}
