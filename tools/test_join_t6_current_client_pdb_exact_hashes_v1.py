@@ -26,6 +26,8 @@ class ExactHashJoinTests(unittest.TestCase):
                 {"entry_va":"00401000","instruction_bytes_sha256":"aa"*32,"name":"FUN_00401000"},
                 {"entry_va":"00402000","instruction_bytes_sha256":"bb"*32,"name":"FUN_00402000"},
                 {"entry_va":"00403000","instruction_bytes_sha256":"cc"*32,"name":"FUN_00403000"},
+                {"entry_va":"00404000","instruction_bytes_sha256":"dd"*32,"name":"FUN_00404000"},
+                {"entry_va":"00405000","instruction_bytes_sha256":"dd"*32,"name":"FUN_00405000"},
             ])
             write_tsv(pdb,[
                 "exact_bytes_sha256","variant_id","family_id","symbol_name","object_name",
@@ -40,6 +42,9 @@ class ExactHashJoinTests(unittest.TestCase):
                 {"exact_bytes_sha256":"bb"*32,"variant_id":"urn:test:variant:dup2",
                  "family_id":"urn:test:family:dup2","symbol_name":"DupFn2","object_name":"dup.obj",
                  "exact_address_start":"0x3000","exact_size_bytes":"16"},
+                {"exact_bytes_sha256":"dd"*32,"variant_id":"urn:test:variant:clientdup",
+                 "family_id":"urn:test:family:clientdup","symbol_name":"ClientDupFn","object_name":"clientdup.obj",
+                 "exact_address_start":"0x4000","exact_size_bytes":"24"},
             ])
             p=subprocess.run([
                 sys.executable,str(SCRIPT),
@@ -51,22 +56,24 @@ class ExactHashJoinTests(unittest.TestCase):
             ],check=True,capture_output=True,text=True)
             self.assertTrue(p.stdout.strip())
             doc=json.loads(out.read_text(encoding="utf-8"))
-            self.assertEqual(doc["current_client_catalog_functions"],3)
-            self.assertEqual(doc["server_pdb_exact_hash_variants"],3)
-            self.assertEqual(doc["match_rows"],3)
-            self.assertEqual(doc["current_client_functions_with_match"],2)
-            self.assertEqual(doc["ambiguous_current_client_hashes"],1)
+            self.assertEqual(doc["current_client_catalog_functions"],5)
+            self.assertEqual(doc["server_pdb_exact_hash_variants"],4)
+            self.assertEqual(doc["match_rows"],5)
+            self.assertEqual(doc["current_client_functions_with_match"],4)
+            self.assertEqual(doc["ambiguous_current_client_hashes"],3)
 
             manifest=json.loads((cy/"manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["acceptedRows"],1)
-            self.assertEqual(manifest["candidateAmbiguousRows"],2)
-            self.assertEqual(manifest["matchRows"],3)
+            self.assertEqual(manifest["candidateAmbiguousRows"],4)
+            self.assertEqual(manifest["matchRows"],5)
 
             joined="\n".join(p.read_text(encoding="utf-8") for p in sorted(cy.glob("matches_*.cypher")))
             self.assertIn("CROSSBUILD_CORRESPONDS_TO",joined)
             self.assertIn("accepted-exact-byte-identity-witness",joined)
             self.assertIn("candidate-ambiguous-exact-byte-hash",joined)
             self.assertIn("CASE WHEN row.accepted THEN [1] ELSE [] END",joined)
+            self.assertIn("client_hash_multiplicity",joined)
+            self.assertIn("server_hash_multiplicity",joined)
 
             # The no-hit client function must not appear in graph projection.
             self.assertNotIn("00403000",joined.lower())
