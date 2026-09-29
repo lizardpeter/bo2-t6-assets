@@ -1,0 +1,59 @@
+{
+  "authority": "SHA-pinned exact 0x009B59F0 entry validation plus instruction-aligned direct incoming-edge census",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "directIncomingEdges": [],
+  "entry": {
+    "arg1Load": {
+      "address": "0x009B59F6",
+      "bytes": "8b7c247c",
+      "mnemonic": "mov",
+      "opStr": "edi, dword ptr [esp + 0x7c]"
+    },
+    "downstreamWriterBase": "*(arg1+0x110)+0xF00",
+    "prologue": [
+      {
+        "address": "0x009B59F0",
+        "bytes": "83ec6c",
+        "mnemonic": "sub",
+        "opStr": "esp, 0x6c"
+      },
+      {
+        "address": "0x009B59F3",
+        "bytes": "55",
+        "mnemonic": "push",
+        "opStr": "ebp"
+      },
+      {
+        "address": "0x009B59F4",
+        "bytes": "56",
+        "mnemonic": "push",
+        "opStr": "esi"
+      },
+      {
+        "address": "0x009B59F5",
+        "bytes": "57",
+        "mnemonic": "push",
+        "opStr": "edi"
+      },
+      {
+        "address": "0x009B59F6",
+        "bytes": "8b7c247c",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esp + 0x7c]"
+      }
+    ],
+    "va": "0x009B59F0"
+  },
+  "format": "t6-current-client-writer-9c2a88-owner-entry-callers-v1",
+  "proofBoundary": "Exact decoded direct CALL/JMP census only. Last push is retained as direct call-site evidence but semantic arg identity is promoted only where calling convention and local dataflow are unambiguous. Indirect calls remain outside this proof.",
+  "summary": {
+    "directIncomingEdgeCount": 0,
+    "edgeArgPushes": [],
+    "entryVa": "0x009B59F0"
+  }
+}
