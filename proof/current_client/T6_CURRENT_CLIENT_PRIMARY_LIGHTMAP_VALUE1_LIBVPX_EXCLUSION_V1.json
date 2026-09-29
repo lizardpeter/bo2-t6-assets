@@ -1,0 +1,55 @@
+{
+  "authority": "join of exact current-client libvpx interface identity and SHA-pinned path-sensitive writer provenance",
+  "client": {
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "exactObservedPath": [
+    "0x00CB5B78 vpx_codec_vp8_dx interface -> +0x28 dec.decode = 0x009B59F0",
+    "0x009B59F0 arg1 -> EDI; 0x009B5B8C loads *(arg1+0x110)",
+    "0x009B5C0A calls 0x009B7E80 with arg1 = *(decoder_arg1+0x110)",
+    "0x009B8083 branch reaches 0x009B80DA with frame pointer intact",
+    "0x009B80E9 calls 0x009C1EF0 with the same enclosing arg1",
+    "0x009C1EF0 path reaches 0x009C2A88 at base arg1+0xF00",
+    "0x009C21B7 calls 0x009C1D50 with live-in EBX from 0x009C1EF4; 0x009C1DBB writes the same slot on that observed context"
+  ],
+  "format": "t6-current-client-primary-lightmap-value1-libvpx-exclusion-v1",
+  "proofBoundary": "Excludes the exact proven decode-rooted occurrences of 0x009C1DBB and 0x009C2A88 from the GfxCmdBufSourceState/lightmapSamplerPrimary writer denominator. It does not prove those instruction addresses are universally unreachable from all hypothetical indirect/internal entries with other object identities.",
+  "rootIdentity": {
+    "decoderCallbackField": "vpx_codec_iface_t.dec.decode",
+    "decoderCallbackVa": "0x009B59F0",
+    "decoderName": "WebM Project VP8 Decoder v1.1.0",
+    "interfaceTableVa": "0x00CB5B78",
+    "libvpxVersion": "1.1.0"
+  },
+  "sources": {
+    "completeWriterCensus": "proof/current_client/T6_CURRENT_CLIENT_PRIMARY_LIGHTMAP_CONSTANT_WRITER_BASE_PROVENANCE_V1.json",
+    "decoderIdentity": "proof/current_client/T6_CURRENT_CLIENT_9B59F0_LIBVPX_VP8_DECODER_IDENTITY_V1.json",
+    "ownerBoundary": "proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V2.json",
+    "ownerField": "proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_CALLER_OWNER_FIELD_V1.json",
+    "pathSensitiveJoin": "proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_PATH_SENSITIVE_ARG1_V3.json",
+    "writer9C1DBB": "proof/current_client/T6_CURRENT_CLIENT_WRITER_9C1DBB_LIVEIN_EBX_V1.json",
+    "writer9C2A88": "proof/current_client/T6_CURRENT_CLIENT_PRIMARY_LIGHTMAP_WRITER_9C2A88_BASE_EXPRESSION_V1.json"
+  },
+  "summary": {
+    "excludedWriterVAs": [
+      "0x009C1DBB",
+      "0x009C2A88"
+    ],
+    "excludedWriterValue": 1,
+    "primaryLightmapRendererWriterDenominatorEffect": "remove both value-1 overlap writers for the proven decode-rooted occurrences",
+    "rendererSourceStateOccurrenceAccepted": false,
+    "root": "embedded libvpx v1.1.0 VP8 decoder callback"
+  },
+  "value1Writers": [
+    {
+      "classification": "libvpx-vp8-decode-rooted observed occurrence; exclude from renderer source-state denominator",
+      "slot4Value": 1,
+      "va": "0x009C1DBB"
+    },
+    {
+      "classification": "libvpx-vp8-decode-rooted observed occurrence; exclude from renderer source-state denominator",
+      "slot4Value": 1,
+      "va": "0x009C2A88"
+    }
+  ]
+}
