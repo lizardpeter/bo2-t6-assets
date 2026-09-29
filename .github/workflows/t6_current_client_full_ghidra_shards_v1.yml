@@ -1,0 +1,118 @@
+name: T6 current-client full Ghidra decompile shards v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_current_client_full_ghidra_shards_v1.yml'
+
+permissions:
+  contents: read
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  CLIENT_SHA256: 770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf
+  GHIDRA_CACHE_KEY: t6-current-client-ghidra-12.1.3-77031817-v1
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shards
+          python3 tools/shard_t6_current_client_catalog_v1.py             proof/current_client/ghidra_low_hanging_v1/catalog.tsv             --out-dir /tmp/shards --shard-size 750
+          cp /tmp/shards/manifest.json /tmp/manifest.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d=json.load(open('/tmp/manifest.json'))
+          print('matrix='+json.dumps({'shard':[x['index'] for x in d['shards']]},separators=(',',':')))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_GHIDRA_FULL_SHARD_PLAN_V1
+          path: /tmp/shards
+          retention-days: 30
+
+  decompile:
+    needs: plan
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download verified Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip             https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+      - name: Restore analyzed project
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-ghidra/projects
+          key: ${{ env.GHIDRA_CACHE_KEY }}
+          fail-on-cache-miss: true
+      - name: Build shard selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shards /tmp/out
+          python3 tools/shard_t6_current_client_catalog_v1.py             proof/current_client/ghidra_low_hanging_v1/catalog.tsv             --out-dir /tmp/shards --shard-size 750
+          test -s "/tmp/shards/shard_$(printf '%03d' ${{ matrix.shard }}).tsv"
+      - name: Decompile shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless"             /tmp/t6-ghidra/projects t6-current-client             -process t6mp.exe -noanalysis -readOnly             -postScript ExportT6CurrentClientBatch.java               "/tmp/shards/shard_$(printf '%03d' ${{ matrix.shard }}).tsv" /tmp/out             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 2
+          python3 - <<'PY'
+          import csv,json,pathlib,os
+          p=pathlib.Path('/tmp/out/results.tsv')
+          with p.open(encoding='utf-8',newline='') as f:
+              rows=list(csv.DictReader(f,dialect='excel-tab'))
+          d={
+            'format':'t6-current-client-ghidra-decompile-shard-v1',
+            'shard':int(os.environ['SHARD']),
+            'rows':len(rows),
+            'found_exact':sum(x['found_exact']=='true' for x in rows),
+            'decompile_completed':sum(x['decompile_completed']=='true' for x in rows),
+            'failed_or_timed_out':sum(x['decompile_completed']!='true' for x in rows),
+            'client_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
+            'proof_boundary':'Generated/unreviewed Ghidra evidence only.'
+          }
+          pathlib.Path('/tmp/out/summary.json').write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+        env:
+          SHARD: ${{ matrix.shard }}
+      - name: Pack shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -C /tmp/out -cf - . | zstd -12 -T0 -o "/tmp/t6-ghidra-shard-$(printf '%03d' ${{ matrix.shard }}).tar.zst"
+          sha256sum "/tmp/t6-ghidra-shard-$(printf '%03d' ${{ matrix.shard }}).tar.zst" > "/tmp/t6-ghidra-shard-$(printf '%03d' ${{ matrix.shard }}).sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_GHIDRA_SHARD_${{ matrix.shard }}
+          path: |
+            /tmp/t6-ghidra-shard-*.tar.zst
+            /tmp/t6-ghidra-shard-*.sha256
+            /tmp/out/summary.json
+          retention-days: 30
