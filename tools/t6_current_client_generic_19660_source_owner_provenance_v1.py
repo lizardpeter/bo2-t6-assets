@@ -87,8 +87,22 @@ def main():
         elif mn not in ("ret","retn","iret","iretd"):
             if n is not None and n<=FORM: edges[i.address].append(n)
 
-    # Reaching-definition sets for ESI. "entry-livein" means not yet locally defined.
-    states=defaultdict(set); states[start].add("entry-livein"); q=deque([(start,"entry-livein")]); seen=set()
+    # Reaching-definition sets for ESI. The diagnostic INT3 region can contain
+    # multiple real CFG entries, so seed every predecessorless decoded block
+    # before FORM instead of assuming the first decoded byte is the sole entry.
+    preds=defaultdict(set)
+    for src,dsts in edges.items():
+        for dst in dsts: preds[dst].add(src)
+    seed_entries=[]
+    for i in ins:
+        if i.address>FORM: break
+        if i.address==start or not preds.get(i.address):
+            seed_entries.append(i.address)
+    seed_entries=sorted(set(seed_entries))
+    states=defaultdict(set); q=deque(); seen=set()
+    for sv in seed_entries:
+        states[sv].add("entry-livein")
+        q.append((sv,"entry-livein"))
     esi_defs={}
     for i in ins:
         if i.address<FORM and writes_reg(md,i,"esi"):
@@ -104,7 +118,7 @@ def main():
             if nd not in states[nv]:
                 states[nv].add(nd);q.append((nv,nd))
     reaching=sorted(states.get(FORM,set()))
-    req(reaching,"formation unreachable")
+    req(reaching,"formation unreachable even after multi-entry CFG seeding")
 
     incoming=[]
     for es in ss:
@@ -122,10 +136,12 @@ def main():
       "client":{"revision":a.revision,"bytes":len(raw),"sha256":dg,"imageBaseHex":f"0x{base:08X}"},
       "region":{"startVa":f"0x{start:08X}","endVaExclusive":f"0x{end:08X}","sha256":hashlib.sha256(blob).hexdigest(),"instructionCount":len(ins)},
       "anchors":{"sourceFormation":rec(by[FORM]),"genericSamplerWrite":rec(by[STORE])},
-      "esi":{"localDefinitions":esi_defs,"reachingDefinitionsAtFormation":reaching,
+      "esi":{"localDefinitions":esi_defs,"cfgSeedEntries":[f"0x{x:08X}" for x in seed_entries],
+             "reachingDefinitionsAtFormation":reaching,
              "reachingDefinitionRecords":[esi_defs.get(x,{"kind":"entry-livein"}) for x in reaching]},
       "directIncomingEdges":incoming,
       "summary":{"regionStartVa":f"0x{start:08X}","regionEndVaExclusive":f"0x{end:08X}",
+                 "cfgSeedEntryCount":len(seed_entries),"cfgSeedEntries":[f"0x{x:08X}" for x in seed_entries],
                  "esiReachingDefinitionCount":len(reaching),"esiReachingDefinitions":reaching,
                  "directIncomingEdgeCount":len(incoming),
                  "sourceBaseExpression":"ESI_at_formation + 0x19660"},
