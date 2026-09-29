@@ -289,56 +289,81 @@ def main():
     files={}
     files["sections"]=write_chunks(cy,"sections",secrows,header,
       """MERGE (n:KGNode {id:row.id})
+ON CREATE SET n._mechanical_inventory_new=true
 SET n.kind='re:BinarySectionOccurrence', n.namespace='t6', n.build_id=b.id, n.artifact_id=a.id,
     n.display_name=row.name, n.ordinal=row.ordinal, n.address_space='va', n.address_start=row.va,
     n.rva=row.rva, n.raw_offset=row.raw_offset, n.raw_size=row.raw_size, n.virtual_size=row.virtual_size,
     n.characteristics=row.characteristics, n.executable=row.executable, n.readable=row.readable, n.writable=row.writable,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
-MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",5000)
+WITH b,a,n,coalesce(n._mechanical_inventory_new,false) AS is_new
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(n)
+  CREATE (n)-[:DEFINED_IN]->(a)
+)
+REMOVE n._mechanical_inventory_new""",5000)
 
     files["imports"]=write_chunks(cy,"imports",improws,header,
       """MERGE (n:KGNode {id:row.id})
+ON CREATE SET n._mechanical_inventory_new=true
 SET n.kind='core:Occurrence', n.occurrence_type='pe-import', n.namespace='t6', n.build_id=b.id, n.artifact_id=a.id,
     n.dll=row.dll, n.import_name=row.name, n.import_ordinal=row.ordinal, n.iat_va=row.iat_va,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
-MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",5000)
+WITH b,a,n,coalesce(n._mechanical_inventory_new,false) AS is_new
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(n)
+  CREATE (n)-[:DEFINED_IN]->(a)
+)
+REMOVE n._mechanical_inventory_new""",5000)
 
     files["strings"]=write_chunks(cy,"strings",strrows,header,
       """MERGE (n:KGNode {id:row.id})
+ON CREATE SET n._mechanical_inventory_new=true
 SET n.kind='core:Occurrence', n.occurrence_type='string-literal', n.namespace='t6', n.build_id=b.id, n.artifact_id=a.id,
     n.address_space='va', n.address_start=row.va, n.section_name=row.section, n.length=row.length,
     n.text=row.text, n.truncated=row.truncated, n.content_sha256=row.sha256,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
-MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",5000)
+WITH b,a,n,coalesce(n._mechanical_inventory_new,false) AS is_new
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(n)
+  CREATE (n)-[:DEFINED_IN]->(a)
+)
+REMOVE n._mechanical_inventory_new""",5000)
 
     files["functions"]=write_chunks(cy,"functions",fnrows,header,
       """MERGE (n:KGNode {id:row.id})
-ON CREATE SET n.kind='re:FunctionOccurrence', n.namespace='t6', n.build_id=b.id, n.artifact_id=a.id,
+ON CREATE SET n._mechanical_inventory_new=true,
+    n.kind='re:FunctionOccurrence', n.namespace='t6', n.build_id=b.id, n.artifact_id=a.id,
     n.display_name='sub_'+substring(row.va,2), n.address_space='va', n.address_start=row.va
 SET n.entry_basis=row.basis, n.entry_strongest_basis=row.strongest_basis,
     n.boundary_state=CASE WHEN coalesce(n.boundary_state,'') STARTS WITH 'exact-' THEN n.boundary_state ELSE 'entry-only-mechanical-inventory' END,
     n.producer=CASE WHEN n.producer IS NULL THEN 't6-current-client-whole-image-mechanical-inventory-v1' ELSE n.producer END
-MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",5000)
+WITH b,a,n,coalesce(n._mechanical_inventory_new,false) AS is_new
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(n)
+  CREATE (n)-[:DEFINED_IN]->(a)
+)
+REMOVE n._mechanical_inventory_new""",5000)
 
     call_header=f"MATCH (b:KGNode {{id:{q(BUILD_ID)}}}) MATCH (a:KGNode {{id:{q(ARTIFACT_ID)}}})"
     files["calls"]=write_chunks(cy,"calls",callrows,call_header,
       """MATCH (target:KGNode {id:row.target_id})
 MERGE (c:KGNode {id:row.id})
+ON CREATE SET c._mechanical_inventory_new=true
 SET c.kind='core:Occurrence', c.occurrence_type='direct-callsite', c.namespace='t6', c.build_id=b.id, c.artifact_id=a.id,
     c.address_space='va', c.address_start=row.call_va, c.target_va=row.target_va, c.section_name=row.section,
     c.instruction_bytes=row.bytes, c.caller_assignment_state=CASE WHEN row.caller_id IS NULL THEN 'unassigned' ELSE 'nearest-preceding-entry-candidate' END,
     c.producer='t6-current-client-whole-image-mechanical-inventory-v1'
-MERGE (b)-[:HAS_OCCURRENCE]->(c)
-MERGE (c)-[:DEFINED_IN]->(a)
-MERGE (c)-[:CALLS_TARGET]->(target)
-FOREACH (_ IN CASE WHEN row.caller_id IS NULL THEN [] ELSE [1] END |
-  MERGE (caller:KGNode {id:row.caller_id})
-  MERGE (caller)-[:HAS_CALLSITE]->(c)
-)""",5000)
+WITH b,a,row,target,c,coalesce(c._mechanical_inventory_new,false) AS is_new
+OPTIONAL MATCH (caller:KGNode {id:row.caller_id})
+FOREACH (_ IN CASE WHEN is_new THEN [1] ELSE [] END |
+  CREATE (b)-[:HAS_OCCURRENCE]->(c)
+  CREATE (c)-[:DEFINED_IN]->(a)
+  CREATE (c)-[:CALLS_TARGET]->(target)
+)
+FOREACH (_ IN CASE WHEN is_new AND caller IS NOT NULL THEN [1] ELSE [] END |
+  CREATE (caller)-[:HAS_CALLSITE]->(c)
+)
+REMOVE c._mechanical_inventory_new""",5000)
 
     graph_manifest={
       "format":"uregraph-cypher-chunk-manifest-v1",
