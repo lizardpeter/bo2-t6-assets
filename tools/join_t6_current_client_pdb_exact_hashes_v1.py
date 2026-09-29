@@ -9,7 +9,7 @@ Exact byte-hash equality is emitted as an identity witness, not as an address/na
 Optional graph projection:
 - every exact-hash hit becomes a deterministic re:Evidence node linked to the
   current-client FunctionOccurrence and server FunctionVariant;
-- only a server hash with multiplicity 1 creates CROSSBUILD_CORRESPONDS_TO;
+- only a hash with multiplicity 1 on both client and server creates CROSSBUILD_CORRESPONDS_TO;
 - duplicate server hashes remain candidate evidence and are never auto-promoted.
 """
 from __future__ import annotations
@@ -62,7 +62,8 @@ SET e.kind='re:Evidence',
     e.server_pdb_exact_hash_variants={server_count},
     e.match_rows={len(matches)},
     e.current_client_functions_with_match={len(set(x["current_client_va"] for x in matches))},
-    e.ambiguous_current_client_hashes={len(set(x["current_client_va"] for x in matches if x["server_hash_multiplicity"]>1))},
+    e.ambiguous_current_client_hashes={len(set(x["current_client_hash"] for x in matches if x["server_hash_multiplicity"]>1 or x["client_hash_multiplicity"]>1))},
+    e.ambiguous_current_client_functions={len(set(x["current_client_va"] for x in matches if x["server_hash_multiplicity"]>1 or x["client_hash_multiplicity"]>1))},
     e.proof_boundary='Exact instruction-byte hash equality is strong cross-build identity evidence. Hashes duplicated on either side remain candidates and are not auto-corresponded. No address/name-only identity is admitted.'
 MERGE (e)-[:TARGETS_BUILD]->(b)
 MERGE (e)-[:EVIDENCE_FOR]->(a)
@@ -115,7 +116,7 @@ SET e.kind='re:Evidence',
     e.server_hash_multiplicity=row.server_multiplicity,
     e.client_hash_multiplicity=row.client_multiplicity,
     e.identity_basis='exact-function-instruction-bytes-sha256-across-builds',
-    e.proof_boundary=CASE WHEN row.accepted THEN 'Unique exact server-function instruction-byte hash witness; correspondence is accepted at the machine-body level but does not by itself prove all source-level type or ABI details.' ELSE 'Exact byte hash is duplicated among server variants; candidate evidence only and no correspondence edge is created.' END
+    e.proof_boundary=CASE WHEN row.accepted THEN 'Exact instruction-byte hash is unique on both current-client and server-variant sides; correspondence is accepted at the machine-body level but does not by itself prove all source-level type or ABI details.' ELSE 'Exact instruction-byte hash is duplicated on at least one side; candidate evidence only and no correspondence edge is created.' END
 MERGE (corpus)-[:CONTAINS_EVIDENCE]->(e)
 MERGE (e)-[:EVIDENCE_FOR]->(c)
 MERGE (e)-[:EVIDENCE_FOR]->(v)
@@ -167,13 +168,16 @@ def main():
         h=r["instruction_bytes_sha256"].lower()
         if h: client_by[h].append(r)
     matches=[]
-    ambiguous=0
+    ambiguous_hashes=set()
+    ambiguous_client_functions=0
     for c in cc:
         h=c["instruction_bytes_sha256"].lower()
         hits=by.get(h,[])
         client_mult=len(client_by.get(h,[]))
         if not hits: continue
-        if len(hits)>1 or client_mult>1: ambiguous+=1
+        if len(hits)>1 or client_mult>1:
+            ambiguous_hashes.add(h)
+            ambiguous_client_functions+=1
         for s in hits:
             matches.append({
               "current_client_va":"0x"+c["entry_va"].lower().removeprefix("0x"),
@@ -196,7 +200,8 @@ def main():
       "server_pdb_exact_hash_variants":len(sv),
       "match_rows":len(matches),
       "current_client_functions_with_match":len(set(x["current_client_va"] for x in matches)),
-      "ambiguous_current_client_hashes":ambiguous,
+      "ambiguous_current_client_hashes":len(ambiguous_hashes),
+      "ambiguous_current_client_functions":ambiguous_client_functions,
       "matches":matches,
       "proof_boundary":"Exact instruction-byte hash equality is strong cross-build identity evidence. Hashes duplicated on either the current-client or server side remain candidate/ambiguous and are not auto-merged. No address/name-only identity is admitted."
     }
@@ -207,7 +212,8 @@ def main():
     print({
       "matches":len(matches),
       "current_client_functions":len(set(x["current_client_va"] for x in matches)),
-      "ambiguous":ambiguous,
+      "ambiguous_hashes":len(ambiguous_hashes),
+      "ambiguous_client_functions":ambiguous_client_functions,
       "cypher_out_dir":str(a.cypher_out_dir) if a.cypher_out_dir else None,
     })
 if __name__=="__main__": main()
