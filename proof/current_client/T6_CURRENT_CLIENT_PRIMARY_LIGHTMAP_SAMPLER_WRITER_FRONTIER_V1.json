@@ -1,0 +1,77 @@
+{
+  "authority": "byte-0 projection of the complete exact current-client +0x1610 dword-writer denominator/value proofs",
+  "format": "t6-current-client-primary-lightmap-sampler-writer-frontier-v1",
+  "geometry": {
+    "accessor": "lightmapSamplerPrimary",
+    "byteIndex": 0,
+    "packedDwordOffset": 5648,
+    "samplerStateArrayOffset": 5644,
+    "slotIndex": 4,
+    "targetByteOffset": 5648
+  },
+  "proofBoundary": "This closes which members of the already-complete +0x1610 writer denominator have a constant byte-0 value. It proves five writer values exactly (0/1) and narrows the primary-lightmap frontier to the two packed builders 0x009A7D3F and 0x009A7DD3. It does not claim every low-byte value 0..255 is runtime-reachable, identify the lightmap caller path, order all writers at runtime, map numeric bytes to API sampler enums, or prove a historical executable build.",
+  "source": {
+    "format": "t6-current-client-shadowmap-sampler-sun-all-writer-state-byte-semantics-v1",
+    "gitBlobSha": "7b53717985e680d5197afb8650bd4ec75d6604f5",
+    "path": "proof/current_client/T6_CURRENT_CLIENT_SHADOWMAP_SAMPLER_SUN_ALL_WRITER_STATE_BYTE_SEMANTICS_V1.json"
+  },
+  "summary": {
+    "finalSlot4ValueClosed": false,
+    "remainingWriterVAs": [
+      "0x009a7d3f",
+      "0x009a7dd3"
+    ],
+    "slot4ExactWriterCount": 5,
+    "slot4RuntimeDependentWriterCount": 2,
+    "writerDenominatorReusedFromExactProof": true,
+    "writerInstructionCount": 7
+  },
+  "writers": [
+    {
+      "basis": "exact initializer proof",
+      "slot4Value": 0,
+      "slot4ValueClosed": true,
+      "writerVa": "0x004555a6"
+    },
+    {
+      "basis": "unsigned cap <=0x15FF",
+      "packedUpperBound": 5631,
+      "remainingProof": "identify the exact caller/runtime inputs reaching this writer for lightmapSamplerPrimary and project the resulting low byte",
+      "slot4AllowedByExistingProof": [0, 255],
+      "slot4ValueClosed": false,
+      "writerVa": "0x009a7d3f"
+    },
+    {
+      "basis": "min(EAX,0x15FB)+4",
+      "packedUpperBound": 5631,
+      "remainingProof": "identify the exact caller/runtime inputs reaching this writer for lightmapSamplerPrimary and project the resulting low byte",
+      "slot4AllowedByExistingProof": [0, 255],
+      "slot4ValueClosed": false,
+      "writerVa": "0x009a7dd3"
+    },
+    {
+      "basis": "EDI zero on writer branch; pop/ret is alternate arm",
+      "slot4Value": 0,
+      "slot4ValueClosed": true,
+      "writerVa": "0x009bcde7"
+    },
+    {
+      "basis": "EDX=0",
+      "slot4Value": 0,
+      "slot4ValueClosed": true,
+      "writerVa": "0x009bd388"
+    },
+    {
+      "basis": "ECX=1",
+      "slot4Value": 1,
+      "slot4ValueClosed": true,
+      "writerVa": "0x009c1dbb"
+    },
+    {
+      "basis": "EBX=1",
+      "slot4Value": 1,
+      "slot4ValueClosed": true,
+      "writerVa": "0x009c2a88"
+    }
+  ]
+}
