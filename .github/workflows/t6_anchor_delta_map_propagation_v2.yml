@@ -1,0 +1,62 @@
+name: T6 full-MAP anchor propagation v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_anchor_delta_map_propagation_v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  propagate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch retained server MAP symbol inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-map
+          curl --fail --location --retry 5 --retry-all-errors             -o /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz             https://raw.githubusercontent.com/lizardpeter/bo2-pc-server-decompile/main/analysis/generated/CoDMPServer_PC.symbols.csv.gz
+          test -s /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz
+          gzip -t /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz
+      - name: Run full MAP propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/anchor_delta_map_propagation_v2
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          python3 tools/t6_anchor_delta_map_propagation_v2.py             --strict-join proof/current_client/pdb_exact_hash_join_v1_strict/join.json             --call-dir proof/current_client/whole_image_inventory_v1_transport/cypher             --map-symbols-gz /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz             --out "$OUT/result.json"             --min-independent-anchors 2
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path("proof/current_client/anchor_delta_map_propagation_v2/result.json")
+          d=json.loads(p.read_text())
+          keys=(
+            "format","strict_anchor_count","map_function_start_addresses",
+            "map_function_symbol_rows","current_client_direct_calls_parsed",
+            "anchors_with_interval_calls","anchors_with_map_target_hits",
+            "raw_translated_call_hits","candidate_pairs","new_candidate_pairs",
+            "new_multi_anchor_candidate_pairs","game_or_engine_context_candidate_pairs",
+            "state_counts","proof_boundary"
+          )
+          s={k:d[k] for k in keys}
+          pathlib.Path("proof/current_client/anchor_delta_map_propagation_v2/summary.json").write_text(
+              json.dumps(s,indent=2,sort_keys=True)+"\n"
+          )
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+      - name: Commit MAP propagation proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/anchor_delta_map_propagation_v2
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: propagate T6 exact anchors through full server MAP"
+          git pull --rebase origin main
+          git push origin HEAD:main
