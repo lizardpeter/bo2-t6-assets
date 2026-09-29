@@ -1,0 +1,53 @@
+name: T6 9C2A88 upstream stack slot one-shot
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_writer_9c2a88_owner_stack_slot_one_shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover exact current client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 tools/t6_current_client_fetch_exact_v1.py --out-exe /tmp/client/t6mp.exe --out-identity /tmp/client/identity.json
+      - name: Resolve upstream stack slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rev=$(python3 -c "import json;print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])")
+          python3 tools/t6_current_client_writer_9c2a88_owner_stack_slot_v1.py             /tmp/client/t6mp.exe --revision "$rev"             --out proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json
+          python3 - <<'PY'
+          import json
+          p='proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json'
+          d=json.load(open(p))
+          print(json.dumps(d['summary'],indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Resolve T6 9C2A88 upstream stack slot"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          rm -f /tmp/client/t6mp.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_WRITER_9C2A88_OWNER_STACK_SLOT_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_WRITER_9C2A88_OWNER_STACK_SLOT_V1.json
+          if-no-files-found: error
