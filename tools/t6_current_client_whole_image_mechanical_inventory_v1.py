@@ -278,7 +278,7 @@ SET n.kind='re:BinarySectionOccurrence', n.namespace='t6', n.build_id=b.id, n.ar
     n.characteristics=row.characteristics, n.executable=row.executable, n.readable=row.readable, n.writable=row.writable,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
 MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",250)
+MERGE (n)-[:DEFINED_IN]->(a)""",5000)
 
     files["imports"]=write_chunks(cy,"imports",improws,header,
       """MERGE (n:KGNode {id:row.id})
@@ -286,7 +286,7 @@ SET n.kind='core:Occurrence', n.occurrence_type='pe-import', n.namespace='t6', n
     n.dll=row.dll, n.import_name=row.name, n.import_ordinal=row.ordinal, n.iat_va=row.iat_va,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
 MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",250)
+MERGE (n)-[:DEFINED_IN]->(a)""",5000)
 
     files["strings"]=write_chunks(cy,"strings",strrows,header,
       """MERGE (n:KGNode {id:row.id})
@@ -295,7 +295,7 @@ SET n.kind='core:Occurrence', n.occurrence_type='string-literal', n.namespace='t
     n.text=row.text, n.truncated=row.truncated, n.content_sha256=row.sha256,
     n.producer='t6-current-client-whole-image-mechanical-inventory-v1'
 MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",250)
+MERGE (n)-[:DEFINED_IN]->(a)""",5000)
 
     files["functions"]=write_chunks(cy,"functions",fnrows,header,
       """MERGE (n:KGNode {id:row.id})
@@ -305,7 +305,7 @@ SET n.entry_basis=row.basis, n.entry_strongest_basis=row.strongest_basis,
     n.boundary_state=CASE WHEN coalesce(n.boundary_state,'') STARTS WITH 'exact-' THEN n.boundary_state ELSE 'entry-only-mechanical-inventory' END,
     n.producer=CASE WHEN n.producer IS NULL THEN 't6-current-client-whole-image-mechanical-inventory-v1' ELSE n.producer END
 MERGE (b)-[:HAS_OCCURRENCE]->(n)
-MERGE (n)-[:DEFINED_IN]->(a)""",250)
+MERGE (n)-[:DEFINED_IN]->(a)""",5000)
 
     call_header=f"MATCH (b:KGNode {{id:{q(BUILD_ID)}}}) MATCH (a:KGNode {{id:{q(ARTIFACT_ID)}}})"
     files["calls"]=write_chunks(cy,"calls",callrows,call_header,
@@ -321,7 +321,7 @@ MERGE (c)-[:CALLS_TARGET]->(target)
 FOREACH (_ IN CASE WHEN row.caller_id IS NULL THEN [] ELSE [1] END |
   MERGE (caller:KGNode {id:row.caller_id})
   MERGE (caller)-[:HAS_CALLSITE]->(c)
-)""",200)
+)""",5000)
 
     graph_manifest={
       "format":"uregraph-cypher-chunk-manifest-v1",
