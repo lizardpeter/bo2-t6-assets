@@ -1,0 +1,47 @@
+name: T6 sampler context source backtrace one-shot
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_sampler_context_source_backtrace_one_shot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check -q capstone==5.0.6
+      - name: Recover exact current client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/client proof/current_client
+          python3 tools/t6_current_client_fetch_exact_v1.py --out-exe /tmp/client/t6mp.exe --out-identity /tmp/client/identity.json
+      - name: Backtrace sampler context sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          rev=$(python3 -c "import json;print(json.load(open('/tmp/client/identity.json'))['observedCdnRevision'])")
+          python3 tools/t6_current_client_generic_sampler_context_source_backtrace_v1.py             /tmp/client/t6mp.exe --revision "$rev"             --out proof/current_client/T6_CURRENT_CLIENT_GENERIC_SAMPLER_CONTEXT_SOURCE_BACKTRACE_V1.json
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/T6_CURRENT_CLIENT_GENERIC_SAMPLER_CONTEXT_SOURCE_BACKTRACE_V1.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Backtrace T6 generic sampler context sources"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          rm -f /tmp/client/t6mp.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_GENERIC_SAMPLER_CONTEXT_SOURCE_BACKTRACE_V1
+          path: proof/current_client/T6_CURRENT_CLIENT_GENERIC_SAMPLER_CONTEXT_SOURCE_BACKTRACE_V1.json
+          if-no-files-found: error
