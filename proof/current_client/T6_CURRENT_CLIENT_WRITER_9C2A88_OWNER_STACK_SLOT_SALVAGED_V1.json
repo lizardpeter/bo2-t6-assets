@@ -1,0 +1,41 @@
+{
+  "format": "t6-current-client-writer-9c2a88-owner-stack-slot-salvaged-v1",
+  "authority": "SHA-pinned GitHub Actions artifact from run 36561355678; analysis succeeded before final push race",
+  "client": {
+    "revision": "5354",
+    "bytes": 13263640,
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "workflow": {
+    "runId": 36561355678,
+    "artifactId": 11030340948,
+    "artifactName": "T6_WRITER_9C2A88_OWNER_STACK_SLOT_V1",
+    "artifactDigest": "sha256:d54be098012c543a9341a908a88cfca35c28ad85143b0d67314babf90bf06f06"
+  },
+  "boundaryCorrection": {
+    "helperA": "0x009B5960..0x009B59EC",
+    "helperAReturn": "0x009B59EC ret",
+    "padding": "0x009B59ED..0x009B59EF INT3",
+    "actualOwnerCallerEntry": "0x009B59F0"
+  },
+  "prologue": [
+    "0x009B59F0 sub esp,0x6C",
+    "0x009B59F3 push ebp",
+    "0x009B59F4 push esi",
+    "0x009B59F5 push edi"
+  ],
+  "anchor": {
+    "va": "0x009B59F6",
+    "instruction": "mov edi,dword ptr [esp+0x7C]",
+    "espRelativeToEntry": -120,
+    "effectiveEntryRelativeOffset": 4,
+    "classification": "stack argument 1 at [entry_ESP+4]"
+  },
+  "downstream": {
+    "ownerFieldLoad": "0x009B5B8C ECX=[EDI+0x110]",
+    "argPush": "0x009B5C09 push ECX",
+    "call": "0x009B5C0A -> 0x009B7E80",
+    "value1WriterBaseExpression": "*(0x009B59F0_arg1+0x110)+0xF00"
+  },
+  "proofBoundary": "Closes exact stack geometry and true function boundary for the decoded direct path. The semantic type of 0x009B59F0 arg1 remains unassigned."
+}
