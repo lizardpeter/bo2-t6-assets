@@ -32,11 +32,13 @@ public class ExportT6CurrentClientBatch extends GhidraScript {
     @Override
     protected void run() throws Exception {
         String[] args=getScriptArgs();
-        if(args.length!=2) throw new IllegalArgumentException(
-            "usage: ExportT6CurrentClientBatch.java <selection.tsv> <output-dir>");
+        if(args.length!=2 && args.length!=3) throw new IllegalArgumentException(
+            "usage: ExportT6CurrentClientBatch.java <selection.tsv> <output-dir> [timeout-seconds]");
 
         Path selection=Paths.get(args[0]).toAbsolutePath().normalize();
         Path output=Paths.get(args[1]).toAbsolutePath().normalize();
+        int decompileTimeout=args.length==3 ? Integer.parseInt(args[2]) : DEFAULT_DECOMPILE_TIMEOUT_SECONDS;
+        if(decompileTimeout<1) throw new IllegalArgumentException("timeout must be positive");
         Path cDir=output.resolve("unreviewed");
         Path asmDir=output.resolve("disassembly");
         Files.createDirectories(cDir);
