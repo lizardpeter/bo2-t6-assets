@@ -48,6 +48,20 @@ Do not duplicate these paths:
 
 Generated Ghidra C is evidence, not accepted reconstructed source.
 
+
+### Current generated decompilation census (2026-09-29)
+
+The exact current-client Ghidra catalog contains **24,617 functions**. The retained v1/v2/v3 low-hanging, thunk, and deferred lanes collectively target all 24,617 catalog functions:
+
+- v1: 3,000 / 3,000 completed;
+- v2: 4,997 / 5,000 completed;
+- v3: 12,523 / 12,525 completed;
+- thunk lane: 169 / 169 completed;
+- deferred lane: 3,920 / 3,923 completed;
+- aggregate: **24,609 successful generated decompilations; 8 failed/timed out**.
+
+This is generated/unreviewed evidence coverage, not 99.97% semantic or recompilation completion. The whole-program frontier is now dominated by symbol/type/structure/global recovery, semantic review, source-unit reconstruction, compilation, and differential validation. The mechanical whole-image inventory may contain additional entry candidates that Ghidra does not recognize as exact functions; those remain a separate boundary-audit lane.
+
 ## Immediate frontier
 
 The highest-leverage task is to project the existing current-client Ghidra catalog into `uregraph`, then expand high-confidence server-PDB → current-client identity using exact byte equality first and progressively stronger structural evidence (CFG/call topology/strings/constants/imports/globals/object-file context) for changed functions.
