@@ -48,6 +48,8 @@ def all_edges(raw,s,target):
     md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
     out=[]
     for i in md.disasm(data,s["va"]):
+        if not i.id:
+            continue
         if len(i.operands)!=1 or i.operands[0].type!=X86_OP_IMM:continue
         if i.mnemonic not in ("call","jmp","je","jne","jz","jnz","ja","jb","jbe","jae","jg","jge","jl","jle"):continue
         if (int(i.operands[0].imm)&0xffffffff)==target:out.append(rec(i))
