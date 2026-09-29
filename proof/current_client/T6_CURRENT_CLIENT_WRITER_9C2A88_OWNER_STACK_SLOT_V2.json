@@ -1,0 +1,104 @@
+{
+  "anchor": {
+    "classification": "arg1 at [S+0x4]",
+    "effectiveEntryRelativeOffset": 4,
+    "espRelativeToEntry": -120,
+    "instruction": {
+      "address": "0x009B59F6",
+      "bytes": "8b7c247c",
+      "mnemonic": "mov",
+      "opStr": "edi, dword ptr [esp + 0x7c]"
+    }
+  },
+  "authority": "SHA-pinned exact function-boundary gates and entry-relative ESP arithmetic",
+  "boundary": {
+    "functionStart": {
+      "address": "0x009B59F0",
+      "bytes": "83ec6c",
+      "mnemonic": "sub",
+      "opStr": "esp, 0x6c"
+    },
+    "padding": "0x009B59ED..0x009B59EF = INT3",
+    "previousRet": {
+      "address": "0x009B59EC",
+      "bytes": "c3",
+      "mnemonic": "ret",
+      "opStr": ""
+    }
+  },
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "espTrace": [
+    {
+      "effect": "sub esp,0x6c",
+      "espRelativeToEntryAfter": -108,
+      "espRelativeToEntryBefore": 0,
+      "instruction": {
+        "address": "0x009B59F0",
+        "bytes": "83ec6c",
+        "mnemonic": "sub",
+        "opStr": "esp, 0x6c"
+      }
+    },
+    {
+      "effect": "push => ESP-4",
+      "espRelativeToEntryAfter": -112,
+      "espRelativeToEntryBefore": -108,
+      "instruction": {
+        "address": "0x009B59F3",
+        "bytes": "55",
+        "mnemonic": "push",
+        "opStr": "ebp"
+      }
+    },
+    {
+      "effect": "push => ESP-4",
+      "espRelativeToEntryAfter": -116,
+      "espRelativeToEntryBefore": -112,
+      "instruction": {
+        "address": "0x009B59F4",
+        "bytes": "56",
+        "mnemonic": "push",
+        "opStr": "esi"
+      }
+    },
+    {
+      "effect": "push => ESP-4",
+      "espRelativeToEntryAfter": -120,
+      "espRelativeToEntryBefore": -116,
+      "instruction": {
+        "address": "0x009B59F5",
+        "bytes": "57",
+        "mnemonic": "push",
+        "opStr": "edi"
+      }
+    },
+    {
+      "espRelativeToEntryBefore": -120,
+      "instruction": {
+        "address": "0x009B59F6",
+        "bytes": "8b7c247c",
+        "mnemonic": "mov",
+        "opStr": "edi, dword ptr [esp + 0x7c]"
+      },
+      "memoryAddressRelativeToEntry": 4
+    }
+  ],
+  "format": "t6-current-client-writer-9c2a88-owner-stack-slot-v2",
+  "function": {
+    "diagnosticEndVaExclusive": "0x009B5C93",
+    "sha256": "ee13739b116387e1a84e2a4bbc33e2fc72a54a682a2ceb196625b9b56d6a7716",
+    "startVa": "0x009B59F0"
+  },
+  "proofBoundary": "Closes the exact 0x009B59F0 function boundary and proves EDI at 0x009B59F6 equals this function's arg1. It does not assign arg1 a source-level type or exclude indirect/internal entry paths elsewhere.",
+  "summary": {
+    "correctFunctionStartVa": "0x009B59F0",
+    "downstreamWriterBaseExpression": "*(arg1+0x110)+0xF00",
+    "ediExpression": "arg1",
+    "previousFunctionReturnVa": "0x009B59EC"
+  }
+}
