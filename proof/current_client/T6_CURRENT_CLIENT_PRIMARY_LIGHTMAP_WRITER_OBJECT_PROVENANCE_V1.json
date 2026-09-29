@@ -1,0 +1,57 @@
+{
+  "authority": "join of retained exact SHA-pinned current-client machine-code proofs",
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "format": "t6-current-client-primary-lightmap-writer-object-provenance-v1",
+  "observedDirectOccurrences": [
+    {
+      "baseObjectProvenance": "ECX = ESP + 0x2C immediately before direct call",
+      "builder": "0x009A7D00",
+      "caller": "0x009AFF48",
+      "objectClass": "stack-derived local transfer window",
+      "samplerWriterClassification": "exclude-from-accepted-denominator",
+      "windowEvidence": [
+        "builder stores cursor/end/size metadata at +0x1604/+0x1608/+0x1610",
+        "builder calls 0x00A72BF0 with destination=self and byte count from the +0x1610 value"
+      ],
+      "writer": "0x009A7D3F"
+    },
+    {
+      "baseObjectProvenance": "ECX = ESP + 0x20 immediately before direct call",
+      "builder": "0x009A7D60",
+      "caller": "0x009B007A",
+      "objectClass": "stack-derived local sliding transfer window",
+      "samplerWriterClassification": "exclude-from-accepted-denominator",
+      "windowEvidence": [
+        "builder reads/writes payload at self and self+4",
+        "builder slides/copies bytes through 0x00A72BF0",
+        "builder updates cursor/end/span metadata at +0x1604/+0x1608/+0x1610"
+      ],
+      "writer": "0x009A7DD3"
+    }
+  ],
+  "policyConclusion": {
+    "acceptedAsPrimaryLightmapWriterEvidence": false,
+    "correctRule": "a sampler writer requires base-object provenance to the GfxCmdBufSource occurrence; displacement alone is evidence of layout overlap only",
+    "oldRule": "displacement overlap at +0x1610 admitted a possible codeImageSamplerStates writer",
+    "reclassifiedWriterVAs": [
+      "0x009A7D3F",
+      "0x009A7DD3"
+    ]
+  },
+  "proofBoundary": "This excludes the two observed direct-call occurrences from the accepted GfxCmdBufSource sampler-writer denominator. It does not prove the builder entry points can never be reached indirectly with another object, and it does not assign a final primary-lightmap sampler-state byte.",
+  "remainingFrontier": "Trace writes from an object proven to be the GfxCmdBufSource/source occurrence used by the generic code-sampler consumers. Re-run the +0x1610 writer census with base-object provenance instead of raw displacement matching.",
+  "transferHelper": {
+    "abi": {
+      "arg1": "destination",
+      "arg2": "source",
+      "arg3": "byte count"
+    },
+    "behavior": "overlap-safe memmove-style byte transfer",
+    "entry": "0x00a72bf0"
+  }
+}
