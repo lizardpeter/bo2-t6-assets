@@ -12,18 +12,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: client
-      - name: Checkout server PDB/MAP inventories
-        uses: actions/checkout@v4
-        with:
-          repository: lizardpeter/bo2-pc-server-decompile
-          path: server
-          fetch-depth: 1
-      - name: Verify server inventories
+      - name: Fetch server inventories through GitHub API
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          mkdir -p server/analysis/generated
+          python3 - <<'PY'
+          import base64,json,pathlib,urllib.request
+          # The public server evidence repo is fetched without assuming a default branch.
+          # GitHub contents API is used here because raw/main and cross-repo checkout are brittle.
+          repo='lizardpeter/bo2-pc-server-decompile'
+          names=['canonical_functions.csv.gz','CoDMPServer_PC.functions.csv.gz','CoDMPServer_PC.procedures.csv.gz','cross_build_symbols.csv.gz']
+          out=pathlib.Path('server/analysis/generated')
+          for name in names:
+              url=f'https://api.github.com/repos/{repo}/contents/analysis/generated/{name}'
+              req=urllib.request.Request(url,headers={'Accept':'application/vnd.github.raw+json','User-Agent':'t6-cross-build-census'})
+              with urllib.request.urlopen(req) as r:
+                  data=r.read()
+              (out/name).write_bytes(data)
+              print(name,len(data))
+          PY
           for f in canonical_functions.csv.gz CoDMPServer_PC.functions.csv.gz CoDMPServer_PC.procedures.csv.gz cross_build_symbols.csv.gz; do
             test -s "server/analysis/generated/$f"
+            gzip -t "server/analysis/generated/$f"
           done
       - name: Inspect and join inventories
         shell: bash
