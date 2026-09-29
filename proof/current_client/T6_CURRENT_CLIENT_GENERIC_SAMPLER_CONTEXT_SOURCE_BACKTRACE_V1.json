@@ -1,0 +1,2146 @@
+{
+  "authority": "SHA-pinned current-client exact direct consumer calls with fail-closed local stack-context recovery",
+  "calls": [
+    {
+      "call": {
+        "address": "0x0074322D",
+        "bytes": "e8dea40300",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x00743228",
+          "bytes": "8d4c2414",
+          "mnemonic": "lea",
+          "opStr": "ecx, [esp + 0x14]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074322C",
+          "bytes": "51",
+          "mnemonic": "push",
+          "opStr": "ecx"
+        },
+        "arg1Register": "ecx",
+        "contextCoordinateAtLea": 20,
+        "contextLeaDisplacement": 20,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 20,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x007431F7",
+                "bytes": "8d46fd",
+                "definesRegister": "eax",
+                "mnemonic": "lea",
+                "opStr": "eax, [esi - 3]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074320B",
+            "bytes": "89442410",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x10], eax"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 24,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x007431FA",
+                "bytes": "5f",
+                "definesRegister": "edi",
+                "mnemonic": "pop",
+                "opStr": "edi"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074320F",
+            "bytes": "897c2414",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x14], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0074336B",
+        "bytes": "e8a0a30300",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x00743366",
+          "bytes": "8d4c2414",
+          "mnemonic": "lea",
+          "opStr": "ecx, [esp + 0x14]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074336A",
+          "bytes": "51",
+          "mnemonic": "push",
+          "opStr": "ecx"
+        },
+        "arg1Register": "ecx",
+        "contextCoordinateAtLea": 20,
+        "contextLeaDisplacement": 20,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 20,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00743339",
+                "bytes": "8b742428",
+                "definesRegister": "esi",
+                "mnemonic": "mov",
+                "opStr": "esi, dword ptr [esp + 0x28]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x00743349",
+            "bytes": "89742410",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x10], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 24,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00743335",
+                "bytes": "8b44242c",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x2c]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074334D",
+            "bytes": "89442414",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x14], eax"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0074B75F",
+        "bytes": "e87c240300",
+        "mnemonic": "call",
+        "opStr": "0x77dbe0"
+      },
+      "contextRecovery": {
+        "arg1Definition": null,
+        "arg1Instruction": {
+          "address": "0x0074B75E",
+          "bytes": "56",
+          "mnemonic": "push",
+          "opStr": "esi"
+        },
+        "arg1Register": "esi",
+        "reason": "arg1-not-local-stack-lea",
+        "recovered": false
+      },
+      "section": ".text",
+      "targetRole": "consumer-b",
+      "targetVa": "0x0077DBE0"
+    },
+    {
+      "call": {
+        "address": "0x0074BAD2",
+        "bytes": "e809210300",
+        "mnemonic": "call",
+        "opStr": "0x77dbe0"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0074BAC9",
+          "bytes": "8b8c24e8000000",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [esp + 0xe8]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074BAD1",
+          "bytes": "51",
+          "mnemonic": "push",
+          "opStr": "ecx"
+        },
+        "arg1Register": "ecx",
+        "reason": "arg1-not-local-stack-lea",
+        "recovered": false
+      },
+      "section": ".text",
+      "targetRole": "consumer-b",
+      "targetVa": "0x0077DBE0"
+    },
+    {
+      "call": {
+        "address": "0x0074BC24",
+        "bytes": "e8b71f0300",
+        "mnemonic": "call",
+        "opStr": "0x77dbe0"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0074BC1B",
+          "bytes": "8b9424e8000000",
+          "mnemonic": "mov",
+          "opStr": "edx, dword ptr [esp + 0xe8]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074BC23",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "reason": "arg1-not-local-stack-lea",
+        "recovered": false
+      },
+      "section": ".text",
+      "targetRole": "consumer-b",
+      "targetVa": "0x0077DBE0"
+    },
+    {
+      "call": {
+        "address": "0x0074BD30",
+        "bytes": "e8db190300",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0074BD28",
+          "bytes": "8d942484000000",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x84]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074BD2F",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 132,
+        "contextLeaDisplacement": 132,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 132,
+          "sourceKind": "register",
+          "sourceRegister": "edx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0074BCEE",
+                "bytes": "8b9424e8000000",
+                "definesRegister": "edx",
+                "mnemonic": "mov",
+                "opStr": "edx, dword ptr [esp + 0xe8]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074BD05",
+            "bytes": "89942480000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x80], edx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 136,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0074BCF5",
+                "bytes": "8bbc24ec000000",
+                "definesRegister": "edi",
+                "mnemonic": "mov",
+                "opStr": "edi, dword ptr [esp + 0xec]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074BD0C",
+            "bytes": "89bc2484000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x84], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0074BED8",
+        "bytes": "e8031d0300",
+        "mnemonic": "call",
+        "opStr": "0x77dbe0"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0074BECF",
+          "bytes": "8b8c24e8000000",
+          "mnemonic": "mov",
+          "opStr": "ecx, dword ptr [esp + 0xe8]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074BED7",
+          "bytes": "51",
+          "mnemonic": "push",
+          "opStr": "ecx"
+        },
+        "arg1Register": "ecx",
+        "reason": "arg1-not-local-stack-lea",
+        "recovered": false
+      },
+      "section": ".text",
+      "targetRole": "consumer-b",
+      "targetVa": "0x0077DBE0"
+    },
+    {
+      "call": {
+        "address": "0x0074BFAC",
+        "bytes": "e85f170300",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0074BFA7",
+          "bytes": "8d542464",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x64]"
+        },
+        "arg1Instruction": {
+          "address": "0x0074BFAB",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 100,
+        "contextLeaDisplacement": 100,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 100,
+          "sourceKind": "register",
+          "sourceRegister": "edx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0074BF73",
+                "bytes": "8b9424ec000000",
+                "definesRegister": "edx",
+                "mnemonic": "mov",
+                "opStr": "edx, dword ptr [esp + 0xec]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074BF8A",
+            "bytes": "89542460",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x60], edx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 104,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0074BF6C",
+                "bytes": "8b8424f0000000",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0xf0]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0074BF8E",
+            "bytes": "89442464",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x64], eax"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x00751B25",
+        "bytes": "e8e6bb0200",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x00751B20",
+          "bytes": "8d4c242c",
+          "mnemonic": "lea",
+          "opStr": "ecx, [esp + 0x2c]"
+        },
+        "arg1Instruction": {
+          "address": "0x00751B24",
+          "bytes": "51",
+          "mnemonic": "push",
+          "opStr": "ecx"
+        },
+        "arg1Register": "ecx",
+        "contextCoordinateAtLea": 44,
+        "contextLeaDisplacement": 44,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 44,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00751AEF",
+                "bytes": "8b442448",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x48]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x00751AF3",
+            "bytes": "89442430",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x30], eax"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 48,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00751AF7",
+                "bytes": "8b44244c",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x4c]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x00751B07",
+            "bytes": "8944242c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x2c], eax"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x00779F5C",
+        "bytes": "e8af370000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x00779F57",
+          "bytes": "8d542458",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x58]"
+        },
+        "arg1Instruction": {
+          "address": "0x00779F5B",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 88,
+        "contextLeaDisplacement": 88,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 88,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x00779EC3",
+              "bytes": "ffd1",
+              "mnemonic": "call",
+              "opStr": "ecx"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x00779F3A",
+            "bytes": "897c2454",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x54], edi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 92,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x00779EC3",
+              "bytes": "ffd1",
+              "mnemonic": "call",
+              "opStr": "ecx"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x00779F3E",
+            "bytes": "89742458",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x58], esi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077A2F5",
+        "bytes": "e816340000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077A2F0",
+          "bytes": "8d542458",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x58]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077A2F4",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 88,
+        "contextLeaDisplacement": 88,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 88,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077A2B6",
+              "bytes": "e8b58effff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077A2D3",
+            "bytes": "895c2454",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x54], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 92,
+          "sourceKind": "register",
+          "sourceRegister": "ecx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077A2C6",
+                "bytes": "8b4c2444",
+                "definesRegister": "ecx",
+                "mnemonic": "mov",
+                "opStr": "ecx, dword ptr [esp + 0x44]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077A2D7",
+            "bytes": "894c2458",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x58], ecx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077A684",
+        "bytes": "e887300000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077A67F",
+          "bytes": "8d542458",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x58]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077A683",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 88,
+        "contextLeaDisplacement": 88,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 88,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077A651",
+              "bytes": "e81a8bffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077A662",
+            "bytes": "895c2454",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x54], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 92,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077A651",
+              "bytes": "e81a8bffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077A666",
+            "bytes": "89742458",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x58], esi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077A94F",
+        "bytes": "e8bc2d0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077A94A",
+          "bytes": "8d54245c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x5c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077A94E",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 92,
+        "contextLeaDisplacement": 92,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 92,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077A921",
+                "bytes": "8b442418",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x18]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077A92D",
+            "bytes": "89442458",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x58], eax"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 96,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077A8EC",
+              "bytes": "e8cf6ffdff",
+              "mnemonic": "call",
+              "opStr": "0x7518c0"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077A931",
+            "bytes": "897c245c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x5c], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077AC24",
+        "bytes": "e8e72a0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077AC1C",
+          "bytes": "8d94249c000000",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x9c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077AC23",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 156,
+        "contextLeaDisplacement": 156,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 156,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077ABE8",
+              "bytes": "e88385ffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077ABF9",
+            "bytes": "89b42498000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x98], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 160,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077ABE8",
+              "bytes": "e88385ffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077AC00",
+            "bytes": "89bc249c000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x9c], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077B36E",
+        "bytes": "e89d230000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077B369",
+          "bytes": "8d54242c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x2c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077B36D",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 44,
+        "contextLeaDisplacement": 44,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 44,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B336",
+              "bytes": "e80576ffff",
+              "mnemonic": "call",
+              "opStr": "0x772940"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B34C",
+            "bytes": "895c2428",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x28], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 48,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077B33B",
+                "bytes": "8b74243c",
+                "definesRegister": "esi",
+                "mnemonic": "mov",
+                "opStr": "esi, dword ptr [esp + 0x3c]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077B350",
+            "bytes": "8974242c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x2c], esi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077B8B9",
+        "bytes": "e8521e0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077B8B1",
+          "bytes": "8d942484000000",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x84]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077B8B8",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 132,
+        "contextLeaDisplacement": 132,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 132,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B875",
+              "bytes": "e8b679ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B88A",
+            "bytes": "899c2480000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x80], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 136,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B875",
+              "bytes": "e8b679ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B891",
+            "bytes": "89bc2484000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x84], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077B8E8",
+        "bytes": "e8231e0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077B8E3",
+          "bytes": "8d54246c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x6c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077B8E7",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 108,
+        "contextLeaDisplacement": 108,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 108,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B8B9",
+              "bytes": "e8521e0000",
+              "mnemonic": "call",
+              "opStr": "0x77d710"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B8C6",
+            "bytes": "895c2468",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x68], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 112,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B8B9",
+              "bytes": "e8521e0000",
+              "mnemonic": "call",
+              "opStr": "0x77d710"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B8CA",
+            "bytes": "897c246c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x6c], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077BA01",
+        "bytes": "e80a1d0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077B9FC",
+          "bytes": "8d54247c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x7c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077BA00",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 124,
+        "contextLeaDisplacement": 124,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 124,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B9D4",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B9DF",
+            "bytes": "895c2478",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x78], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 128,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077B9D4",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077B9E3",
+            "bytes": "897c247c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x7c], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077BEA9",
+        "bytes": "e862180000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077BEA4",
+          "bytes": "8d54244c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x4c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077BEA8",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 76,
+        "contextLeaDisplacement": 76,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 76,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077BE6F",
+              "bytes": "e8bc73ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077BE87",
+            "bytes": "89742448",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x48], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 80,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077BE6F",
+              "bytes": "e8bc73ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077BE8B",
+            "bytes": "895c244c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x4c], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077BF0C",
+        "bytes": "e8ff170000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077BF07",
+          "bytes": "8d542454",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x54]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077BF0B",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 84,
+        "contextLeaDisplacement": 84,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 84,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077BEE4",
+                "bytes": "5e",
+                "definesRegister": "esi",
+                "mnemonic": "pop",
+                "opStr": "esi"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077BEEA",
+            "bytes": "89742450",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x50], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 88,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077BEE5",
+                "bytes": "5b",
+                "definesRegister": "ebx",
+                "mnemonic": "pop",
+                "opStr": "ebx"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077BEEE",
+            "bytes": "895c2454",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x54], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077C07F",
+        "bytes": "e88c160000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077C07A",
+          "bytes": "8d542424",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x24]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077C07E",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 36,
+        "contextLeaDisplacement": 36,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 36,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077C052",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077C05D",
+            "bytes": "89742420",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x20], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 40,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077C052",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077C061",
+            "bytes": "895c2424",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x24], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077C755",
+        "bytes": "e8b60f0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077C74D",
+          "bytes": "8d9424a8000000",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0xa8]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077C754",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 168,
+        "contextLeaDisplacement": 168,
+        "reason": "context-source-store-not-found-before-barrier",
+        "recovered": false,
+        "scanBarrier": {
+          "address": "0x0077C727",
+          "bytes": "e84491cdff",
+          "mnemonic": "call",
+          "opStr": "0x455870"
+        },
+        "sourceStore": null,
+        "stateStore": null
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077C991",
+        "bytes": "e87a0d0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077C98C",
+          "bytes": "8d54241c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x1c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077C990",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 28,
+        "contextLeaDisplacement": 28,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 28,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077C93B",
+              "bytes": "e8f068ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077C96D",
+            "bytes": "89742418",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x18], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 32,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077C93B",
+              "bytes": "e8f068ffff",
+              "mnemonic": "call",
+              "opStr": "0x773230"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077C971",
+            "bytes": "895c241c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x1c], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077C9EC",
+        "bytes": "e81f0d0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077C9E7",
+          "bytes": "8d54241c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x1c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077C9EB",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 28,
+        "contextLeaDisplacement": 28,
+        "reason": "context-source-store-not-found-before-barrier",
+        "recovered": false,
+        "scanBarrier": {
+          "address": "0x0077C9D1",
+          "bytes": "c3",
+          "mnemonic": "ret",
+          "opStr": ""
+        },
+        "sourceStore": null,
+        "stateStore": null
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077CCB7",
+        "bytes": "e8540a0000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077CCB2",
+          "bytes": "8d542420",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x20]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077CCB6",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 32,
+        "contextLeaDisplacement": 32,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 32,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077CC4D",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077CC95",
+            "bytes": "8974241c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x1c], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 36,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077CC4D",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077CC99",
+            "bytes": "895c2420",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x20], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077CD4B",
+        "bytes": "e8c0090000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077CD46",
+          "bytes": "8d542430",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x30]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077CD4A",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 48,
+        "contextLeaDisplacement": 48,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 48,
+          "sourceKind": "register",
+          "sourceRegister": "esi",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077CD1A",
+                "bytes": "5e",
+                "definesRegister": "esi",
+                "mnemonic": "pop",
+                "opStr": "esi"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077CD29",
+            "bytes": "8974242c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x2c], esi"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 52,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0077CD1B",
+                "bytes": "5b",
+                "definesRegister": "ebx",
+                "mnemonic": "pop",
+                "opStr": "ebx"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0077CD2D",
+            "bytes": "895c2430",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x30], ebx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077D018",
+        "bytes": "e8f3060000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077D013",
+          "bytes": "8d542444",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x44]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077D017",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 68,
+        "contextLeaDisplacement": 68,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 68,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077CFC1",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077CFF6",
+            "bytes": "895c2440",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x40], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 72,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077CFC1",
+              "bytes": "ffd0",
+              "mnemonic": "call",
+              "opStr": "eax"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077CFFA",
+            "bytes": "897c2444",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x44], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077D12E",
+        "bytes": "e8dd050000",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077D126",
+          "bytes": "8d94249c000000",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0x9c]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077D12D",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 156,
+        "contextLeaDisplacement": 156,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 156,
+          "sourceKind": "register",
+          "sourceRegister": "ebx",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077D0F2",
+              "bytes": "e87960ffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077D10A",
+            "bytes": "899c2498000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0x98], ebx"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 160,
+          "sourceKind": "register",
+          "sourceRegister": "edi",
+          "sourceRegisterDefinition": {
+            "barrier": {
+              "address": "0x0077D0F2",
+              "bytes": "e87960ffff",
+              "mnemonic": "call",
+              "opStr": "0x773170"
+            },
+            "chain": [],
+            "reason": "call-barrier",
+            "resolved": false
+          },
+          "store": {
+            "address": "0x0077D0F7",
+            "bytes": "89bc24a4000000",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0xa4], edi"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x0077D858",
+        "bytes": "e8b3feffff",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x0077D853",
+          "bytes": "8d54240c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0xc]"
+        },
+        "arg1Instruction": {
+          "address": "0x0077D857",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 12,
+        "contextLeaDisplacement": 12,
+        "reason": "context-source-store-not-found-before-barrier",
+        "recovered": false,
+        "scanBarrier": {
+          "address": "0x0077D82D",
+          "bytes": "c3",
+          "mnemonic": "ret",
+          "opStr": ""
+        },
+        "sourceStore": null,
+        "stateStore": null
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x007800CA",
+        "bytes": "e841d6ffff",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x007800C5",
+          "bytes": "8d54240c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0xc]"
+        },
+        "arg1Instruction": {
+          "address": "0x007800C9",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 12,
+        "contextLeaDisplacement": 12,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 12,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0078009A",
+                "bytes": "8b442444",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x44]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0078009E",
+            "bytes": "89442404",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 4], eax"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 16,
+          "sourceKind": "register",
+          "sourceRegister": "ecx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00780093",
+                "bytes": "8b4c2444",
+                "definesRegister": "ecx",
+                "mnemonic": "mov",
+                "opStr": "ecx, dword ptr [esp + 0x44]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x007800AC",
+            "bytes": "894c240c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0xc], ecx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    },
+    {
+      "call": {
+        "address": "0x007801CA",
+        "bytes": "e841d5ffff",
+        "mnemonic": "call",
+        "opStr": "0x77d710"
+      },
+      "contextRecovery": {
+        "arg1Definition": {
+          "address": "0x007801C5",
+          "bytes": "8d54240c",
+          "mnemonic": "lea",
+          "opStr": "edx, [esp + 0xc]"
+        },
+        "arg1Instruction": {
+          "address": "0x007801C9",
+          "bytes": "52",
+          "mnemonic": "push",
+          "opStr": "edx"
+        },
+        "arg1Register": "edx",
+        "contextCoordinateAtLea": 12,
+        "contextLeaDisplacement": 12,
+        "reason": "local-context-recovered",
+        "recovered": true,
+        "scanBarrier": null,
+        "sourceStore": {
+          "normalizedContextOffset": 0,
+          "normalizedStackCoordinate": 12,
+          "sourceKind": "register",
+          "sourceRegister": "eax",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x0078019A",
+                "bytes": "8b442444",
+                "definesRegister": "eax",
+                "mnemonic": "mov",
+                "opStr": "eax, dword ptr [esp + 0x44]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x0078019E",
+            "bytes": "89442404",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 4], eax"
+          }
+        },
+        "stateStore": {
+          "normalizedContextOffset": 4,
+          "normalizedStackCoordinate": 16,
+          "sourceKind": "register",
+          "sourceRegister": "ecx",
+          "sourceRegisterDefinition": {
+            "chain": [
+              {
+                "address": "0x00780193",
+                "bytes": "8b4c2444",
+                "definesRegister": "ecx",
+                "mnemonic": "mov",
+                "opStr": "ecx, dword ptr [esp + 0x44]"
+              }
+            ],
+            "reason": "terminal-definition",
+            "resolved": true
+          },
+          "store": {
+            "address": "0x007801AC",
+            "bytes": "894c240c",
+            "mnemonic": "mov",
+            "opStr": "dword ptr [esp + 0xc], ecx"
+          }
+        }
+      },
+      "section": ".text",
+      "targetRole": "consumer-a",
+      "targetVa": "0x0077D710"
+    }
+  ],
+  "client": {
+    "bytes": 13263640,
+    "imageBaseHex": "0x00400000",
+    "revision": "5354",
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
+  },
+  "consumerContract": {
+    "arg1": "pointer to two-dword context",
+    "basis": "consumer bodies load [arg1] for source and [arg1+4] for state",
+    "contextSourceOffset": 0,
+    "contextStateOffset": 4
+  },
+  "format": "t6-current-client-generic-sampler-context-source-backtrace-v1",
+  "proofBoundary": "Exact direct-call/local stack dataflow only. Register-definition chains stop at calls and do not cross unresolved control-flow joins. A recovered source pointer is not assigned a semantic global/type name unless its terminal definition proves that identity.",
+  "summary": {
+    "directConsumerCallCount": 31,
+    "localContextSourceRecoveredCount": 24,
+    "terminalSourceDefinitionHistogram": {
+      "<unresolved>": 14,
+      "eax, [esi - 3]": 1,
+      "eax, dword ptr [esp + 0x18]": 1,
+      "eax, dword ptr [esp + 0x44]": 2,
+      "eax, dword ptr [esp + 0x48]": 1,
+      "edx, dword ptr [esp + 0xe8]": 1,
+      "edx, dword ptr [esp + 0xec]": 1,
+      "esi": 2,
+      "esi, dword ptr [esp + 0x28]": 1
+    },
+    "unrecoveredCount": 7
+  }
+}
