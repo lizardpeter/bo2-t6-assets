@@ -1,0 +1,52 @@
+name: T6 exact-anchor call propagation v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_anchor_delta_call_propagation_v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  propagate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run anchor-delta call propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/anchor_delta_call_propagation_v1
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          python3 tools/t6_anchor_delta_call_propagation_v1.py             --strict-join proof/current_client/pdb_exact_hash_join_v1_strict/join.json             --call-dir proof/current_client/whole_image_inventory_v1_transport/cypher             --pdb-dir proof/server_pdb_exact_hashes_v1             --out "$OUT/result.json"             --min-independent-anchors 2
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path("proof/current_client/anchor_delta_call_propagation_v1/result.json")
+          d=json.loads(p.read_text())
+          s={k:d[k] for k in (
+            "format","strict_anchor_count","server_pdb_rows",
+            "current_client_direct_calls_parsed","raw_translated_call_hits",
+            "candidate_pairs","rediscovered_existing_strict_pairs",
+            "new_multi_anchor_candidate_pairs","new_single_anchor_candidate_pairs",
+            "state_counts","proof_boundary"
+          )}
+          pathlib.Path("proof/current_client/anchor_delta_call_propagation_v1/summary.json").write_text(
+              json.dumps(s,indent=2,sort_keys=True)+"\n"
+          )
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+      - name: Commit propagation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/anchor_delta_call_propagation_v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: propagate T6 identities through exact-anchor calls"
+          git pull --rebase origin main
+          git push origin HEAD:main
