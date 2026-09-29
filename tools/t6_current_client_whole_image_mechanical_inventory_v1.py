@@ -65,7 +65,7 @@ def write_chunks(out_dir: Path, prefix: str, rows: list[dict], header: str, row_
     for ci in range(0,len(rows),chunk):
         batch=rows[ci:ci+chunk]
         payload=cypher_literal(batch)
-        cypher=header + "\nWITH " + payload + " AS rows\nUNWIND rows AS row\n" + row_expr + "\n"
+        cypher=header + "\nWITH b,a," + payload + " AS rows\nUNWIND rows AS row\n" + row_expr + "\n"
         p=out_dir / f"{prefix}_{ci//chunk:04d}.cypher"
         p.write_text(cypher,encoding="utf-8")
         paths.append(p.name)
