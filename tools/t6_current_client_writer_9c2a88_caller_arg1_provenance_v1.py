@@ -1,130 +1,107 @@
 #!/usr/bin/env python3
-"""Trace the caller-arg provenance feeding current-client writer 0x009C2A88.
+"""Fast exact caller-arg provenance for the path feeding writer 0x009C2A88.
 
-The prior proof closes:
+Prior proof:
   0x009B80E9 -> 0x009C1EF0
   0x009B80DA ESI=[EBP+8]
-  callee destination base = that value + 0xF00.
+  downstream destination base = that value + 0xF00.
 
-This probe recovers the exact diagnostic region containing 0x009B80E9,
-checks the local frame setup, and enumerates all decoded direct CALL/JMP
-edges to the region start with bounded caller argument context.
-
-INT3-derived region boundaries are diagnostic until direct control-flow
-and prologue evidence support function-boundary promotion.
+This version avoids full-image Capstone detail. It decodes executable sections
+without detail for direct incoming-edge census and decodes only the local
+anchor region for frame/argument proof.
 """
 from __future__ import annotations
 import argparse,hashlib,json,struct
 from pathlib import Path
 from capstone import Cs,CS_ARCH_X86,CS_MODE_32
-from capstone.x86 import X86_OP_IMM
 
 SHA="770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf"
 ANCHOR=0x009B80E9
-TARGET=0x009C1EF0
-CTX=128
+DOWNSTREAM=0x009C1EF0
+CTX=96
 
 class E(RuntimeError): pass
 def req(c,m):
     if not c: raise E(m)
-
-def parse_pe(raw):
-    p=struct.unpack_from("<I",raw,0x3c)[0]; req(raw[p:p+4]==b"PE\0\0","bad PE")
+def pe(raw):
+    p=struct.unpack_from("<I",raw,0x3c)[0];req(raw[p:p+4]==b"PE\0\0","bad PE")
     c=p+4;n=struct.unpack_from("<H",raw,c+2)[0];os=struct.unpack_from("<H",raw,c+16)[0];op=c+20
-    base=struct.unpack_from("<I",raw,op+28)[0];so=op+os;secs=[]
+    base=struct.unpack_from("<I",raw,op+28)[0];so=op+os;ss=[]
     for i in range(n):
-        x=so+i*40; name=raw[x:x+8].split(b"\0",1)[0].decode("ascii","replace")
+        x=so+i*40;name=raw[x:x+8].split(b"\0",1)[0].decode("ascii","replace")
         vs,rva,rs,ro=struct.unpack_from("<IIII",raw,x+8);ch=struct.unpack_from("<I",raw,x+36)[0]
-        secs.append(dict(name=name,va=base+rva,rawSize=rs,rawOffset=ro,executable=bool(ch&0x20000000)))
-    return base,secs
-
-def rec(i): return {"address":f"0x{i.address:08X}","bytes":i.bytes.hex(),"mnemonic":i.mnemonic,"opStr":i.op_str}
-
-def disasm_section(raw,s):
-    md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=True;md.skipdata=True
+        ss.append(dict(name=name,va=base+rva,rawSize=rs,rawOffset=ro,executable=bool(ch&0x20000000)))
+    return base,ss
+def sec_for(ss,va):
+    for s in ss:
+        if s["va"]<=va<s["va"]+s["rawSize"]: return s
+    raise E(f"unbacked VA {va:x}")
+def rec(i):return {"address":f"0x{i.address:08X}","bytes":i.bytes.hex(),"mnemonic":i.mnemonic,"opStr":i.op_str}
+def quick_dis(raw,s):
+    md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=False;md.skipdata=True
     data=raw[s["rawOffset"]:s["rawOffset"]+s["rawSize"]]
-    return md,[i for i in md.disasm(data,s["va"]) if i.id]
-
-def find_region(ins,idx):
-    # nearest preceding/following run of >=8 INT3 instructions
-    start_idx=0; run=0; last_after=None
-    for j in range(0,idx):
-        if ins[j].mnemonic=="int3":
-            run+=1
-            if run>=8: last_after=j+1
-        else:
-            run=0
-    if last_after is not None:
-        start_idx=last_after
-        while start_idx<len(ins) and ins[start_idx].mnemonic=="int3": start_idx+=1
-    end_idx=len(ins);run=0
-    for j in range(idx+1,len(ins)):
-        if ins[j].mnemonic=="int3":
-            run+=1
-            if run>=8:
-                end_idx=j-run+1
-                break
-        else: run=0
-    return start_idx,end_idx
-
+    return [i for i in md.disasm(data,s["va"]) if i.id]
+def local_region(raw,s,anchor):
+    off=s["rawOffset"]+(anchor-s["va"])
+    lo=max(s["rawOffset"],off-0x10000);hi=min(s["rawOffset"]+s["rawSize"],off+0x10000)
+    data=raw[lo:hi];base=s["va"]+(lo-s["rawOffset"]);rel=off-lo
+    before=data.rfind(b"\xcc"*8,0,rel)
+    req(before>=0,"no preceding int3 run")
+    start=before+8
+    while start<len(data) and data[start]==0xcc:start+=1
+    after=data.find(b"\xcc"*8,rel)
+    req(after>=0,"no following int3 run")
+    va0=base+start;va1=base+after
+    md=Cs(CS_ARCH_X86,CS_MODE_32);md.detail=False
+    ins=list(md.disasm(raw[s["rawOffset"]+(va0-s["va"]):s["rawOffset"]+(va1-s["va"])],va0))
+    return va0,va1,ins
+def parse_target(op):
+    op=op.strip().lower()
+    try:
+        return int(op,16) if op.startswith("0x") else None
+    except: return None
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("exe",type=Path);ap.add_argument("--revision",required=True);ap.add_argument("--out",type=Path,required=True);a=ap.parse_args()
-    raw=a.exe.read_bytes();dg=hashlib.sha256(raw).hexdigest();req(dg==SHA,f"SHA drift {dg}")
-    base,secs=parse_pe(raw)
-    textsec=next(s for s in secs if s["name"]==".text")
-    md,ins=disasm_section(raw,textsec)
-    index={i.address:j for j,i in enumerate(ins)}
-    req(ANCHOR in index,f"missing anchor {ANCHOR:x}")
-    ai=index[ANCHOR]; anchor=ins[ai]
-    req(anchor.mnemonic=="call" and anchor.op_str.lower()=="0x9c1ef0",f"anchor drift {anchor.mnemonic} {anchor.op_str}")
-    si,ei=find_region(ins,ai)
-    region=ins[si:ei]
-    req(region,"empty region")
-    start=region[0].address; end=(region[-1].address+region[-1].size)
-    rindex={i.address:k for k,i in enumerate(region)}
-    req(0x009B80DA in rindex,"missing arg load")
-    argload=region[rindex[0x009B80DA]]
-    req(argload.mnemonic=="mov" and argload.op_str=="esi, dword ptr [ebp + 8]",f"arg load drift {argload.op_str}")
+    raw=a.exe.read_bytes();dg=hashlib.sha256(raw).hexdigest();req(dg==SHA,f"sha drift {dg}")
+    base,secs=pe(raw);s=sec_for(secs,ANCHOR)
+    start,end,region=local_region(raw,s,ANCHOR)
+    by={i.address:i for i in region}
+    req(ANCHOR in by,"anchor absent local")
+    req(by[ANCHOR].mnemonic=="call" and parse_target(by[ANCHOR].op_str)==DOWNSTREAM,"anchor drift")
+    req(0x009B80DA in by and by[0x009B80DA].mnemonic=="mov" and by[0x009B80DA].op_str=="esi, dword ptr [ebp + 8]","arg load drift")
 
-    # Frame setup evidence before anchor.
-    pre=region[:rindex[ANCHOR]]
-    frame_setup=[rec(i) for i in pre if (i.mnemonic=="push" and i.op_str=="ebp") or (i.mnemonic=="mov" and i.op_str=="ebp, esp")]
-    ebp_writes=[]
-    for i in pre:
-        _r,w=i.regs_access()
-        if any(md.reg_name(x)=="ebp" for x in w):
-            ebp_writes.append(rec(i))
+    # Determine whether the region establishes EBP as its own frame pointer before anchor.
+    anchor_i=next(i for i,x in enumerate(region) if x.address==ANCHOR)
+    pre=region[:anchor_i]
+    frame=[rec(x) for x in pre if (x.mnemonic=="push" and x.op_str=="ebp") or (x.mnemonic=="mov" and x.op_str=="ebp, esp")]
+    # Keep all textual EBP destination candidates; no regs_access required.
+    ebp_defs=[rec(x) for x in pre if x.op_str.startswith("ebp,") or (x.mnemonic=="pop" and x.op_str=="ebp")]
 
     incoming=[]
-    for s in secs:
-        if not s["executable"]: continue
-        smd,sins=disasm_section(raw,s)
-        for j,i in enumerate(sins):
-            if i.mnemonic not in ("call","jmp") or len(i.operands)!=1 or i.operands[0].type!=X86_OP_IMM: continue
-            t=int(i.operands[0].imm)&0xffffffff
-            if t!=start: continue
-            lo=max(0,j-CTX);hi=min(len(sins),j+32)
-            incoming.append({
-                "section":s["name"],"edge":rec(i),
-                "contextBefore":[rec(x) for x in sins[lo:j]],
-                "contextAfter":[rec(x) for x in sins[j+1:hi]],
-            })
-
+    for es in secs:
+        if not es["executable"]:continue
+        ins=quick_dis(raw,es)
+        for j,x in enumerate(ins):
+            if x.mnemonic not in ("call","jmp"):continue
+            if parse_target(x.op_str)!=start:continue
+            incoming.append({"section":es["name"],"edge":rec(x),
+                             "contextBefore":[rec(z) for z in ins[max(0,j-CTX):j]],
+                             "contextAfter":[rec(z) for z in ins[j+1:min(len(ins),j+24)]]})
+    frame_is_standard=any(x["mnemonic"]=="push" and x["opStr"]=="ebp" for x in frame) and any(x["mnemonic"]=="mov" and x["opStr"]=="ebp, esp" for x in frame)
     doc={
-      "format":"t6-current-client-writer-9c2a88-caller-arg1-provenance-v1",
-      "authority":"SHA-pinned current-client exact diagnostic region, frame dataflow, and decoded direct incoming-edge census",
+      "format":"t6-current-client-writer-9c2a88-caller-arg1-provenance-v2",
+      "authority":"SHA-pinned local function region plus instruction-aligned direct incoming-edge census",
       "client":{"revision":a.revision,"bytes":len(raw),"sha256":dg,"imageBaseHex":f"0x{base:08X}"},
-      "anchor":{"call":rec(anchor),"arg1Load":rec(argload),"downstreamDestinationBase":"loaded [EBP+8] + 0xF00"},
       "region":{"startVa":f"0x{start:08X}","endVaExclusive":f"0x{end:08X}","instructionCount":len(region),
-                "frameSetupCandidates":frame_setup,"ebpWritesBeforeAnchor":ebp_writes,
-                "instructions":[rec(i) for i in region]},
+                "frameSetupCandidates":frame,"ebpDefinitionsBeforeAnchor":ebp_defs,"instructions":[rec(x) for x in region]},
+      "anchor":{"call":rec(by[ANCHOR]),"arg1Load":rec(by[0x009B80DA]),"downstreamDestinationBase":"[EBP+8] + 0xF00"},
       "directIncomingEdges":incoming,
-      "summary":{"diagnosticRegionStart":f"0x{start:08X}","diagnosticRegionEndExclusive":f"0x{end:08X}",
-                 "directIncomingEdgeCount":len(incoming),"frameSetupCandidateCount":len(frame_setup),
-                 "ebpWriteCountBeforeAnchor":len(ebp_writes)},
-      "proofBoundary":"Exact current-client local/caller census. INT3 boundaries remain diagnostic unless the recovered prologue and incoming edges establish a true entry. [EBP+8] is promoted as function arg1 only if frame setup is unambiguous; caller source-level semantics remain unassigned."
+      "summary":{"regionStartVa":f"0x{start:08X}","regionEndVaExclusive":f"0x{end:08X}",
+                 "standardEbpFrameBeforeAnchor":frame_is_standard,
+                 "directIncomingEdgeCount":len(incoming),
+                 "downstreamBaseExpression":"this_function_arg1 + 0xF00" if frame_is_standard else "[EBP+8] + 0xF00"},
+      "proofBoundary":"Exact current-client instruction-aligned census. INT3 region is diagnostic unless prologue/incoming-edge evidence confirms entry. No caller source-level identity is assigned from address or layout alone."
     }
     a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(doc,indent=2,sort_keys=True)+"\n")
     print(json.dumps(doc["summary"],indent=2,sort_keys=True))
-
-if __name__=="__main__": main()
+if __name__=="__main__":main()
