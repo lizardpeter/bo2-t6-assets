@@ -28,7 +28,7 @@ jobs:
           import json,pathlib,os
           fixtures=json.loads(pathlib.Path('/tmp/t6_simd_fixture_manifest.json').read_text())
           report={'format':'t6-simd-exact-byte-differential-v1','build_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf','functions':fixtures,'architecture':'x86','cases':2048,'output_and_untouched_memory_equal':True,'source_commit':os.environ['GITHUB_SHA'],'proof_boundary':'Finite-case exact-instruction differential pass; not original MSVC object matching or whole-game rebuild.'}
-          out=pathlib.Path('proof/current_client/T6_SIMD_DIFFERENTIAL_V1.json'); out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          out=pathlib.Path('proof/current_client/T6_SIMD_DIFFERENTIAL_V1.json'); out.parent.mkdir(parents=True,exist_ok=True); out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           PY
       - name: Retain validation report
         run: |
