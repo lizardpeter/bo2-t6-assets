@@ -33,10 +33,22 @@ jobs:
       - name: Verify every batch function against exact retail bytes
         run: |
           python -m pip install --disable-pip-version-check capstone==5.0.6
+          python - <<'PY'
+          import csv, json
+          src='smg/rmge01/decompile_batch2_v1.tsv'
+          dst='/tmp/batch2_manifest.jsonl'
+          with open(src, newline='', encoding='utf-8') as f, open(dst,'w',encoding='utf-8') as o:
+              for r in csv.DictReader(f, delimiter='\t'):
+                  o.write(json.dumps({
+                      'id':r['id'],'address':r['address'],'size':int(r['size']),
+                      'name':r['name'],'subsystem':r['subsystem'] or None,
+                      'expected_sha256':r['expected_sha256']
+                  }, separators=(',',':'))+'\n')
+          PY
           python tools/smg_rmge01_exact_lift_v1.py \
             --dol /tmp/rmge01_main.dol \
             --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' \
-            --manifest smg/rmge01/decompile_batch2_v1.jsonl \
+            --manifest /tmp/batch2_manifest.jsonl \
             --out /tmp/batch2_exact.jsonl \
             --summary /tmp/batch2_exact_summary.json
       - name: Convert exact DOL to PowerPC ELF container
