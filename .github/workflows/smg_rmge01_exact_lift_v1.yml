@@ -21,10 +21,17 @@ jobs:
           python-version: '3.12'
       - name: Install PowerPC disassembler
         run: python -m pip install --disable-pip-version-check capstone==5.0.6
+      - name: Fetch and verify exact RMGE01 main.dol
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors \
+            -A 'Mozilla/5.0' \
+            -o /tmp/rmge01_main.dol \
+            'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
+          echo '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09  /tmp/rmge01_main.dol' | sha256sum --check
       - name: Lift exact RMGE01 low-hanging functions
         run: |
           python tools/smg_rmge01_exact_lift_v1.py \
-            --url 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol' \
+            --dol /tmp/rmge01_main.dol \
             --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' \
             --manifest smg/rmge01/decompile_batch_low_hanging_v1.jsonl \
             --out /tmp/rmge01_exact_low_hanging_v1.jsonl \
