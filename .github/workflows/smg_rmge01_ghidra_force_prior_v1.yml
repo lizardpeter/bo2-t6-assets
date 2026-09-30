@@ -1,0 +1,191 @@
+name: SMG RMGE01 force-all prior batches v1
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_ghidra_force_prior_v1.txt'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  MASTER_RUN_ID: '36701847118'
+  DOL_SHA256: 2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09
+
+jobs:
+  force-prior:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        shard: ['00','01','02','03','04','05','06','07','08','09','10','11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Prepare batches 2-6 force-all shards
+        run: python tools/smg_prepare_forced_prior_batches_v1.py --out-dir /tmp/prior --shards 12
+
+      - name: Restore verified Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ghidra_12.1.3_PUBLIC
+          key: ghidra-12.1.3-public-20260817-${{ runner.os }}-v1
+
+      - name: Fallback install verified Ghidra
+        if: steps.cache-ghidra.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          mkdir -p /tmp/ghidra_unpack
+          unzip -q /tmp/ghidra.zip -d /tmp/ghidra_unpack
+          SRC="$(find /tmp/ghidra_unpack -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -n "$SRC"
+          mv "$SRC" /tmp/ghidra_12.1.3_PUBLIC
+
+      - name: Set Ghidra path
+        run: echo "GHIDRA_HOME=/tmp/ghidra_12.1.3_PUBLIC" >> "$GITHUB_ENV"
+
+      - name: Download saved whole-image analysis
+        uses: actions/download-artifact@v4
+        with:
+          name: SMG_RMGE01_GHIDRA_MASTER_V1
+          path: /tmp/master
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.MASTER_RUN_ID }}
+
+      - name: Restore analyzed exact project
+        run: tar -xzf /tmp/master/rmge01-ghidra-master-v1.tar.gz -C /tmp
+
+      - name: Download exact DOL and verify shard bytes
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -A 'Mozilla/5.0' -o /tmp/rmge01_main.dol 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
+          echo "$DOL_SHA256  /tmp/rmge01_main.dol" | sha256sum --check
+          python -m pip install --disable-pip-version-check capstone==5.0.6
+          python - <<'PY'
+          import csv,json,os
+          s=os.environ['SHARD']
+          src=f'/tmp/prior/prior_force_{s}.tsv'
+          with open(src,newline='',encoding='utf-8') as f, open('/tmp/prior_manifest.jsonl','w',encoding='utf-8') as o:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  o.write(json.dumps({'id':r['id'],'address':r['address'],'size':int(r['size']),'name':r['name'],'subsystem':r['subsystem'] or None,'expected_sha256':r['expected_sha256']},separators=(',',':'))+'\n')
+          PY
+          python tools/smg_rmge01_exact_lift_v1.py --dol /tmp/rmge01_main.dol --expected-dol-sha256 "$DOL_SHA256" --manifest /tmp/prior_manifest.jsonl --out /tmp/prior_exact.jsonl --summary /tmp/prior_exact_summary.json
+
+      - name: Force exact entries and decompile batches 2-6
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p /tmp/prior-out
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" /tmp/smg-ghidra-master rmge01 -process rmge01_main.elf -noanalysis \
+            -postScript ExportSmgRmge01ForcedDecompBatch.java "/tmp/prior/prior_force_$SHARD.tsv" "/tmp/prior-out/decompile_$SHARD.tsv" force-all \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts"
+
+      - name: Normalize force-all outputs
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import base64,csv,hashlib,json,os,pathlib
+          shard=os.environ['SHARD']; run=int(os.environ['GITHUB_RUN_ID'])
+          exact={}
+          for line in pathlib.Path('/tmp/prior_exact.jsonl').read_text().splitlines():
+              if line.strip():
+                  r=json.loads(line); exact[r['id']]=r
+          recs=[]
+          with pathlib.Path(f'/tmp/prior-out/decompile_{shard}.tsv').open(newline='',encoding='utf-8') as f:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  e=exact[r['id']]
+                  success=r['success'].lower()=='true'
+                  c=base64.b64decode(r['c_b64']).decode('utf-8','replace') if r['c_b64'] else ''
+                  name=base64.b64decode(r['function_name_b64']).decode('utf-8','replace') if r['function_name_b64'] else ''
+                  err=base64.b64decode(r['error_b64']).decode('utf-8','replace') if r['error_b64'] else ''
+                  recs.append({
+                      'function_variant_id':r['id'],'address':r['address'],'size_bytes':int(r['size']),
+                      'function_byte_sha256':e['byte_sha256'],'bytes_hex':e['bytes_hex'],
+                      'ghidra_success':success,'ghidra_function_name':name,'ghidra_c':c,
+                      'ghidra_c_sha256':hashlib.sha256(c.encode()).hexdigest() if c else None,
+                      'ghidra_error':err,'dol_sha256':e['dol_sha256'],
+                      'producer':'smg-rmge01-ghidra-force-prior-v1','workflow_run_id':run,
+                      'workflow_shard':shard,'force_mode':'force-all',
+                      'conflicts_removed':int(r['conflicts_removed'])
+                  })
+          out=pathlib.Path('/tmp/graph-ready'); out.mkdir(parents=True,exist_ok=True)
+          (out/'graph_ready.jsonl').write_text('\n'.join(json.dumps(x,separators=(',',':')) for x in recs)+'\n')
+          summary={
+              'retry':'force-prior-v1','scope':'batches2-6-force-all','shard':shard,'attempted':len(recs),
+              'ghidra_success':sum(x['ghidra_success'] for x in recs),
+              'ghidra_failed':sum(not x['ghidra_success'] for x in recs),
+              'conflicts_removed':sum(x['conflicts_removed'] for x in recs),
+              'dol_sha256':os.environ['DOL_SHA256'],'workflow_run_id':run,
+              'source_policy':'exact retail RMGE01 main.dol only; no community decompilation source used for semantics'
+          }
+          (out/'graph_ready_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(summary)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_FORCE_PRIOR_${{ matrix.shard }}
+          path: |
+            /tmp/prior_exact_summary.json
+            /tmp/prior-out/decompile_${{ matrix.shard }}.tsv
+            /tmp/graph-ready/graph_ready.jsonl
+            /tmp/graph-ready/graph_ready_summary.json
+          retention-days: 30
+
+  aggregate:
+    needs: [force-prior]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: SMG_RMGE01_FORCE_PRIOR_*
+          path: /tmp/all
+      - name: Aggregate force-all graph records
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('/tmp/all'); recs=[]; summaries=[]
+          for p in root.rglob('graph_ready_summary.json'): summaries.append(json.loads(p.read_text()))
+          for p in root.rglob('graph_ready.jsonl'):
+              for line in p.read_text().splitlines():
+                  if line.strip(): recs.append(json.loads(line))
+          by_id={}
+          for r in recs:
+              old=by_id.get(r['function_variant_id'])
+              if old is None or (r.get('ghidra_success') and not old.get('ghidra_success')):
+                  by_id[r['function_variant_id']]=r
+          recs=list(by_id.values())
+          out=pathlib.Path('/tmp/aggregate'); out.mkdir(parents=True,exist_ok=True)
+          (out/'graph_ready.jsonl').write_text('\n'.join(json.dumps(x,separators=(',',':')) for x in recs)+'\n')
+          summary={
+              'retry':'force-prior-v1','attempted_unique':len(recs),
+              'ghidra_success':sum(bool(x.get('ghidra_success')) for x in recs),
+              'ghidra_failed':sum(not bool(x.get('ghidra_success')) for x in recs),
+              'conflicts_removed':sum(int(x.get('conflicts_removed',0)) for x in recs),
+              'component_summaries':summaries,
+              'source_policy':'exact retail RMGE01 main.dol only; no community decompilation source used for semantics'
+          }
+          (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(json.dumps(summary,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SMG_RMGE01_FORCE_PRIOR_V1
+          path: /tmp/aggregate/
+          retention-days: 30
