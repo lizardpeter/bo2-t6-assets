@@ -26,8 +26,10 @@ jobs:
           triggers=(smg/rmge01/trigger_prepare_batch*_v1.txt)
           test "${#triggers[@]}" -ge 1
           TRIGGER="$(printf '%s\n' "${triggers[@]}" | sort -V | tail -1)"
-          BATCH="$(basename "$TRIGGER" | sed -E 's/^trigger_prepare_batch([0-9]+)_v1\.txt$/\1/')"
-          COUNT="$(sed -n -E 's/^count=([0-9]+)$/\1/p' "$TRIGGER" | tail -1)"
+          NAME="${TRIGGER##*/}"
+          BATCH="${NAME#trigger_prepare_batch}"
+          BATCH="${BATCH%_v1.txt}"
+          COUNT="$(grep -E '^count=[0-9]+$' "$TRIGGER" | tail -1 | cut -d= -f2 || true)"
           [[ "$BATCH" =~ ^[0-9]+$ ]]
           [[ "$COUNT" =~ ^[0-9]+$ ]]
           echo "BATCH=$BATCH" >> "$GITHUB_ENV"
