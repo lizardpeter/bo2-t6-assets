@@ -27,8 +27,8 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           triggers=(smg/rmge01/trigger_finalize_batch*_v1.txt)
-          test "${#triggers[@]}" -eq 1
-          BATCH="$(basename "${triggers[0]}" | sed -E 's/^trigger_finalize_batch([0-9]+)_v1\\.txt$/\\1/')"
+          test "${#triggers[@]}" -ge 1
+          BATCH="$(printf '%s\n' "${triggers[@]}" | sed -E 's#^.*/trigger_finalize_batch([0-9]+)_v1\\.txt$#\\1#' | sort -n | tail -1)"
           [[ "$BATCH" =~ ^[0-9]+$ ]]
           WF="smg_rmge01_ghidra_batch${BATCH}_v1.yml"
           ART="SMG_RMGE01_GHIDRA_BATCH${BATCH}_V1"
