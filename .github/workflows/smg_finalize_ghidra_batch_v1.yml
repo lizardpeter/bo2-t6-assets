@@ -3,9 +3,7 @@ name: SMG finalize Ghidra batch for graph
 on:
   pull_request:
     paths:
-      - 'smg/rmge01/trigger_finalize_batch3_v1.txt'
-      - 'smg/rmge01/trigger_finalize_batch4_v1.txt'
-      - 'smg/rmge01/trigger_finalize_batch5_v1.txt'
+      - 'smg/rmge01/trigger_finalize_batch*_v1.txt'
 
 permissions:
   contents: write
@@ -27,7 +25,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if test -f smg/rmge01/trigger_finalize_batch3_v1.txt; then BATCH=3; elif test -f smg/rmge01/trigger_finalize_batch4_v1.txt; then BATCH=4; else BATCH=5; fi
+          shopt -s nullglob
+          triggers=(smg/rmge01/trigger_finalize_batch*_v1.txt)
+          test "${#triggers[@]}" -eq 1
+          BATCH="$(basename "${triggers[0]}" | sed -E 's/^trigger_finalize_batch([0-9]+)_v1\\.txt$/\\1/')"
+          [[ "$BATCH" =~ ^[0-9]+$ ]]
           WF="smg_rmge01_ghidra_batch${BATCH}_v1.yml"
           ART="SMG_RMGE01_GHIDRA_BATCH${BATCH}_V1"
           RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?event=pull_request&status=success&per_page=1" --jq '.workflow_runs[0].id')"
