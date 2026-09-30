@@ -1,0 +1,63 @@
+name: SMG RMGE01 Ghidra decompile batch 7 v1
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_ghidra_batch7_v1.txt'
+
+permissions:
+  contents: read
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+
+jobs:
+  decompile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Download and verify exact RMGE01 main.dol
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -A 'Mozilla/5.0' -o /tmp/rmge01_main.dol 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
+          echo '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09  /tmp/rmge01_main.dol' | sha256sum --check
+      - name: Verify all 7680 exact function ranges
+        run: |
+          python -m pip install --disable-pip-version-check capstone==5.0.6
+          python - <<'PY'
+          import csv,json
+          src='smg/rmge01/decompile_batch7_v1.tsv'; dst='/tmp/batch7_manifest.jsonl'
+          with open(src,newline='',encoding='utf-8') as f, open(dst,'w',encoding='utf-8') as o:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  o.write(json.dumps({'id':r['id'],'address':r['address'],'size':int(r['size']),'name':r['name'],'subsystem':r['subsystem'] or None,'expected_sha256':r['expected_sha256']},separators=(',',':'))+'\n')
+          PY
+          python tools/smg_rmge01_exact_lift_v1.py --dol /tmp/rmge01_main.dol --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' --manifest /tmp/batch7_manifest.jsonl --out /tmp/batch7_exact.jsonl --summary /tmp/batch7_exact_summary.json
+      - name: Convert DOL and install verified Ghidra
+        run: |
+          python tools/smg_dol_to_elf_v1.py /tmp/rmge01_main.dol /tmp/rmge01_main.elf
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+      - name: Analyze exact executable and decompile batch 7
+        run: |
+          mkdir -p /tmp/smg-ghidra-project /tmp/smg-ghidra-out
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" /tmp/smg-ghidra-project rmge01 -import /tmp/rmge01_main.elf \
+            -preScript SeedSmgRmge01ExactFunctions.java "$GITHUB_WORKSPACE/smg/rmge01/decompile_batch7_v1.tsv" \
+            -postScript ExportSmgRmge01DecompBatch.java "$GITHUB_WORKSPACE/smg/rmge01/decompile_batch7_v1.tsv" /tmp/smg-ghidra-out/decompile.tsv \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -analysisTimeoutPerFile 1800 -max-cpu 4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_GHIDRA_BATCH7_V1
+          path: |
+            /tmp/batch7_exact.jsonl
+            /tmp/batch7_exact_summary.json
+            /tmp/smg-ghidra-out/decompile.tsv
+          retention-days: 30
