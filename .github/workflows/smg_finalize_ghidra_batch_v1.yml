@@ -32,7 +32,11 @@ jobs:
           [[ "$BATCH" =~ ^[0-9]+$ ]]
           WF="smg_rmge01_ghidra_batch${BATCH}_v1.yml"
           ART="SMG_RMGE01_GHIDRA_BATCH${BATCH}_V1"
-          RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?event=pull_request&status=success&per_page=1" --jq '.workflow_runs[0].id')"
+          TRIGGER="smg/rmge01/trigger_finalize_batch${BATCH}_v1.txt"
+          RUN_ID="$(sed -n -E 's/^run_id=([0-9]+)$/\\1/p' "$TRIGGER" | tail -1)"
+          if test -z "$RUN_ID"; then
+            RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?event=pull_request&status=success&per_page=1" --jq '.workflow_runs[0].id')"
+          fi
           test -n "$RUN_ID" -a "$RUN_ID" != "null"
           mkdir -p /tmp/batch
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ART" --dir /tmp/batch
