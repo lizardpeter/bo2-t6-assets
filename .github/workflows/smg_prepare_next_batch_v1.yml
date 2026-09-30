@@ -1,0 +1,45 @@
+name: SMG prepare next exact Ghidra batch
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_prepare_batch*_v1.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve requested batch
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          triggers=(smg/rmge01/trigger_prepare_batch*_v1.txt)
+          test "${#triggers[@]}" -ge 1
+          TRIGGER="$(printf '%s\n' "${triggers[@]}" | sort -V | tail -1)"
+          BATCH="$(basename "$TRIGGER" | sed -E 's/^trigger_prepare_batch([0-9]+)_v1\.txt$/\1/')"
+          COUNT="$(sed -n -E 's/^count=([0-9]+)$/\1/p' "$TRIGGER" | tail -1)"
+          [[ "$BATCH" =~ ^[0-9]+$ ]]
+          [[ "$COUNT" =~ ^[0-9]+$ ]]
+          echo "BATCH=$BATCH" >> "$GITHUB_ENV"
+          echo "COUNT=$COUNT" >> "$GITHUB_ENV"
+      - name: Build exact next-batch manifest
+        run: |
+          python tools/smg_prepare_next_decompile_batch.py --batch "$BATCH" --count "$COUNT"
+      - name: Commit prepared manifest
+        run: |
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add "smg/rmge01/decompile_batch${BATCH}_v1.tsv"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "SMG: prepare exact RMGE01 Ghidra batch ${BATCH}"
+          git push origin HEAD:"${GITHUB_HEAD_REF}"
