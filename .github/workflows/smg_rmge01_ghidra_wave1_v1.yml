@@ -1,0 +1,201 @@
+name: SMG RMGE01 whole-image Ghidra fanout v1
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_ghidra_wave1_v1.txt'
+
+permissions:
+  contents: read
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Prepare balanced remaining-function shards
+        run: python tools/smg_prepare_wave1_manifests.py --out-dir /tmp/wave1 --shards 12
+
+      - name: Download and verify exact RMGE01 main.dol
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -A 'Mozilla/5.0' -o /tmp/rmge01_main.dol 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
+          echo '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09  /tmp/rmge01_main.dol' | sha256sum --check
+
+      - name: Build and verify complete exact-function manifest
+        run: |
+          python -m pip install --disable-pip-version-check capstone==5.0.6
+          python - <<'PY'
+          import csv,glob,json
+          rows=[]
+          for p in sorted(glob.glob('smg/rmge01/inventory/exact_functions_*.tsv')):
+              with open(p,newline='',encoding='utf-8') as f: rows.extend(csv.DictReader(f,delimiter='\t'))
+          if len(rows)!=23345: raise SystemExit(f'expected 23345 rows, got {len(rows)}')
+          with open('/tmp/rmge01_all_functions.tsv','w',newline='',encoding='utf-8') as f:
+              w=csv.DictWriter(f,fieldnames=['id','address','size','name','subsystem','expected_sha256'],delimiter='\t',lineterminator='\n'); w.writeheader(); w.writerows(rows)
+          with open('/tmp/rmge01_all_manifest.jsonl','w',encoding='utf-8') as f:
+              for r in rows:
+                  f.write(json.dumps({'id':r['id'],'address':r['address'],'size':int(r['size']),'name':r['name'],'subsystem':r['subsystem'] or None,'expected_sha256':r['expected_sha256']},separators=(',',':'))+'\n')
+          PY
+          python tools/smg_rmge01_exact_lift_v1.py --dol /tmp/rmge01_main.dol --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' --manifest /tmp/rmge01_all_manifest.jsonl --out /tmp/rmge01_all_exact.jsonl --summary /tmp/rmge01_all_exact_summary.json
+
+      - name: Restore verified Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ghidra_12.1.3_PUBLIC
+          key: ghidra-12.1.3-public-20260817-${{ runner.os }}-v1
+
+      - name: Install verified Ghidra
+        if: steps.cache-ghidra.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          mkdir -p /tmp/ghidra_unpack
+          unzip -q /tmp/ghidra.zip -d /tmp/ghidra_unpack
+          SRC="$(find /tmp/ghidra_unpack -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -n "$SRC"
+          mv "$SRC" /tmp/ghidra_12.1.3_PUBLIC
+
+      - name: Set Ghidra path
+        run: echo "GHIDRA_HOME=/tmp/ghidra_12.1.3_PUBLIC" >> "$GITHUB_ENV"
+
+      - name: Analyze exact executable once with all 23345 verified boundaries
+        run: |
+          python tools/smg_dol_to_elf_v1.py /tmp/rmge01_main.dol /tmp/rmge01_main.elf
+          mkdir -p /tmp/smg-ghidra-master
+          export GHIDRA_HEADLESS_MAXMEM=12G
+          "$GHIDRA_HOME/support/analyzeHeadless" /tmp/smg-ghidra-master rmge01 -import /tmp/rmge01_main.elf \
+            -preScript SeedSmgRmge01ExactFunctions.java /tmp/rmge01_all_functions.tsv \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -analysisTimeoutPerFile 2400 -max-cpu 4
+          tar -C /tmp -czf /tmp/rmge01-ghidra-master-v1.tar.gz smg-ghidra-master
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SMG_RMGE01_GHIDRA_MASTER_V1
+          path: |
+            /tmp/rmge01-ghidra-master-v1.tar.gz
+            /tmp/rmge01_all_exact_summary.json
+            /tmp/wave1/
+          retention-days: 30
+
+  decompile:
+    needs: analyze
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        shard: ['00','01','02','03','04','05','06','07','08','09','10','11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '21' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Restore verified Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ghidra_12.1.3_PUBLIC
+          key: ghidra-12.1.3-public-20260817-${{ runner.os }}-v1
+
+      - name: Fallback install verified Ghidra
+        if: steps.cache-ghidra.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -o /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          mkdir -p /tmp/ghidra_unpack
+          unzip -q /tmp/ghidra.zip -d /tmp/ghidra_unpack
+          SRC="$(find /tmp/ghidra_unpack -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -n "$SRC"
+          mv "$SRC" /tmp/ghidra_12.1.3_PUBLIC
+
+      - name: Set Ghidra path
+        run: echo "GHIDRA_HOME=/tmp/ghidra_12.1.3_PUBLIC" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: SMG_RMGE01_GHIDRA_MASTER_V1
+          path: /tmp/master
+
+      - name: Restore analyzed exact project
+        run: tar -xzf /tmp/master/rmge01-ghidra-master-v1.tar.gz -C /tmp
+
+      - name: Download exact DOL and verify shard bytes
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors -A 'Mozilla/5.0' -o /tmp/rmge01_main.dol 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
+          echo '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09  /tmp/rmge01_main.dol' | sha256sum --check
+          python -m pip install --disable-pip-version-check capstone==5.0.6
+          python - <<'PY'
+          import csv,json,os
+          s=os.environ['SHARD']
+          src=f'/tmp/master/wave1/decompile_wave1_{s}.tsv'
+          with open(src,newline='',encoding='utf-8') as f, open('/tmp/shard_manifest.jsonl','w',encoding='utf-8') as o:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  o.write(json.dumps({'id':r['id'],'address':r['address'],'size':int(r['size']),'name':r['name'],'subsystem':r['subsystem'] or None,'expected_sha256':r['expected_sha256']},separators=(',',':'))+'\n')
+          PY
+          python tools/smg_rmge01_exact_lift_v1.py --dol /tmp/rmge01_main.dol --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' --manifest /tmp/shard_manifest.jsonl --out /tmp/shard_exact.jsonl --summary /tmp/shard_exact_summary.json
+
+      - name: Decompile shard from saved whole-image analysis
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p /tmp/smg-ghidra-out
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" /tmp/smg-ghidra-master rmge01 -process rmge01_main.elf -readOnly -noanalysis \
+            -postScript ExportSmgRmge01DecompBatch.java "/tmp/master/wave1/decompile_wave1_$SHARD.tsv" "/tmp/smg-ghidra-out/decompile_$SHARD.tsv" \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts"
+
+      - name: Normalize shard for graph
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import base64,csv,hashlib,json,os,pathlib
+          shard=os.environ['SHARD']; run=int(os.environ['GITHUB_RUN_ID'])
+          exact={}
+          for line in pathlib.Path('/tmp/shard_exact.jsonl').read_text().splitlines():
+              if line.strip():
+                  r=json.loads(line); exact[r['id']]=r
+          recs=[]
+          dec=pathlib.Path(f'/tmp/smg-ghidra-out/decompile_{shard}.tsv')
+          with dec.open(newline='',encoding='utf-8') as f:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  e=exact[r['id']]
+                  success=r['success'].lower()=='true'
+                  c=base64.b64decode(r['c_b64']).decode('utf-8','replace') if r['c_b64'] else ''
+                  name=base64.b64decode(r['function_name_b64']).decode('utf-8','replace') if r['function_name_b64'] else ''
+                  err=base64.b64decode(r['error_b64']).decode('utf-8','replace') if r['error_b64'] else ''
+                  dis='\n'.join(f"{i['address']}: {i['bytes']}  {i['mnemonic']} {i['op_str']}".rstrip() for i in e['instructions'])+'\n'
+                  recs.append({'function_variant_id':r['id'],'address':r['address'],'size_bytes':int(r['size']),'function_byte_sha256':e['byte_sha256'],'bytes_hex':e['bytes_hex'],'disassembly':dis,'disassembly_sha256':hashlib.sha256(dis.encode()).hexdigest(),'ghidra_success':success,'ghidra_function_name':name,'ghidra_c':c,'ghidra_c_sha256':hashlib.sha256(c.encode()).hexdigest() if c else None,'ghidra_error':err,'dol_sha256':e['dol_sha256'],'producer':'smg-rmge01-ghidra-wave1-v1','workflow_run_id':run,'workflow_shard':shard})
+          out=pathlib.Path('/tmp/graph-ready'); out.mkdir(parents=True,exist_ok=True)
+          (out/'graph_ready.jsonl').write_text('\n'.join(json.dumps(x,separators=(',',':')) for x in recs)+'\n')
+          summary={'wave':1,'shard':shard,'records':len(recs),'ghidra_success':sum(x['ghidra_success'] for x in recs),'ghidra_failed':sum(not x['ghidra_success'] for x in recs),'dol_sha256':'2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09','workflow_run_id':run,'source_policy':'exact retail RMGE01 main.dol only; no community decompilation source used for semantics'}
+          (out/'graph_ready_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(summary)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_GHIDRA_WAVE1_${{ matrix.shard }}
+          path: |
+            /tmp/shard_exact.jsonl
+            /tmp/shard_exact_summary.json
+            /tmp/smg-ghidra-out/decompile_${{ matrix.shard }}.tsv
+            /tmp/graph-ready/graph_ready.jsonl
+            /tmp/graph-ready/graph_ready_summary.json
+          retention-days: 30
