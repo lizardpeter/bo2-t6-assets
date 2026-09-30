@@ -1,0 +1,150 @@
+name: SMG finalize whole-image Ghidra wave 1
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_finalize_wave1_v1.txt'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve successful wave run and download all graph-ready shards
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TRIGGER='smg/rmge01/trigger_finalize_wave1_v1.txt'
+          RUN_ID="$(grep -E '^run_id=[0-9]+$' "$TRIGGER" | tail -1 | cut -d= -f2 || true)"
+          if test -z "$RUN_ID"; then
+            RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/smg_rmge01_ghidra_wave1_v1.yml/runs?event=pull_request&status=success&per_page=1" --jq '.workflow_runs[0].id')"
+          fi
+          test -n "$RUN_ID" -a "$RUN_ID" != "null"
+          rm -rf /tmp/wave1-retain
+          mkdir -p /tmp/wave1-retain
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'SMG_RMGE01_GHIDRA_WAVE1_*' --dir /tmp/wave1-retain
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Validate and retain normalized wave records
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, shutil
+
+          expected_dol='2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09'
+          expected_producer='smg-rmge01-ghidra-wave1-v1'
+          root=pathlib.Path('/tmp/wave1-retain')
+          out=pathlib.Path('smg/rmge01/derived/ghidra_wave1_v1')
+          if out.exists():
+              shutil.rmtree(out)
+          out.mkdir(parents=True)
+
+          all_ids=set()
+          totals={'records':0,'ghidra_success':0,'ghidra_failed':0}
+          shard_summaries=[]
+
+          for i in range(12):
+              shard=f'{i:02d}'
+              artifact=root/f'SMG_RMGE01_GHIDRA_WAVE1_{shard}'
+              if not artifact.exists():
+                  matches=[p for p in root.iterdir() if p.is_dir() and p.name.endswith(f'WAVE1_{shard}')]
+                  if len(matches)!=1:
+                      raise SystemExit(f'missing or ambiguous shard artifact {shard}: {matches}')
+                  artifact=matches[0]
+
+              graph_files=list(artifact.rglob('graph_ready.jsonl'))
+              summary_files=list(artifact.rglob('graph_ready_summary.json'))
+              exact_summary_files=list(artifact.rglob('shard_exact_summary.json'))
+              if len(graph_files)!=1 or len(summary_files)!=1:
+                  raise SystemExit(f'shard {shard}: expected one graph_ready and one summary, got {graph_files} {summary_files}')
+
+              graph_src=graph_files[0]
+              summary=json.loads(summary_files[0].read_text())
+              if str(summary.get('shard')).zfill(2)!=shard:
+                  raise SystemExit(f'shard summary mismatch {shard}: {summary}')
+              if summary.get('dol_sha256')!=expected_dol:
+                  raise SystemExit(f'shard {shard}: DOL SHA mismatch')
+              if int(summary.get('workflow_run_id'))!=int(os.environ['RUN_ID']):
+                  raise SystemExit(f'shard {shard}: workflow run mismatch')
+
+              records=0
+              successes=0
+              failures=0
+              with graph_src.open(encoding='utf-8') as f:
+                  for line_no,line in enumerate(f,1):
+                      if not line.strip():
+                          continue
+                      r=json.loads(line)
+                      records+=1
+                      successes+=bool(r.get('ghidra_success'))
+                      failures+=not bool(r.get('ghidra_success'))
+                      if r.get('dol_sha256')!=expected_dol:
+                          raise SystemExit(f'shard {shard} line {line_no}: DOL SHA mismatch')
+                      if r.get('producer')!=expected_producer:
+                          raise SystemExit(f'shard {shard} line {line_no}: producer mismatch {r.get("producer")}')
+                      if str(r.get('workflow_shard')).zfill(2)!=shard:
+                          raise SystemExit(f'shard {shard} line {line_no}: workflow_shard mismatch')
+                      fid=r['function_variant_id']
+                      if fid in all_ids:
+                          raise SystemExit(f'duplicate function across wave shards: {fid}')
+                      all_ids.add(fid)
+
+              if records!=int(summary['records']) or successes!=int(summary['ghidra_success']) or failures!=int(summary['ghidra_failed']):
+                  raise SystemExit(f'shard {shard}: summary mismatch records={records} success={successes} failed={failures} summary={summary}')
+
+              shard_out=out/f'shard_{shard}'
+              shard_out.mkdir()
+              shutil.copyfile(graph_src,shard_out/'graph_ready.jsonl')
+              shutil.copyfile(summary_files[0],shard_out/'graph_ready_summary.json')
+              if len(exact_summary_files)==1:
+                  shutil.copyfile(exact_summary_files[0],shard_out/'shard_exact_summary.json')
+
+              totals['records']+=records
+              totals['ghidra_success']+=successes
+              totals['ghidra_failed']+=failures
+              shard_summaries.append(summary)
+
+          if totals['records']!=15745:
+              raise SystemExit(f'expected 15745 wave records, got {totals["records"]}')
+
+          combined={
+              'wave':1,
+              'shards':12,
+              **totals,
+              'unique_function_variants':len(all_ids),
+              'dol_sha256':expected_dol,
+              'producer':expected_producer,
+              'workflow_run_id':int(os.environ['RUN_ID']),
+              'source_policy':'exact retail RMGE01 main.dol only; no community decompilation source used for semantics',
+              'shard_summaries':shard_summaries,
+          }
+          (out/'wave1_summary.json').write_text(json.dumps(combined,indent=2)+'\n')
+
+          with (out/'SHA256SUMS.txt').open('w') as sums:
+              for p in sorted(x for x in out.rglob('*') if x.is_file() and x.name!='SHA256SUMS.txt'):
+                  sums.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p)+'\n')
+
+          print(json.dumps(combined,indent=2))
+          PY
+
+      - name: Commit durable whole-image wave
+        run: |
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add smg/rmge01/derived/ghidra_wave1_v1/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "SMG: retain exact RMGE01 whole-image Ghidra wave 1"
+          git push origin HEAD:"${GITHUB_HEAD_REF}"
