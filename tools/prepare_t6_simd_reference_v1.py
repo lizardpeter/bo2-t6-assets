@@ -5,10 +5,17 @@ REPO='lizardpeter/bo2-t6-assets'
 TARGETS={
  '009f6c0f':(11033713166,'0280f06bba10f68f306f80c505784efc7472e3d9b01c266c9db9fb090e3c3689','28ea55108bd3acef24cd29332d76ae33828dc44082b42cba3e6b16d3fdc617a4'),
  '009f6d72':(11033373743,'fffb15f0f12cf846c1808f753bed5d68e9561ec0c6f49d3c81df7b5403f2bfad','6d730af6c9b8eebee629dfd4251fc6df5a6411cbc75c6ec63fa45b2fbfe273e6')}
+class CredentialSafeRedirect(urllib.request.HTTPRedirectHandler):
+ def redirect_request(self, req, fp, code, msg, headers, newurl):
+  redirected=super().redirect_request(req,fp,code,msg,headers,newurl)
+  if redirected is not None and urllib.parse.urlsplit(req.full_url).netloc != urllib.parse.urlsplit(newurl).netloc:
+   redirected.remove_header('Authorization')
+  return redirected
+opener=urllib.request.build_opener(CredentialSafeRedirect())
 generated=[]; manifest=[]
 for va,(aid,ziphash,codehash) in TARGETS.items():
  request=urllib.request.Request(f'https://api.github.com/repos/{REPO}/actions/artifacts/{aid}/zip',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
- raw=urllib.request.urlopen(request).read(); assert hashlib.sha256(raw).hexdigest()==ziphash
+ raw=opener.open(request).read(); assert hashlib.sha256(raw).hexdigest()==ziphash
  z=zipfile.ZipFile(io.BytesIO(raw)); name=next(n for n in z.namelist() if n.endswith('.tar.zst')); compressed=z.read(name)
  hname=next(n for n in z.namelist() if n.endswith('.sha256')); assert hashlib.sha256(compressed).hexdigest()==z.read(hname).decode().split()[0]
  data=subprocess.run(['zstd','-dc'],input=compressed,stdout=subprocess.PIPE,check=True).stdout
