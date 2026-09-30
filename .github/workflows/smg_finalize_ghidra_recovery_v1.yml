@@ -1,0 +1,206 @@
+name: SMG finalize exact Ghidra recovery v1
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_finalize_ghidra_recovery_v1.txt'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve and download exact recovery artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TRIGGER='smg/rmge01/trigger_finalize_ghidra_recovery_v1.txt'
+          RETRY_RUN_ID="$(grep -E '^retry_run_id=[0-9]+$' "$TRIGGER" | tail -1 | cut -d= -f2)"
+          PRIOR_RUN_ID="$(grep -E '^prior_run_id=[0-9]+$' "$TRIGGER" | tail -1 | cut -d= -f2)"
+          test -n "$RETRY_RUN_ID"
+          test -n "$PRIOR_RUN_ID"
+          rm -rf /tmp/smg-recovery-retain
+          mkdir -p /tmp/smg-recovery-retain/retry /tmp/smg-recovery-retain/prior
+          gh run download "$RETRY_RUN_ID" --repo "$GITHUB_REPOSITORY" --name 'SMG_RMGE01_FORCED_RETRY_V1' --dir /tmp/smg-recovery-retain/retry
+          gh run download "$PRIOR_RUN_ID" --repo "$GITHUB_REPOSITORY" --name 'SMG_RMGE01_FORCE_PRIOR_V1' --dir /tmp/smg-recovery-retain/prior
+          echo "RETRY_RUN_ID=$RETRY_RUN_ID" >> "$GITHUB_ENV"
+          echo "PRIOR_RUN_ID=$PRIOR_RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Validate exact full-function pseudocode coverage and retain
+        run: |
+          python - <<'PY'
+          import csv, glob, hashlib, json, os, pathlib, shutil
+
+          DOL='2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09'
+          RETRY_PRODUCER='smg-rmge01-ghidra-forced-retry-v1'
+          PRIOR_PRODUCER='smg-rmge01-ghidra-force-prior-v1'
+
+          root=pathlib.Path('/tmp/smg-recovery-retain')
+          retry_graph=root/'retry'/'graph_ready.jsonl'
+          retry_summary=root/'retry'/'summary.json'
+          prior_graph=root/'prior'/'graph_ready.jsonl'
+          prior_summary=root/'prior'/'summary.json'
+          for p in [retry_graph,retry_summary,prior_graph,prior_summary]:
+              if not p.exists():
+                  raise SystemExit(f'missing recovery artifact file: {p}')
+
+          def read_jsonl(path):
+              return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+
+          retry=read_jsonl(retry_graph)
+          prior=read_jsonl(prior_graph)
+          rs=json.loads(retry_summary.read_text())
+          ps=json.loads(prior_summary.read_text())
+
+          if len(retry)!=650 or rs.get('attempted_unique')!=650 or rs.get('ghidra_success')!=650 or rs.get('ghidra_failed')!=0:
+              raise SystemExit(f'unexpected forced-retry summary: {rs}')
+          if len(prior)!=7440 or ps.get('attempted_unique')!=7440 or ps.get('ghidra_success')!=7440 or ps.get('ghidra_failed')!=0:
+              raise SystemExit(f'unexpected prior-force summary: {ps}')
+
+          retry_by={r['function_variant_id']:r for r in retry}
+          prior_by={r['function_variant_id']:r for r in prior}
+          if len(retry_by)!=650 or len(prior_by)!=7440:
+              raise SystemExit('duplicate IDs in recovery artifacts')
+
+          for label,rows,producer,run_id in [
+              ('retry',retry,RETRY_PRODUCER,int(os.environ['RETRY_RUN_ID'])),
+              ('prior',prior,PRIOR_PRODUCER,int(os.environ['PRIOR_RUN_ID'])),
+          ]:
+              for r in rows:
+                  if not r.get('ghidra_success'):
+                      raise SystemExit(f'{label}: unsuccessful record {r["function_variant_id"]}')
+                  if r.get('dol_sha256')!=DOL:
+                      raise SystemExit(f'{label}: DOL SHA mismatch {r["function_variant_id"]}')
+                  if r.get('producer')!=producer:
+                      raise SystemExit(f'{label}: producer mismatch {r["function_variant_id"]}')
+                  if int(r.get('workflow_run_id'))!=run_id:
+                      raise SystemExit(f'{label}: workflow run mismatch {r["function_variant_id"]}')
+                  if not r.get('ghidra_c') or not r.get('ghidra_c_sha256'):
+                      raise SystemExit(f'{label}: missing C output {r["function_variant_id"]}')
+                  if hashlib.sha256(r['ghidra_c'].encode()).hexdigest()!=r['ghidra_c_sha256']:
+                      raise SystemExit(f'{label}: C SHA mismatch {r["function_variant_id"]}')
+
+          # Exact inventory is the authority for the 23,345 validated boundaries.
+          inventory=[]
+          for p in sorted(glob.glob('smg/rmge01/inventory/exact_functions_*.tsv')):
+              with open(p,newline='',encoding='utf-8') as f:
+                  inventory.extend(csv.DictReader(f,delimiter='\t'))
+          exact_ids={r['id'] for r in inventory}
+          if len(inventory)!=23345 or len(exact_ids)!=23345:
+              raise SystemExit(f'exact inventory expected 23345 unique rows, got {len(inventory)} / {len(exact_ids)}')
+
+          # Batch 1 is the original 160 low-hanging exact variants.
+          batch1=[]
+          with open('smg/rmge01/decompile_batch_low_hanging_v1.jsonl',encoding='utf-8') as f:
+              for line in f:
+                  if line.strip():
+                      batch1.append(json.loads(line))
+          batch1_ids={r['id'] for r in batch1}
+          if len(batch1_ids)!=160:
+              raise SystemExit(f'expected 160 batch1 IDs, got {len(batch1_ids)}')
+
+          # Batches 2-6 are exactly 7,440 variants.
+          prior_expected=set()
+          for n in range(2,7):
+              with open(f'smg/rmge01/decompile_batch{n}_v1.tsv',newline='',encoding='utf-8') as f:
+                  prior_expected.update(r['id'] for r in csv.DictReader(f,delimiter='\t'))
+          if len(prior_expected)!=7440:
+              raise SystemExit(f'expected 7440 batch2-6 IDs, got {len(prior_expected)}')
+          if set(prior_by)!=prior_expected:
+              raise SystemExit(f'force-prior ID mismatch missing={len(prior_expected-set(prior_by))} extra={len(set(prior_by)-prior_expected)}')
+          if not batch1_ids.issubset(retry_by):
+              raise SystemExit(f'forced retry missing batch1 IDs: {len(batch1_ids-set(retry_by))}')
+
+          # Retained whole-image wave is the exact complement after batches 1-6.
+          wave_root=pathlib.Path('smg/rmge01/derived/ghidra_wave1_v1')
+          wave=[]
+          for p in sorted(wave_root.glob('shard_*/graph_ready.jsonl')):
+              wave.extend(read_jsonl(p))
+          wave_by={r['function_variant_id']:r for r in wave}
+          if len(wave)!=15745 or len(wave_by)!=15745:
+              raise SystemExit(f'expected 15745 unique wave records, got {len(wave)} / {len(wave_by)}')
+
+          prior_partition=batch1_ids|prior_expected
+          if len(prior_partition)!=7600:
+              raise SystemExit(f'expected 7600 batch1-6 partition IDs, got {len(prior_partition)}')
+          if prior_partition & set(wave_by):
+              raise SystemExit(f'prior/wave partition overlap: {len(prior_partition & set(wave_by))}')
+          if prior_partition | set(wave_by) != exact_ids:
+              raise SystemExit('batch1-6 plus wave does not equal exact inventory')
+
+          wave_ok={fid for fid,r in wave_by.items() if r.get('ghidra_success')}
+          wave_fail=set(wave_by)-wave_ok
+          if len(wave_ok)!=15571 or len(wave_fail)!=174:
+              raise SystemExit(f'unexpected wave success/fail counts {len(wave_ok)}/{len(wave_fail)}')
+          retry_success=set(retry_by)
+          if not wave_fail.issubset(retry_success):
+              raise SystemExit(f'unrecovered wave failures: {len(wave_fail-retry_success)}')
+
+          covered=batch1_ids | prior_expected | wave_ok | (wave_fail & retry_success)
+          if covered != exact_ids or len(covered)!=23345:
+              raise SystemExit(f'full coverage failed: covered={len(covered)} missing={len(exact_ids-covered)}')
+
+          out=pathlib.Path('smg/rmge01/derived/ghidra_recovery_v1')
+          if out.exists():
+              shutil.rmtree(out)
+          (out/'forced_retry').mkdir(parents=True)
+          (out/'force_prior').mkdir(parents=True)
+          shutil.copyfile(retry_graph,out/'forced_retry'/'graph_ready.jsonl')
+          shutil.copyfile(retry_summary,out/'forced_retry'/'summary.json')
+          shutil.copyfile(prior_graph,out/'force_prior'/'graph_ready.jsonl')
+          shutil.copyfile(prior_summary,out/'force_prior'/'summary.json')
+
+          coverage={
+              'coverage':'rmge01-exact-function-pseudocode-v1',
+              'exact_function_variants':23345,
+              'pseudocode_covered':23345,
+              'pseudocode_missing':0,
+              'batch1_force_success':160,
+              'batches2_6_force_success':7440,
+              'wave1_records':15745,
+              'wave1_direct_success':15571,
+              'wave1_recovered_success':174,
+              'forced_retry_total_success':650,
+              'forced_retry_total_failed':0,
+              'force_prior_total_success':7440,
+              'force_prior_total_failed':0,
+              'retry_conflicts_removed':int(rs.get('conflicts_removed',0)),
+              'prior_conflicts_removed':int(ps.get('conflicts_removed',0)),
+              'dol_sha256':DOL,
+              'wave1_run_id':36701847118,
+              'retry_run_id':int(os.environ['RETRY_RUN_ID']),
+              'prior_run_id':int(os.environ['PRIOR_RUN_ID']),
+              'source_policy':'exact retail RMGE01 Rev 0 main.dol only; no community decompilation source used for semantics',
+              'note':'Coverage is Ghidra pseudocode availability at all 23,345 exact validated function boundaries; semantic naming/types remain separate reverse-engineering work.'
+          }
+          (out/'coverage_complete_v1.json').write_text(json.dumps(coverage,indent=2)+'\n')
+
+          with (out/'SHA256SUMS.txt').open('w') as sums:
+              for p in sorted(x for x in out.rglob('*') if x.is_file() and x.name!='SHA256SUMS.txt'):
+                  sums.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p)+'\n')
+
+          print(json.dumps(coverage,indent=2))
+          PY
+
+      - name: Commit durable exact recovery corpus
+        run: |
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add smg/rmge01/derived/ghidra_recovery_v1/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "SMG: retain full exact RMGE01 Ghidra recovery corpus"
+          git push origin HEAD:"${GITHUB_HEAD_REF}"
