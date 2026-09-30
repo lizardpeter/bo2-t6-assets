@@ -74,11 +74,14 @@ def lift(ins):
 
 def main():
     ap=argparse.ArgumentParser()
-    ap.add_argument("--url",required=True); ap.add_argument("--expected-dol-sha256",required=True)
+    ap.add_argument("--url"); ap.add_argument("--dol"); ap.add_argument("--expected-dol-sha256",required=True)
     ap.add_argument("--manifest",required=True); ap.add_argument("--out",required=True); ap.add_argument("--summary",required=True)
     a=ap.parse_args()
-    dol="/tmp/rmge01_main.dol"
-    urllib.request.urlretrieve(a.url,dol)
+    dol=a.dol or "/tmp/rmge01_main.dol"
+    if a.dol is None:
+        req=urllib.request.Request(a.url,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req) as r, open(dol,"wb") as f:
+            f.write(r.read())
     data=open(dol,"rb").read()
     got=hashlib.sha256(data).hexdigest()
     if got.lower()!=a.expected_dol_sha256.lower():
