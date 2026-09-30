@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - '.github/workflows/smg_rmge01_exact_lift_v1.yml'
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_exact_lift_v1.txt'
 
 permissions:
   contents: write
@@ -24,13 +27,29 @@ jobs:
             --url 'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol' \
             --expected-dol-sha256 '2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09' \
             --manifest smg/rmge01/decompile_batch_low_hanging_v1.jsonl \
-            --out smg/rmge01/derived/rmge01_exact_low_hanging_v1.jsonl \
-            --summary smg/rmge01/derived/rmge01_exact_low_hanging_v1_summary.json
+            --out /tmp/rmge01_exact_low_hanging_v1.jsonl \
+            --summary /tmp/rmge01_exact_low_hanging_v1_summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_EXACT_LIFT_V1
+          path: |
+            /tmp/rmge01_exact_low_hanging_v1.jsonl
+            /tmp/rmge01_exact_low_hanging_v1_summary.json
+          retention-days: 30
       - name: Commit derived executable evidence
+        if: github.event_name == 'push'
         run: |
+          mkdir -p smg/rmge01/derived
+          cp /tmp/rmge01_exact_low_hanging_v1.jsonl smg/rmge01/derived/
+          cp /tmp/rmge01_exact_low_hanging_v1_summary.json smg/rmge01/derived/
           git config user.name 'smg-re-bot'
           git config user.email 'smg-re-bot@users.noreply.github.com'
           git add smg/rmge01/derived/
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'SMG: derive exact RMGE01 low-hanging semantic lifts'
-          git push
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 2
+          done
+          exit 1
