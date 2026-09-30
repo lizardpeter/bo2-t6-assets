@@ -1,0 +1,68 @@
+name: SMG prepare RMGE01 Ghidra batch 2 graph import
+
+on:
+  pull_request:
+    paths:
+      - 'smg/rmge01/trigger_prepare_graph_batch2_v1.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build graph-ready exact-binary records
+        run: |
+          python - <<'PY'
+          import base64,csv,hashlib,json,pathlib
+          root=pathlib.Path('smg/rmge01/derived/ghidra_batch2_v1')
+          exact={}
+          for line in (root/'batch2_exact.jsonl').read_text().splitlines():
+              if line.strip():
+                  r=json.loads(line); exact[r['id']]=r
+          out=[]
+          with (root/'decompile.tsv').open(newline='',encoding='utf-8') as f:
+              for r in csv.DictReader(f,delimiter='\t'):
+                  e=exact[r['id']]
+                  success=r['success'].lower()=='true'
+                  c=base64.b64decode(r['c_b64']).decode('utf-8','replace') if r['c_b64'] else ''
+                  name=base64.b64decode(r['function_name_b64']).decode('utf-8','replace') if r['function_name_b64'] else ''
+                  err=base64.b64decode(r['error_b64']).decode('utf-8','replace') if r['error_b64'] else ''
+                  dis='\n'.join(f"{i['address']}: {i['bytes']}  {i['mnemonic']} {i['op_str']}".rstrip() for i in e['instructions'])+'\n'
+                  out.append({
+                    'function_variant_id':r['id'],'address':r['address'],'size_bytes':int(r['size']),
+                    'function_byte_sha256':e['byte_sha256'],'bytes_hex':e['bytes_hex'],
+                    'disassembly':dis,'disassembly_sha256':hashlib.sha256(dis.encode()).hexdigest(),
+                    'ghidra_success':success,'ghidra_function_name':name,'ghidra_c':c,
+                    'ghidra_c_sha256':hashlib.sha256(c.encode()).hexdigest() if c else None,
+                    'ghidra_error':err,'dol_sha256':e['dol_sha256'],
+                    'producer':'smg-rmge01-ghidra-batch2-v1','workflow_run_id':36692633033
+                  })
+          (root/'graph_ready.jsonl').write_text('\n'.join(json.dumps(x,separators=(',',':')) for x in out)+'\n')
+          summary={
+            'records':len(out),'ghidra_success':sum(x['ghidra_success'] for x in out),
+            'ghidra_failed':sum(not x['ghidra_success'] for x in out),
+            'dol_sha256':'2c680585a8f58e1cc9c5521b579057f12b124ff0ef409e470a57606c50a93c09',
+            'workflow_run_id':36692633033,
+            'source_policy':'exact retail RMGE01 main.dol only; no community decompilation source used for semantics'
+          }
+          (root/'graph_ready_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print(summary)
+          PY
+          sha256sum smg/rmge01/derived/ghidra_batch2_v1/graph_ready* >> smg/rmge01/derived/ghidra_batch2_v1/SHA256SUMS.txt
+      - name: Commit graph-ready records
+        run: |
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add smg/rmge01/derived/ghidra_batch2_v1/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'SMG: prepare RMGE01 Ghidra batch 2 graph records'
+          git push origin HEAD:"${GITHUB_HEAD_REF}"
