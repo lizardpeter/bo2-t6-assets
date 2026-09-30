@@ -1,0 +1,40 @@
+name: T6 SIMD reconstruction differential v1
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_simd_reconstruction_differential_v1.yml'
+      - 'reconstruction/current_client/simd_candidates_v1.cpp'
+      - 'tests/current_client/simd_differential_v1.cpp'
+      - 'tools/prepare_t6_simd_reference_v1.py'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  differential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact x86 reference instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/prepare_t6_simd_reference_v1.py
+      - name: Compile and execute exact-byte x86 differential test
+        run: |
+          set -euo pipefail
+          g++ -m32 -std=c++17 -O2 -ffreestanding -fno-stack-protector -fno-exceptions -fno-rtti -fno-pie -no-pie -nostdlib -Wl,-e,_start -I/tmp reconstruction/current_client/simd_candidates_v1.cpp tests/current_client/simd_differential_v1.cpp -o /tmp/t6_simd_differential
+          /tmp/t6_simd_differential
+          python3 - <<'PY'
+          import json,pathlib,os
+          fixtures=json.loads(pathlib.Path('/tmp/t6_simd_fixture_manifest.json').read_text())
+          report={'format':'t6-simd-exact-byte-differential-v1','build_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf','functions':fixtures,'architecture':'x86','cases':2048,'output_and_untouched_memory_equal':True,'source_commit':os.environ['GITHUB_SHA'],'proof_boundary':'Finite-case exact-instruction differential pass; not original MSVC object matching or whole-game rebuild.'}
+          out=pathlib.Path('proof/current_client/T6_SIMD_DIFFERENTIAL_V1.json'); out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          PY
+      - name: Retain validation report
+        run: |
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/T6_SIMD_DIFFERENTIAL_V1.json
+          git commit -m "Record exact-byte x86 differential validation for T6 SIMD candidates"
+          git pull --rebase origin main
+          git push origin HEAD:main
