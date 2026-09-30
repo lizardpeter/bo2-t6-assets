@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/smg_rmge01_native_ghidra_v1.yml'
       - 'tools/ghidra_scripts/ExportSmgRmge01NativeDecompile.java'
+      - 'tools/smg_dol_to_elf.py'
   pull_request:
     paths:
       - 'smg/rmge01/trigger_native_ghidra_v1.txt'
@@ -39,17 +40,13 @@ jobs:
           GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
           test -x "$GHIDRA_HOME/support/analyzeHeadless"
           echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
-      - name: Build pinned GameCube/Wii DOL loader
+      - name: Install pinned Gekko/Broadway language definition
         run: |
           set -euo pipefail
           git clone https://github.com/Cuyler36/Ghidra-GameCube-Loader.git /tmp/gc-loader
           git -C /tmp/gc-loader checkout "$GC_LOADER_COMMIT"
-          cd /tmp/gc-loader
-          GHIDRA_INSTALL_DIR="$GHIDRA_HOME" ./gradlew buildExtension --no-daemon
-          LOADER_ZIP="$(find dist -maxdepth 1 -type f -name '*.zip' | head -1)"
-          test -n "$LOADER_ZIP"
-          unzip -q "$LOADER_ZIP" -d "$GHIDRA_HOME/Ghidra/Extensions"
-          find "$GHIDRA_HOME/Ghidra/Extensions" -maxdepth 2 -name extension.properties -print
+          cp /tmp/gc-loader/data/languages/* "$GHIDRA_HOME/Ghidra/Processors/PowerPC/data/languages/"
+          grep -n 'Gekko_Broadway' "$GHIDRA_HOME/Ghidra/Processors/PowerPC/data/languages/ppc_gekko_broadway.ldefs"
       - name: Fetch and verify exact retail RMGE01 main.dol
         run: |
           set -euo pipefail
@@ -57,27 +54,33 @@ jobs:
             'https://r2.houseofkublai.com/super-mario-galaxy/DATA/sys/main.dol'
           echo "$DOL_SHA256  /tmp/rmge01_main.dol" | sha256sum --check
           test "$(stat -c %s /tmp/rmge01_main.dol)" = "6283264"
-      - name: Analyze DOL and decompile shortest 1500 discovered functions
+      - name: Convert exact DOL to address-preserving ELF
+        run: |
+          set -euo pipefail
+          python3 tools/smg_dol_to_elf.py /tmp/rmge01_main.dol /tmp/rmge01_main.elf /tmp/smg_dol_segments.json
+      - name: Analyze executable and decompile shortest 1500 discovered functions
         run: |
           set -euo pipefail
           rm -rf /tmp/smg-ghidra /tmp/smg-native-out
           mkdir -p /tmp/smg-ghidra /tmp/smg-native-out
           export GHIDRA_HEADLESS_MAXMEM=10G
           "$GHIDRA_HOME/support/analyzeHeadless" /tmp/smg-ghidra rmge01-native-v1 \
-            -import /tmp/rmge01_main.dol \
-            -loader "Nintendo GameCube/Wii Binary" \
-            -loader-autoloadMaps false \
-            -loader-addSystemMemorySections true \
+            -import /tmp/rmge01_main.elf \
+            -loader ElfLoader \
+            -processor PowerPC:BE:32:Gekko_Broadway \
+            -cspec default \
             -analysisTimeoutPerFile 2400 \
             -postScript ExportSmgRmge01NativeDecompile.java \
               /tmp/smg-native-out/functions.tsv /tmp/smg-native-out/decompile.tsv /tmp/smg-native-out/summary.json 1500 12 \
             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" \
             -max-cpu 4
+          cp /tmp/smg_dol_segments.json /tmp/smg-native-out/dol_to_elf_segments.json
       - name: Add provenance files
         run: |
           echo "$DOL_SHA256  /tmp/rmge01_main.dol" > /tmp/smg-native-out/main.dol.sha256
-          printf '%s\n' "$GC_LOADER_COMMIT" > /tmp/smg-native-out/gamecube_loader_commit.txt
+          printf '%s\n' "$GC_LOADER_COMMIT" > /tmp/smg-native-out/gekko_language_source_commit.txt
           printf '%s\n' 'Ghidra 12.1.3 PUBLIC 20260817' > /tmp/smg-native-out/ghidra_version.txt
+          printf '%s\n' 'deterministic-dol-to-elf32be-v1' > /tmp/smg-native-out/binary_bridge.txt
       - name: Commit durable native analysis
         if: github.event_name == 'push'
         run: |
@@ -86,8 +89,10 @@ jobs:
           rm -rf "$OUT"; mkdir -p "$OUT"
           cp /tmp/smg-native-out/summary.json "$OUT/"
           cp /tmp/smg-native-out/main.dol.sha256 "$OUT/"
-          cp /tmp/smg-native-out/gamecube_loader_commit.txt "$OUT/"
+          cp /tmp/smg-native-out/gekko_language_source_commit.txt "$OUT/"
           cp /tmp/smg-native-out/ghidra_version.txt "$OUT/"
+          cp /tmp/smg-native-out/binary_bridge.txt "$OUT/"
+          cp /tmp/smg-native-out/dol_to_elf_segments.json "$OUT/"
           zstd -12 -T0 /tmp/smg-native-out/functions.tsv -o "$OUT/functions.tsv.zst"
           zstd -12 -T0 /tmp/smg-native-out/decompile.tsv -o "$OUT/decompile.tsv.zst"
           sha256sum "$OUT"/* > "$OUT/CHECKSUMS.sha256"
