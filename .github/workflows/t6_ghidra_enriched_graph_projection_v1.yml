@@ -1,0 +1,94 @@
+name: T6 enriched Ghidra graph projection v1
+
+on:
+  push:
+    paths:
+      - 'proof/current_client/ghidra_cross_build_hints_v1/full_v1/summary.json'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  SOURCE_RUN_ID: 36988725442
+  SOURCE_RUN_SHA: ecee4bc1642daccf52e1e6d8540158f0158b10b3
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download exact full-corpus shard artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-artifacts
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --pattern 't6-enriched-full-v1-shard-*' \
+            --dir /tmp/t6-artifacts
+          for i in 0 1 2 3 4 5 6 7; do
+            test -s "/tmp/t6-artifacts/t6-enriched-full-v1-shard-$i/bundle.tar.zst"
+            test -s "/tmp/t6-artifacts/t6-enriched-full-v1-shard-$i/results.tsv"
+            test -s "/tmp/t6-artifacts/t6-enriched-full-v1-shard-$i/summary.json"
+          done
+
+      - name: Build graph-ready revision-2 projections
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/ghidra_cross_build_hints_v1/uregraph_v1
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          for i in 0 1 2 3 4 5 6 7; do
+            SRC="/tmp/t6-artifacts/t6-enriched-full-v1-shard-$i"
+            EXT="/tmp/t6-extract-$i"
+            rm -rf "$EXT"; mkdir -p "$EXT"
+            zstd -q -d -c "$SRC/bundle.tar.zst" | tar -xf - -C "$EXT"
+            BUNDLE_SHA="$(awk '{print $1}' "$SRC/bundle.sha256")"
+            python3 tools/t6_enriched_ghidra_to_uregraph_v1.py \
+              --batch-dir "$EXT/batch" \
+              --shard "$i" \
+              --workflow-run-id "$SOURCE_RUN_ID" \
+              --repo-commit "$SOURCE_RUN_SHA" \
+              --bundle-sha256 "$BUNDLE_SHA" \
+              --out-dir "$OUT/shard-$i" \
+              --chunk-size 20
+          done
+
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('proof/current_client/ghidra_cross_build_hints_v1/uregraph_v1')
+          ms=[json.loads((root/f'shard-{i}'/'manifest.json').read_text()) for i in range(8)]
+          total={
+            'format':'t6-enriched-ghidra-uregraph-projection-v1',
+            'source_workflow_run_id':36988725442,
+            'source_run_sha':'ecee4bc1642daccf52e1e6d8540158f0158b10b3',
+            'shards':8,
+            'full_rerun_functions':sum(x['full_shard_functions'] for x in ms),
+            'xbuild_affected_functions':sum(x['xbuild_affected_functions'] for x in ms),
+            'revision2_representations':sum(x['revision2_representations'] for x in ms),
+            'proof_boundary':'Graph-ready source-text revisions only for decompiler-visible cross-build impact. Server PDB/MAP remains hint evidence; no server prototypes, types, globals, source layouts, or address deltas are promoted.'
+          }
+          assert total['full_rerun_functions']==24617,total
+          (root/'summary.json').write_text(json.dumps(total,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(total,indent=2,sort_keys=True))
+          PY
+          git diff --check
+
+      - name: Commit graph-ready projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add proof/current_client/ghidra_cross_build_hints_v1/uregraph_v1
+          git commit -m "Add graph-ready T6 enriched Ghidra revisions"
+          git pull --rebase origin main
+          git push origin HEAD:main
