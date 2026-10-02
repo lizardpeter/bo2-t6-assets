@@ -1,0 +1,107 @@
+name: T6 weaponoptions table dump v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_weaponoptions_table_dump_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore pinned OAT Unlinker
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+          fail-on-cache-miss: true
+
+      - name: Fetch exact MP/ZM support roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/out /tmp/proof
+          for f in common_mp.ff common_patch_mp.ff patch_mp.ff common_zm.ff patch_zm.ff; do
+            curl -fL --retry 5 --retry-delay 2               -o "/tmp/source/$f"               "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/source/common_zm.ff /tmp/source/patch_zm.ff > /tmp/proof/zm_fastfile_sha256.txt
+          sha256sum /tmp/source/*.ff | sort > /tmp/proof/all_fastfile_sha256.txt
+
+      - name: Dump exact StringTables
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for f in common_mp common_patch_mp patch_mp common_zm patch_zm; do
+            mkdir -p "/tmp/out/$f"
+            "$BIN" --no-color --include-assets stringtable               --output-folder "/tmp/out/$f" "/tmp/source/$f.ff"               >"/tmp/proof/$f.log" 2>&1
+          done
+
+      - name: Retain native weaponoptions rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,shutil
+
+          rows=[]
+          selected=Path('/tmp/proof/selected')
+          selected.mkdir(parents=True,exist_ok=True)
+          for root in sorted(Path('/tmp/out').iterdir()):
+              for p in sorted(root.rglob('*')):
+                  if not p.is_file():
+                      continue
+                  rel=p.relative_to(root).as_posix().lower()
+                  if rel not in ('mp/weaponoptions.csv','mp/weaponoptions_zm.csv'):
+                      continue
+                  data=p.read_bytes()
+                  dst=selected/root.name/rel
+                  dst.parent.mkdir(parents=True,exist_ok=True)
+                  shutil.copy2(p,dst)
+                  rows.append({
+                      'zone':root.name,
+                      'table':rel,
+                      'bytes':len(data),
+                      'sha256':hashlib.sha256(data).hexdigest(),
+                  })
+                  print('===',root.name,rel,'===')
+                  print(data.decode('utf-8','replace'))
+          manifest={
+              'format':'t6-weaponoptions-table-dump-v1',
+              'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'tables':rows,
+              'proofBoundary':'Native pinned OAT StringTable dump from exact retail FastFiles. Column semantics are supplied separately by exact PDB-backed WeaponOptions::InitWeaponOptions evidence.'
+          }
+          Path('/tmp/proof/T6_WEAPONOPTIONS_TABLE_DUMP_V1.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          if not any(r['table']=='mp/weaponoptions.csv' for r in rows):
+              raise SystemExit('missing mp/weaponoptions.csv')
+          if not any(r['table']=='mp/weaponoptions_zm.csv' for r in rows):
+              raise SystemExit('missing mp/weaponoptions_zm.csv')
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_WEAPONOPTIONS_TABLE_DUMP_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          retention-days: 14
