@@ -6,7 +6,7 @@ exact importer admission in Rust-test.
 """
 from __future__ import annotations
 
-import argparse, collections, hashlib, json, struct, time, urllib.error, urllib.request
+import argparse, collections, concurrent.futures, hashlib, json, struct, time, urllib.error, urllib.request
 from pathlib import Path
 
 BASE_DEFAULT = "https://r2.houseofkublai.com/super-mario-galaxy/DATA/files"
@@ -231,26 +231,42 @@ def main():
 
     objects=sorted(object_names)[:a.max_objects]
     failures=[]; materials=[]; textures=[]; shape_types=[]; models=0
-    for n,obj in enumerate(objects,1):
+
+    def inspect_object(obj):
         try:
             arc=rarc_files(fetch(f"{base}/ObjectData/{obj}.arc"))
         except Exception as e:
-            failures.append({"object":obj,"stage":"download","error":str(e)}); continue
+            return obj, None, {"object":obj,"stage":"download","error":str(e)}
         models_found=[(name,p) for name,p in arc if name.lower().endswith((".bdl",".bmd"))]
-        if not models_found: continue
+        if not models_found:
+            return obj, None, None
         models_found.sort(key=lambda x:(x[0].rsplit(".",1)[0].lower()!=obj.lower(),x[0].lower()))
         name,b=models_found[0]
         try:
             secs=j3d_sections(b)
             if "MAT3" not in secs or "TEX1" not in secs or "SHP1" not in secs:
                 raise ValueError(f"missing core sections {sorted(secs)}")
-            materials.extend(mat3_census(secs["MAT3"],obj))
-            for t in tex1_census(secs["TEX1"]):
-                t["model"]=obj; textures.append(t)
-            shape_types.extend(shp1_census(secs["SHP1"]))
-            models+=1
+            mats=mat3_census(secs["MAT3"],obj)
+            tex=tex1_census(secs["TEX1"])
+            for t in tex: t["model"]=obj
+            shapes=shp1_census(secs["SHP1"])
+            return obj, (mats,tex,shapes), None
         except Exception as e:
-            failures.append({"object":obj,"model_file":name,"stage":"j3d","error":str(e)})
+            return obj, None, {"object":obj,"model_file":name,"stage":"j3d","error":str(e)}
+
+    inspected=[]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
+        for item in pool.map(inspect_object, objects):
+            inspected.append(item)
+    # pool.map preserves input order, so structural output remains deterministic.
+    for obj,payload,error in inspected:
+        if error is not None:
+            failures.append(error)
+            continue
+        if payload is None:
+            continue
+        mats,tex,shapes=payload
+        materials.extend(mats); textures.extend(tex); shape_types.extend(shapes); models+=1
 
     sig=collections.Counter(canonical_signature(m) for m in materials)
     examples={}
