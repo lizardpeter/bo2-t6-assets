@@ -129,10 +129,10 @@ UNWIND rows AS row
 MATCH (struct:KGNode)
 WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
   AND struct.client_va=row.client_va AND struct.server_va=row.server_va
-MATCH (server:KGNode {id:row.server_variant_id})
+MATCH (server:KGNode {{id:row.server_variant_id}})
 WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:row.client_id})
-MERGE (ev:KGNode {id:row.evidence_id})
+MATCH (client:KGNode {{id:row.client_id}})
+MERGE (ev:KGNode {{id:row.evidence_id}})
 SET ev.kind='re:Evidence',
     ev.namespace='t6',
     ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
