@@ -1,0 +1,57 @@
+name: SMG RMGE01 SHP display-list census v1
+
+on:
+  push:
+    paths:
+      - "tools/smg_rmge01_shp_displaylist_census_v1.py"
+      - ".github/workflows/smg_rmge01_shp_displaylist_census_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Census exact RMGE01 Good Egg SHP display lists
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smg-shp
+          python tools/smg_rmge01_shp_displaylist_census_v1.py \
+            --galaxy EggStarGalaxy \
+            --max-objects 220 \
+            --out /tmp/smg-shp/eggstar_shp_displaylist_census_v1.json
+
+      - name: Retain structural census
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=smg/rmge01/derived/shp_displaylist_census_v1
+          mkdir -p "$OUT"
+          cp /tmp/smg-shp/eggstar_shp_displaylist_census_v1.json "$OUT/"
+          sha256sum "$OUT"/*.json > "$OUT/CHECKSUMS.sha256"
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add "$OUT"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'SMG: retain RMGE01 SHP display-list census v1'
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_SHP_DISPLAYLIST_CENSUS_V1
+          path: /tmp/smg-shp
+          retention-days: 30
