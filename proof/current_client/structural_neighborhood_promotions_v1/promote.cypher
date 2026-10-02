@@ -1,28 +1,29 @@
-
+WITH [{client_va:"0x00761200",server_va:"0x00a8b000",client_id:"urn:ure:t6:occ:function:current-client:00761200",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_R_RegisterSunDvars_YAXXZ_623ae7cc27ec3b78_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:a0a475f41cc3ebde",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:6f23126a2f3b973d33ed0494",server_symbol:"?R_RegisterSunDvars@@YAXXZ",server_object:"gfx_d3d:r_sky.obj",basis:"five-calibrated-structural-schemes+complete-distinctive-retail-string-set",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:0,shared_unique_strings:22,call_count:21,data_ref_offset_count:102},{client_va:"0x00573290",server_va:"0x0079ebd0",client_id:"urn:ure:t6:occ:function:current-client:00573290",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_Voice_Init_YA_NXZ_1f30f34805d1cfed_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:16bb3a9071285d03",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:976ee5fc4025db6f5fe106af",server_symbol:"?Voice_Init@@YA_NXZ",server_object:"win_voice.obj",basis:"five-calibrated-structural-schemes+complete-distinctive-retail-string-set",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:0,shared_unique_strings:6,call_count:19,data_ref_offset_count:35},{client_va:"0x00440c10",server_va:"0x00561a80",client_id:"urn:ure:t6:occ:function:current-client:00440c10",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_0dwQoSMultiProbeListener_QAE_XZ_74689808ad26bd12_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:551329442c8f2ad8",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:8bf0c706a0cb7d8ff954a08b",server_symbol:"??0dwQoSMultiProbeListener@@QAE@XZ",server_object:"dwQoS.obj",basis:"five-calibrated-structural-schemes+exact-anchor-callees",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:3,shared_unique_strings:0,call_count:6,data_ref_offset_count:1},{client_va:"0x004e3f70",server_va:"0x007e4b80",client_id:"urn:ure:t6:occ:function:current-client:004e3f70",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_Phys_EffectsInit_YAXXZ_e3d932ce92eb6f58_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:5f117fc2d310f002",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:661eea438ec6c40952850faf",server_symbol:"?Phys_EffectsInit@@YAXXZ",server_object:"phys_effects.obj",basis:"five-calibrated-structural-schemes+complete-distinctive-retail-string-set",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:0,shared_unique_strings:3,call_count:3,data_ref_offset_count:13},{client_va:"0x004863a0",server_va:"0x0070d600",client_id:"urn:ure:t6:occ:function:current-client:004863a0",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_UI_FriendsRegisterDvars_YAXXZ_05e34d8dd4f14696_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:d9f5c38ecd9fd885",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:5a171b1563f743de14b4fb27",server_symbol:"?UI_FriendsRegisterDvars@@YAXXZ",server_object:"ui_friends.obj",basis:"five-calibrated-structural-schemes+complete-distinctive-retail-string-set",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:0,shared_unique_strings:3,call_count:3,data_ref_offset_count:9},{client_va:"0x005380d0",server_va:"0x00795a70",client_id:"urn:ure:t6:occ:function:current-client:005380d0",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_VCS_Init_YAXXZ_a1e6201a6877c974_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:e3f2e4540a07846c",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:7249626164555d4cd1d82004",server_symbol:"?VCS_Init@@YAXXZ",server_object:"vcs_hooks.obj",basis:"five-calibrated-structural-schemes+complete-distinctive-retail-string-set",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:0,shared_unique_strings:3,call_count:3,data_ref_offset_count:10},{client_va:"0x004c1160",server_va:"0x005b4520",client_id:"urn:ure:t6:occ:function:current-client:004c1160",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_0FriendInfo_QAE_XZ_e00cbe22601a9227_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:5da95d0c94133770",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:af1862aa86dff38d3ef71436",server_symbol:"??0FriendInfo@@QAE@XZ",server_object:"bot.obj",basis:"five-calibrated-structural-schemes+exact-anchor-callees",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:2,shared_unique_strings:0,call_count:2,data_ref_offset_count:0},{client_va:"0x00534f20",server_va:"0x00564cc0",client_id:"urn:ure:t6:occ:function:current-client:00534f20",server_variant_id:"urn:ure:t6:re_FunctionVariant:urn_ure_t6_re_FunctionFamily_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_re_Function_msvc-public_dwGetAddressMap_YAPAVbdAddressMap_XZ_ee07260c164cfc14_build_urn_ure_t6_re_Build_urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11_4ee9a1fac7aa9195:24345ef40cf6f890",evidence_id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:e09d1869a1e869733b4e4d77",server_symbol:"?dwGetAddressMap@@YAPAVbdAddressMap@@XZ",server_object:"dwUtils.obj",basis:"five-calibrated-structural-schemes+exact-anchor-callees",structural_schemes:"coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",exact_anchor_callee_matches:2,shared_unique_strings:0,call_count:3,data_ref_offset_count:0}] AS rows
+UNWIND rows AS row
 MATCH (struct:KGNode)
 WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x00761200" AND struct.server_va="0x00a8b000"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
+  AND struct.client_va=row.client_va AND struct.server_va=row.server_va
+MATCH (server:KGNode {id:row.server_variant_id})
 WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:00761200"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:6f23126a2f3b973d33ed0494"})
+MATCH (client:KGNode {id:row.client_id})
+MERGE (ev:KGNode {id:row.evidence_id})
 SET ev.kind='re:Evidence',
     ev.namespace='t6',
     ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
     ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x00761200",
-    ev.server_va="0x00a8b000",
-    ev.server_symbol="?R_RegisterSunDvars@@YAXXZ",
-    ev.server_object="gfx_d3d:r_sky.obj",
-    ev.basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=0,
-    ev.shared_unique_strings=22,
-    ev.call_count=21,
-    ev.data_ref_offset_count=102,
+    ev.client_va=row.client_va,
+    ev.server_va=row.server_va,
+    ev.server_symbol=row.server_symbol,
+    ev.server_object=row.server_object,
+    ev.basis=row.basis,
+    ev.structural_schemes=row.structural_schemes,
+    ev.exact_anchor_callee_matches=row.exact_anchor_callee_matches,
+    ev.shared_unique_strings=row.shared_unique_strings,
+    ev.call_count=row.call_count,
+    ev.data_ref_offset_count=row.data_ref_offset_count,
     ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
+    ev.repo_commit="336ff5286454021a06640ff0b8300c9af205ea58",
+    ev.workflow_run_id=36998799407,
     ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
 MERGE (ev)-[:CORROBORATES]->(struct)
 MERGE (ev)-[:EVIDENCE_FOR]->(client)
@@ -32,265 +33,6 @@ SET struct.state='accepted-evidence-awaiting-semantic-promotion',
     client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
     client.cross_build_identity_candidate_variant_id=server.id,
     client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
+    client.cross_build_identity_basis=row.basis,
     client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x00573290" AND struct.server_va="0x0079ebd0"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:00573290"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:976ee5fc4025db6f5fe106af"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x00573290",
-    ev.server_va="0x0079ebd0",
-    ev.server_symbol="?Voice_Init@@YA_NXZ",
-    ev.server_object="win_voice.obj",
-    ev.basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=0,
-    ev.shared_unique_strings=6,
-    ev.call_count=19,
-    ev.data_ref_offset_count=35,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x00440c10" AND struct.server_va="0x00561a80"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:00440c10"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:8bf0c706a0cb7d8ff954a08b"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x00440c10",
-    ev.server_va="0x00561a80",
-    ev.server_symbol="??0dwQoSMultiProbeListener@@QAE@XZ",
-    ev.server_object="dwQoS.obj",
-    ev.basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=3,
-    ev.shared_unique_strings=0,
-    ev.call_count=6,
-    ev.data_ref_offset_count=1,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x004e3f70" AND struct.server_va="0x007e4b80"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:004e3f70"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:661eea438ec6c40952850faf"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x004e3f70",
-    ev.server_va="0x007e4b80",
-    ev.server_symbol="?Phys_EffectsInit@@YAXXZ",
-    ev.server_object="phys_effects.obj",
-    ev.basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=0,
-    ev.shared_unique_strings=3,
-    ev.call_count=3,
-    ev.data_ref_offset_count=13,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x004863a0" AND struct.server_va="0x0070d600"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:004863a0"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:5a171b1563f743de14b4fb27"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x004863a0",
-    ev.server_va="0x0070d600",
-    ev.server_symbol="?UI_FriendsRegisterDvars@@YAXXZ",
-    ev.server_object="ui_friends.obj",
-    ev.basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=0,
-    ev.shared_unique_strings=3,
-    ev.call_count=3,
-    ev.data_ref_offset_count=9,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x005380d0" AND struct.server_va="0x00795a70"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:005380d0"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:7249626164555d4cd1d82004"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x005380d0",
-    ev.server_va="0x00795a70",
-    ev.server_symbol="?VCS_Init@@YAXXZ",
-    ev.server_object="vcs_hooks.obj",
-    ev.basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=0,
-    ev.shared_unique_strings=3,
-    ev.call_count=3,
-    ev.data_ref_offset_count=10,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+complete-distinctive-retail-string-set",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x004c1160" AND struct.server_va="0x005b4520"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:004c1160"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:af1862aa86dff38d3ef71436"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x004c1160",
-    ev.server_va="0x005b4520",
-    ev.server_symbol="??0FriendInfo@@QAE@XZ",
-    ev.server_object="bot.obj",
-    ev.basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=2,
-    ev.shared_unique_strings=0,
-    ev.call_count=2,
-    ev.data_ref_offset_count=0,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    client.cross_build_identity_evidence_id=ev.id
-
-
-MATCH (struct:KGNode)
-WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va="0x00534f20" AND struct.server_va="0x00564cc0"
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
-WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {id:"urn:ure:t6:occ:function:current-client:00534f20"})
-MERGE (ev:KGNode {id:"urn:ure:t6:re_Evidence:structural-neighborhood-accepted:e09d1869a1e869733b4e4d77"})
-SET ev.kind='re:Evidence',
-    ev.namespace='t6',
-    ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
-    ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va="0x00534f20",
-    ev.server_va="0x00564cc0",
-    ev.server_symbol="?dwGetAddressMap@@YAPAVbdAddressMap@@XZ",
-    ev.server_object="dwUtils.obj",
-    ev.basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    ev.structural_schemes="coarse_flow;coarse_profile;fine_flow;fine_profile;mnemonic_flow",
-    ev.exact_anchor_callee_matches=2,
-    ev.shared_unique_strings=0,
-    ev.call_count=3,
-    ev.data_ref_offset_count=0,
-    ev.repo='lizardpeter/bo2-t6-assets',
-    ev.repo_commit="c48086ffa9ebae04d083aabda6e43f7ab29474e5",
-    ev.workflow_run_id=36998585457,
-    ev.proof_boundary='Accepted cross-build identity evidence only. Server PDB prototypes, types, globals, layouts, and source claims remain server-build facts until separately proven for retail.'
-MERGE (ev)-[:CORROBORATES]->(struct)
-MERGE (ev)-[:EVIDENCE_FOR]->(client)
-MERGE (ev)-[:EVIDENCE_FOR]->(server)
-SET struct.state='accepted-evidence-awaiting-semantic-promotion',
-    struct.corroboration_evidence_id=ev.id,
-    client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
-    client.cross_build_identity_candidate_variant_id=server.id,
-    client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis="five-calibrated-structural-schemes+exact-anchor-callees",
-    client.cross_build_identity_evidence_id=ev.id
-
+RETURN count(DISTINCT ev) AS accepted_evidence_rows
