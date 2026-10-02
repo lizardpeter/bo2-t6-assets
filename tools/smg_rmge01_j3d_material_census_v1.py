@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""Census actual RMGE01 J3D/MAT3/TEX1 contracts from owner-hosted retail assets.
+
+No game bytes are committed. The output is structural JSON used to prioritize
+exact importer admission in Rust-test.
+"""
+from __future__ import annotations
+
+import argparse, collections, hashlib, json, struct, time, urllib.error, urllib.request
+from pathlib import Path
+
+BASE_DEFAULT = "https://r2.houseofkublai.com/super-mario-galaxy/DATA/files"
+UA = "Mozilla/5.0 SMG-RMGE01-census/1"
+
+def be16(b,o): return struct.unpack_from(">H",b,o)[0]
+def be32(b,o): return struct.unpack_from(">I",b,o)[0]
+def cstr(b,o):
+    e=b.find(b"\0",o)
+    if e<0: e=len(b)
+    return b[o:e].decode("shift_jis","replace")
+
+def yaz0(src: bytes) -> bytes:
+    if src[:4] != b"Yaz0": return src
+    n=be32(src,4); out=bytearray(); p=16; code=0; bits=0
+    while len(out)<n:
+        if bits==0: code=src[p]; p+=1; bits=8
+        if code&0x80:
+            out.append(src[p]); p+=1
+        else:
+            a,b=src[p],src[p+1]; p+=2
+            dist=((a&15)<<8)|b; length=a>>4
+            if length==0: length=src[p]+0x12; p+=1
+            else: length+=2
+            q=len(out)-dist-1
+            for _ in range(length):
+                if len(out)>=n: break
+                out.append(out[q]); q+=1
+        code=(code<<1)&0xff; bits-=1
+    return bytes(out)
+
+def fetch(url, retries=4):
+    err=None
+    for attempt in range(retries):
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":UA})
+            with urllib.request.urlopen(req,timeout=60) as r:
+                return r.read()
+        except Exception as e:
+            err=e; time.sleep(1.5*(attempt+1))
+    raise RuntimeError(f"download failed {url}: {err}")
+
+def rarc_files(src: bytes):
+    b=yaz0(src)
+    if b[:4]!=b"RARC": raise ValueError("not RARC")
+    header_size=be32(b,0x08)
+    data_rel=be32(b,0x0c)
+    data_start=header_size+data_rel
+    info=header_size
+    node_count=be32(b,info+0x00)
+    node_start=info+be32(b,info+0x04)
+    entry_count=be32(b,info+0x08)
+    entry_start=info+be32(b,info+0x0c)
+    string_start=info+be32(b,info+0x14)
+    out=[]
+    for i in range(entry_count):
+        o=entry_start+i*0x14
+        flags_name=be32(b,o+4); flags=flags_name>>24; no=flags_name&0xffffff
+        name=cstr(b,string_start+no)
+        if flags&0x02: continue
+        do=be32(b,o+8); size=be32(b,o+0x0c)
+        payload=b[data_start+do:data_start+do+size]
+        if flags&0x04 and payload[:4]==b"Yaz0": payload=yaz0(payload)
+        out.append((name,payload))
+    return out
+
+def bcsv_hash(s):
+    h=0
+    for c in s.encode("ascii"): h=(h*0x1f+c)&0xffffffff
+    return h
+
+H_NAME=bcsv_hash("name"); H_ZONE=bcsv_hash("ZoneName")
+
+def bcsv_rows(b: bytes):
+    if len(b)<0x10: return []
+    nr,nf,ro,rs=struct.unpack_from(">IIII",b,0)
+    fields=[]
+    for i in range(nf):
+        o=0x10+i*0x0c
+        h,mask,off=struct.unpack_from(">IIH",b,o)
+        shift=b[o+0x0a]; ty=b[o+0x0b]
+        fields.append((h,mask,off,shift,ty))
+    st=ro+nr*rs
+    rows=[]
+    for r in range(nr):
+        base=ro+r*rs; row={}
+        for h,mask,off,shift,ty in fields:
+            o=base+off
+            try:
+                if ty==0: v=(be32(b,o)&mask)>>shift
+                elif ty==1:
+                    raw=b[o:o+0x20].split(b"\0",1)[0]; v=raw.decode("shift_jis","replace")
+                elif ty==2: v=struct.unpack_from(">f",b,o)[0]
+                elif ty==4: v=(be16(b,o)&mask)>>shift
+                elif ty==5: v=(b[o]&mask)>>shift
+                elif ty==6: v=cstr(b,st+be32(b,o))
+                else: continue
+                row[h]=v
+            except Exception: pass
+        rows.append(row)
+    return rows
+
+def j3d_sections(b):
+    if b[:4] not in (b"J3D1",b"J3D2"): raise ValueError("not J3D")
+    n=be32(b,0x0c); o=0x20; out={}
+    for _ in range(n):
+        tag=b[o:o+4].decode("ascii","replace"); size=be32(b,o+4)
+        out[tag]=b[o:o+size]; o+=size
+    return out
+
+def string_table(b,off):
+    n=be16(b,off); out=[]
+    for i in range(n): out.append(cstr(b,off+be16(b,off+4+i*4+2)))
+    return out
+
+def mat3_census(sec, model_name):
+    count=be16(sec,8)
+    ent=be32(sec,0x0c); rem=be32(sec,0x10); names=string_table(sec,be32(sec,0x14))
+    indirect=be32(sec,0x18); cull=be32(sec,0x1c); texno=be32(sec,0x48)
+    tev_order=be32(sec,0x4c); tev_stage_num=be32(sec,0x58); tev_stage=be32(sec,0x5c)
+    alpha_off=be32(sec,0x6c); blend_off=be32(sec,0x70)
+    rows=[]
+    for i in range(count):
+        ri=be16(sec,rem+i*2); m=ent+0x14c*ri
+        mode=sec[m]; cull_i=sec[m+1]; tsn_i=sec[m+4]
+        stage_count=sec[tev_stage_num+tsn_i] if tev_stage_num else None
+        cull_mode=be32(sec,cull+cull_i*4) if cull else None
+        textures=[]
+        for j in range(8):
+            ti=be16(sec,m+0x84+j*2)
+            textures.append(None if ti==0xffff else be16(sec,texno+ti*2))
+        stages=[]
+        for j in range(16):
+            si=be16(sec,m+0xe4+j*2)
+            if si==0xffff: continue
+            s=tev_stage+si*0x14
+            oi=be16(sec,m+0xbc+j*2)
+            order=None
+            if oi!=0xffff:
+                oo=tev_order+oi*4; order=list(sec[oo:oo+4])
+            stages.append({
+                "slot":j,"stage_index":si,
+                "color":list(sec[s+1:s+10]),
+                "alpha":list(sec[s+0x0a:s+0x13]),
+                "order":order,
+                "konst_color":sec[m+0x9c+j],
+                "konst_alpha":sec[m+0xac+j],
+            })
+        ai=be16(sec,m+0x146); bi=be16(sec,m+0x148)
+        alpha=list(sec[alpha_off+ai*8:alpha_off+ai*8+8]) if alpha_off else None
+        blend=list(sec[blend_off+bi*4:blend_off+bi*4+4]) if blend_off else None
+        has_indirect=bool(indirect and indirect!=be32(sec,0x14) and sec[indirect+i*0x138]==1)
+        rows.append({
+            "model":model_name,"material_index":i,
+            "material_name":names[i] if i<len(names) else f"material_{i}",
+            "mode":mode,"cull":cull_mode,"stage_count_declared":stage_count,
+            "texture_indices":textures,"has_indirect":has_indirect,
+            "stages":stages,"alpha_compare":alpha,"blend":blend,
+        })
+    return rows
+
+def tex1_census(sec):
+    count=be16(sec,8); headers=be32(sec,0x0c); names=string_table(sec,be32(sec,0x10))
+    rows=[]
+    for i in range(count):
+        h=headers+i*0x20
+        rows.append({
+            "index":i,"name":names[i] if i<len(names) else f"texture_{i}",
+            "format":sec[h],"width":be16(sec,h+2),"height":be16(sec,h+4),
+            "palette_format":sec[h+9],"palette_count":be16(sec,h+0x0a),
+            "mip_count":sec[h+0x18],
+        })
+    return rows
+
+def shp1_census(sec):
+    count=be16(sec,8); init=be32(sec,0x0c); rem=be32(sec,0x10)
+    vals=[]
+    for i in range(count):
+        ri=be16(sec,rem+i*2)
+        vals.append(sec[init+ri*0x28])
+    return vals
+
+def canonical_signature(m):
+    keep={k:m[k] for k in ("mode","cull","stage_count_declared","texture_indices","has_indirect","stages","alpha_compare","blend")}
+    return json.dumps(keep,sort_keys=True,separators=(",",":"))
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--base",default=BASE_DEFAULT)
+    ap.add_argument("--galaxy",default="EggStarGalaxy")
+    ap.add_argument("--max-objects",type=int,default=220)
+    ap.add_argument("--out",required=True)
+    a=ap.parse_args()
+    base=a.base.rstrip("/"); galaxy=a.galaxy
+
+    scenario_url=f"{base}/StageData/{galaxy}/{galaxy}Scenario.arc"
+    scenario=rarc_files(fetch(scenario_url))
+    zone_rows=[]
+    for name,payload in scenario:
+        if name.lower()=="zonelist.bcsv": zone_rows=bcsv_rows(payload); break
+    zones=[r.get(H_ZONE) for r in zone_rows if isinstance(r.get(H_ZONE),str)]
+    if not zones: raise RuntimeError("ZoneList.bcsv yielded no zones")
+
+    object_names=set(); zone_failures=[]
+    for zone in zones:
+        try: files=rarc_files(fetch(f"{base}/StageData/{zone}.arc"))
+        except Exception as e:
+            zone_failures.append({"zone":zone,"error":str(e)}); continue
+        for name,payload in files:
+            if not name.lower().endswith(".bcsv") or name.lower()=="stageobjinfo": continue
+            try: rows=bcsv_rows(payload)
+            except Exception: continue
+            for row in rows:
+                v=row.get(H_NAME)
+                if isinstance(v,str) and v and len(v)<128: object_names.add(v)
+
+    objects=sorted(object_names)[:a.max_objects]
+    failures=[]; materials=[]; textures=[]; shape_types=[]; models=0
+    for n,obj in enumerate(objects,1):
+        try:
+            arc=rarc_files(fetch(f"{base}/ObjectData/{obj}.arc"))
+        except Exception as e:
+            failures.append({"object":obj,"stage":"download","error":str(e)}); continue
+        models_found=[(name,p) for name,p in arc if name.lower().endswith((".bdl",".bmd"))]
+        if not models_found: continue
+        models_found.sort(key=lambda x:(x[0].rsplit(".",1)[0].lower()!=obj.lower(),x[0].lower()))
+        name,b=models_found[0]
+        try:
+            secs=j3d_sections(b)
+            if "MAT3" not in secs or "TEX1" not in secs or "SHP1" not in secs:
+                raise ValueError(f"missing core sections {sorted(secs)}")
+            materials.extend(mat3_census(secs["MAT3"],obj))
+            for t in tex1_census(secs["TEX1"]):
+                t["model"]=obj; textures.append(t)
+            shape_types.extend(shp1_census(secs["SHP1"]))
+            models+=1
+        except Exception as e:
+            failures.append({"object":obj,"model_file":name,"stage":"j3d","error":str(e)})
+
+    sig=collections.Counter(canonical_signature(m) for m in materials)
+    examples={}
+    for m in materials:
+        s=canonical_signature(m)
+        examples.setdefault(s,[]).append(f"{m['model']}::{m['material_name']}")
+    top=[]
+    for s,n in sig.most_common(50):
+        top.append({"count":n,"examples":examples[s][:12],"signature":json.loads(s)})
+    fmt=collections.Counter(t["format"] for t in textures)
+    shape=collections.Counter(shape_types)
+    result={
+        "source":{"galaxy":galaxy,"scenario_url":scenario_url,"base":base},
+        "counts":{
+            "zones":len(zones),"placement_object_names":len(object_names),
+            "objects_attempted":len(objects),"models_parsed":models,
+            "materials":len(materials),"textures":len(textures),"failures":len(failures),
+        },
+        "zones":zones,
+        "zone_failures":zone_failures,
+        "texture_format_counts":{f"0x{k:02x}":v for k,v in sorted(fmt.items())},
+        "shape_matrix_type_counts":{str(k):v for k,v in sorted(shape.items())},
+        "top_material_signatures":top,
+        "failures":failures[:200],
+        "provenance":{
+            "script":"tools/smg_rmge01_j3d_material_census_v1.py",
+            "policy":"retail files are fetched transiently; only structural census JSON is retained",
+        },
+    }
+    raw=json.dumps(result,indent=2,sort_keys=True)+"\n"
+    result["provenance"]["result_sha256"]=hashlib.sha256(raw.encode()).hexdigest()
+    Path(a.out).write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+    print(json.dumps(result["counts"],indent=2))
+    print("texture formats",result["texture_format_counts"])
+    print("shape matrix types",result["shape_matrix_type_counts"])
+    for row in top[:10]:
+        print("SIG",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:500])
+
+if __name__=="__main__": main()
