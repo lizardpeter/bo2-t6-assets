@@ -1,0 +1,21 @@
+MERGE (e:KGNode {id:"urn:ure:t6:re_Evidence:structural-cross-build-match-v1"})
+SET e.kind='re:Evidence',
+    e.namespace='t6',
+    e.evidence_kind='cross-build-structural-fingerprint-corpus',
+    e.state='candidate-only',
+    e.format="t6-structural-cross-build-uregraph-v1",
+    e.client_build_id="urn:ure:t6:re_Build:current-client-sha77031817",
+    e.client_artifact_id="urn:ure:t6:re_BinaryArtifact:current-client:770318175f0161aa",
+    e.client_sha256="770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
+    e.server_build_id="urn:ure:t6:re_Build:urn_ure_t6_core_Project_black-ops-2_fd2705692f16c05f_pc-server-2013-03-11:4ee9a1fac7aa9195",
+    e.server_pdb_sha256="7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc",
+    e.repo='lizardpeter/bo2-t6-assets',
+    e.repo_commit="edf83051ba3ff218adcb87371370e4b1e6e626f5",
+    e.workflow_run_id=36997056635,
+    e.candidate_count=929,
+    e.game_or_engine_candidate_count=99,
+    e.conflicting_structural_vote_count=0,
+    e.safe_zero_error_schemes=["mnemonic_flow","coarse_flow","fine_flow","coarse_profile","fine_profile"],
+    e.calibration_json="{\"coarse_flow\":{\"correct\":183,\"missing_or_shape_changed\":88,\"not_unique\":82,\"precision\":1.0,\"tested_unique_anchors\":183,\"wrong\":0,\"wrong_examples\":[]},\"coarse_profile\":{\"correct\":237,\"missing_or_shape_changed\":89,\"not_unique\":27,\"precision\":1.0,\"tested_unique_anchors\":237,\"wrong\":0,\"wrong_examples\":[]},\"fine_flow\":{\"correct\":242,\"missing_or_shape_changed\":88,\"not_unique\":23,\"precision\":1.0,\"tested_unique_anchors\":242,\"wrong\":0,\"wrong_examples\":[]},\"fine_profile\":{\"correct\":242,\"missing_or_shape_changed\":89,\"not_unique\":22,\"precision\":1.0,\"tested_unique_anchors\":242,\"wrong\":0,\"wrong_examples\":[]},\"mnemonic_flow\":{\"correct\":165,\"missing_or_shape_changed\":88,\"not_unique\":100,\"precision\":1.0,\"tested_unique_anchors\":165,\"wrong\":0,\"wrong_examples\":[]},\"string_profile\":{\"correct\":0,\"missing_or_shape_changed\":353,\"not_unique\":0,\"precision\":null,\"tested_unique_anchors\":0,\"wrong\":0,\"wrong_examples\":[]}}",
+    e.proof_boundary='Calibrated changed-byte structural similarity is candidate evidence only. No retail semantic identity, name, prototype, type, global, layout, source attribution, or server address fact is promoted.'
+RETURN e.id
