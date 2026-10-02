@@ -147,7 +147,9 @@ def mat3_census(sec, model_name):
     indirect=be32(sec,0x18); cull=be32(sec,0x1c)
     mat_color=be32(sec,0x20); color_chan_num=be32(sec,0x24); color_chan=be32(sec,0x28); amb_color=be32(sec,0x2c)
     texgen_num=be32(sec,0x34); texcoord=be32(sec,0x38); texmtx=be32(sec,0x40); texno=be32(sec,0x48)
-    tev_order=be32(sec,0x4c); tev_stage_num=be32(sec,0x58); tev_stage=be32(sec,0x5c)
+    tev_order=be32(sec,0x4c); tev_color=be32(sec,0x50); tev_kcolor=be32(sec,0x54)
+    tev_stage_num=be32(sec,0x58); tev_stage=be32(sec,0x5c)
+    tev_swap_mode=be32(sec,0x60); tev_swap_table=be32(sec,0x64)
     alpha_off=be32(sec,0x6c); blend_off=be32(sec,0x70)
     rows=[]
     for i in range(count):
@@ -176,6 +178,8 @@ def mat3_census(sec, model_name):
                 else:
                     co=color_chan+ci*8
                     raw=list(sec[co:co+8])
+                    if raw[0] not in (0,1):
+                        raise ValueError(f"{model_name} material {i} channel enable {raw[0]} is not boolean")
                     pair[label]={
                         "index":ci,
                         "enable":raw[0],
@@ -196,9 +200,13 @@ def mat3_census(sec, model_name):
                 continue
             to=texcoord+ti*4
             texgen={"index":ti,"type":sec[to],"source":sec[to+1],"matrix":sec[to+2],"raw":list(sec[to:to+4])}
+            if texgen["raw"][3] != 0xff:
+                raise ValueError(f"{model_name} material {i} texgen {j} pad is {texgen['raw'][3]:#x}")
             mi=be16(sec,m+0x48+j*2)
             if mi!=0xffff and texmtx:
                 mo=texmtx+mi*0x64
+                if be16(sec,mo+0x02) != 0xffff or be16(sec,mo+0x1a) != 0xffff:
+                    raise ValueError(f"{model_name} material {i} tex matrix {mi} sentinel mismatch")
                 texgen["tex_mtx"]={
                     "index":mi,
                     "projection":sec[mo],
@@ -214,6 +222,21 @@ def mat3_census(sec, model_name):
         for j in range(8):
             ti=be16(sec,m+0x84+j*2)
             textures.append(None if ti==0xffff else be16(sec,texno+ti*2))
+
+        tev_konst_colors=[]
+        for j in range(4):
+            ki=be16(sec,m+0x94+j*2)
+            tev_konst_colors.append([255,255,255,255] if ki==0xffff else rgba8(sec,tev_kcolor+ki*4))
+
+        tev_color_registers=[]
+        for j in range(4):
+            ci=be16(sec,m+0xdc+j*2)
+            if ci==0xffff:
+                tev_color_registers.append([0,0,0,0])
+            else:
+                co=tev_color+ci*8
+                tev_color_registers.append(list(struct.unpack_from(">hhhh",sec,co)))
+
         stages=[]
         for j in range(16):
             si=be16(sec,m+0xe4+j*2)
@@ -223,6 +246,20 @@ def mat3_census(sec, model_name):
             order=None
             if oi!=0xffff:
                 oo=tev_order+oi*4; order=list(sec[oo:oo+4])
+            smi=be16(sec,m+0x104+j*2)
+            raster_swap=[0,1,2,3]; texture_swap=[0,1,2,3]
+            if smi!=0xffff:
+                so=tev_swap_mode+smi*4
+                ras_sel=sec[so]; tex_sel=sec[so+1]
+                if ras_sel>=4 or tex_sel>=4:
+                    raise ValueError(f"{model_name} material {i} stage {j} swap selector out of range")
+                for sel,label in ((ras_sel,"raster"),(tex_sel,"texture")):
+                    sti=be16(sec,m+0x124+sel*2)
+                    table=[0,1,2,3] if sti==0xffff else list(sec[tev_swap_table+sti*4:tev_swap_table+sti*4+4])
+                    if any(ch>3 for ch in table):
+                        raise ValueError(f"{model_name} material {i} stage {j} {label} swap {table} invalid")
+                    if label=="raster": raster_swap=table
+                    else: texture_swap=table
             stages.append({
                 "slot":j,"stage_index":si,
                 "color":list(sec[s+1:s+10]),
@@ -230,6 +267,8 @@ def mat3_census(sec, model_name):
                 "order":order,
                 "konst_color":sec[m+0x9c+j],
                 "konst_alpha":sec[m+0xac+j],
+                "raster_swap":raster_swap,
+                "texture_swap":texture_swap,
             })
         ai=be16(sec,m+0x146); bi=be16(sec,m+0x148)
         alpha=list(sec[alpha_off+ai*8:alpha_off+ai*8+8]) if alpha_off else None
@@ -245,6 +284,8 @@ def mat3_census(sec, model_name):
             "channels":channels,
             "texgen_count":texgen_count,
             "texgens":texgens,
+            "tev_konst_colors":tev_konst_colors,
+            "tev_color_registers":tev_color_registers,
             "stage_count_declared":stage_count,
             "texture_indices":textures,"has_indirect":has_indirect,
             "stages":stages,"alpha_compare":alpha,"blend":blend,
@@ -360,6 +401,10 @@ def main():
         top.append({"count":n,"examples":examples[s][:12],"signature":json.loads(s)})
     fmt=collections.Counter(t["format"] for t in textures)
     shape=collections.Counter(shape_types)
+    non_identity_raster_swaps=sum(1 for m in materials for s in m["stages"] if s["raster_swap"] != [0,1,2,3])
+    non_identity_texture_swaps=sum(1 for m in materials for s in m["stages"] if s["texture_swap"] != [0,1,2,3])
+    tex_matrices=sum(1 for m in materials for t in m["texgens"] if t and "tex_mtx" in t)
+    signed_tev_register_materials=sum(1 for m in materials if any(any(v != 0 for v in reg) for reg in m["tev_color_registers"]))
     ras=collections.Counter(ras_signature(m) for m in materials)
     ras_examples={}
     for m in materials:
@@ -375,6 +420,10 @@ def main():
             "zones":len(zones),"placement_object_names":len(object_names),
             "objects_attempted":len(objects),"models_parsed":models,
             "materials":len(materials),"textures":len(textures),"failures":len(failures),
+            "tex_matrices":tex_matrices,
+            "non_identity_raster_swaps":non_identity_raster_swaps,
+            "non_identity_texture_swaps":non_identity_texture_swaps,
+            "materials_with_nonzero_signed_tev_registers":signed_tev_register_materials,
         },
         "zones":zones,
         "zone_failures":zone_failures,
