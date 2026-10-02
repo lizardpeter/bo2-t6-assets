@@ -1,0 +1,101 @@
+name: T6 native mapsTable dump v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_maps_table_dump_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned OpenAssetTools Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          ./scripts/make-debug.sh >/tmp/oat_build.log 2>&1
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+          test -x "$BIN"
+          realpath "$BIN" >/tmp/unlinker_path
+
+      - name: Fetch exact common MP/ZM retail FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/zone/all /tmp/out-mp /tmp/out-zm /tmp/proof
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/game/zone/all/common_mp.ff             https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/game/zone/all/common_mp.ff' | sha256sum -c -
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/game/zone/all/common_zm.ff             https://r2.houseofkublai.com/bo2/zone/all/common_zm.ff
+          echo 'b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e  /tmp/game/zone/all/common_zm.ff' | sha256sum -c -
+
+      - name: Dump native StringTables
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          "$BIN" --no-color --verbose --include-assets stringtable             --output-folder /tmp/out-mp /tmp/game/zone/all/common_mp.ff             | tee /tmp/common_mp_stringtable.log
+          "$BIN" --no-color --verbose --include-assets stringtable             --output-folder /tmp/out-zm /tmp/game/zone/all/common_zm.ff             | tee /tmp/common_zm_stringtable.log
+
+          echo '=== MP candidate files ==='
+          find /tmp/out-mp -type f | sort | grep -Ei 'mapsTable|map.*table' || true
+          echo '=== ZM candidate files ==='
+          find /tmp/out-zm -type f | sort | grep -Ei 'mapsTable|map.*table' || true
+
+          mp=$(find /tmp/out-mp -type f -path '*/mp/mapsTable.csv' | head -1)
+          zm=$(find /tmp/out-zm -type f -path '*/zm/mapsTable.csv' | head -1)
+          test -n "$mp"
+          test -n "$zm"
+          cp "$mp" /tmp/proof/mp_mapsTable.csv
+          cp "$zm" /tmp/proof/zm_mapsTable.csv
+
+          echo '=== mp/mapsTable.csv ==='
+          cat /tmp/proof/mp_mapsTable.csv
+          echo '=== zm/mapsTable.csv ==='
+          cat /tmp/proof/zm_mapsTable.csv
+
+      - name: Emit typed raw-column JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,json,pathlib
+          out={'format':'t6-native-maps-table-dump-v1','tables':{}}
+          for mode in ('mp','zm'):
+              p=pathlib.Path(f'/tmp/proof/{mode}_mapsTable.csv')
+              rows=list(csv.reader(p.open(encoding='utf-8-sig',newline='')))
+              out['tables'][mode]={
+                'sourceAsset':f'{mode}/mapsTable.csv',
+                'rowCount':len(rows),
+                'maxColumnCount':max((len(r) for r in rows),default=0),
+                'rows':rows,
+              }
+          pathlib.Path('/tmp/proof/maps_tables.json').write_text(json.dumps(out,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          print(json.dumps({k:{'rows':v['rowCount'],'cols':v['maxColumnCount']} for k,v in out['tables'].items()},indent=2))
+          PY
+
+      - name: Upload exact native map tables
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_NATIVE_MAPS_TABLE_DUMP_V1
+          path: |
+            /tmp/proof
+            /tmp/common_mp_stringtable.log
+            /tmp/common_zm_stringtable.log
+          if-no-files-found: error
+          retention-days: 3
