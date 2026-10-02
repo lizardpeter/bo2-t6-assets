@@ -66,6 +66,13 @@ jobs:
           function_id	requested_va	tier	note
           UI_GetMapTableName	0x00717420	map-meta	server PDB exact
           UI_GetMapName	0x00717440	map-meta	server PDB exact
+          UI_GetZMMapStartLocName	0x00717600	map-meta	server PDB exact
+          UI_GetMapDisplayName	0x007135d0	map-meta	server PDB exact
+          UI_GetMapDisplayNameCaps	0x00718820	map-meta	server PDB exact
+          UI_GetMapLocationName	0x00718870	map-meta	server PDB exact
+          UI_GetMapLoadNameForCurrentIndex	0x0070d170	map-meta	server PDB exact
+          UI_LoadMaps	0x0070d650	map-meta	server PDB exact
+          UI_MapLoadInfo	0x00733f70	map-meta	server PDB exact
           EOF
 
       - name: Export exact disassembly and decompile
@@ -77,12 +84,14 @@ jobs:
           export XDG_CACHE_HOME=/tmp/t6-server-ghidra/cache-map
           export GHIDRA_HEADLESS_MAXMEM=8G
           "$GHIDRA_HOME/support/analyzeHeadless"             /tmp/t6-server-ghidra/projects t6-server-pdb             -process CoDMPServer_PC.exe -noanalysis -readOnly             -postScript ExportT6CurrentClientBatch.java               /tmp/t6-map-decomp/selection.tsv /tmp/t6-map-decomp/out 30             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 2
-          echo '=== UI_GetMapTableName ==='
-          cat /tmp/t6-map-decomp/out/unreviewed/UI_GetMapTableName.c
-          cat /tmp/t6-map-decomp/out/disassembly/UI_GetMapTableName.asm
-          echo '=== UI_GetMapName ==='
-          cat /tmp/t6-map-decomp/out/unreviewed/UI_GetMapName.c
-          cat /tmp/t6-map-decomp/out/disassembly/UI_GetMapName.asm
+          for f in /tmp/t6-map-decomp/out/unreviewed/*.c; do
+            echo "=== $(basename "$f") ==="
+            cat "$f"
+          done
+          for f in /tmp/t6-map-decomp/out/disassembly/*.asm; do
+            echo "=== $(basename "$f") ==="
+            cat "$f"
+          done
 
       - name: Upload exact evidence
         uses: actions/upload-artifact@v4
