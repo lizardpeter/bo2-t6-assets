@@ -27,7 +27,6 @@ import ghidra.program.model.listing.InstructionIterator;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.Reference;
-import ghidra.program.model.symbol.ReferenceType;
 
 public class ExportT6StructuralFingerprints extends GhidraScript {
     @Override
@@ -155,9 +154,8 @@ public class ExportT6StructuralFingerprints extends GhidraScript {
             feed(flow,fl.toString());
 
             for(Reference ref:ins.getReferencesFrom()){
-                ReferenceType rt=ref.getReferenceType();
-                if(rt.isCall()) callRefs++;
-                if(rt.isData()){
+                if(ref.getReferenceType().isCall()) callRefs++;
+                if(ref.getReferenceType().isData()){
                     dataRefs++;
                     Data d=listing.getDefinedDataContaining(ref.getToAddress());
                     if(d!=null){
