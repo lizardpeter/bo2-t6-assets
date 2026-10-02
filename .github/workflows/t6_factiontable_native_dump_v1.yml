@@ -1,0 +1,140 @@
+name: T6 factiontable native dump v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_factiontable_native_dump_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build pinned OAT Unlinker if cache is absent
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq g++-multilib >/dev/null
+          git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+          git -C /tmp/oat checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+          git -C /tmp/oat submodule update -q --init --recursive
+          python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+          cd /tmp/oat
+          PREMAKE_NO_PROMPT=1 ./generate.sh
+          make -C build -j2 config=debug_x86 UnlinkerCli
+          BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)
+          test -n "$BIN"
+          mkdir -p /tmp/oat-unlinker-cache
+          install -m 0755 "$BIN" /tmp/oat-unlinker-cache/Unlinker
+
+      - name: Save exact pinned OAT cache
+        if: steps.oat-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Fetch exact MP support roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source /tmp/proof /tmp/out
+          for f in code_post_gfx_mp.ff common_mp.ff common_patch_mp.ff patch_mp.ff; do
+            curl -fL --retry 5 --retry-delay 2               -o "/tmp/source/$f"               "https://r2.houseofkublai.com/bo2/zone/all/$f"
+          done
+          echo 'b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3  /tmp/source/code_post_gfx_mp.ff' | sha256sum -c -
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
+          echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
+          sha256sum /tmp/source/*.ff | sort > /tmp/proof/fastfile_sha256.txt
+          sha256sum /tmp/oat-unlinker-cache/Unlinker > /tmp/proof/unlinker_sha256.txt
+
+      - name: Native-dump every StringTable from MP support roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          for spec in code_post=code_post_gfx_mp.ff common=common_mp.ff common_patch=common_patch_mp.ff patch=patch_mp.ff; do
+            label=${spec%%=*}; file=${spec#*=}
+            mkdir -p "/tmp/out/$label"
+            "$BIN" --no-color --verbose --include-assets stringtable               --output-folder "/tmp/out/$label" "/tmp/source/$file"               >"/tmp/proof/${label}_stringtable.log" 2>&1
+            find "/tmp/out/$label" -type f -printf '%P\n' | sort               >"/tmp/proof/${label}_files.txt"
+          done
+
+      - name: Retain faction/map table identities and exact payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof/selected
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, shutil
+
+          out=Path('/tmp/out')
+          selected=Path('/tmp/proof/selected')
+          rows=[]
+          for root in sorted(p for p in out.iterdir() if p.is_dir()):
+              for path in sorted(p for p in root.rglob('*') if p.is_file()):
+                  rel=path.relative_to(root).as_posix()
+                  low=rel.lower()
+                  if 'factiontable' not in low and 'mapstable' not in low:
+                      continue
+                  payload=path.read_bytes()
+                  dst=selected / root.name / rel
+                  dst.parent.mkdir(parents=True,exist_ok=True)
+                  shutil.copy2(path,dst)
+                  rows.append({
+                      'root':root.name,
+                      'relativePath':rel,
+                      'bytes':len(payload),
+                      'sha256':hashlib.sha256(payload).hexdigest(),
+                  })
+                  print('SELECTED_TABLE',root.name,rel,len(payload),hashlib.sha256(payload).hexdigest())
+                  try:
+                      print(payload.decode('utf-8'))
+                  except UnicodeDecodeError:
+                      print(payload.decode('latin1'))
+          manifest={
+              'format':'t6-factiontable-native-dump-v1',
+              'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+              'assetSelector':'stringtable',
+              'selected':rows,
+              'proofBoundary':'Native pinned OpenAssetTools T6 Unlinker output from SHA-pinned retail MP support roots; no table column semantics are inferred here.',
+          }
+          Path('/tmp/proof/T6_FACTIONTABLE_NATIVE_DUMP_V1.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          if not any('factiontable' in r['relativePath'].lower() for r in rows):
+              raise SystemExit('mp/factiontable.csv was not emitted by any exact MP support root')
+          PY
+          sha256sum /tmp/proof/T6_FACTIONTABLE_NATIVE_DUMP_V1.json > /tmp/proof/manifest_sha256.txt
+
+      - name: Upload exact table proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_FACTIONTABLE_NATIVE_DUMP_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          retention-days: 14
