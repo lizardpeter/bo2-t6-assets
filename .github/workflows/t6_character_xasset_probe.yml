@@ -1,0 +1,70 @@
+name: T6 character XAsset probe
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_character_xasset_probe.yml"
+      - "tools/t6_character_xasset_probe_v1.py"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Fetch exact retail FastFiles
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-character/raw /tmp/t6-character/expanded /tmp/t6-character/proof
+
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/t6-character/raw/faction_cd_mp.ff             https://r2.houseofkublai.com/bo2/zone/all/faction_cd_mp.ff
+          echo "fe890c3336555998914280e47429a8f030baa507471f4e409363d79dd15505e3  /tmp/t6-character/raw/faction_cd_mp.ff" | sha256sum -c -
+
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/t6-character/raw/common_zm.ff             https://r2.houseofkublai.com/bo2/zone/all/common_zm.ff
+          echo "b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e  /tmp/t6-character/raw/common_zm.ff" | sha256sum -c -
+
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/t6-character/raw/zm_prison.ff             https://r2.houseofkublai.com/bo2/zone/all/zm_prison.ff
+          echo "ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1  /tmp/t6-character/raw/zm_prison.ff" | sha256sum -c -
+
+      - name: Expand and inventory exact XAsset tables
+        run: |
+          set -euo pipefail
+          for zone in faction_cd_mp common_zm zm_prison; do
+            /tmp/t6_expand               "/tmp/t6-character/raw/$zone.ff"               "/tmp/t6-character/expanded/$zone.bin"               "$zone"
+
+            sha="$(sha256sum "/tmp/t6-character/raw/$zone.ff" | awk '{print $1}')"
+            python tools/t6_character_xasset_probe_v1.py               "/tmp/t6-character/expanded/$zone.bin"               --zone "$zone"               --source-sha256 "$sha"               --out "/tmp/t6-character/proof/$zone.json"
+          done
+
+      - name: Print character ownership summary
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          for p in sorted(pathlib.Path('/tmp/t6-character/proof').glob('*.json')):
+              d=json.loads(p.read_text())
+              print(p.stem, d['characterOwnershipCounts'])
+          PY
+
+      - name: Upload exact inputs and probe results
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CHARACTER_XASSET_PROBE
+          compression-level: 0
+          retention-days: 1
+          path: |
+            /tmp/t6-character/raw/*.ff
+            /tmp/t6-character/proof/*.json
+          if-no-files-found: error
