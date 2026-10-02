@@ -139,6 +139,14 @@ jobs:
           test -s /tmp/t6-full/batch/results.tsv
           python3 - <<'PY'
           import csv,os,pathlib
+          s=list(csv.DictReader(pathlib.Path('/tmp/t6-full/selection.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          r=list(csv.DictReader(pathlib.Path('/tmp/t6-full/batch/results.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          expected=int(os.environ['SHARD_LIMIT'])
+          assert len(s)==expected,(len(s),expected)
+          assert len(r)==expected,(len(r),expected)
+          PY
+          python3 - <<'PY'
+          import csv,os,pathlib
           p=pathlib.Path('/tmp/t6-full/batch/results.tsv')
           rows=list(csv.DictReader(p.open(encoding='utf-8',newline=''),dialect='excel-tab'))
           expected=int(os.environ['SHARD_LIMIT'])
