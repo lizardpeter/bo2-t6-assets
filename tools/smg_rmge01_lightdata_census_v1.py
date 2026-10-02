@@ -86,6 +86,30 @@ def main():
             mapping_count+=1
         zone_maps[zone]=out
 
+    # LightCtrlCube / LightCtrlCylinder are ordinary placement records whose
+    # Obj_arg0 is LightID and Obj_arg1 is priority.
+    light_areas=[]
+    unresolved_areas=[]
+    for zone in zones:
+        try:
+            zone_files=common.rarc_files(common.fetch(f"{base}/StageData/{zone}.arc"))
+        except Exception:
+            continue
+        zone_map=zone_maps.get(zone,{})
+        for fname,payload in zone_files:
+            try: placements=common.bcsv_rows(payload)
+            except Exception: continue
+            for row in placements:
+                obj=row.get(common.H_NAME)
+                if obj not in ("LightCtrlCube","LightCtrlCylinder"):
+                    continue
+                lid=int(row.get(common.bcsv_hash("Obj_arg0"),-1) or -1)
+                priority=int(row.get(common.bcsv_hash("Obj_arg1"),-1) or -1)
+                item={"zone":zone,"shape":obj,"light_id":lid,"priority":priority}
+                light_areas.append(item)
+                if str(lid) not in zone_map:
+                    unresolved_areas.append(item)
+
     result={
       "source":{"base":base,"galaxy":a.galaxy},
       "counts":{
@@ -96,10 +120,14 @@ def main():
         "light_id_mappings":mapping_count,
         "follow_camera_light_records":follow_camera,
         "invalid_area_light_references":len(invalid_names),
+        "light_area_volumes":len(light_areas),
+        "unresolved_light_area_volumes":len(unresolved_areas),
       },
       "missing_zone_mapping_tables":missing,
       "invalid_area_light_references":invalid_names,
       "zone_maps":zone_maps,
+      "light_areas":light_areas,
+      "unresolved_light_areas":unresolved_areas,
       "presets":presets,
       "provenance":{"policy":"retail files fetched transiently; only structural LightData census retained"}
     }
@@ -107,5 +135,6 @@ def main():
     print(json.dumps(result["counts"],indent=2,sort_keys=True))
     print("missing zone maps",missing)
     print("invalid refs",invalid_names)
+    print("light areas",len(light_areas),"unresolved",unresolved_areas)
 
 if __name__=="__main__": main()
