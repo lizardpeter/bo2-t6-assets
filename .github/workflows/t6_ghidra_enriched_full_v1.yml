@@ -123,6 +123,8 @@ jobs:
 
       - name: Export enriched pseudocode shard
         shell: bash
+        env:
+          SHARD_LIMIT: ${{ matrix.limit }}
         run: |
           set -euo pipefail
           export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
