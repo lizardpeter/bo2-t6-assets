@@ -142,6 +142,7 @@ jobs:
           SHARD_ID: ${{ matrix.shard }}
           SHARD_SKIP: ${{ matrix.skip }}
           SHARD_LIMIT: ${{ matrix.limit }}
+          OUT_DIR: /tmp/out-${{ matrix.shard }}
         run: |
           set -euo pipefail
           OUT="/tmp/out-${SHARD_ID}"
@@ -171,8 +172,6 @@ jobs:
           PY
           tar -C /tmp/t6-full -cf - batch | zstd -19 -T0 -o "$OUT/bundle.tar.zst"
           sha256sum "$OUT/bundle.tar.zst" | sed 's#  .*/#  #' > "$OUT/bundle.sha256"
-        env:
-          OUT_DIR: /tmp/out-${{ matrix.shard }}
 
       - uses: actions/upload-artifact@v4
         with:
