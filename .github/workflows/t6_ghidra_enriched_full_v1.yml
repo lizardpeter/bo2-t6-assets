@@ -1,0 +1,242 @@
+name: T6 enriched full Ghidra corpus v1
+
+on:
+  push:
+    paths:
+      - 'proof/current_client/ghidra_cross_build_hints_v1/run/summary.json'
+
+permissions:
+  contents: write
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  ENRICHED_CACHE_KEY: t6-current-client-ghidra-12.1.3-77031817-xbuild-hints-v1-20261002
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 0
+            skip: 0
+            limit: 3078
+          - shard: 1
+            skip: 3078
+            limit: 3078
+          - shard: 2
+            skip: 6156
+            limit: 3078
+          - shard: 3
+            skip: 9234
+            limit: 3078
+          - shard: 4
+            skip: 12312
+            limit: 3078
+          - shard: 5
+            skip: 15390
+            limit: 3078
+          - shard: 6
+            skip: 18468
+            limit: 3078
+          - shard: 7
+            skip: 21546
+            limit: 3071
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify validation gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('proof/current_client/ghidra_cross_build_hints_v1/run/summary.json')
+          d=json.loads(p.read_text())
+          assert d['hint_rows']==353
+          assert d['exact_retail_functions_found']==353
+          assert d['retail_instruction_hashes_reverified']==353
+          assert d['server_prototypes_applied']==0
+          assert d['server_types_applied']==0
+          assert d['server_globals_applied']==0
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download verified Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/ghidra.zip \
+            https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+
+      - name: Restore enriched exact-current-client project
+        id: enriched-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-ghidra/projects
+          key: ${{ env.ENRICHED_CACHE_KEY }}
+
+      - name: Require enriched cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.enriched-cache.outputs.cache-hit }}" = true
+          test -d /tmp/t6-ghidra/projects
+
+      - name: Build deterministic shard selection
+        shell: bash
+        env:
+          SHARD_SKIP: ${{ matrix.skip }}
+          SHARD_LIMIT: ${{ matrix.limit }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-full/batch /tmp/t6-ghidra/config /tmp/t6-ghidra/cache
+          python3 - <<'PY'
+          import csv,os,pathlib
+          src=pathlib.Path('proof/current_client/ghidra_low_hanging_v1/catalog.tsv')
+          rows=list(csv.DictReader(src.open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          assert len(rows)==24617, len(rows)
+          skip=int(os.environ['SHARD_SKIP']); limit=int(os.environ['SHARD_LIMIT'])
+          part=rows[skip:skip+limit]
+          assert len(part)==limit, (skip,limit,len(part))
+          out=pathlib.Path('/tmp/t6-full/selection.tsv')
+          with out.open('w',encoding='utf-8',newline='') as f:
+              w=csv.writer(f,delimiter='\t',lineterminator='\n')
+              w.writerow(['function_id','requested_va','tier','reserved'])
+              for r in part:
+                  va=int(r['entry_va'],16)
+                  w.writerow([f'urn:ure:t6:occ:function:current-client:{va:08x}',r['entry_va'],'xbuild-enriched-full',''])
+          PY
+
+      - name: Export enriched pseudocode shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-ghidra/projects t6-current-client \
+            -process t6mp.exe -noanalysis -readOnly \
+            -postScript ExportT6CurrentClientBatch.java \
+              /tmp/t6-full/selection.tsv /tmp/t6-full/batch 15 \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+          test -s /tmp/t6-full/batch/results.tsv
+
+      - name: Package shard
+        shell: bash
+        env:
+          SHARD_ID: ${{ matrix.shard }}
+          SHARD_SKIP: ${{ matrix.skip }}
+          SHARD_LIMIT: ${{ matrix.limit }}
+        run: |
+          set -euo pipefail
+          OUT="/tmp/out-${SHARD_ID}"
+          mkdir -p "$OUT"
+          cp /tmp/t6-full/selection.tsv "$OUT/selection.tsv"
+          cp /tmp/t6-full/batch/results.tsv "$OUT/results.tsv"
+          python3 - <<'PY'
+          import csv,json,os,pathlib
+          root=pathlib.Path('/tmp/t6-full')
+          sel=list(csv.DictReader((root/'selection.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          res=list(csv.DictReader((root/'batch/results.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          assert len(sel)==len(res)==int(os.environ['SHARD_LIMIT'])
+          d={
+            'format':'t6-enriched-full-ghidra-v1-shard',
+            'shard':int(os.environ['SHARD_ID']),
+            'skip':int(os.environ['SHARD_SKIP']),
+            'selected_functions':len(sel),
+            'exact_functions_found':sum(x['found_exact']=='true' for x in res),
+            'decompile_completed':sum(x['decompile_completed']=='true' for x in res),
+            'decompile_failed_or_timed_out':sum(x['decompile_completed']!='true' for x in res),
+            'xbuild_named_rows':sum('xbuild_' in x['ghidra_name'] for x in res),
+            'proof_boundary':'Exact current-client generated Ghidra evidence from the provenance-safe enriched project. xbuild_ names are cross-build hints, not retail-authoritative semantic promotion.'
+          }
+          out=pathlib.Path(os.environ['OUT_DIR'])
+          (out/'summary.json').write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+          tar -C /tmp/t6-full -cf - batch | zstd -19 -T0 -o "$OUT/bundle.tar.zst"
+          sha256sum "$OUT/bundle.tar.zst" | sed 's#  .*/#  #' > "$OUT/bundle.sha256"
+        env:
+          OUT_DIR: /tmp/out-${{ matrix.shard }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-enriched-full-v1-shard-${{ matrix.shard }}
+          path: /tmp/out-${{ matrix.shard }}
+          if-no-files-found: error
+          retention-days: 30
+
+  collect:
+    needs: shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: t6-enriched-full-v1-shard-*
+          path: /tmp/t6-enriched-full
+
+      - name: Commit durable full-corpus census
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/ghidra_cross_build_hints_v1/full_v1
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          src=pathlib.Path('/tmp/t6-enriched-full')
+          out=pathlib.Path('proof/current_client/ghidra_cross_build_hints_v1/full_v1')
+          summaries=[]
+          for i in range(8):
+              d=src/f't6-enriched-full-v1-shard-{i}'
+              s=json.loads((d/'summary.json').read_text())
+              summaries.append(s)
+              q=out/f'shard-{i}'
+              q.mkdir(parents=True,exist_ok=True)
+              for name in ('selection.tsv','results.tsv','summary.json','bundle.sha256'):
+                  shutil.copy2(d/name,q/name)
+          total={
+            'format':'t6-enriched-full-ghidra-v1',
+            'client_sha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
+            'shards':8,
+            'selected_functions':sum(x['selected_functions'] for x in summaries),
+            'exact_functions_found':sum(x['exact_functions_found'] for x in summaries),
+            'decompile_completed':sum(x['decompile_completed'] for x in summaries),
+            'decompile_failed_or_timed_out':sum(x['decompile_failed_or_timed_out'] for x in summaries),
+            'xbuild_named_rows':sum(x['xbuild_named_rows'] for x in summaries),
+            'server_prototypes_applied':0,
+            'server_types_applied':0,
+            'server_globals_applied':0,
+            'proof_boundary':'Full exact current-client generated Ghidra corpus from a separate provenance-safe enriched project. The pristine retail project remains unchanged; xbuild_ names are hints only.'
+          }
+          assert total['selected_functions']==24617,total
+          assert total['exact_functions_found']==24617,total
+          (out/'summary.json').write_text(json.dumps(total,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(total,indent=2,sort_keys=True))
+          PY
+          git diff --check
+          git config user.name uregraph-re-bot
+          git config user.email uregraph-re-bot@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "Record full provenance-safe T6 enriched Ghidra corpus census"
+          git pull --rebase origin main
+          git push origin HEAD:main
