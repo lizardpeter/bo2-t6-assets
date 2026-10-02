@@ -1,0 +1,149 @@
+name: T6 retail player model script probe v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_retail_player_model_script_probe_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exactly pinned OAT
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-\${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Dump exact common_mp ScriptParseTree assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "\${{ steps.oat-cache.outputs.cache-hit }}" = true
+          BIN=/tmp/oat-unlinker-cache/Unlinker
+          test -x "$BIN"
+          mkdir -p /tmp/source /tmp/oatout /tmp/proof
+          curl -fL --retry 5 --retry-delay 2 -o /tmp/source/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
+          "$BIN" --no-color --include-assets script --output-folder /tmp/oatout /tmp/source/common_mp.ff >/tmp/unlinker.log 2>&1
+          find /tmp/oatout -type f | sort >/tmp/proof/script_inventory.txt
+          grep -Ei '(^|/)(_teams|_teamset|_weapons|_class|_loadout|_globallogic|_spawning|_utility).*[.](gsc|csc)$' /tmp/proof/script_inventory.txt | tee /tmp/proof/candidate_scripts.txt || true
+          test -s /tmp/proof/candidate_scripts.txt
+
+      - name: Build pinned gsc-tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-18 wget >/dev/null
+          git clone -q --recursive https://github.com/xensik/gsc-tool.git /tmp/gsc-tool
+          git -C /tmp/gsc-tool checkout -q cd304ac752fe52ae1cd6726e5edb56e5f838595c
+          git -C /tmp/gsc-tool submodule update -q --init --recursive
+          wget -q https://github.com/premake/premake-core/releases/download/v5.0.0-beta8/premake-5.0.0-beta8-linux.tar.gz -O /tmp/premake.tgz
+          mkdir -p /tmp/premake
+          tar -xzf /tmp/premake.tgz -C /tmp/premake
+          chmod +x /tmp/premake/premake5
+          cd /tmp/gsc-tool
+          /tmp/premake/premake5 gmake
+          CC=clang-18 CXX=clang++-18 make -C build config=release_amd64 -j2
+          test -x build/bin/amd64/release/gsc-tool
+          sha256sum build/bin/amd64/release/gsc-tool >/tmp/proof/gsc_tool_sha256.txt
+
+      - name: Decompile exact retail team and loadout scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/decomp/in /tmp/decomp/out
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil,re,json,hashlib
+          root=Path('/tmp/oatout')
+          priority=[
+            re.compile(r'(^|/)maps/mp/teams/_teams[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/teams/_teamset[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/gametypes/_weapons[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/gametypes/_class[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/gametypes/_loadout[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/bots/_bot_loadout[.]gsc$',re.I),
+          ]
+          candidates=[]
+          for p in root.rglob('*'):
+              if not p.is_file(): continue
+              rel=p.relative_to(root).as_posix()
+              if any(rx.search(rel) for rx in priority):
+                  candidates.append((rel,p))
+          if not candidates:
+              raise SystemExit('no target retail team/loadout scripts found')
+          manifest=[]
+          for i,(rel,p) in enumerate(sorted(candidates)):
+              out=Path('/tmp/decomp/in')/('%03d_%s' % (i,p.name))
+              shutil.copy2(p,out)
+              manifest.append({'input':str(out),'retailPath':rel,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          Path('/tmp/proof/input_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          print(json.dumps(manifest,indent=2))
+          PY
+
+          find /tmp/decomp/in -maxdepth 1 -type f -name '*.gsc' | sort | while read -r f; do
+            base="$(basename "$f")"
+            work="/tmp/decomp/work_$base"
+            mkdir -p "$work"
+            cp "$f" "$work/$base"
+            (
+              cd "$work"
+              /tmp/gsc-tool/build/bin/amd64/release/gsc-tool -m decomp -g t6 -s pc "$base" >>/tmp/proof/decompile.log 2>&1
+              out="$(find decompiled -type f -name '*.gsc' | head -1)"
+              test -n "$out"
+              stem="$(basename "$base" .gsc)"
+              cp "$out" "/tmp/decomp/out/$stem.decompiled.gsc"
+            )
+          done
+
+          grep -RniE 'setviewmodel|setmodel|viewhands|_fb"|_fb[)]|weaponclass|weapclass|assault|sniper|shotgun|smg|lmg|faction|team|model' /tmp/decomp/out | tee /tmp/proof/model_selection_hits.txt || true
+          test -s /tmp/proof/model_selection_hits.txt
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib,re
+          manifest=json.loads(Path('/tmp/proof/input_manifest.json').read_text())
+          rows=[]
+          for p in sorted(Path('/tmp/decomp/out').glob('*.gsc')):
+              text=p.read_text(errors='replace')
+              hits=[]
+              for i,line in enumerate(text.splitlines()):
+                  if re.search(r'(?i)setviewmodel|setmodel|viewhands|_fb\b|weaponclass|weapclass|assault|sniper|shotgun|smg|lmg|faction|team',line):
+                      hits.append({'line':i+1,'text':line.strip()})
+              rows.append({'file':p.name,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'hits':hits})
+          doc={
+            'format':'t6-retail-player-model-script-probe-v1',
+            'authority':'SHA-pinned retail common_mp.ff -> pinned OAT ScriptParseTree bytes -> pinned xensik/gsc-tool T6 PC decompiler',
+            'sourceFastFileSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+            'sourceExpandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+            'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
+            'gscToolCommit':'cd304ac752fe52ae1cd6726e5edb56e5f838595c',
+            'inputs':manifest,
+            'decompiled':rows,
+            'proofBoundary':'Exact retail script decompilation evidence. Semantic model-selection rules are promoted only from explicit decompiled control/data flow, not filename adjacency.'
+          }
+          Path('/tmp/proof/T6_RETAIL_PLAYER_MODEL_SCRIPT_PROBE_V1.json').write_text(json.dumps(doc,indent=2)+'\n')
+          print(json.dumps({'files':len(rows),'hitCounts':{r['file']:len(r['hits']) for r in rows}},indent=2))
+          PY
+
+      - name: Upload exact script-selection evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RETAIL_PLAYER_MODEL_SCRIPT_PROBE_V1
+          path: |
+            /tmp/proof
+            /tmp/decomp/out
+          if-no-files-found: error
+          retention-days: 7
