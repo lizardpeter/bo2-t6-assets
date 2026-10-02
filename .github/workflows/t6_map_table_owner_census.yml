@@ -1,0 +1,72 @@
+name: T6 map table owner census
+
+on:
+  push:
+    branches: [probe-t6-map-metadata]
+    paths:
+      - ".github/workflows/t6_map_table_owner_census.yml"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+      - "tools/t6_raw_xasset_inventory.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zone: code_post_gfx_mp
+            sha256: b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3
+          - zone: common_mp
+            sha256: 93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77
+          - zone: common_patch_mp
+            sha256: 95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9
+          - zone: patch_mp
+            sha256: 459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e
+          - zone: code_post_gfx_zm
+            sha256: dc44f775074e010e37f3fbdf60fc21af1de2582634432cd6057d6eecd0099942
+          - zone: common_zm
+            sha256: b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e
+          - zone: patch_zm
+            sha256: f5a27345a61de5fabd735f45f05b127e95ad9a488619bd7fbc96ac14c5ab4d47
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build expander
+        run: cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+      - name: Exact owner probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          Z="${{ matrix.zone }}"
+          mkdir -p /tmp/proof
+          curl -fL --retry 4 --retry-delay 2 -o "/tmp/$Z.ff" "https://r2.houseofkublai.com/bo2/zone/all/$Z.ff"
+          echo "${{ matrix.sha256 }}  /tmp/$Z.ff" | sha256sum -c -
+          /tmp/t6_expand "/tmp/$Z.ff" "/tmp/$Z.expanded" "$Z"
+          python3 tools/t6_raw_xasset_inventory.py "/tmp/$Z.expanded" --out "/tmp/proof/$Z.json"
+          python3 - "$Z" "/tmp/$Z.expanded" <<'PY' | tee "/tmp/proof/$Z.txt"
+          import pathlib,re,sys
+          z=sys.argv[1]; raw=pathlib.Path(sys.argv[2]).read_bytes()
+          needles=[
+            b'mp/mapsTable.csv',b'zm/mapsTable.csv',
+            b'mp/gametypesTable.csv',b'zm/gametypesTable.csv',
+            b'mappack_count',b'maxnum_map',
+            b'MPUI_NUKETOWN2025',b'ZMUI_TRANSIT',
+            b'menu_mp_nuketown2025_map_select_final',
+            b'loadscreen_',b'MPUI_DESC_MAP_',b'_LOC'
+          ]
+          print('ZONE',z)
+          for n in needles:
+            hits=[m.start() for m in re.finditer(re.escape(n),raw)]
+            print(n.decode('ascii'),len(hits),[hex(x) for x in hits[:24]])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MAP_TABLE_OWNER_${{ matrix.zone }}
+          path: /tmp/proof
+          if-no-files-found: error
+          retention-days: 3
