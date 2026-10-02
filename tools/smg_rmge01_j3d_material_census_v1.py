@@ -525,6 +525,10 @@ def main():
     neutral_tev_v2_blockers=collections.Counter(neutral_tev_v2_blocker(m) or "admitted" for m in materials)
     texture_lookup={(t["model"],t["index"]):t for t in textures}
     neutral_tev_v3_blockers=collections.Counter(neutral_tev_v3_blocker(m,texture_lookup) or "admitted" for m in materials)
+    tev_v3_rop=collections.Counter(
+        (m["mode"], tuple(m["blend"]) if m["blend"] is not None else None, tuple(m["alpha_compare"]) if m["alpha_compare"] is not None else None)
+        for m in materials if neutral_tev_v3_blocker(m,texture_lookup) is None
+    )
     non_identity_raster_swaps=sum(1 for m in materials for s in m["stages"] if s["raster_swap"] != [0,1,2,3])
     non_identity_texture_swaps=sum(1 for m in materials for s in m["stages"] if s["texture_swap"] != [0,1,2,3])
     tex_matrices=sum(1 for m in materials for t in m["texgens"] if t and "tex_mtx" in t)
@@ -555,6 +559,10 @@ def main():
         "neutral_tev_v1_blockers":dict(sorted(neutral_tev_v1_blockers.items())),
         "neutral_tev_v2_blockers":dict(sorted(neutral_tev_v2_blockers.items())),
         "neutral_tev_v3_blockers":dict(sorted(neutral_tev_v3_blockers.items())),
+        "neutral_tev_v3_rop":[
+            {"count":n,"mode":mode,"blend":list(blend) if blend is not None else None,"alpha_compare":list(alpha) if alpha is not None else None}
+            for (mode,blend,alpha),n in tev_v3_rop.most_common()
+        ],
         "zones":zones,
         "zone_failures":zone_failures,
         "texture_format_counts":{f"0x{k:02x}":v for k,v in sorted(fmt.items())},
@@ -577,6 +585,7 @@ def main():
     print("neutral TEV v1 blockers",result["neutral_tev_v1_blockers"])
     print("neutral TEV v2 blockers",result["neutral_tev_v2_blockers"])
     print("neutral TEV v3 blockers",result["neutral_tev_v3_blockers"])
+    print("neutral TEV v3 ROP",result["neutral_tev_v3_rop"])
     for row in top_ras[:8]:
         print("RAS",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:900])
     for row in top[:10]:
