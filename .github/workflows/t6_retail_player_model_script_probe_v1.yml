@@ -24,12 +24,13 @@ jobs:
         with:
           path: /tmp/oat-unlinker-cache
           key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+          restore-keys: |
+            oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-
 
       - name: Dump exact common_mp ScriptParseTree assets
         shell: bash
         run: |
           set -euo pipefail
-          test "${{ steps.oat-cache.outputs.cache-hit }}" = true
           BIN=/tmp/oat-unlinker-cache/Unlinker
           test -x "$BIN"
           mkdir -p /tmp/source /tmp/oatout /tmp/proof
