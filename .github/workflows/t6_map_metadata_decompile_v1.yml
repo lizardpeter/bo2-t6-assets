@@ -6,6 +6,7 @@ on:
       - probe-t6-character-xassets
     paths:
       - ".github/workflows/t6_map_metadata_decompile_v1.yml"
+      - "tools/ghidra_scripts/ExportT6TypeLayout.java"
   workflow_dispatch:
 
 permissions:
@@ -92,6 +93,18 @@ jobs:
             echo "=== $(basename "$f") ==="
             cat "$f"
           done
+
+      - name: Export PDB map metadata layouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -process CoDMPServer_PC.exe -noanalysis -readOnly \
+            -postScript ExportT6TypeLayout.java \
+              /tmp/t6-map-decomp/map_types.tsv mapInfo sharedUiInfo_t contentPackInfo \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 2
+          cat /tmp/t6-map-decomp/map_types.tsv
 
       - name: Upload exact evidence
         uses: actions/upload-artifact@v4
