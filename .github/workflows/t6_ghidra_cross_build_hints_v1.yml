@@ -79,10 +79,10 @@ jobs:
           assert len(rows)==353, len(rows)
           with out.open('w',encoding='utf-8',newline='') as f:
               w=csv.writer(f,delimiter='\t',lineterminator='\n')
-              w.writerow(['function_id','requested_va','tier'])
+              w.writerow(['function_id','requested_va','tier','reserved'])
               for r in rows:
                   va=int(r['client_va'],16)
-                  w.writerow([f'urn:ure:t6:occ:function:current-client:{va:08x}',r['client_va'],'cross-build-exact-hint'])
+                  w.writerow([f'urn:ure:t6:occ:function:current-client:{va:08x}',r['client_va'],'cross-build-exact-hint',''])
           PY
 
       - name: Apply provenance-safe exact-byte hints
@@ -132,10 +132,12 @@ jobs:
           r=list(csv.DictReader((root/'batch/results.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
           assert len(a)==353, len(a)
           assert len(r)==353, len(r)
+          assert all(x['found_exact']=='true' for x in r)
           assert all(x['exact_function']=='true' for x in a)
           assert all(x['hash_match']=='true' for x in a)
           renamed=[x for x in a if x['renamed']=='true']
           comments=[x for x in a if x['commented']=='true']
+          xbuild_apply=[x for x in a if 'xbuild_' in x['final_name']]
           xbuild=[x for x in r if 'xbuild_' in x['ghidra_name']]
           summary={
             'format':'t6-ghidra-cross-build-hints-v1',
@@ -143,7 +145,8 @@ jobs:
             'hint_rows':len(a),
             'exact_retail_functions_found':sum(x['exact_function']=='true' for x in a),
             'retail_instruction_hashes_reverified':sum(x['hash_match']=='true' for x in a),
-            'functions_renamed_with_xbuild_prefix':len(renamed),
+            'functions_renamed_this_run':len(renamed),
+            'functions_xbuild_named_after_pass':len(xbuild_apply),
             'functions_commented_this_run':len(comments),
             'decompile_completed':sum(x['decompile_completed']=='true' for x in r),
             'decompile_failed_or_timed_out':sum(x['decompile_completed']!='true' for x in r),
