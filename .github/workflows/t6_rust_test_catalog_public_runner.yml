@@ -1,0 +1,64 @@
+name: T6 Rust-test catalog public runner
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_rust_test_catalog_public_runner.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-rust-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Clone Rust-test feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch t6-retail-character-weapon-catalog https://github.com/lizardpeter/Rust-test.git /tmp/Rust-test
+          git -C /tmp/Rust-test rev-parse HEAD
+
+      - name: Compile BO2 catalog and engine bridge
+        shell: bash
+        working-directory: /tmp/Rust-test
+        run: |
+          set -euo pipefail
+          cargo check --manifest-path asset_import/importers/bo2/Cargo.toml --lib --bin t6_asset_catalog --bin t6_xasset_front
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml retail_xasset_front -- --nocapture
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml t6_asset_catalog -- --nocapture
+          cargo check --no-default-features --features import-bo2 --bin fps_game
+
+      - name: Fetch exact MP retail roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/t6-catalog-mp
+          mkdir -p "$ROOT/zone/all" "$ROOT/zone/english"
+          curl -fL --retry 5 --retry-delay 2 -o "$ROOT/zone/all/common_mp.ff" https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          curl -fL --retry 5 --retry-delay 2 -o "$ROOT/zone/all/mp_nuketown_2020.ff" https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/t6-catalog-mp/zone/all/common_mp.ff' | sha256sum -c -
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/t6-catalog-mp/zone/all/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Run exact retail weapon and character canaries
+        shell: bash
+        working-directory: /tmp/Rust-test
+        run: |
+          set -euo pipefail
+          cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml --bin t6_asset_catalog -- /tmp/t6-catalog-mp mp_nuketown_2020 weapon an94_mp | tee /tmp/t6_an94.log
+          grep -q '^WEAPON id=an94_mp ' /tmp/t6_an94.log
+          grep -Eq 'gun_models=[1-9][0-9]*' /tmp/t6_an94.log
+          grep -Eq 'world_models=[1-9][0-9]*' /tmp/t6_an94.log
+          cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml --bin t6_asset_catalog -- /tmp/t6-catalog-mp mp_nuketown_2020 model german_shepherd | tee /tmp/t6_shepherd.log
+          grep -Eq '^MODEL name=german_shepherd .*bones=56 .*meshes=3 .*vertices=5731 .*triangles=7123 .*weighted=5731 .*blended=3378$' /tmp/t6_shepherd.log
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_RUST_TEST_CATALOG_PUBLIC_RUNNER
+          path: /tmp/t6_*.log
+          if-no-files-found: warn
