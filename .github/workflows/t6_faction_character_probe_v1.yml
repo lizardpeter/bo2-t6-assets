@@ -1,0 +1,53 @@
+name: T6 faction character ownership probe v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_raw_xasset_inventory.py'
+      - '.github/workflows/t6_faction_character_probe_v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact retail T6 expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Fetch and expand exact faction_cd_mp retail FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 5 --retry-delay 2 \
+            -o /tmp/faction_cd_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/faction_cd_mp.ff
+          echo 'fe890c3336555998914280e47429a8f030baa507471f4e409363d79dd15505e3  /tmp/faction_cd_mp.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/faction_cd_mp.ff /tmp/faction_cd_mp.expanded faction_cd_mp
+          echo '29ef228c7aa1e3f012d40231021338a4f7a1922e6a1a0c26fc5b6b34b04798ac  /tmp/faction_cd_mp.expanded' | sha256sum -c -
+
+      - name: Inventory exact XAsset front
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_raw_xasset_inventory.py \
+            /tmp/faction_cd_mp.expanded \
+            --out /tmp/faction_cd_mp_xasset_inventory.json
+          cat /tmp/faction_cd_mp_xasset_inventory.json
+
+      - name: Preserve exact fixture for structure reversal
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_FACTION_CD_CHARACTER_PROBE_V1
+          path: |
+            /tmp/faction_cd_mp.ff
+            /tmp/faction_cd_mp.expanded
+            /tmp/faction_cd_mp_xasset_inventory.json
+          if-no-files-found: error
+          compression-level: 9
