@@ -1,0 +1,60 @@
+name: T6 structural candidate graph projection v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_structural_candidate_graph_projection_v1.yml'
+      - 'tools/t6_structural_candidates_to_uregraph_v1.py'
+      - 'proof/current_client/structural_cross_build_match_v1/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build candidate-only graph projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/structural_cross_build_match_v1/uregraph_v1
+          rm -rf "$OUT"
+          python3 tools/t6_structural_candidates_to_uregraph_v1.py \
+            --summary proof/current_client/structural_cross_build_match_v1/summary.json \
+            --candidates proof/current_client/structural_cross_build_match_v1/candidates.tsv \
+            --repo-commit "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --out-dir "$OUT" \
+            --chunk-size 35
+          python3 - <<'PY'
+          import json, pathlib
+          m=json.load(open('proof/current_client/structural_cross_build_match_v1/uregraph_v1/manifest.json'))
+          assert m['candidate_rows']==929,m
+          assert m['game_or_engine_candidate_rows']==99,m
+          assert len(m['candidate_files'])==27,m
+          assert len(m['safe_zero_error_schemes'])==5,m
+          for p in [m['corpus_file'],*m['candidate_files']]:
+              q=pathlib.Path('proof/current_client/structural_cross_build_match_v1/uregraph_v1')/p
+              assert q.stat().st_size>0,q
+          print(json.dumps(m,indent=2,sort_keys=True))
+          PY
+          git diff --check
+
+      - name: Commit graph-ready evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/structural_cross_build_match_v1/uregraph_v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: add T6 structural candidate uregraph projection"
+          git pull --rebase origin main
+          git push origin HEAD:main
