@@ -5,25 +5,55 @@ on:
   push:
     paths:
       - '.github/workflows/t6_anchor_delta_map_propagation_v2.yml'
+      - 'tools/t6_anchor_delta_map_propagation_v2.py'
+      - 'tools/t6_parse_msvc_map_function_symbols_v1.py'
 
 permissions:
   contents: write
 
+env:
+  SERVER_MAP_DRIVE_ID: 1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd
+  SERVER_MAP_SHA256: 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+
 jobs:
   propagate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Fetch retained server MAP symbol inventory
+
+      - name: Fetch and verify pinned original server MAP
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/t6-server-map
-          curl --fail --location --retry 5 --retry-all-errors             -o /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz             https://raw.githubusercontent.com/lizardpeter/bo2-pc-server-decompile/main/analysis/generated/CoDMPServer_PC.symbols.csv.gz
-          test -s /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz
+          python3 -m pip install --quiet 'gdown==5.2.0'
+          gdown "https://drive.google.com/uc?id=$SERVER_MAP_DRIVE_ID" \
+            -O /tmp/t6-server-map/CoDMPServer_PC.map
+          test -s /tmp/t6-server-map/CoDMPServer_PC.map
+          echo "$SERVER_MAP_SHA256  /tmp/t6-server-map/CoDMPServer_PC.map" | sha256sum --check
+
+      - name: Parse verified linker MAP function starts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/t6_parse_msvc_map_function_symbols_v1.py \
+            --map /tmp/t6-server-map/CoDMPServer_PC.map \
+            --out /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz \
+            --summary /tmp/t6-server-map/map_parse_summary.json \
+            --expected-sha256 "$SERVER_MAP_SHA256"
           gzip -t /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/t6-server-map/map_parse_summary.json'))
+          assert p['input_sha256']=='34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf'
+          assert p['preferred_load_address']==4194304
+          assert p['symbol_rows']==90203,p
+          assert p['function_symbol_rows']==30507,p
+          PY
+
       - name: Run full MAP propagation
         shell: bash
         run: |
@@ -31,7 +61,13 @@ jobs:
           OUT=proof/current_client/anchor_delta_map_propagation_v2
           rm -rf "$OUT"
           mkdir -p "$OUT"
-          python3 tools/t6_anchor_delta_map_propagation_v2.py             --strict-join proof/current_client/pdb_exact_hash_join_v1_strict/join.json             --call-dir proof/current_client/whole_image_inventory_v1_transport/cypher             --map-symbols-gz /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz             --out "$OUT/result.json"             --min-independent-anchors 2
+          cp /tmp/t6-server-map/map_parse_summary.json "$OUT/map_parse_summary.json"
+          python3 tools/t6_anchor_delta_map_propagation_v2.py \
+            --strict-join proof/current_client/pdb_exact_hash_join_v1_strict/join.json \
+            --call-dir proof/current_client/whole_image_inventory_v1_transport/cypher \
+            --map-symbols-gz /tmp/t6-server-map/CoDMPServer_PC.symbols.csv.gz \
+            --out "$OUT/result.json" \
+            --min-independent-anchors 2
           python3 - <<'PY'
           import json,pathlib
           p=pathlib.Path("proof/current_client/anchor_delta_map_propagation_v2/result.json")
@@ -45,11 +81,15 @@ jobs:
             "state_counts","proof_boundary"
           )
           s={k:d[k] for k in keys}
+          s["server_map_drive_id"]="1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd"
+          s["server_map_sha256"]="34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf"
           pathlib.Path("proof/current_client/anchor_delta_map_propagation_v2/summary.json").write_text(
               json.dumps(s,indent=2,sort_keys=True)+"\n"
           )
           print(json.dumps(s,indent=2,sort_keys=True))
           PY
+          git diff --check
+
       - name: Commit MAP propagation proof
         shell: bash
         run: |
@@ -58,6 +98,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add proof/current_client/anchor_delta_map_propagation_v2
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "proof: propagate T6 exact anchors through full server MAP"
+          git commit -m "proof: propagate T6 exact anchors through verified full server MAP"
           git pull --rebase origin main
           git push origin HEAD:main
