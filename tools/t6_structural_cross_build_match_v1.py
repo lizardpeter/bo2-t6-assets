@@ -113,17 +113,25 @@ def index_scheme(rows: list[dict], name: str) -> tuple[dict[tuple,list[dict]], C
     return out, Counter({k:len(v) for k,v in out.items()})
 
 def is_gameish(objects: list[str]) -> bool:
+    """Conservatively distinguish Treyarch/engine objects from bundled libraries."""
     if not objects:
         return False
-    third_prefixes = (
-        "lib", "bd", "bn_", "crt", "cvt", "exsup", "ismb", "inflate", "deflate",
+    full_third_prefixes = (
+        "lib", "bd", "phys_pcr:", "nvapi:", "ssleay", "libeay",
+    )
+    base_third_prefixes = (
+        "bn_", "crt", "cvt", "exsup", "ismb", "inflate", "deflate",
         "unzip", "zip", "zlib", "lzo", "minilzo", "speex", "curl", "ssl", "crypto",
-        "jpeg", "png", "ogg", "vorbis", "nvapi",
+        "jpeg", "png", "ogg", "vorbis", "aes.", "ecc_", "rsa_", "der_",
     )
     for obj in objects:
-        base = obj.split(":")[-1].lower()
-        if not base.startswith(third_prefixes):
-            return True
+        full = obj.lower()
+        base = full.split(":")[-1]
+        if full.startswith(full_third_prefixes):
+            continue
+        if base.startswith(base_third_prefixes):
+            continue
+        return True
     return False
 
 def main() -> None:
