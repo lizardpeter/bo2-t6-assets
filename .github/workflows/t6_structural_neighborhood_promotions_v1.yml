@@ -1,0 +1,60 @@
+name: T6 structural neighborhood promotions v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_structural_neighborhood_promotions_v1.yml'
+      - 'tools/t6_structural_neighborhood_promotions_v1.py'
+      - 'proof/current_client/structural_cross_build_match_v1/candidates.tsv'
+      - 'proof/current_client/structural_candidate_neighborhood_v1/result.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply strict evidence-promotion gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/structural_neighborhood_promotions_v1
+          rm -rf "$OUT"
+          python3 tools/t6_structural_neighborhood_promotions_v1.py \
+            --candidates proof/current_client/structural_cross_build_match_v1/candidates.tsv \
+            --neighborhood proof/current_client/structural_candidate_neighborhood_v1/result.json \
+            --out-dir "$OUT" \
+            --repo-commit "$GITHUB_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID"
+          python3 - <<'PY'
+          import csv,json,pathlib
+          root=pathlib.Path('proof/current_client/structural_neighborhood_promotions_v1')
+          with (root/'accepted.tsv').open(encoding='utf-8',newline='') as f:
+              rows=list(csv.DictReader(f,dialect='excel-tab'))
+          s=json.load((root/'summary.json').open())
+          assert len(rows)==8, len(rows)
+          assert s['accepted_evidence_rows']==8,s
+          assert s['exact_anchor_callee_basis']==3,s
+          assert s['distinctive_string_basis']==5,s
+          assert (root/'promote.cypher').stat().st_size>0
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+
+      - name: Commit promotion proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/structural_neighborhood_promotions_v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: accept eight corroborated T6 changed-byte identities"
+          git pull --rebase origin main
+          git push origin HEAD:main
