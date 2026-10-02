@@ -1,0 +1,90 @@
+name: T6 map localization probe
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_map_localization_probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Select exact English map localization FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/targets.tsv
+          import json
+          d=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'))
+          for r in d['rows']:
+              f=r['file']
+              if (f.startswith('en_mp_') or f.startswith('en_zm_')) and f.endswith('.ff'):
+                  print(f"{f}\t{r['fastFileSha256']}")
+          PY
+          cat /tmp/targets.tsv
+
+      - name: Download, verify and expand all map localization zones
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-map-localize/raw /tmp/t6-map-localize/expanded /tmp/t6-map-localize/strings
+          while IFS=$'\t' read -r file sha; do
+            curl -fL --retry 4 --retry-delay 2               -o "/tmp/t6-map-localize/raw/$file"               "https://r2.houseofkublai.com/bo2/zone/english/$file"
+            echo "$sha  /tmp/t6-map-localize/raw/$file" | sha256sum -c -
+            stem="${file%.ff}"
+            /tmp/t6_expand               "/tmp/t6-map-localize/raw/$file"               "/tmp/t6-map-localize/expanded/$stem.bin"               "$stem"
+            strings -a -t x "/tmp/t6-map-localize/expanded/$stem.bin"               > "/tmp/t6-map-localize/strings/$stem.txt"
+          done < /tmp/targets.tsv
+
+      - name: Extract map UI localization candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,pathlib,re
+          out=[]
+          for p in sorted(pathlib.Path('/tmp/t6-map-localize/strings').glob('*.txt')):
+              lines=p.read_text(errors='replace').splitlines()
+              matches=[]
+              for line in lines:
+                  text=line.split(maxsplit=1)[1] if len(line.split(maxsplit=1)) == 2 else ''
+                  if ('MPUI_' in text or 'ZMUI_' in text or
+                      '_LOC' in text or '_DESC' in text or '_CAPS' in text):
+                      matches.append(line)
+              out.append({'zone':p.stem,'matches':matches})
+          pathlib.Path('/tmp/t6-map-localize/candidates.json').write_text(
+              json.dumps({'format':'t6-map-localization-candidates-v1','zones':out},indent=2)+'\n'
+          )
+          for row in out:
+              if row['matches']:
+                  print('\n###',row['zone'])
+                  print('\n'.join(row['matches']))
+          PY
+
+      - name: Upload exact expanded localization evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MAP_LOCALIZATION_PROBE
+          compression-level: 0
+          retention-days: 3
+          path: |
+            /tmp/t6-map-localize/expanded/*.bin
+            /tmp/t6-map-localize/strings/*.txt
+            /tmp/t6-map-localize/candidates.json
+            /tmp/targets.tsv
+          if-no-files-found: error
