@@ -1,0 +1,71 @@
+name: T6 UI XAsset front census
+
+on:
+  push:
+    branches: [probe-t6-map-metadata]
+    paths:
+      - ".github/workflows/t6_ui_xasset_front_census.yml"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+      - "tools/t6_raw_xasset_inventory.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zone: ui_mp
+            sha256: 1b014f0c1bcb4cad93298f1137df89af1d823417dbd5f233865d633b1a7ad5d8
+          - zone: ui_zm
+            sha256: 74c273336b22e1df9f23159b32bff3ea835e5939418326570c63ef9d3c47b8fc
+          - zone: patch_ui_mp
+            sha256: e4d8c49db84307057bcd4e5003546d88f41306af734e04629fa7e84e9eaf3b15
+          - zone: patch_ui_zm
+            sha256: afae792355a5a8e54c273645c418712223e37a945daaa3136f27c03131b780dd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source-closed T6 expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+
+      - name: Download, verify, expand and census exact UI FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          Z="${{ matrix.zone }}"
+          curl -fL --retry 4 --retry-delay 2 -o "/tmp/$Z.ff" "https://r2.houseofkublai.com/bo2/zone/all/$Z.ff"
+          echo "${{ matrix.sha256 }}  /tmp/$Z.ff" | sha256sum -c -
+          /tmp/t6_expand "/tmp/$Z.ff" "/tmp/$Z.expanded" "$Z"
+          python3 tools/t6_raw_xasset_inventory.py "/tmp/$Z.expanded" --out "/tmp/proof/$Z.json"
+          python3 - "$Z" "/tmp/$Z.expanded" <<'PY' | tee "/tmp/proof/${{ matrix.zone }}_metadata_strings.txt"
+          import pathlib,sys,re
+          zone=sys.argv[1]
+          raw=pathlib.Path(sys.argv[2]).read_bytes()
+          needles=[
+            b'mp/mapsTable.csv',b'zm/mapsTable.csv',
+            b'mp/gametypesTable.csv',b'zm/gametypesTable.csv',
+            b'menu_mp_',b'menu_zm_',b'loadscreen_',b'_LOC',b'MPUI_DESC_MAP_',b'ZMUI_'
+          ]
+          print('ZONE',zone)
+          for needle in needles:
+            hits=[m.start() for m in re.finditer(re.escape(needle),raw)]
+            print(needle.decode('ascii'),len(hits),[hex(x) for x in hits[:16]])
+          PY
+
+      - name: Upload exact front census
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_UI_XASSET_FRONT_${{ matrix.zone }}
+          path: /tmp/proof
+          if-no-files-found: error
+          retention-days: 3
