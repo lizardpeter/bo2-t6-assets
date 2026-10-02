@@ -47,6 +47,73 @@ jobs:
             --out /tmp/faction_cd_mp_xasset_inventory.json
           cat /tmp/faction_cd_mp_xasset_inventory.json
 
+      - name: Strict-scan faction XModels from exact expanded bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from t6_clipmap_normalize_v5 import parse_top_level_xasset_table, ASSET_TYPE_XMODEL
+          from t6_clipmap_normalize_v6 import parse_xmodel_fixed, XMODEL_FIXED_SIZE
+          from t6_clipmap_serialized_walker import ptr_kind
+          from t6_xmodel_serialized_walker import XModelWalker
+
+          data=Path('/tmp/faction_cd_mp.expanded').read_bytes()
+          table=parse_top_level_xasset_table(data)
+          top=[
+              {
+                  'assetIndex':e['index'],
+                  'headerPointerRaw':f"0x{e['headerPointerRaw']:08X}",
+                  'headerPointer':ptr_kind(e['headerPointerRaw']),
+              }
+              for e in table['entries'] if e['type']==ASSET_TYPE_XMODEL
+          ]
+          rows=[]
+          pos=table['assetArrayRawEnd']
+          limit=len(data)-XMODEL_FIXED_SIZE
+          while pos<=limit:
+              rec=parse_xmodel_fixed(data,pos,{})
+              if rec is None or rec.get('nameSource')!='following':
+                  pos+=1
+                  continue
+              try:
+                  walk=XModelWalker(data,pos).walk_xmodel()
+              except Exception:
+                  pos+=1
+                  continue
+              if walk.get('blockers'):
+                  pos+=1
+                  continue
+              rows.append({
+                  'fixedSourceStart':pos,
+                  'name':rec['name'],
+                  'numBones':rec['numBones'],
+                  'numRootBones':rec['numRootBones'],
+                  'numSurfs':rec['numSurfs'],
+                  'numLods':rec['numLods'],
+                  'numCollSurfs':rec['numCollSurfs'],
+                  'numCollmaps':rec['numCollmaps'],
+                  'lods':rec['lods'],
+                  'serializedEnd':walk.get('end'),
+              })
+              pos+=XMODEL_FIXED_SIZE
+
+          report={
+              'format':'t6-faction-cd-strict-xmodel-scan-v1',
+              'topLevelXModelCount':len(top),
+              'topLevelXModelEntries':top,
+              'strictInlineXModelCount':len(rows),
+              'strictInlineXModels':rows,
+          }
+          Path('/tmp/faction_cd_mp_xmodels.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(report,indent=2,sort_keys=True))
+          if len(top)!=10:
+              raise SystemExit(f'expected 10 top-level XMODEL assets, got {len(top)}')
+          if len(rows)<10:
+              raise SystemExit(f'only recovered {len(rows)} strict inline XModels; packed-name follow-up required')
+          PY
+
       - name: Preserve exact fixture for structure reversal
         uses: actions/upload-artifact@v4
         with:
@@ -55,5 +122,6 @@ jobs:
             /tmp/faction_cd_mp.ff
             /tmp/faction_cd_mp.expanded
             /tmp/faction_cd_mp_xasset_inventory.json
+            /tmp/faction_cd_mp_xmodels.json
           if-no-files-found: error
           compression-level: 9
