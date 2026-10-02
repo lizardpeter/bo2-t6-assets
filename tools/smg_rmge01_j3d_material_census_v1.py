@@ -6,7 +6,7 @@ exact importer admission in Rust-test.
 """
 from __future__ import annotations
 
-import argparse, collections, concurrent.futures, hashlib, json, struct, time, urllib.error, urllib.request
+import argparse, collections, concurrent.futures, hashlib, json, struct, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 BASE_DEFAULT = "https://r2.houseofkublai.com/super-mario-galaxy/DATA/files"
@@ -18,6 +18,15 @@ def cstr(b,o):
     e=b.find(b"\0",o)
     if e<0: e=len(b)
     return b[o:e].decode("shift_jis","replace")
+
+def rgba8(b,o):
+    return list(b[o:o+4])
+
+def f32(b,o):
+    return struct.unpack_from(">f",b,o)[0]
+
+def object_url(base,obj):
+    return f"{base}/ObjectData/{urllib.parse.quote(obj, safe='')}.arc"
 
 def yaz0(src: bytes) -> bytes:
     if src[:4] != b"Yaz0": return src
@@ -135,15 +144,72 @@ def string_table(b,off):
 def mat3_census(sec, model_name):
     count=be16(sec,8)
     ent=be32(sec,0x0c); rem=be32(sec,0x10); names=string_table(sec,be32(sec,0x14))
-    indirect=be32(sec,0x18); cull=be32(sec,0x1c); texno=be32(sec,0x48)
+    indirect=be32(sec,0x18); cull=be32(sec,0x1c)
+    mat_color=be32(sec,0x20); color_chan_num=be32(sec,0x24); color_chan=be32(sec,0x28); amb_color=be32(sec,0x2c)
+    texgen_num=be32(sec,0x34); texcoord=be32(sec,0x38); texmtx=be32(sec,0x40); texno=be32(sec,0x48)
     tev_order=be32(sec,0x4c); tev_stage_num=be32(sec,0x58); tev_stage=be32(sec,0x5c)
     alpha_off=be32(sec,0x6c); blend_off=be32(sec,0x70)
     rows=[]
     for i in range(count):
         ri=be16(sec,rem+i*2); m=ent+0x14c*ri
-        mode=sec[m]; cull_i=sec[m+1]; tsn_i=sec[m+4]
+        mode=sec[m]; cull_i=sec[m+1]; chan_num_i=sec[m+2]; texgen_num_i=sec[m+3]; tsn_i=sec[m+4]
         stage_count=sec[tev_stage_num+tsn_i] if tev_stage_num else None
+        channel_count=sec[color_chan_num+chan_num_i] if color_chan_num else 0
+        texgen_count=sec[texgen_num+texgen_num_i] if texgen_num else 0
         cull_mode=be32(sec,cull+cull_i*4) if cull else None
+
+        material_colors=[]
+        ambient_colors=[]
+        for j in range(2):
+            mi=be16(sec,m+0x08+j*2)
+            ai=be16(sec,m+0x14+j*2)
+            material_colors.append([255,255,255,255] if mi==0xffff or not mat_color else rgba8(sec,mat_color+mi*4))
+            ambient_colors.append([255,255,255,255] if ai==0xffff or not amb_color else rgba8(sec,amb_color+ai*4))
+
+        channels=[]
+        for j in range(channel_count):
+            pair={}
+            for label,k in (("color",0),("alpha",1)):
+                ci=be16(sec,m+0x0c+(j*2+k)*2)
+                if ci==0xffff:
+                    pair[label]=None
+                else:
+                    co=color_chan+ci*8
+                    raw=list(sec[co:co+8])
+                    pair[label]={
+                        "index":ci,
+                        "enable":raw[0],
+                        "mat_src":raw[1],
+                        "light_mask":raw[2],
+                        "diff_fn":raw[3],
+                        "attn_raw":raw[4],
+                        "amb_src":raw[5],
+                        "raw":raw,
+                    }
+            channels.append(pair)
+
+        texgens=[]
+        for j in range(texgen_count):
+            ti=be16(sec,m+0x28+j*2)
+            if ti==0xffff:
+                texgens.append(None)
+                continue
+            to=texcoord+ti*4
+            texgen={"index":ti,"type":sec[to],"source":sec[to+1],"matrix":sec[to+2],"raw":list(sec[to:to+4])}
+            mi=be16(sec,m+0x48+j*2)
+            if mi!=0xffff and texmtx:
+                mo=texmtx+mi*0x64
+                texgen["tex_mtx"]={
+                    "index":mi,
+                    "projection":sec[mo],
+                    "info":sec[mo+1],
+                    "center":[f32(sec,mo+0x04),f32(sec,mo+0x08),f32(sec,mo+0x0c)],
+                    "scale":[f32(sec,mo+0x10),f32(sec,mo+0x14)],
+                    "rotation_s16":struct.unpack_from(">h",sec,mo+0x18)[0],
+                    "translation":[f32(sec,mo+0x1c),f32(sec,mo+0x20)],
+                }
+            texgens.append(texgen)
+
         textures=[]
         for j in range(8):
             ti=be16(sec,m+0x84+j*2)
@@ -172,7 +238,14 @@ def mat3_census(sec, model_name):
         rows.append({
             "model":model_name,"material_index":i,
             "material_name":names[i] if i<len(names) else f"material_{i}",
-            "mode":mode,"cull":cull_mode,"stage_count_declared":stage_count,
+            "mode":mode,"cull":cull_mode,
+            "light_channel_count":channel_count,
+            "material_colors":material_colors,
+            "ambient_colors":ambient_colors,
+            "channels":channels,
+            "texgen_count":texgen_count,
+            "texgens":texgens,
+            "stage_count_declared":stage_count,
             "texture_indices":textures,"has_indirect":has_indirect,
             "stages":stages,"alpha_compare":alpha,"blend":blend,
         })
@@ -201,6 +274,10 @@ def shp1_census(sec):
 
 def canonical_signature(m):
     keep={k:m[k] for k in ("mode","cull","stage_count_declared","texture_indices","has_indirect","stages","alpha_compare","blend")}
+    return json.dumps(keep,sort_keys=True,separators=(",",":"))
+
+def ras_signature(m):
+    keep={k:m[k] for k in ("light_channel_count","channels","texgen_count","texgens")}
     return json.dumps(keep,sort_keys=True,separators=(",",":"))
 
 def main():
@@ -239,7 +316,7 @@ def main():
 
     def inspect_object(obj):
         try:
-            arc=rarc_files(fetch(f"{base}/ObjectData/{obj}.arc"))
+            arc=rarc_files(fetch(object_url(base,obj)))
         except Exception as e:
             return obj, None, {"object":obj,"stage":"download","error":str(e)}
         models_found=[(name,p) for name,p in arc if name.lower().endswith((".bdl",".bmd"))]
@@ -283,6 +360,15 @@ def main():
         top.append({"count":n,"examples":examples[s][:12],"signature":json.loads(s)})
     fmt=collections.Counter(t["format"] for t in textures)
     shape=collections.Counter(shape_types)
+    ras=collections.Counter(ras_signature(m) for m in materials)
+    ras_examples={}
+    for m in materials:
+        s=ras_signature(m)
+        ras_examples.setdefault(s,[]).append(f"{m['model']}::{m['material_name']}")
+    top_ras=[
+        {"count":n,"examples":ras_examples[s][:12],"signature":json.loads(s)}
+        for s,n in ras.most_common(30)
+    ]
     result={
         "source":{"galaxy":galaxy,"scenario_url":scenario_url,"base":base},
         "counts":{
@@ -295,7 +381,9 @@ def main():
         "texture_format_counts":{f"0x{k:02x}":v for k,v in sorted(fmt.items())},
         "shape_matrix_type_counts":{str(k):v for k,v in sorted(shape.items())},
         "top_material_signatures":top,
-        "failures":failures[:200],
+        "top_raster_contracts":top_ras,
+        "materials":materials,
+        "failures":failures[:300],
         "provenance":{
             "script":"tools/smg_rmge01_j3d_material_census_v1.py",
             "policy":"retail files are fetched transiently; only structural census JSON is retained",
@@ -307,6 +395,8 @@ def main():
     print(json.dumps(result["counts"],indent=2))
     print("texture formats",result["texture_format_counts"])
     print("shape matrix types",result["shape_matrix_type_counts"])
+    for row in top_ras[:8]:
+        print("RAS",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:900])
     for row in top[:10]:
         print("SIG",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:500])
 
