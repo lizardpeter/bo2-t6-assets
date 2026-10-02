@@ -42,7 +42,8 @@ jobs:
           echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
           echo '95622d93d4fb761db311a123cd073bed34ea48c9c711d2c11bce4170dd08bae9  /tmp/source/common_patch_mp.ff' | sha256sum -c -
           echo '459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e  /tmp/source/patch_mp.ff' | sha256sum -c -
-          sha256sum /tmp/source/common_zm.ff /tmp/source/patch_zm.ff > /tmp/proof/zm_fastfile_sha256.txt
+          echo 'b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e  /tmp/source/common_zm.ff' | sha256sum -c -
+          echo 'f5a27345a61de5fabd735f45f05b127e95ad9a488619bd7fbc96ac14c5ab4d47  /tmp/source/patch_zm.ff' | sha256sum -c -
           sha256sum /tmp/source/*.ff | sort > /tmp/proof/all_fastfile_sha256.txt
 
       - name: Dump exact StringTables
