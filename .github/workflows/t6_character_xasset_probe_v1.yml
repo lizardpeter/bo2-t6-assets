@@ -1,0 +1,91 @@
+name: T6 character XAsset probe v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_character_xasset_probe_v1.yml"
+      - "tools/t6_character_xasset_probe_v1.py"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Fetch, verify, expand, and probe exact retail zones
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-character-xassets/raw /tmp/t6-character-xassets/expanded /tmp/t6-character-xassets/proof
+
+          probe_zone () {
+            zone="$1"
+            expected_sha="$2"
+            curl -fL --retry 5 --retry-delay 2 \
+              -o "/tmp/t6-character-xassets/raw/${zone}.ff" \
+              "https://r2.houseofkublai.com/bo2/zone/all/${zone}.ff"
+            echo "${expected_sha}  /tmp/t6-character-xassets/raw/${zone}.ff" | sha256sum -c -
+            /tmp/t6_expand \
+              "/tmp/t6-character-xassets/raw/${zone}.ff" \
+              "/tmp/t6-character-xassets/expanded/${zone}.bin" \
+              "${zone}"
+            python tools/t6_character_xasset_probe_v1.py \
+              "/tmp/t6-character-xassets/expanded/${zone}.bin" \
+              --zone "${zone}" \
+              --source-sha256 "${expected_sha}" \
+              --out "/tmp/t6-character-xassets/proof/${zone}.json"
+          }
+
+          probe_zone faction_cd_mp fe890c3336555998914280e47429a8f030baa507471f4e409363d79dd15505e3
+          probe_zone faction_fbi_mp a48a85e9df5da4086a3577195e86eecf9115e3dd90606760fef8e09e3045196e
+          probe_zone common_zm b0663e765b50a17e3e7a53e2675ca18a1eeca186e0356df74e9b2c615f09ce9e
+          probe_zone zm_prison ebfd53156542bc61e842087879475c7515851ddcc6d4f0ae743099590177dcb1
+
+      - name: Summarize character ownership classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib
+          root = pathlib.Path('/tmp/t6-character-xassets/proof')
+          rows = []
+          for path in sorted(root.glob('*.json')):
+              d = json.loads(path.read_text())
+              row = {
+                  'zone': d['zone'],
+                  'assetCount': d['assetCount'],
+                  **d['characterOwnershipCounts'],
+                  'targetIndices': [e['index'] for e in d['characterOwnershipEntries']],
+                  'assetBodyStreamRawOffset': d['assetBodyStreamRawOffset'],
+              }
+              rows.append(row)
+          summary = {
+              'format': 't6-character-xasset-zone-summary-v1',
+              'rows': rows,
+          }
+          out = root / 'summary.json'
+          out.write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+          print(out.read_text())
+          PY
+
+      - name: Upload exact probe artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_CHARACTER_XASSET_PROBE_V1
+          path: /tmp/t6-character-xassets/proof
+          if-no-files-found: error
