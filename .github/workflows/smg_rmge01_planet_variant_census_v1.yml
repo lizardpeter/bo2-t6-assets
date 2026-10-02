@@ -1,0 +1,53 @@
+name: SMG RMGE01 PlanetMap variants v1
+
+on:
+  push:
+    paths:
+      - "tools/smg_rmge01_planet_variant_census_v1.py"
+      - ".github/workflows/smg_rmge01_planet_variant_census_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Census Good Egg planet variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smg-variants
+          python tools/smg_rmge01_planet_variant_census_v1.py \
+            --galaxy EggStarGalaxy \
+            --out /tmp/smg-variants/eggstar_planet_variants_v1.json
+      - name: Retain structural result
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=smg/rmge01/derived/planet_variant_census_v1
+          mkdir -p "$OUT"
+          cp /tmp/smg-variants/eggstar_planet_variants_v1.json "$OUT/"
+          sha256sum "$OUT"/*.json > "$OUT/CHECKSUMS.sha256"
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add "$OUT"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'SMG: retain RMGE01 PlanetMap variant census v1'
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 2
+          done
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SMG_RMGE01_PLANET_VARIANTS_V1
+          path: /tmp/smg-variants
+          retention-days: 30
