@@ -32,15 +32,30 @@ def load_tsv_dir(root: Path, prefix: str) -> list[dict[str,str]]:
     return rows
 
 def load_ranges(root: Path) -> tuple[dict[str,list[dict]], int]:
+    """Load exact PDB-backed server ranges.
+
+    Prefer the retained server_pdb_exact_hashes_v1 corpus. A legacy ranges_*.tsv
+    layout is still accepted for reproducibility of older experiments.
+    """
     by_va: dict[str,list[dict]] = defaultdict(list)
     total = 0
-    for p in sorted(root.glob("ranges_*.tsv")):
+    paths = sorted(root.glob("server_pdb_exact_hashes_*.tsv"))
+    if not paths:
+        paths = sorted(root.glob("ranges_*.tsv"))
+    for p in paths:
         with p.open(encoding="utf-8", newline="") as f:
-            for r in csv.DictReader(f, dialect="excel-tab"):
+            for raw in csv.DictReader(f, dialect="excel-tab"):
+                server_va = raw.get("server_va") or raw.get("exact_address_start") or ""
+                variant_id = raw.get("server_variant_id") or raw.get("variant_id") or ""
+                if not server_va or not variant_id:
+                    raise SystemExit(f"malformed exact server range row in {p}: {raw}")
+                r = dict(raw)
+                r["server_va"] = norm_va(server_va)
+                r["server_variant_id"] = variant_id
                 total += 1
-                by_va[norm_va(r["server_va"])].append(r)
+                by_va[r["server_va"]].append(r)
     if not total:
-        raise SystemExit(f"no server range rows under {root}")
+        raise SystemExit(f"no exact PDB-backed server range rows under {root}")
     return by_va, total
 
 def nonempty_hash(row: dict, field: str, count_field: str) -> str:
