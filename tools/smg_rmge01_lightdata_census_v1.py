@@ -17,6 +17,15 @@ def number(row,name,default=0.0):
     try: return float(v)
     except Exception: return float(default)
 
+def s32_value(v):
+    i=int(v) & 0xffffffff
+    return i - 0x100000000 if i & 0x80000000 else i
+
+def s32(row,name,default=-1):
+    v=row.get(common.bcsv_hash(name),default)
+    try: return s32_value(v)
+    except Exception: return int(default)
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--base",default=common.BASE_DEFAULT)
@@ -74,7 +83,7 @@ def main():
         table=common.bcsv_rows(payload)
         out={}
         for row in table:
-            lid=int(number(row,"LightID",-1))
+            lid=s32(row,"LightID",-1)
             name=row.get(common.bcsv_hash("AreaLightName"))
             if not isinstance(name,str) or not name:
                 raise RuntimeError(f"{key} LightID {lid} has no AreaLightName")
@@ -103,8 +112,8 @@ def main():
                 obj=row.get(common.H_NAME)
                 if obj not in ("LightCtrlCube","LightCtrlCylinder"):
                     continue
-                lid=int(row.get(common.bcsv_hash("Obj_arg0"),-1) or -1)
-                priority=int(row.get(common.bcsv_hash("Obj_arg1"),-1) or -1)
+                lid=s32(row,"Obj_arg0",-1)
+                priority=s32(row,"Obj_arg1",-1)
                 item={"zone":zone,"shape":obj,"light_id":lid,"priority":priority}
                 light_areas.append(item)
                 if str(lid) not in zone_map:
