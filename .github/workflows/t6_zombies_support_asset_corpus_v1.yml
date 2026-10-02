@@ -1,0 +1,162 @@
+name: T6 Zombies support asset corpus v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_zombies_support_asset_corpus_v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bind-support-corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_ff_expand -lz -lcrypto
+
+      - name: Restore pinned native name oracle
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-all-xasset-name-cache
+          key: oat-unlinker-t6-9dca965-compat-v3-all-xasset-name-v1-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py', 'tools/t6_oat_all_xasset_ordinal_name_trace_patch_v1.py') }}-ubuntu24-x86-debug
+
+      - name: Require cached pinned OAT oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'
+          test -x /tmp/oat-all-xasset-name-cache/Unlinker
+          grep -qx 'oat_commit=9dca965366541504b71fa8cfb7ac049cb9b717e1' /tmp/oat-all-xasset-name-cache/source_identity.txt
+
+      - name: Select Zombies support/overlay zones from retained corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zmsupport/raw /tmp/zmsupport/expanded /tmp/zmsupport/front /tmp/zmsupport/native /tmp/zmsupport/bind /tmp/zmsupport/summary
+          python3 - <<'PY'
+          import json,pathlib
+          src=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'))
+          rows=[]
+          for r in src['rows']:
+              z=r['zoneName']
+              f=r['file']
+              wanted=(
+                  (z.startswith('so_') and ('_zm_' in z or z.endswith('_zm_transit') or z.endswith('_zm_prison') or z.endswith('_zm_buried'))) or
+                  z == 'zm_transit_dr' or z == 'zm_transit_dr_patch' or
+                  (z.startswith('zm_') and z.endswith('_patch'))
+              )
+              if wanted:
+                  rows.append({
+                      'file':f,'zone':z,'rawSha256':r['fastFileSha256'],
+                      'expandedSha256':r['expandedSha256'],'xassetCount':r['xassetCount']
+                  })
+          pathlib.Path('/tmp/zmsupport/targets.json').write_text(json.dumps(rows,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'targetCount':len(rows),'zones':[r['zone'] for r in rows]},indent=2))
+          PY
+
+      - name: Fetch, prove, and bind canonical asset names
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=/tmp/oat-all-xasset-name-cache/Unlinker
+          python3 - <<'PY' > /tmp/zmsupport/targets.tsv
+          import json
+          for r in json.load(open('/tmp/zmsupport/targets.json')):
+              print('\t'.join([r['file'],r['zone'],r['rawSha256'],r['expandedSha256'],str(r['xassetCount'])]))
+          PY
+
+          while IFS=$'\t' read -r file zone raw_sha expanded_sha xasset_count; do
+            echo "=== $zone ==="
+            curl -fsSL --retry 5 --retry-delay 2               -o "/tmp/zmsupport/raw/$file"               "https://r2.houseofkublai.com/bo2/zone/all/$file"
+            echo "$raw_sha  /tmp/zmsupport/raw/$file" | sha256sum -c -
+            /tmp/t6_ff_expand "/tmp/zmsupport/raw/$file" "/tmp/zmsupport/expanded/$zone.bin" "$zone"
+            echo "$expanded_sha  /tmp/zmsupport/expanded/$zone.bin" | sha256sum -c -
+            python3 tools/t6_character_xasset_probe_v1.py               "/tmp/zmsupport/expanded/$zone.bin" --zone "$zone" --source-sha256 "$raw_sha"               --out "/tmp/zmsupport/front/$zone.json"
+
+            unsupported=$(python3 - "$zone" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/zmsupport/front/'+sys.argv[1]+'.json'))
+          print(sum(d['characterOwnershipCounts'].values()))
+          PY
+            )
+            test "$unsupported" -eq 0
+
+            mkdir -p "/tmp/oat_out/$zone"
+            set +e
+            "$BIN" --no-color --verbose --include-assets soundbank               --output-folder "/tmp/oat_out/$zone" "/tmp/zmsupport/raw/$file"               2>&1 | tee "/tmp/zmsupport/native/$zone.log"
+            rc=${PIPESTATUS[0]}
+            set -e
+            test "$rc" -eq 0
+            test "$(grep -c '^T6_XASSET_ORDINAL_NAME' "/tmp/zmsupport/native/$zone.log")" -eq "$xasset_count"
+
+            python3 tools/t6_oat_all_xasset_ordinal_name_binding_v1.py               --expanded "/tmp/zmsupport/expanded/$zone.bin"               --native-log "/tmp/zmsupport/native/$zone.log"               --oat-commit 9dca965366541504b71fa8cfb7ac049cb9b717e1               --out "/tmp/zmsupport/bind/$zone.json"
+
+            rm -f "/tmp/zmsupport/raw/$file" "/tmp/zmsupport/expanded/$zone.bin"
+          done < /tmp/zmsupport/targets.tsv
+
+      - name: Summarize support-zone models, weapons, and animations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib,collections
+          targets={r['zone']:r for r in json.load(open('/tmp/zmsupport/targets.json'))}
+          rows=[]
+          model_owners=collections.defaultdict(set)
+          weapon_owners=collections.defaultdict(set)
+          for zone,meta in sorted(targets.items()):
+              b=json.load(open(f'/tmp/zmsupport/bind/{zone}.json'))
+              models=[]; weapons=[]; xanims=[]
+              for a in b['rows']:
+                  typ=a['assetTypeName']; name=a['nativeResolvedName']
+                  if typ=='XMODEL': models.append(name); model_owners[name].add(zone)
+                  elif typ=='WEAPON': weapons.append(name); weapon_owners[name].add(zone)
+                  elif typ=='XANIMPARTS': xanims.append(name)
+              rows.append({'zone':zone,'file':meta['file'],'xmodels':models,'weapons':weapons,'xanims':xanims})
+          out={
+              'format':'t6-zombies-support-asset-corpus-v1',
+              'rows':rows,
+              'summary':{
+                  'zoneCount':len(rows),
+                  'xmodelOccurrences':sum(len(r['xmodels']) for r in rows),
+                  'uniqueXModelCount':len(model_owners),
+                  'weaponOccurrences':sum(len(r['weapons']) for r in rows),
+                  'uniqueWeaponCount':len(weapon_owners),
+                  'xanimOccurrences':sum(len(r['xanims']) for r in rows),
+              },
+              'uniqueXModels':[{'name':n,'zones':sorted(zs)} for n,zs in sorted(model_owners.items())],
+              'uniqueWeapons':[{'name':n,'zones':sorted(zs)} for n,zs in sorted(weapon_owners.items())],
+          }
+          p=pathlib.Path('/tmp/zmsupport/summary/T6_ZOMBIES_SUPPORT_ASSET_CORPUS_V1.json')
+          p.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out['summary'],indent=2,sort_keys=True))
+          for r in rows:
+              print('ZONE',r['zone'],'XMODELS',len(r['xmodels']),'WEAPONS',len(r['weapons']),'XANIMS',len(r['xanims']))
+              for n in r['xmodels']:
+                  if n.startswith('c_') or 'zom' in n.lower() or 'viewmodel' in n.lower():
+                      print('MODEL_CANDIDATE',r['zone'],n)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: T6_ZOMBIES_SUPPORT_ASSET_CORPUS_V1
+          path: |
+            /tmp/zmsupport/targets.json
+            /tmp/zmsupport/front
+            /tmp/zmsupport/bind
+            /tmp/zmsupport/summary
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 30
