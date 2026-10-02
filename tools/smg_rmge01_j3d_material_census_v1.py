@@ -45,8 +45,13 @@ def fetch(url, retries=4):
             req=urllib.request.Request(url,headers={"User-Agent":UA})
             with urllib.request.urlopen(req,timeout=60) as r:
                 return r.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise RuntimeError(f"download missing {url}: HTTP 404")
+            err=e
         except Exception as e:
-            err=e; time.sleep(1.5*(attempt+1))
+            err=e
+        time.sleep(1.5*(attempt+1))
     raise RuntimeError(f"download failed {url}: {err}")
 
 def rarc_files(src: bytes):
