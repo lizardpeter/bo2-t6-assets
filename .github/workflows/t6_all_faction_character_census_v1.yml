@@ -1,0 +1,113 @@
+name: T6 all faction character census v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_all_faction_character_census_v1.yml"
+      - "tools/t6_faction_character_xmodel_census_v1.py"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+      - "tools/t6_xmodel_serialized_walker.py"
+      - "tools/t6_clipmap_serialized_walker.py"
+      - "tools/t6_clipmap_serialized_walker_v3.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact retail T6 expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Write pinned faction corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-faction-census/out
+          cat >/tmp/t6-faction-census/factions.tsv <<'EOF'
+          faction_cd_mp	fe890c3336555998914280e47429a8f030baa507471f4e409363d79dd15505e3	29ef228c7aa1e3f012d40231021338a4f7a1922e6a1a0c26fc5b6b34b04798ac
+          faction_cd_sand_mp	c21b2e1e19000d1b944447c395562eebf46015013648db1bcc81c74541541487	aed0a9d103bab5ce91b37a3c103f2274a175d018126aad622943e04cc9f55025
+          faction_fbi_mp	a48a85e9df5da4086a3577195e86eecf9115e3dd90606760fef8e09e3045196e	26d9c2377aa0330eed9ed745074cbec8dc560147f890c63a256f789194cb1c35
+          faction_isa_mp	ed481baaaf1782f414831f2a04d994a1dd32a8784effcb515f5639611158b4fa	ef9cf888b2bf10615bbcad77969c0b2da22dc2fc352a5df34c4a0c96810d7381
+          faction_isa_sand_mp	2e3309705b7e7afd3f390fd0565f6499cafa5fbe1b06c79d64d5830319622864	5661d10c05ccd90d6205a8f0cc15266dae00deaabdb977b603fd2f00f647ff29
+          faction_multiteam_mp	1e22ed4f284d77d9f30d59e940b006977f208fcde6d0f68c9e3e613c5d8c06c7	aee2aa0ab22d1349c7c2726523de2e79140c50d4f8d5a546a8bfd8c5d59a9c8b
+          faction_multiteam_sand_mp	07d9774a9a82af58d417fefca10e6f348f2135ee09783614e0dae1f26b571a72	f765346f3d56bde09abbc35dea4ca51261bde1fcf39d60c4f3f4b40536dba67f
+          faction_multiteam_snow_mp	8cd1190496ccfc55143567a9ee30e7e8e43adf10491534e5b44a3b6bec36c44f	884f4c7e527396545f91e3957225981a16adec76e391a67c7385bd3d5d1ac8b8
+          faction_multiteam_wet_mp	c19bcbe408aa27e4d969fbeec7545fe179a7764d17d041153bad71c558f8ae37	ca7b826779dda208eed7f1a87706ae7107870c1e241c92fceb0144b19e185979
+          faction_pla_mp	030ea9220bba4028a5e6747a5630a1ef06bc896de856b696e58de825556ec0cd	d853e71040dc1fabc78bf9a65d53d25b69043d0312ceda52153a4054e34ae5c3
+          faction_pla_wet_mp	d068a12fb3a5feb274e9a3cfaeca5a68e8657a7f63c52149880e30d66a0f6a34	b7a17871bfc639834cbf2452903f9f217ebc45fa1b171ea098634028df8c4aeb
+          faction_pmc_mp	7e59404116a1b5d3fec633969293e22b5f88f210c114c1ca0cc201f59213912b	6ee0c0bcf7148acdca45c186da8d32f728b9889a10f0279c5bf0cad579cfe0ea
+          faction_pmc_snow_mp	31fd3c824b4e67015143adae621af7997dc2b51451a665560a8660efe3a645b6	80e8bed01c60a8a8342bb290d5b26c7346d46145e0b4282e090e1a7191c38d43
+          faction_seals_mp	1a075434760751551158b7d62cc2761649e2d2c7606b27b3bbe066b998b77c88	21a11090990417faefa8c39282f499c7bdb87a7acf62f00082aa9b3811cced30
+          faction_seals_snow_mp	55487bb4b25f6048451a870213afc4e6015c12189a3d2a3be6a51f12891bd7f6	2cfae73223884226287bc5cb68ef87c0c86044572e8a8d190659a4b05256e151
+          faction_seals_wet_mp	e84ea77b9617c631de03305e42feec85f67fe85f4164fa636b43c8ee4883e454	94a7e7efd4b627b02e4574aae2eb27fbb1f163f42d82b45780d4b3289b144a78
+          EOF
+
+      - name: Fetch, verify, expand and census every faction package
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r zone rawsha expsha; do
+            echo "=== $zone ==="
+            curl -fL --retry 5 --retry-delay 2               -o "/tmp/t6-faction-census/$zone.ff"               "https://r2.houseofkublai.com/bo2/zone/all/$zone.ff"
+            echo "$rawsha  /tmp/t6-faction-census/$zone.ff" | sha256sum -c -
+            /tmp/t6_expand               "/tmp/t6-faction-census/$zone.ff"               "/tmp/t6-faction-census/$zone.expanded"               "$zone"
+            echo "$expsha  /tmp/t6-faction-census/$zone.expanded" | sha256sum -c -
+            PYTHONPATH=tools python3 tools/t6_faction_character_xmodel_census_v1.py               "/tmp/t6-faction-census/$zone.expanded"               --zone "$zone"               --raw-sha256 "$rawsha"               --expected-expanded-sha256 "$expsha"               --out "/tmp/t6-faction-census/out/$zone.json"
+            rm -f "/tmp/t6-faction-census/$zone.ff" "/tmp/t6-faction-census/$zone.expanded"
+          done </tmp/t6-faction-census/factions.tsv
+
+      - name: Combine exact faction census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root=Path('/tmp/t6-faction-census/out')
+          zones=[json.loads(p.read_text()) for p in sorted(root.glob('faction_*.json'))]
+          all_models=[dict(zone=z['source']['zone'], **m) for z in zones for m in z['xmodels']]
+          all_pairs=[dict(zone=z['source']['zone'], **p) for z in zones for p in z['pairs']]
+          out={
+            'format':'t6-all-faction-character-census-v1',
+            'zoneCount':len(zones),
+            'zones':zones,
+            'allXModels':all_models,
+            'allPairs':all_pairs,
+            'summary':{
+              'validatedXModels':len(all_models),
+              'fullBodyModels':sum(m['role']=='full_body' for m in all_models),
+              'viewhandsModels':sum(m['role']=='viewhands' for m in all_models),
+              'pairedIdentities':sum(p['paired'] for p in all_pairs),
+              'unpairedIdentities':[f"{p['zone']}::{p['identity']}" for p in all_pairs if not p['paired']],
+            },
+            'proofBoundary':(
+              'Sixteen SHA-pinned retail MP faction FastFiles. Each promoted XModel closes '
+              'blocker-free through the general serialized walker and carries exact zone ownership. '
+              'Same-stem _fb/_viewhands pairing is source-derived; higher Character/MpType ownership remains open.'
+            ),
+          }
+          Path('/tmp/t6-faction-census/T6_ALL_FACTION_CHARACTER_CENSUS_V1.json').write_text(
+            json.dumps(out,indent=2)+'\n'
+          )
+          print(json.dumps(out['summary'],indent=2))
+          PY
+
+      - name: Upload retained faction proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_ALL_FACTION_CHARACTER_CENSUS_V1
+          path: |
+            /tmp/t6-faction-census/T6_ALL_FACTION_CHARACTER_CENSUS_V1.json
+            /tmp/t6-faction-census/out/*.json
+            /tmp/t6-faction-census/factions.tsv
+          if-no-files-found: error
+          retention-days: 7
