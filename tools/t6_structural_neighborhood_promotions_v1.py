@@ -19,6 +19,21 @@ def read_tsv(p):
 def q(v):
     return json.dumps("" if v is None else str(v),ensure_ascii=False)
 
+def cv(v):
+    if v is None:
+        return "null"
+    if isinstance(v,bool):
+        return "true" if v else "false"
+    if isinstance(v,(int,float)):
+        return str(v)
+    if isinstance(v,str):
+        return q(v)
+    if isinstance(v,list):
+        return "["+",".join(cv(x) for x in v)+"]"
+    if isinstance(v,dict):
+        return "{"+",".join(f"{k}:{cv(x)}" for k,x in v.items())+"}"
+    raise TypeError(type(v))
+
 def eid(c,s):
     return "urn:ure:t6:re_Evidence:structural-neighborhood-accepted:"+hashlib.sha256((c+"\0"+s).encode()).hexdigest()[:24]
 
@@ -57,12 +72,15 @@ def main():
             x["shared_unique_strings"]==x["client_unique_strings"] and
             len(x["client_only_strings"])==0
         )
-        ok=structural_complete and calls_complete and data_complete and no_conflict and (anchor_basis or string_basis)
+        variant_ids=[v for v in c["server_variant_ids"].split(";") if v]
+        single_variant=len(variant_ids)==1
+        ok=structural_complete and calls_complete and data_complete and no_conflict and single_variant and (anchor_basis or string_basis)
         row={
             "client_va":x["client_va"],
             "server_va":x["server_va"],
             "server_symbol":x["server_symbols"][0] if len(x["server_symbols"])==1 else ";".join(x["server_symbols"]),
             "server_object":x["server_objects"][0] if len(x["server_objects"])==1 else ";".join(x["server_objects"]),
+            "server_variant_id":variant_ids[0] if single_variant else "",
             "structural_schemes":";".join(sorted(schemes)),
             "exact_anchor_callee_matches":x["exact_anchor_callee_matches"],
             "shared_unique_strings":x["shared_unique_strings"],
@@ -83,35 +101,52 @@ def main():
         w=csv.DictWriter(f,fieldnames=fields,delimiter="\t",lineterminator="\n")
         w.writeheader();w.writerows(accepted)
 
-    # Resolve the already-projected structural candidate by client/server VA,
-    # then derive server FunctionVariant/family from its EVIDENCE_FOR links.
-    statements=[]
+    # Resolve each accepted row in one atomic UNWIND transaction. The
+    # server variant is pinned by the candidate ledger so aliases cannot
+    # silently change which semantic family is selected.
+    payload=[]
     for r in accepted:
         cva=r["client_va"].lower()
         sva=r["server_va"].lower()
-        cid="urn:ure:t6:occ:function:current-client:"+cva.removeprefix("0x")
-        statements.append(f"""
+        payload.append({
+            "client_va":cva,
+            "server_va":sva,
+            "client_id":"urn:ure:t6:occ:function:current-client:"+cva.removeprefix("0x"),
+            "server_variant_id":r["server_variant_id"],
+            "evidence_id":r["evidence_id"],
+            "server_symbol":r["server_symbol"],
+            "server_object":r["server_object"],
+            "basis":r["basis"],
+            "structural_schemes":r["structural_schemes"],
+            "exact_anchor_callee_matches":int(r["exact_anchor_callee_matches"]),
+            "shared_unique_strings":int(r["shared_unique_strings"]),
+            "call_count":int(r["call_count"]),
+            "data_ref_offset_count":int(r["data_ref_offset_count"]),
+        })
+
+    cypher=f"""WITH {cv(payload)} AS rows
+UNWIND rows AS row
 MATCH (struct:KGNode)
 WHERE struct.evidence_kind='cross-build-structural-fingerprint-candidate'
-  AND struct.client_va={q(cva)} AND struct.server_va={q(sva)}
-MATCH (struct)-[:EVIDENCE_FOR]->(server:KGNode)
+  AND struct.client_va=row.client_va AND struct.server_va=row.server_va
+MATCH (server:KGNode {id:row.server_variant_id})
 WHERE server.kind='re:FunctionVariant'
-MATCH (client:KGNode {{id:{q(cid)}}})
-MERGE (ev:KGNode {{id:{q(r["evidence_id"])}}})
+MATCH (client:KGNode {id:row.client_id})
+MERGE (ev:KGNode {id:row.evidence_id})
 SET ev.kind='re:Evidence',
     ev.namespace='t6',
     ev.evidence_kind='cross-build-structural-neighborhood-corroboration',
     ev.state='accepted-evidence-awaiting-semantic-promotion',
-    ev.client_va={q(cva)},
-    ev.server_va={q(sva)},
-    ev.server_symbol={q(r["server_symbol"])},
-    ev.server_object={q(r["server_object"])},
-    ev.basis={q(r["basis"])},
-    ev.structural_schemes={q(r["structural_schemes"])},
-    ev.exact_anchor_callee_matches={int(r["exact_anchor_callee_matches"])},
-    ev.shared_unique_strings={int(r["shared_unique_strings"])},
-    ev.call_count={int(r["call_count"])},
-    ev.data_ref_offset_count={int(r["data_ref_offset_count"])},
+    ev.client_va=row.client_va,
+    ev.server_va=row.server_va,
+    ev.server_symbol=row.server_symbol,
+    ev.server_object=row.server_object,
+    ev.basis=row.basis,
+    ev.structural_schemes=row.structural_schemes,
+    ev.exact_anchor_callee_matches=row.exact_anchor_callee_matches,
+    ev.shared_unique_strings=row.shared_unique_strings,
+    ev.call_count=row.call_count,
+    ev.data_ref_offset_count=row.data_ref_offset_count,
     ev.repo='lizardpeter/bo2-t6-assets',
     ev.repo_commit={q(a.repo_commit)},
     ev.workflow_run_id={a.workflow_run_id},
@@ -124,10 +159,11 @@ SET struct.state='accepted-evidence-awaiting-semantic-promotion',
     client.cross_build_identity_state='accepted-evidence-awaiting-semantic-promotion',
     client.cross_build_identity_candidate_variant_id=server.id,
     client.cross_build_identity_candidate_family_id=server.family_id,
-    client.cross_build_identity_basis={q(r["basis"])},
+    client.cross_build_identity_basis=row.basis,
     client.cross_build_identity_evidence_id=ev.id
-""")
-    (a.out_dir/"promote.cypher").write_text("\n".join(statements)+"\n",encoding="utf-8")
+RETURN count(DISTINCT ev) AS accepted_evidence_rows
+"""
+    (a.out_dir/"promote.cypher").write_text(cypher,encoding="utf-8")
     summary={
         "format":FORMAT,
         "accepted_evidence_rows":len(accepted),
