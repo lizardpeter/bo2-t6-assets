@@ -1,0 +1,73 @@
+name: T6 map localization dump
+
+on:
+  push:
+    branches: [probe-t6-map-metadata]
+    paths:
+      - ".github/workflows/t6_map_localize_dump.yml"
+      - "tools/t6_oat_9dca_gcc_compat_patch_v3.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zone: en_common
+            sha256: 9a74de861dbe3452572b5c6bbdab0d4975fce1bb4e3df58c913df49c30e62fdc
+            rel: zone/english/en_common.ff
+          - zone: en_common_mp
+            sha256: 22b9893f41fd2bdb4d48ea1b15f45fc7656956cbff3e26d1340e60142093996f
+            rel: zone/english/en_common_mp.ff
+          - zone: en_common_zm
+            sha256: 7e72b70a58ec97fa9403f94be667ddcf3f1682f1e833326804f0c6950d8dc188
+            rel: zone/english/en_common_zm.ff
+          - zone: en_patch
+            sha256: 0f1e5e2591fec51c81c6d8636603c2f89a9191ad2a95030e9e11e2daf2af6e9a
+            rel: zone/english/en_patch.ff
+          - zone: en_patch_mp
+            sha256: 6134ea4670708bef864802f37f7e345fe6a663392fbc958e38ce2ef020caa64c
+            rel: zone/english/en_patch_mp.ff
+          - zone: en_patch_zm
+            sha256: ec91edb006826023177e5dfa65ddf990ac3b861576c4a3f0e5ed9e31b93d455f
+            rel: zone/english/en_patch_zm.ff
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore pinned OAT
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+      - name: Require cached OAT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.oat-cache.outputs.cache-hit }}" = "true"
+          test -x /tmp/oat-unlinker-cache/Unlinker
+      - name: Download exact English FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/game/$(dirname "${{ matrix.rel }}") /tmp/out /tmp/proof
+          curl -fL --retry 4 --retry-delay 2 -o "/tmp/game/${{ matrix.rel }}" "https://r2.houseofkublai.com/bo2/${{ matrix.rel }}"
+          echo "${{ matrix.sha256 }}  /tmp/game/${{ matrix.rel }}" | sha256sum -c -
+      - name: Dump LocalizeEntry
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/oat-unlinker-cache/Unlinker --no-color --include-assets localize --output-folder "/tmp/out/${{ matrix.zone }}" "/tmp/game/${{ matrix.rel }}"
+          find "/tmp/out/${{ matrix.zone }}" -type f -maxdepth 6 -print
+          grep -R -n -E 'REFERENCE[[:space:]]+(MPUI_(RAID|NUKETOWN2025|DESC_MAP_RAID|DESC_MAP_NUKETOWN2025)|ZMUI_(TRANSIT|PRISON|BURIED|TOMB|DESC_MAP_TRANSIT|DESC_MAP_PRISON|DESC_MAP_BURIED|DESC_MAP_TOMB|STREET_LOC|CELLBLOCK))' "/tmp/out/${{ matrix.zone }}" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MAP_LOCALIZE_${{ matrix.zone }}
+          path: /tmp/out
+          if-no-files-found: error
+          retention-days: 3
