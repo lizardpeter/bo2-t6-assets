@@ -11,6 +11,7 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--base",default=common.BASE_DEFAULT)
     ap.add_argument("--galaxy",default="EggStarGalaxy")
+    ap.add_argument("--all-planets",action="store_true")
     ap.add_argument("--out",required=True)
     a=ap.parse_args(); base=a.base.rstrip("/")
 
@@ -28,18 +29,22 @@ def main():
             for field in FIELDS
         }
 
-    scenario=common.rarc_files(common.fetch(f"{base}/StageData/{a.galaxy}/{a.galaxy}Scenario.arc"))
-    zone_payload=next((p for n,p in scenario if n.lower()=="zonelist.bcsv"),None)
-    zones=[r.get(common.H_ZONE) for r in common.bcsv_rows(zone_payload) if isinstance(r.get(common.H_ZONE),str)]
-    objects=set()
-    for zone in zones:
-        for name,payload in common.rarc_files(common.fetch(f"{base}/StageData/{zone}.arc")):
-            if name.lower()=="stageobjinfo": continue
-            try: rows=common.bcsv_rows(payload)
-            except Exception: continue
-            for row in rows:
-                v=row.get(common.H_NAME)
-                if isinstance(v,str) and v: objects.add(v)
+    if a.all_planets:
+        objects={name for name in (row.get(common.bcsv_hash("PlanetName")) for row in table) if isinstance(name,str) and name}
+        zones=[]
+    else:
+        scenario=common.rarc_files(common.fetch(f"{base}/StageData/{a.galaxy}/{a.galaxy}Scenario.arc"))
+        zone_payload=next((p for n,p in scenario if n.lower()=="zonelist.bcsv"),None)
+        zones=[r.get(common.H_ZONE) for r in common.bcsv_rows(zone_payload) if isinstance(r.get(common.H_ZONE),str)]
+        objects=set()
+        for zone in zones:
+            for name,payload in common.rarc_files(common.fetch(f"{base}/StageData/{zone}.arc")):
+                if name.lower()=="stageobjinfo": continue
+                try: rows=common.bcsv_rows(payload)
+                except Exception: continue
+                for row in rows:
+                    v=row.get(common.H_NAME)
+                    if isinstance(v,str) and v: objects.add(v)
 
     requested=collections.Counter(); present=collections.Counter(); missing=[]
     planet_objects=[]
@@ -58,7 +63,7 @@ def main():
                 missing.append({"object":obj,"variant":name,"error":str(e)})
 
     result={
-        "source":{"base":base,"galaxy":a.galaxy},
+        "source":{"base":base,"galaxy":None if a.all_planets else a.galaxy,"scope":"all_planets" if a.all_planets else "galaxy"},
         "counts":{
             "planet_table_rows":len(table),
             "placed_unique_objects":len(objects),
