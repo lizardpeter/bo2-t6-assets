@@ -477,6 +477,7 @@ def main():
     print(json.dumps(result["counts"],indent=2))
     print("texture formats",result["texture_format_counts"])
     print("shape matrix types",result["shape_matrix_type_counts"])
+    print("neutral TEV v1 blockers",result["neutral_tev_v1_blockers"])
     for row in top_ras[:8]:
         print("RAS",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:900])
     for row in top[:10]:
