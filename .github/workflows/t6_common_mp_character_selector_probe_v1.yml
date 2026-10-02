@@ -1,0 +1,112 @@
+name: T6 common MP character selector probe v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_common_mp_character_selector_probe_v1.yml"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact retail T6 expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Fetch and expand exact common_mp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-character-selector
+          curl -fL --retry 5 --retry-delay 2 \
+            -o /tmp/t6-character-selector/common_mp.ff \
+            https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/t6-character-selector/common_mp.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/t6-character-selector/common_mp.ff /tmp/t6-character-selector/common_mp.expanded common_mp
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/t6-character-selector/common_mp.expanded' | sha256sum -c -
+
+      - name: Scan exact serialized strings for character-selection leads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,hashlib
+          from pathlib import Path
+
+          p=Path('/tmp/t6-character-selector/common_mp.expanded')
+          data=p.read_bytes()
+          strings=[]
+          start=None
+          for i,b in enumerate(data+b'\0'):
+              if 32 <= b < 127:
+                  if start is None: start=i
+              elif start is not None:
+                  if i-start >= 4:
+                      raw=data[start:i]
+                      try: text=raw.decode('ascii')
+                      except: text=''
+                      if text: strings.append((start,text))
+                  start=None
+
+          patterns=[
+              re.compile(r'(?i)(?:^|/)(?:mp|ui|mpui)[^ ]*\.csv$'),
+              re.compile(r'(?i)(faction|viewhands|_fb$|body|head|character|mptype|loadout|class|team)'),
+          ]
+          hits=[{'offset':o,'text':t} for o,t in strings if any(rx.search(t) for rx in patterns)]
+          csv=[x for x in hits if x['text'].lower().endswith('.csv')]
+          models=[x for x in hits if ('viewhands' in x['text'].lower() or x['text'].lower().endswith('_fb'))]
+          # Preserve context in serialized string order, not raw-byte guesses.
+          idx={(o,t):i for i,(o,t) in enumerate(strings)}
+          contexts=[]
+          for row in models[:1000]:
+              i=idx[(row['offset'],row['text'])]
+              contexts.append({
+                  'target':row,
+                  'before':[{'offset':o,'text':t} for o,t in strings[max(0,i-6):i]],
+                  'after':[{'offset':o,'text':t} for o,t in strings[i+1:i+7]],
+              })
+          out={
+              'format':'t6-common-mp-character-selector-string-probe-v1',
+              'source':{
+                  'fastFile':'common_mp.ff',
+                  'fastFileSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
+                  'expandedSha256':hashlib.sha256(data).hexdigest(),
+                  'expandedBytes':len(data),
+              },
+              'stringCount':len(strings),
+              'candidateHitCount':len(hits),
+              'csvCandidates':csv,
+              'modelMarkerHits':models,
+              'contexts':contexts,
+              'proofBoundary':'Raw expanded-file printable-string census only. Strings are exact retail bytes, but adjacency does not establish table ownership. Candidate table names and model-bearing neighborhoods require structured StringTable/rawfile walking before semantic promotion.'
+          }
+          Path('/tmp/t6-character-selector/T6_COMMON_MP_CHARACTER_SELECTOR_STRING_PROBE_V1.json').write_text(json.dumps(out,indent=2)+'\n')
+          Path('/tmp/t6-character-selector/candidates.txt').write_text('\n'.join(f"{x['offset']:09d} {x['text']}" for x in hits)+'\n')
+          print(json.dumps({
+              'stringCount':len(strings),
+              'candidateHitCount':len(hits),
+              'csvCandidateCount':len(csv),
+              'modelMarkerCount':len(models),
+              'csvCandidates':[x['text'] for x in csv[:200]],
+              'firstModelHits':[x['text'] for x in models[:80]],
+          },indent=2))
+          PY
+
+      - name: Upload retained probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_COMMON_MP_CHARACTER_SELECTOR_STRING_PROBE_V1
+          path: |
+            /tmp/t6-character-selector/T6_COMMON_MP_CHARACTER_SELECTOR_STRING_PROBE_V1.json
+            /tmp/t6-character-selector/candidates.txt
+          if-no-files-found: error
+          retention-days: 7
