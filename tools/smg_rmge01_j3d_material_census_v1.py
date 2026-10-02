@@ -351,6 +351,70 @@ def neutral_tev_v1_blocker(m):
                 return "nonzero_tev_texture_slot"
     return None
 
+def tev_raster_channel_index(raw):
+    if raw in (0,2,4): return 0
+    if raw in (1,3,5): return 1
+    if raw in (6,0xff): return None
+    if raw in (7,8): return "bump"
+    return "unknown"
+
+def dynamic_raster_blocker(m):
+    for s in m["stages"]:
+        color_uses_rgb = any(v == 10 for v in s["color"][:4])
+        color_uses_alpha = any(v == 11 for v in s["color"][:4])
+        alpha_uses_alpha = any(v == 5 for v in s["alpha"][:4])
+        if not (color_uses_rgb or color_uses_alpha or alpha_uses_alpha):
+            continue
+        order=s.get("order")
+        raw=0xff if order is None else order[2]
+        channel=tev_raster_channel_index(raw)
+        if channel == "bump": return "raster_bump"
+        if channel == "unknown": return "raster_unknown_channel"
+        if channel is None: continue
+        if channel >= len(m["channels"]):
+            return "raster_missing_channel"
+        pair=m["channels"][channel]
+        if color_uses_rgb:
+            ctrl=pair.get("color")
+            if ctrl and ctrl["enable"] and ctrl["light_mask"] != 0:
+                return "dynamic_raster_light"
+        if color_uses_alpha or alpha_uses_alpha:
+            ctrl=pair.get("alpha")
+            if ctrl and ctrl["enable"] and ctrl["light_mask"] != 0:
+                return "dynamic_raster_light"
+    return None
+
+def neutral_tev_v2_blocker(m):
+    if m["has_indirect"]:
+        return "indirect"
+    if m["texgen_count"] > 1:
+        return "multiple_texgens"
+    if m["texgen_count"] == 1:
+        t=m["texgens"][0]
+        if t is None:
+            return "missing_texgen"
+        if (t["type"],t["source"],t["matrix"]) != (1,4,60):
+            return "non_uv0_texgen"
+        tm=t.get("tex_mtx")
+        if tm is not None:
+            if tm["rotation_s16"] != 0 or tm["scale"] != [1.0,1.0] or tm["translation"] != [0.0,0.0]:
+                return "animated_or_nonidentity_tex_srt"
+    raster=dynamic_raster_blocker(m)
+    if raster is not None:
+        return raster
+    for s in m["stages"]:
+        color=s["color"]; alpha=s["alpha"]
+        if color[4] not in (0,1) or alpha[4] not in (0,1):
+            return "compare_tev_op"
+        if s["texture_swap"] != [0,1,2,3]:
+            return "texture_swap"
+        order=s["order"]
+        if order is not None:
+            tc,tm=order[0],order[1]
+            if tc not in (0,0xff) or tm not in (0,0xff):
+                return "nonzero_tev_texture_slot"
+    return None
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--base",default=BASE_DEFAULT)
@@ -432,6 +496,7 @@ def main():
     fmt=collections.Counter(t["format"] for t in textures)
     shape=collections.Counter(shape_types)
     neutral_tev_v1_blockers=collections.Counter(neutral_tev_v1_blocker(m) or "admitted" for m in materials)
+    neutral_tev_v2_blockers=collections.Counter(neutral_tev_v2_blocker(m) or "admitted" for m in materials)
     non_identity_raster_swaps=sum(1 for m in materials for s in m["stages"] if s["raster_swap"] != [0,1,2,3])
     non_identity_texture_swaps=sum(1 for m in materials for s in m["stages"] if s["texture_swap"] != [0,1,2,3])
     tex_matrices=sum(1 for m in materials for t in m["texgens"] if t and "tex_mtx" in t)
@@ -456,8 +521,10 @@ def main():
             "non_identity_texture_swaps":non_identity_texture_swaps,
             "materials_with_nonzero_signed_tev_registers":signed_tev_register_materials,
             "neutral_tev_v1_admitted":neutral_tev_v1_blockers["admitted"],
+            "neutral_tev_v2_admitted":neutral_tev_v2_blockers["admitted"],
         },
         "neutral_tev_v1_blockers":dict(sorted(neutral_tev_v1_blockers.items())),
+        "neutral_tev_v2_blockers":dict(sorted(neutral_tev_v2_blockers.items())),
         "zones":zones,
         "zone_failures":zone_failures,
         "texture_format_counts":{f"0x{k:02x}":v for k,v in sorted(fmt.items())},
@@ -478,6 +545,7 @@ def main():
     print("texture formats",result["texture_format_counts"])
     print("shape matrix types",result["shape_matrix_type_counts"])
     print("neutral TEV v1 blockers",result["neutral_tev_v1_blockers"])
+    print("neutral TEV v2 blockers",result["neutral_tev_v2_blockers"])
     for row in top_ras[:8]:
         print("RAS",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:900])
     for row in top[:10]:
