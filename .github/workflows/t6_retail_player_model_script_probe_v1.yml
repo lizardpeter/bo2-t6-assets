@@ -58,12 +58,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq liblzo2-2 >/dev/null
           BIN=/tmp/oat-unlinker-cache/Unlinker
           test -x "$BIN"
           mkdir -p /tmp/source /tmp/oatout /tmp/proof
           curl -fL --retry 5 --retry-delay 2 -o /tmp/source/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
           echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
-          "$BIN" --no-color --include-assets script --output-folder /tmp/oatout /tmp/source/common_mp.ff >/tmp/unlinker.log 2>&1
+          set +e
+          "$BIN" --no-color --verbose --include-assets script --output-folder /tmp/oatout /tmp/source/common_mp.ff             > /tmp/proof/unlinker_script.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/proof/unlinker_script.log
+          echo "unlinker_rc=$rc" > /tmp/proof/unlinker_return_code.txt
+          test "$rc" -eq 0
           find /tmp/oatout -type f | sort >/tmp/proof/script_inventory.txt
           grep -Ei '(^|/)(_teams|_teamset|_weapons|_class|_loadout|_globallogic|_spawning|_utility).*[.](gsc|csc)$' /tmp/proof/script_inventory.txt | tee /tmp/proof/candidate_scripts.txt || true
           test -s /tmp/proof/candidate_scripts.txt
@@ -167,6 +175,7 @@ jobs:
           PY
 
       - name: Upload exact script-selection evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: T6_RETAIL_PLAYER_MODEL_SCRIPT_PROBE_V1
