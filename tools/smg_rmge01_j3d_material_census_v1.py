@@ -83,6 +83,11 @@ H_NAME=bcsv_hash("name"); H_ZONE=bcsv_hash("ZoneName")
 def bcsv_rows(b: bytes):
     if len(b)<0x10: return []
     nr,nf,ro,rs=struct.unpack_from(">IIII",b,0)
+    if nr>1_000_000 or nf==0 or nf>256 or rs==0:
+        return []
+    fields_end=0x10+nf*0x0c
+    if fields_end>len(b) or ro<fields_end or ro+nr*rs>len(b):
+        return []
     fields=[]
     for i in range(nf):
         o=0x10+i*0x0c
@@ -216,9 +221,10 @@ def main():
         except Exception as e:
             zone_failures.append({"zone":zone,"error":str(e)}); continue
         for name,payload in files:
-            if not name.lower().endswith(".bcsv") or name.lower()=="stageobjinfo": continue
+            if name.lower()=="stageobjinfo": continue
             try: rows=bcsv_rows(payload)
             except Exception: continue
+            if not rows: continue
             for row in rows:
                 v=row.get(H_NAME)
                 if isinstance(v,str) and v and len(v)<128: object_names.add(v)
