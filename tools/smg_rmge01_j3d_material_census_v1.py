@@ -301,7 +301,13 @@ def tex1_census(sec):
             "index":i,"name":names[i] if i<len(names) else f"texture_{i}",
             "format":sec[h],"width":be16(sec,h+2),"height":be16(sec,h+4),
             "palette_format":sec[h+9],"palette_count":be16(sec,h+0x0a),
+            "wrap_s":sec[h+0x06],"wrap_t":sec[h+0x07],
+            "max_anisotropy":sec[h+0x13],
+            "min_filter":sec[h+0x14],"mag_filter":sec[h+0x15],
+            "min_lod":struct.unpack_from(">b",sec,h+0x16)[0]/8.0,
+            "max_lod":struct.unpack_from(">b",sec,h+0x17)[0]/8.0,
             "mip_count":sec[h+0x18],
+            "lod_bias":struct.unpack_from(">h",sec,h+0x1a)[0]/100.0,
         })
     return rows
 
@@ -415,6 +421,26 @@ def neutral_tev_v2_blocker(m):
                 return "nonzero_tev_texture_slot"
     return None
 
+def neutral_tev_v3_blocker(m, texture_lookup):
+    blocker=neutral_tev_v2_blocker(m)
+    if blocker is not None:
+        return blocker
+    for texture_index in m["texture_indices"]:
+        if texture_index is None:
+            continue
+        tex=texture_lookup.get((m["model"],texture_index))
+        if tex is None:
+            return "missing_texture_header"
+        if tex["wrap_s"] not in (0,1,2) or tex["wrap_t"] not in (0,1,2):
+            return "unsupported_wrap"
+        if tex["mag_filter"] not in (0,1) or tex["min_filter"] not in (0,1,2,3,4,5):
+            return "unsupported_filter"
+        if tex["max_anisotropy"] not in (0,1,2):
+            return "unsupported_anisotropy"
+        if tex["min_filter"] in (2,3,4,5) and (tex["mip_count"] > 1 or tex["max_lod"] > 0.0):
+            return "mip_chain_not_decoded"
+    return None
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--base",default=BASE_DEFAULT)
@@ -497,6 +523,8 @@ def main():
     shape=collections.Counter(shape_types)
     neutral_tev_v1_blockers=collections.Counter(neutral_tev_v1_blocker(m) or "admitted" for m in materials)
     neutral_tev_v2_blockers=collections.Counter(neutral_tev_v2_blocker(m) or "admitted" for m in materials)
+    texture_lookup={(t["model"],t["index"]):t for t in textures}
+    neutral_tev_v3_blockers=collections.Counter(neutral_tev_v3_blocker(m,texture_lookup) or "admitted" for m in materials)
     non_identity_raster_swaps=sum(1 for m in materials for s in m["stages"] if s["raster_swap"] != [0,1,2,3])
     non_identity_texture_swaps=sum(1 for m in materials for s in m["stages"] if s["texture_swap"] != [0,1,2,3])
     tex_matrices=sum(1 for m in materials for t in m["texgens"] if t and "tex_mtx" in t)
@@ -522,9 +550,11 @@ def main():
             "materials_with_nonzero_signed_tev_registers":signed_tev_register_materials,
             "neutral_tev_v1_admitted":neutral_tev_v1_blockers["admitted"],
             "neutral_tev_v2_admitted":neutral_tev_v2_blockers["admitted"],
+            "neutral_tev_v3_admitted":neutral_tev_v3_blockers["admitted"],
         },
         "neutral_tev_v1_blockers":dict(sorted(neutral_tev_v1_blockers.items())),
         "neutral_tev_v2_blockers":dict(sorted(neutral_tev_v2_blockers.items())),
+        "neutral_tev_v3_blockers":dict(sorted(neutral_tev_v3_blockers.items())),
         "zones":zones,
         "zone_failures":zone_failures,
         "texture_format_counts":{f"0x{k:02x}":v for k,v in sorted(fmt.items())},
@@ -546,6 +576,7 @@ def main():
     print("shape matrix types",result["shape_matrix_type_counts"])
     print("neutral TEV v1 blockers",result["neutral_tev_v1_blockers"])
     print("neutral TEV v2 blockers",result["neutral_tev_v2_blockers"])
+    print("neutral TEV v3 blockers",result["neutral_tev_v3_blockers"])
     for row in top_ras[:8]:
         print("RAS",row["count"],row["examples"][:3],json.dumps(row["signature"],sort_keys=True)[:900])
     for row in top[:10]:
