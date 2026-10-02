@@ -27,6 +27,33 @@ jobs:
           restore-keys: |
             oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-
 
+      - name: Build exact pinned OAT when cache is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x /tmp/oat-unlinker-cache/Unlinker ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            rm -rf /tmp/oat_build
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat_build
+            git -C /tmp/oat_build checkout -q 9dca965366541504b71fa8cfb7ac049cb9b717e1
+            test "$(git -C /tmp/oat_build rev-parse HEAD)" = 9dca965366541504b71fa8cfb7ac049cb9b717e1
+            git -C /tmp/oat_build submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat_build
+            git -C /tmp/oat_build diff --check
+            (
+              cd /tmp/oat_build
+              PREMAKE_NO_PROMPT=1 ./generate.sh
+              make -C build -j2 config=debug_x86 UnlinkerCli
+            )
+            BIN="$(find /tmp/oat_build/build/bin -type f \( -name Unlinker -o -name unlinker \) -perm -111 | head -1)"
+            test -n "$BIN"
+            mkdir -p /tmp/oat-unlinker-cache
+            install -m 0755 "$BIN" /tmp/oat-unlinker-cache/Unlinker
+          fi
+          test -x /tmp/oat-unlinker-cache/Unlinker
+          sha256sum /tmp/oat-unlinker-cache/Unlinker
+
       - name: Dump exact common_mp ScriptParseTree assets
         shell: bash
         run: |
