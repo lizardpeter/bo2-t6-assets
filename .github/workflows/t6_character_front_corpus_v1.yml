@@ -1,0 +1,102 @@
+name: T6 character front corpus v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_character_front_corpus_v1.yml"
+      - "tools/t6_character_xasset_probe_v1.py"
+      - "tools/t6_fastfile_expand_pc_v1.c"
+
+permissions:
+  contents: read
+
+jobs:
+  front-census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact expander and target list
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+          mkdir -p /tmp/front-corpus/raw /tmp/front-corpus/expanded /tmp/front-corpus/proof
+          python3 - <<'PY'
+          import json, pathlib
+          src=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'))
+          zombies={'zm_transit.ff','zm_nuked.ff','zm_highrise.ff','zm_prison.ff','zm_buried.ff','zm_tomb.ff'}
+          rows=[r for r in src['rows'] if (r['file'].startswith('faction_') and r['file'].endswith('_mp.ff')) or r['file'] in zombies]
+          pathlib.Path('/tmp/front-corpus/targets.json').write_text(json.dumps(rows,indent=2)+'\n')
+          print('TARGETS',len(rows))
+          PY
+
+      - name: Probe every target
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/front-corpus/targets.tsv
+          import json
+          for r in json.load(open('/tmp/front-corpus/targets.json')):
+              print('\t'.join([r['file'],r['zoneName'],r['fastFileSha256'],r['expandedSha256']]))
+          PY
+          while IFS=$'\t' read -r file zone raw_sha expanded_sha; do
+            curl -fsSL --retry 5 --retry-delay 2               -o "/tmp/front-corpus/raw/$file"               "https://r2.houseofkublai.com/bo2/zone/all/$file"
+            echo "$raw_sha  /tmp/front-corpus/raw/$file" | sha256sum -c -
+            /tmp/t6_expand "/tmp/front-corpus/raw/$file" "/tmp/front-corpus/expanded/$zone.bin" "$zone"
+            echo "$expanded_sha  /tmp/front-corpus/expanded/$zone.bin" | sha256sum -c -
+            python3 tools/t6_character_xasset_probe_v1.py               "/tmp/front-corpus/expanded/$zone.bin" --zone "$zone" --source-sha256 "$raw_sha"               --out "/tmp/front-corpus/proof/$zone.json"
+            rm -f "/tmp/front-corpus/raw/$file" "/tmp/front-corpus/expanded/$zone.bin"
+          done < /tmp/front-corpus/targets.tsv
+
+      - name: Summarize all asset types and unsupported live-loader classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib,collections
+          supported={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,21,22,23,24,25,29,30,31,32,33,34,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59}
+          rows=[]
+          all_counts=collections.Counter()
+          for p in sorted(pathlib.Path('/tmp/front-corpus/proof').glob('*.json')):
+              d=json.loads(p.read_text())
+              counts=d['assetTypeCounts']
+              all_counts.update(counts)
+              unsupported=[]
+              for e in d['assetEntries']:
+                  if e['assetType'] not in supported:
+                      unsupported.append({'id':e['assetType'],'name':e['assetTypeName'],'index':e['index']})
+              rows.append({
+                  'zone':d['zone'],
+                  'assetCount':d['assetCount'],
+                  'assetTypeCounts':counts,
+                  'unsupportedForCurrentRustWalker':unsupported,
+              })
+          out={
+              'format':'t6-character-front-corpus-v1',
+              'rows':rows,
+              'aggregateAssetTypeCounts':dict(sorted(all_counts.items())),
+              'zonesWithUnsupportedCurrentRustWalker':[r['zone'] for r in rows if r['unsupportedForCurrentRustWalker']],
+          }
+          path=pathlib.Path('/tmp/front-corpus/proof/summary.json')
+          path.write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({
+              'zoneCount':len(rows),
+              'zonesWithUnsupportedCurrentRustWalker':out['zonesWithUnsupportedCurrentRustWalker'],
+              'aggregateAssetTypeCounts':out['aggregateAssetTypeCounts'],
+          },indent=2,sort_keys=True))
+          for r in rows:
+              print('ZONE_TYPES',r['zone'],json.dumps(r['assetTypeCounts'],sort_keys=True))
+              if r['unsupportedForCurrentRustWalker']:
+                  print('UNSUPPORTED',r['zone'],json.dumps(r['unsupportedForCurrentRustWalker'],sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_CHARACTER_FRONT_CORPUS_V1
+          path: /tmp/front-corpus/proof
+          if-no-files-found: error
+          compression-level: 9
