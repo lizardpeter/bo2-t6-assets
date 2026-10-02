@@ -1,0 +1,145 @@
+name: T6 Rust-test character weapon integration
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_rust_test_character_weapon_integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout T6 research repo
+        uses: actions/checkout@v4
+        with:
+          path: t6-assets
+
+      - name: Checkout Rust-test feature branch
+        uses: actions/checkout@v4
+        with:
+          repository: lizardpeter/Rust-test
+          ref: t6-retail-character-weapon-catalog
+          path: rust-test
+
+      - name: Select exact retail source zones
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/zones.tsv
+          import json, pathlib
+          p=pathlib.Path('t6-assets/proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json')
+          d=json.loads(p.read_text())
+          wanted=[]
+          for row in d['rows']:
+              f=row['file']
+              mp = (
+                  f in {'code_post_gfx_mp.ff','common_mp.ff','common_patch_mp.ff','patch_mp.ff','mp_nuketown_2020.ff'}
+                  or (f.startswith('faction_') and f.endswith('_mp.ff'))
+              )
+              zm = (
+                  f in {'code_post_gfx_zm.ff','common_zm.ff','patch_zm.ff','zm_prison.ff','zm_prison_patch.ff','zm_prison_dr.ff','zm_prison_dr_patch.ff'}
+                  or (f.startswith('so_') and f.endswith('zm_prison.ff'))
+              )
+              if mp or zm:
+                  wanted.append((f,row['fastFileSha256']))
+          for f,h in sorted(wanted):
+              print(f"{f}\t{h}")
+          PY
+          cat /tmp/zones.tsv
+
+      - name: Download exact retail zones from R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/t6root
+          mkdir -p "$ROOT/zone/all"
+          while IFS=$'\t' read -r file sha; do
+            echo "fetch $file"
+            curl -fL --retry 4 --retry-delay 2               -o "$ROOT/zone/all/$file"               "https://r2.houseofkublai.com/bo2/zone/all/$file"
+            echo "$sha  $ROOT/zone/all/$file" | sha256sum -c -
+          done < /tmp/zones.tsv
+          du -sh "$ROOT/zone/all"
+
+      - name: Compile live Rust-test T6 catalog
+        working-directory: rust-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --manifest-path asset_import/importers/bo2/Cargo.toml             --lib --bin t6_asset_catalog
+
+      - name: Enumerate and decode multiplayer character and weapon assets
+        working-directory: rust-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-integration
+          CARGO="cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml --bin t6_asset_catalog --"
+
+          $CARGO /tmp/t6root mp_nuketown_2020             | tee /tmp/t6-integration/mp_catalog.log
+
+          $CARGO /tmp/t6root mp_nuketown_2020 list-models faction_cd_mp             | tee /tmp/t6-integration/faction_cd_models.log
+
+          $CARGO /tmp/t6root mp_nuketown_2020 list-models faction_fbi_mp             | tee /tmp/t6-integration/faction_fbi_models.log
+
+          $CARGO /tmp/t6root mp_nuketown_2020 weapon an94_mp             | tee /tmp/t6-integration/an94.log
+
+          $CARGO /tmp/t6root mp_nuketown_2020 model german_shepherd             | tee /tmp/t6-integration/german_shepherd.log
+
+          grep -q '^MODEL_INDEX zone=faction_cd_mp ' /tmp/t6-integration/faction_cd_models.log
+          grep -q '^MODEL_INDEX zone=faction_fbi_mp ' /tmp/t6-integration/faction_fbi_models.log
+          grep -q '^WEAPON id=an94_mp ' /tmp/t6-integration/an94.log
+          grep -q '^MODEL name=german_shepherd ' /tmp/t6-integration/german_shepherd.log
+          grep -Eq 'bones=56 .*vertices=5731 triangles=7123' /tmp/t6-integration/german_shepherd.log
+
+      - name: Enumerate Zombies character and weapon assets
+        working-directory: rust-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARGO="cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml --bin t6_asset_catalog --"
+
+          $CARGO /tmp/t6root zm_prison             | tee /tmp/t6-integration/zm_prison_catalog.log
+
+          $CARGO /tmp/t6root zm_prison list-weapons zm_prison             | tee /tmp/t6-integration/zm_prison_weapons.log
+
+          $CARGO /tmp/t6root zm_prison list-models zm_prison             | tee /tmp/t6-integration/zm_prison_models.log
+
+          grep -q '^WEAPON_INDEX zone=zm_prison ' /tmp/t6-integration/zm_prison_weapons.log
+          grep -q '^MODEL_INDEX zone=zm_prison ' /tmp/t6-integration/zm_prison_models.log
+
+          support="$(awk -F '\t' '$1 ~ /^so_/ && $1 ~ /zm_prison\.ff$/ {sub(/\.ff$/,"",$1); print $1; exit}' /tmp/zones.tsv || true)"
+          if [ -n "$support" ]; then
+            $CARGO /tmp/t6root zm_prison list-models "$support"               | tee /tmp/t6-integration/zm_prison_support_models.log
+          fi
+
+      - name: Summarize physical coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' | tee /tmp/t6-integration/summary.txt
+          import pathlib,re
+          root=pathlib.Path('/tmp/t6-integration')
+          for file in sorted(root.glob('*.log')):
+              lines=file.read_text(errors='replace').splitlines()
+              mi=sum(x.startswith('MODEL_INDEX ') for x in lines)
+              wi=sum(x.startswith('WEAPON_INDEX ') for x in lines)
+              print(f"{file.name}: model_rows={mi} weapon_rows={wi}")
+              for line in lines:
+                  if line.startswith('CATALOG '):
+                      print('  '+line)
+          PY
+
+      - name: Upload integration evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_RUST_TEST_CHARACTER_WEAPON_INTEGRATION
+          path: /tmp/t6-integration
+          if-no-files-found: error
+          retention-days: 3
