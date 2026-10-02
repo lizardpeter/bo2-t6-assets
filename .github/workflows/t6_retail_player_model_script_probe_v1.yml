@@ -54,7 +54,7 @@ jobs:
           test -x /tmp/oat-unlinker-cache/Unlinker
           sha256sum /tmp/oat-unlinker-cache/Unlinker
 
-      - name: Dump exact common_mp ScriptParseTree assets
+      - name: Dump exact MP ScriptParseTree ownership layers
         shell: bash
         run: |
           set -euo pipefail
@@ -63,17 +63,22 @@ jobs:
           BIN=/tmp/oat-unlinker-cache/Unlinker
           test -x "$BIN"
           mkdir -p /tmp/source /tmp/oatout /tmp/proof
-          curl -fL --retry 5 --retry-delay 2 -o /tmp/source/common_mp.ff https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
-          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/source/common_mp.ff' | sha256sum -c -
-          set +e
-          "$BIN" --no-color --verbose --include-assets script --output-folder /tmp/oatout /tmp/source/common_mp.ff             > /tmp/proof/unlinker_script.log 2>&1
-          rc=$?
-          set -e
-          cat /tmp/proof/unlinker_script.log
-          echo "unlinker_rc=$rc" > /tmp/proof/unlinker_return_code.txt
-          test "$rc" -eq 0
+          cat >/tmp/proof/source_fastfiles.tsv <<'EOF'
+          code_post_gfx_mp.ff	b7bce1dbe94692b1668ae9a1c83a4dcf008979ee5d5f79b3d2e619c23a1002b3
+          common_mp.ff	93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77
+          patch_mp.ff	459077cda8e4a1457f7ee7d8f6c5e0abf30f41767a21ff6744df6a4307cbce1e
+          mp_raid.ff	bca3b74d8df5a27b82e77f39ef82cbd87a19dedf30884600b73eb563acba5888
+          EOF
+          while IFS=$'\t' read -r file sha; do
+            zone="${file%.ff}"
+            curl -fL --retry 5 --retry-delay 2               -o "/tmp/source/$file"               "https://r2.houseofkublai.com/bo2/zone/all/$file"
+            echo "$sha  /tmp/source/$file" | sha256sum -c -
+            mkdir -p "/tmp/oatout/$zone"
+            "$BIN" --no-color --verbose --include-assets script               --output-folder "/tmp/oatout/$zone" "/tmp/source/$file"               >"/tmp/proof/unlinker_${zone}.log" 2>&1
+          done </tmp/proof/source_fastfiles.tsv
           find /tmp/oatout -type f | sort >/tmp/proof/script_inventory.txt
-          grep -Ei '(^|/)(_teams|_teamset|_weapons|_class|_loadout|_globallogic|_spawning|_utility).*[.](gsc|csc)$' /tmp/proof/script_inventory.txt | tee /tmp/proof/candidate_scripts.txt || true
+          grep -Ei '(^|/)(_teams|_teamset|_weapons|_class|_loadout|_bot_loadout|_globallogic|_spawning|_utility|_player).*\.(gsc|csc)$'             /tmp/proof/script_inventory.txt | tee /tmp/proof/candidate_scripts.txt || true
+          echo "candidate_count=$(wc -l </tmp/proof/candidate_scripts.txt)" | tee /tmp/proof/candidate_count.txt
           test -s /tmp/proof/candidate_scripts.txt
 
       - name: Build pinned gsc-tool
@@ -111,20 +116,32 @@ jobs:
             re.compile(r'(^|/)maps/mp/gametypes/_class[.]gsc$',re.I),
             re.compile(r'(^|/)maps/mp/gametypes/_loadout[.]gsc$',re.I),
             re.compile(r'(^|/)maps/mp/bots/_bot_loadout[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/_player[.]gsc$',re.I),
+            re.compile(r'(^|/)maps/mp/_utility[.]gsc$',re.I),
           ]
           candidates=[]
           for p in root.rglob('*'):
-              if not p.is_file(): continue
+              if not p.is_file():
+                  continue
               rel=p.relative_to(root).as_posix()
-              if any(rx.search(rel) for rx in priority):
+              # rel begins with physical FastFile owner because every zone is
+              # dumped to its own subdirectory.
+              inner='/'.join(rel.split('/')[1:])
+              if any(rx.search(inner) for rx in priority):
                   candidates.append((rel,p))
           if not candidates:
-              raise SystemExit('no target retail team/loadout scripts found')
+              raise SystemExit('no target retail team/loadout scripts found across exact MP ownership layers')
           manifest=[]
           for i,(rel,p) in enumerate(sorted(candidates)):
-              out=Path('/tmp/decomp/in')/('%03d_%s' % (i,p.name))
+              safe=rel.replace('/','__')
+              out=Path('/tmp/decomp/in')/(f'{i:03d}__{safe}')
               shutil.copy2(p,out)
-              manifest.append({'input':str(out),'retailPath':rel,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+              manifest.append({
+                  'input':str(out),
+                  'retailOwnerAndPath':rel,
+                  'bytes':p.stat().st_size,
+                  'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+              })
           Path('/tmp/proof/input_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
           print(json.dumps(manifest,indent=2))
           PY
@@ -161,9 +178,8 @@ jobs:
               rows.append({'file':p.name,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'hits':hits})
           doc={
             'format':'t6-retail-player-model-script-probe-v1',
-            'authority':'SHA-pinned retail common_mp.ff -> pinned OAT ScriptParseTree bytes -> pinned xensik/gsc-tool T6 PC decompiler',
-            'sourceFastFileSha256':'93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77',
-            'sourceExpandedSha256':'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce',
+            'authority':'SHA-pinned retail MP ownership layers -> pinned OAT ScriptParseTree bytes -> pinned xensik/gsc-tool T6 PC decompiler',
+            'sourceFastFiles':Path('/tmp/proof/source_fastfiles.tsv').read_text().splitlines(),
             'oatCommit':'9dca965366541504b71fa8cfb7ac049cb9b717e1',
             'gscToolCommit':'cd304ac752fe52ae1cd6726e5edb56e5f838595c',
             'inputs':manifest,
