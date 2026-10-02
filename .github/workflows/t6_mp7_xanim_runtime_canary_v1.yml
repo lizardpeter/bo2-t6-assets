@@ -1,0 +1,95 @@
+name: T6 MP7 XAnim runtime canary v1
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_mp7_xanim_runtime_canary_v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact FastFile expander
+        run: |
+          set -euo pipefail
+          cc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lz -lcrypto
+
+      - name: Fetch and expand exact common_mp
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-delay 2             -o /tmp/common_mp.ff             https://r2.houseofkublai.com/bo2/zone/all/common_mp.ff
+          echo '93fe48b0f0d8cc6844be875ccad94e0cfcf635f62eeff00ac33f2f668a77cb77  /tmp/common_mp.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/common_mp.ff /tmp/common_mp.expanded common_mp
+          echo 'fbd91d0ede8e27bcaaf7af9638a7118050f27519524be36e9234f980bd6170ce  /tmp/common_mp.expanded' | sha256sum -c -
+
+      - name: Recover MP7 exact XAnim roots
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mp7raw /tmp/proof
+          python3 tools/stage18d_xanim_raw.py             /tmp/common_mp.expanded             --outdir /tmp/mp7raw
+          python3 - <<'PY'
+          import json, pathlib
+          rows=json.load(open('/tmp/mp7raw/mp7_base_xanim_raw.json'))
+          target=next(r for r in rows if r['name']=='viewmodel_mp7_reload')
+          start=target['raw_struct_offset']
+          pathlib.Path('/tmp/proof/target.json').write_text(json.dumps({
+              'name':target['name'],
+              'rawStructOffset':start,
+              'numframes':target['numframes'],
+              'framerate':target['framerate'],
+              'bLoop':target['bLoop'],
+              'bDelta':target['bDelta'],
+              'boneCount':target['boneCount'],
+              'serializedSha256':target['walk'].get('exact_serialized_sha256'),
+          },indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'target':target['name'],'offset':start,'numframes':target['numframes'],'fps':target['framerate'],'delta':target['bDelta']},indent=2))
+          pathlib.Path('/tmp/target_offset').write_text(str(start))
+          PY
+
+      - name: Normalize exact MP7 reload tracks
+        run: |
+          set -euo pipefail
+          START=$(cat /tmp/target_offset)
+          python3 tools/t6_xanim_normalize_v1.py             /tmp/common_mp.expanded             --asset-start "$START"             --out /tmp/proof/viewmodel_mp7_reload.normalized.json
+          python3 tools/t6_xanim_quaternion_semantics.py             /tmp/proof/viewmodel_mp7_reload.normalized.json             /tmp/proof/viewmodel_mp7_reload.semantic.json
+          python3 - <<'PY'
+          import json, pathlib, hashlib
+          d=json.load(open('/tmp/proof/viewmodel_mp7_reload.semantic.json'))
+          tracks=d['boneTracks']
+          summary={
+              'format':'t6-mp7-xanim-runtime-canary-v1',
+              'name':d['name'],
+              'numframes':d['header']['numframes'],
+              'framerate':d['header']['framerate'],
+              'sampleCount':d['header']['numframes']+1,
+              'durationSeconds':d['header']['numframes']/d['header']['framerate'],
+              'loop':bool(d['header']['bLoop']),
+              'deltaPresent':bool(d.get('delta')),
+              'boneTrackCount':len(tracks),
+              'boneNames':[t['name'] for t in tracks],
+              'quatTypeCounts':{},
+              'transTypeCounts':{},
+              'allFlatPoolsExhausted':d['allFlatPoolsExhausted'],
+              'normalizedSha256':hashlib.sha256(pathlib.Path('/tmp/proof/viewmodel_mp7_reload.semantic.json').read_bytes()).hexdigest(),
+          }
+          from collections import Counter
+          summary['quatTypeCounts']=dict(Counter((t.get('quat') or {}).get('type') for t in tracks))
+          summary['transTypeCounts']=dict(Counter((t.get('trans') or {}).get('type') for t in tracks))
+          pathlib.Path('/tmp/proof/summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_MP7_XANIM_RUNTIME_CANARY_V1
+          path: /tmp/proof
+          if-no-files-found: error
+          compression-level: 9
