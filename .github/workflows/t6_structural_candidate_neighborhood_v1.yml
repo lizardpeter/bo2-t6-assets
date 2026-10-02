@@ -1,0 +1,313 @@
+name: T6 structural candidate neighborhood evidence v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_structural_candidate_neighborhood_v1.yml'
+      - 'tools/ghidra_scripts/ExportT6CandidateDetails.java'
+      - 'proof/current_client/structural_cross_build_match_v1/candidates.tsv'
+      - 'proof/current_client/pdb_exact_hash_join_v2_graph353/join.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GHIDRA_ZIP_SHA256: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  CLIENT_CACHE_KEY: t6-current-client-ghidra-12.1.3-77031817-v1
+  CLIENT_SHA256: 770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf
+  SERVER_EXE_SHA256: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+  SERVER_PDB_SHA256: 7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc
+  SERVER_CACHE_KEY: t6-server-ghidra-12.1.3-f67eb68a-7874efc2-pdb-v1
+
+jobs:
+  corroborate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build exact 99-pair selections
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-candidate-details
+          python3 - <<'PY'
+          import csv,pathlib
+          src=pathlib.Path('proof/current_client/structural_cross_build_match_v1/candidates.tsv')
+          with src.open(encoding='utf-8',newline='') as f:
+              rows=[r for r in csv.DictReader(f,dialect='excel-tab')
+                    if r['game_or_engine_context'].lower()=='true']
+          assert len(rows)==99,len(rows)
+          for side,col in [('client','client_va'),('server','server_va')]:
+              p=pathlib.Path('/tmp/t6-candidate-details')/(side+'_selection.tsv')
+              with p.open('w',encoding='utf-8',newline='') as f:
+                  w=csv.writer(f,delimiter='\t',lineterminator='\n')
+                  w.writerow(['pair_id','va'])
+                  for r in rows:
+                      pair=r['client_va'].lower()+'__'+r['server_va'].lower()
+                      w.writerow([pair,r[col].lower().removeprefix('0x')])
+          PY
+
+      - name: Install verified Ghidra
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/ghidra.zip \
+            https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_ZIP_SHA256  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp
+          GHIDRA_HOME="$(find /tmp -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+
+      - name: Restore pristine analyzed retail project
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-ghidra/projects
+          key: ${{ env.CLIENT_CACHE_KEY }}
+          fail-on-cache-miss: true
+
+      - name: Export retail candidate details
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-candidate-details/client /tmp/t6-ghidra/config-details /tmp/t6-ghidra/cache-details
+          export XDG_CONFIG_HOME=/tmp/t6-ghidra/config-details
+          export XDG_CACHE_HOME=/tmp/t6-ghidra/cache-details
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-ghidra/projects t6-current-client \
+            -process t6mp.exe -noanalysis -readOnly \
+            -postScript ExportT6CandidateDetails.java \
+              /tmp/t6-candidate-details/client_selection.tsv /tmp/t6-candidate-details/client \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+
+      - name: Fetch exact server EXE and PDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-ref
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/t6-server-ref/CoDMPServer_PC.exe \
+            'https://drive.usercontent.google.com/download?id=1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n&export=download&confirm=t'
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/t6-server-ref/CoDMPServer_PC.pdb \
+            'https://drive.usercontent.google.com/download?id=1HLGAl3Pbeyv7FDx39vSncy-iRHa4-oCR&export=download&confirm=t'
+          echo "$SERVER_EXE_SHA256  /tmp/t6-server-ref/CoDMPServer_PC.exe" | sha256sum --check
+          echo "$SERVER_PDB_SHA256  /tmp/t6-server-ref/CoDMPServer_PC.pdb" | sha256sum --check
+
+      - name: Restore PDB-backed server project
+        id: server-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: ${{ env.SERVER_CACHE_KEY }}
+
+      - name: Import and analyze exact server if needed
+        if: steps.server-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-ghidra/projects /tmp/t6-server-ghidra/config /tmp/t6-server-ghidra/cache
+          export XDG_CONFIG_HOME=/tmp/t6-server-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-server-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -import /tmp/t6-server-ref/CoDMPServer_PC.exe -overwrite \
+            -preScript ConfigureT6ServerPdbAnalysis.java \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" \
+            -analysisTimeoutPerFile 3600 -max-cpu 4
+
+      - name: Save server project cache if newly built
+        if: steps.server-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: ${{ env.SERVER_CACHE_KEY }}
+
+      - name: Export server candidate details
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-candidate-details/server /tmp/t6-server-ghidra/config-details /tmp/t6-server-ghidra/cache-details
+          export XDG_CONFIG_HOME=/tmp/t6-server-ghidra/config-details
+          export XDG_CACHE_HOME=/tmp/t6-server-ghidra/cache-details
+          export GHIDRA_HEADLESS_MAXMEM=8G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -process CoDMPServer_PC.exe -noanalysis -readOnly \
+            -postScript ExportT6CandidateDetails.java \
+              /tmp/t6-candidate-details/server_selection.tsv /tmp/t6-candidate-details/server \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+
+      - name: Build independent neighborhood corroboration ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/structural_candidate_neighborhood_v1
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          python3 - <<'PY'
+          import csv,hashlib,json,pathlib
+          from collections import defaultdict
+
+          root=pathlib.Path('/tmp/t6-candidate-details')
+          def read(p):
+              with p.open(encoding='utf-8',newline='') as f:
+                  return list(csv.DictReader(f,dialect='excel-tab'))
+          def bypair(rows):
+              d=defaultdict(list)
+              for r in rows:d[r['pair_id']].append(r)
+              return d
+          client_calls=bypair(read(root/'client/calls.tsv'))
+          server_calls=bypair(read(root/'server/calls.tsv'))
+          client_strings=bypair(read(root/'client/strings.tsv'))
+          server_strings=bypair(read(root/'server/strings.tsv'))
+          client_data=bypair(read(root/'client/data_refs.tsv'))
+          server_data=bypair(read(root/'server/data_refs.tsv'))
+
+          anchors=json.load(open('proof/current_client/pdb_exact_hash_join_v2_graph353/join.json'))
+          amap={}
+          for x in anchors['matches']:
+              if x.get('state')!='accepted-exact-byte-identity-witness':continue
+              c=x['current_client_va'].lower()
+              if not c.startswith('0x'):c='0x'+c
+              s=x['server_address_start'].lower()
+              if not s.startswith('0x'):s='0x'+s
+              amap[c]=s
+
+          with open('proof/current_client/structural_cross_build_match_v1/candidates.tsv',encoding='utf-8',newline='') as f:
+              candidates=[r for r in csv.DictReader(f,dialect='excel-tab')
+                          if r['game_or_engine_context'].lower()=='true']
+          assert len(candidates)==99
+
+          def norm(v):
+              s=(v or '').lower().removeprefix('0x')
+              return '0x'+format(int(s,16),'08x') if s else ''
+          def one_by_off(rows):
+              d=defaultdict(list)
+              for r in rows:d[r['from_offset'].lower()].append(r)
+              return d
+
+          out=[]
+          for c in candidates:
+              pair=c['client_va'].lower()+'__'+c['server_va'].lower()
+              cc=one_by_off(client_calls[pair]); sc=one_by_off(server_calls[pair])
+              common=sorted(set(cc)&set(sc),key=lambda x:int(x,16))
+              anchor_matches=anchor_conflicts=0
+              anchor_details=[]
+              same_named_targets=0
+              for off in common:
+                  # Direct call instructions normally have one call reference. Preserve all if not.
+                  for cr in cc[off]:
+                      mapped=amap.get(norm(cr['target_function_va'] or cr['target_va']))
+                      for sr in sc[off]:
+                          st=norm(sr['target_function_va'] or sr['target_va'])
+                          if mapped:
+                              if mapped==st:
+                                  anchor_matches+=1
+                                  anchor_details.append({
+                                    'offset':off,'client_target':norm(cr['target_function_va'] or cr['target_va']),
+                                    'server_target':st,'server_target_name':sr['target_function_name']
+                                  })
+                              else:
+                                  anchor_conflicts+=1
+                          cn=cr['target_function_name']; sn=sr['target_function_name']
+                          if cn and sn and cn==sn and not cn.startswith('FUN_'):
+                              same_named_targets+=1
+
+              cs={r['text'] for r in client_strings[pair]}
+              ss={r['text'] for r in server_strings[pair]}
+              shared_strings=sorted(cs&ss)
+              client_only=sorted(cs-ss); server_only=sorted(ss-cs)
+              cdo={r['from_offset'].lower() for r in client_data[pair]}
+              sdo={r['from_offset'].lower() for r in server_data[pair]}
+
+              if anchor_conflicts:
+                  state='candidate-neighborhood-conflict'
+              elif anchor_matches>=2:
+                  state='corroborated-exact-anchor-callees'
+              elif anchor_matches>=1 and shared_strings:
+                  state='corroborated-anchor-plus-string'
+              elif len(shared_strings)>=3:
+                  state='corroborated-shared-string-set'
+              else:
+                  state='candidate-needs-more-independent-evidence'
+
+              out.append({
+                'pair_id':pair,
+                'client_va':norm(c['client_va']),
+                'server_va':norm(c['server_va']),
+                'server_symbols':c['server_symbols'].split(';') if c['server_symbols'] else [],
+                'server_objects':c['server_objects'].split(';') if c['server_objects'] else [],
+                'scheme_vote_count':int(c['scheme_vote_count']),
+                'matched_schemes':c['matched_schemes'].split(';'),
+                'client_call_count':sum(map(len,cc.values())),
+                'server_call_count':sum(map(len,sc.values())),
+                'common_call_offsets':len(common),
+                'exact_anchor_callee_matches':anchor_matches,
+                'exact_anchor_callee_conflicts':anchor_conflicts,
+                'same_named_call_targets':same_named_targets,
+                'anchor_callee_details':anchor_details,
+                'client_unique_strings':len(cs),
+                'server_unique_strings':len(ss),
+                'shared_unique_strings':len(shared_strings),
+                'shared_strings':shared_strings,
+                'client_only_strings':client_only,
+                'server_only_strings':server_only,
+                'client_data_ref_offsets':len(cdo),
+                'server_data_ref_offsets':len(sdo),
+                'shared_data_ref_offsets':len(cdo&sdo),
+                'state':state,
+              })
+
+          states={}
+          for x in out:states[x['state']]=states.get(x['state'],0)+1
+          summary={
+            'format':'t6-structural-candidate-neighborhood-v1',
+            'candidate_pairs':len(out),
+            'state_counts':dict(sorted(states.items())),
+            'pairs_with_exact_anchor_callee_match':sum(x['exact_anchor_callee_matches']>0 for x in out),
+            'pairs_with_exact_anchor_callee_conflict':sum(x['exact_anchor_callee_conflicts']>0 for x in out),
+            'pairs_with_shared_strings':sum(x['shared_unique_strings']>0 for x in out),
+            'proof_boundary':'Independent targeted Ghidra reference/string evidence for structural candidates. Corroborated states strengthen candidates but do not by themselves import server prototypes/types/globals/layouts into retail.'
+          }
+          pathlib.Path('/tmp/t6-candidate-details/result.json').write_text(json.dumps({'summary':summary,'pairs':out},indent=2,sort_keys=True)+'\n')
+          pathlib.Path('/tmp/t6-candidate-details/summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+
+          # Fail closed if any exact-anchor neighborhood contradicts the candidate target.
+          # The proof is still committed for diagnosis only by removing this assertion manually.
+          assert summary['pairs_with_exact_anchor_callee_conflict']==0,summary
+          PY
+          cp /tmp/t6-candidate-details/summary.json "$OUT/summary.json"
+          cp /tmp/t6-candidate-details/result.json "$OUT/result.json"
+          cp /tmp/t6-candidate-details/client/functions.tsv "$OUT/client_functions.tsv"
+          cp /tmp/t6-candidate-details/client/calls.tsv "$OUT/client_calls.tsv"
+          cp /tmp/t6-candidate-details/client/strings.tsv "$OUT/client_strings.tsv"
+          cp /tmp/t6-candidate-details/server/functions.tsv "$OUT/server_functions.tsv"
+          cp /tmp/t6-candidate-details/server/calls.tsv "$OUT/server_calls.tsv"
+          cp /tmp/t6-candidate-details/server/strings.tsv "$OUT/server_strings.tsv"
+          git diff --check
+
+      - name: Commit corroboration proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/structural_candidate_neighborhood_v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: corroborate T6 structural candidates with Ghidra neighborhoods"
+          git pull --rebase origin main
+          git push origin HEAD:main
