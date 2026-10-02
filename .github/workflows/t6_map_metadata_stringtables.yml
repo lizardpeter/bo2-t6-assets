@@ -1,0 +1,187 @@
+name: T6 map metadata StringTables
+
+on:
+  push:
+    branches:
+      - probe-t6-map-metadata
+    paths:
+      - ".github/workflows/t6_map_metadata_stringtables.yml"
+      - "tools/t6_oat_9dca_gcc_compat_patch_v3.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore exact pinned OAT Unlinker cache
+        id: oat-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/oat-unlinker-cache
+          key: oat-unlinker-t6-9dca965366541504b71fa8cfb7ac049cb9b717e1-compat-v3-${{ hashFiles('tools/t6_oat_9dca_gcc_compat_patch_v3.py') }}-ubuntu24-x86-debug
+
+      - name: Build or verify pinned OAT Unlinker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof /tmp/game /tmp/oat-unlinker-cache
+          CACHE_BIN=/tmp/oat-unlinker-cache/Unlinker
+          CACHE_META=/tmp/oat-unlinker-cache/source_identity.txt
+          EXPECTED_COMMIT=9dca965366541504b71fa8cfb7ac049cb9b717e1
+          PATCH_SHA=$(sha256sum tools/t6_oat_9dca_gcc_compat_patch_v3.py | awk '{print $1}')
+          if test "${{ steps.oat-cache.outputs.cache-hit }}" = 'true'; then
+            test -x "$CACHE_BIN"
+            test -f "$CACHE_META"
+            grep -qx "oat_commit=$EXPECTED_COMMIT" "$CACHE_META"
+            grep -qx "compat_patch_sha256=$PATCH_SHA" "$CACHE_META"
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq g++-multilib >/dev/null
+            git clone -q --recursive https://github.com/Laupetin/OpenAssetTools.git /tmp/oat
+            git -C /tmp/oat checkout -q "$EXPECTED_COMMIT"
+            git -C /tmp/oat submodule update -q --init --recursive
+            python3 tools/t6_oat_9dca_gcc_compat_patch_v3.py /tmp/oat
+            git -C /tmp/oat diff --check
+            cd /tmp/oat
+            PREMAKE_NO_PROMPT=1 ./generate.sh
+            make -C build -j2 config=debug_x86 UnlinkerCli 2>&1 | tee /tmp/proof/oat_build.log
+            BIN=$(find build/bin -type f \( -name Unlinker -o -name unlinker \) | head -1)
+            test -n "$BIN"
+            install -m 0755 "$BIN" "$CACHE_BIN"
+            printf 'oat_commit=%s\ncompat_patch_sha256=%s\n' "$EXPECTED_COMMIT" "$PATCH_SHA" > "$CACHE_META"
+          fi
+          sha256sum "$CACHE_BIN" | tee /tmp/proof/unlinker_sha256.txt
+          printf '%s\n' "$CACHE_BIN" > /tmp/unlinker_path
+
+      - name: Select exact UI and localization FastFiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/targets.tsv
+          import json
+          d=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json',encoding='utf-8'))
+          wanted={
+            'ui_mp.ff','ui_zm.ff','patch_ui_mp.ff','patch_ui_zm.ff',
+            'en_ui_mp.ff','en_ui_zm.ff','en_patch_ui_mp.ff','en_patch_ui_zm.ff',
+            'common_mp.ff','common_zm.ff','patch_mp.ff','patch_zm.ff',
+          }
+          rows={r['file']:r for r in d['rows']}
+          missing=sorted(wanted-set(rows))
+          if missing:
+            raise SystemExit(f'missing manifest rows: {missing}')
+          for name in sorted(wanted):
+            r=rows[name]
+            rel=r['zipPath'].split('pluto_t6_full_game/',1)[-1]
+            print(f"{name}\t{r['fastFileSha256']}\t{rel}")
+          PY
+          cat /tmp/targets.tsv
+
+      - name: Download exact retail UI roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r file sha rel; do
+            out="/tmp/game/$rel"
+            mkdir -p "$(dirname "$out")"
+            curl -fL --retry 4 --retry-delay 2 -o "$out" "https://r2.houseofkublai.com/bo2/$rel"
+            echo "$sha  $out" | sha256sum -c -
+          done < /tmp/targets.tsv
+
+      - name: Dump every StringTable from selected roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/dumps/stringtables /tmp/logs
+          while IFS=$'\t' read -r file sha rel; do
+            src="/tmp/game/$rel"
+            stem="${file%.ff}"
+            out="/tmp/dumps/stringtables/$stem"
+            mkdir -p "$out"
+            set +e
+            "$BIN" --no-color --verbose --include-assets stringtable --output-folder "$out" "$src" >"/tmp/logs/${stem}_stringtable.log" 2>&1
+            rc=$?
+            set -e
+            echo "$stem stringtable rc=$rc"
+            test "$rc" -eq 0
+          done < /tmp/targets.tsv
+
+      - name: Dump English LocalizeEntry assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(cat /tmp/unlinker_path)
+          mkdir -p /tmp/dumps/localize
+          while IFS=$'\t' read -r file sha rel; do
+            case "$file" in
+              en_*.ff)
+                src="/tmp/game/$rel"
+                stem="${file%.ff}"
+                out="/tmp/dumps/localize/$stem"
+                mkdir -p "$out"
+                set +e
+                "$BIN" --no-color --verbose --include-assets localize --output-folder "$out" "$src" >"/tmp/logs/${stem}_localize.log" 2>&1
+                rc=$?
+                set -e
+                echo "$stem localize rc=$rc"
+                test "$rc" -eq 0
+                ;;
+            esac
+          done < /tmp/targets.tsv
+
+      - name: Build map-metadata candidate report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re, hashlib
+          roots=Path('/tmp/dumps/stringtables')
+          patterns=[
+            re.compile(r'(^|[,/])mp_[a-z0-9_]+',re.I),
+            re.compile(r'(^|[,/])zm_[a-z0-9_]+',re.I),
+            re.compile(r'mappack|map_pack|dlc|location|preview|thumbnail|description|mapname|map_name',re.I),
+            re.compile(r'nuketown|raid|hijacked|prison|tomb|buried|highrise|transit',re.I),
+          ]
+          candidates=[]
+          for p in sorted(roots.rglob('*.csv')):
+            raw=p.read_text(encoding='utf-8',errors='replace')
+            lines=raw.splitlines()
+            hits=[]
+            for i,line in enumerate(lines):
+              if any(rx.search(line) for rx in patterns):
+                hits.append({'line':i+1,'text':line[:2000]})
+            if hits:
+              candidates.append({
+                'path':str(p.relative_to(roots)),
+                'bytes':p.stat().st_size,
+                'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+                'hitCount':len(hits),
+                'hits':hits[:200],
+              })
+          report={'format':'t6-map-metadata-stringtable-candidates-v1','candidateCount':len(candidates),'candidates':candidates}
+          out=Path('/tmp/proof/T6_MAP_METADATA_STRINGTABLE_CANDIDATES_V1.json')
+          out.write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          print(json.dumps({'candidateCount':len(candidates),'paths':[x['path'] for x in candidates]},indent=2))
+          PY
+
+      - name: Upload exact map metadata evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_MAP_METADATA_STRINGTABLES
+          path: |
+            /tmp/proof
+            /tmp/dumps/stringtables
+            /tmp/dumps/localize
+            /tmp/logs
+            /tmp/targets.tsv
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 9
