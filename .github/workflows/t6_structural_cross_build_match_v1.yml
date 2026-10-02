@@ -7,7 +7,7 @@ on:
       - 'tools/t6_structural_cross_build_match_v1.py'
       - 'proof/current_client/structural_fingerprints_v1/**'
       - 'proof/server_structural_fingerprints_v1/**'
-      - 'proof/server_structural_ranges_v1/**'
+      - 'proof/server_pdb_exact_hashes_v1/**'
       - 'proof/current_client/pdb_exact_hash_join_v2_graph353/join.json'
   workflow_dispatch:
 
@@ -31,6 +31,7 @@ jobs:
           set -euo pipefail
           test -s proof/current_client/structural_fingerprints_v1/summary.json
           test -s proof/server_structural_fingerprints_v1/summary.json
+          test -s proof/server_pdb_exact_hashes_v1/server_pdb_exact_hashes_0000.tsv
           python3 - <<'PY'
           import json
           c=json.load(open('proof/current_client/structural_fingerprints_v1/summary.json'))
@@ -51,7 +52,7 @@ jobs:
           python3 tools/t6_structural_cross_build_match_v1.py \
             --client-dir proof/current_client/structural_fingerprints_v1 \
             --server-dir proof/server_structural_fingerprints_v1 \
-            --server-ranges-dir proof/server_structural_ranges_v1 \
+            --server-ranges-dir proof/server_pdb_exact_hashes_v1 \
             --anchors proof/current_client/pdb_exact_hash_join_v2_graph353/join.json \
             --out-dir "$OUT" \
             --min-anchor-tests 20 \
