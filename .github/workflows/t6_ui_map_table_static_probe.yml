@@ -1,0 +1,121 @@
+name: T6 UI map table static probe
+
+on:
+  push:
+    branches: [probe-t6-map-metadata]
+    paths:
+      - '.github/workflows/t6_ui_map_table_static_probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact dedicated-server executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proof
+          curl --fail --location --retry 5 --retry-all-errors \
+            -o /tmp/CoDMPServer_PC.exe \
+            'https://drive.usercontent.google.com/download?id=1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n&export=download&confirm=t'
+          echo 'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d  /tmp/CoDMPServer_PC.exe' | sha256sum -c -
+
+      - name: Install static-analysis dependencies
+        run: python3 -m pip install --quiet pefile capstone
+
+      - name: Recover UI map-table literals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          import pefile
+          from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+          from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+
+          raw=Path('/tmp/CoDMPServer_PC.exe').read_bytes()
+          pe=pefile.PE(data=raw,fast_load=False)
+          base=pe.OPTIONAL_HEADER.ImageBase
+          funcs={
+            'UI_Project_AssetCache':(0x00717220,46),
+            'UI_SetMap':(0x00717290,133),
+            'UI_GetMapTableName':(0x00717420,20),
+            'UI_GetMapName':(0x00717440,135),
+            'UI_GetZMMapStartLocName':(0x00717600,171),
+            'UI_SetMapStartLocation':(0x007186b0,82),
+            'UI_GetMapDisplayNameCaps':(0x00718820,80),
+            'UI_GetMapLocationName':(0x00718870,85),
+            'UI_GetGameTypeOnMapName':(0x00718bc0,198),
+          }
+
+          def off_for_va(va):
+            try: return pe.get_offset_from_rva(va-base)
+            except Exception: return None
+
+          def cstr(va,maxn=1024):
+            off=off_for_va(va)
+            if off is None or off < 0 or off >= len(raw): return None
+            end=raw.find(b'\0',off,min(len(raw),off+maxn))
+            if end < 0: return None
+            b=raw[off:end]
+            if len(b)<2: return None
+            try: s=b.decode('ascii')
+            except UnicodeDecodeError: return None
+            return s if all(32 <= ord(ch) < 127 or ch in '\t\r\n' for ch in s) else None
+
+          md=Cs(CS_ARCH_X86,CS_MODE_32)
+          md.detail=True
+          report={'format':'t6-ui-map-table-static-probe-v1','imageBaseHex':hex(base),'functions':{},'csvCandidates':[]}
+          for name,(va,size) in funcs.items():
+            off=off_for_va(va)
+            if off is None: raise SystemExit(f'unmapped function {name} {va:#x}')
+            code=raw[off:off+size]
+            insns=[]; refs=[]
+            for ins in md.disasm(code,va):
+              insns.append({'addressHex':hex(ins.address),'bytesHex':ins.bytes.hex(),'mnemonic':ins.mnemonic,'opStr':ins.op_str})
+              values=[]
+              for op in ins.operands:
+                if op.type==X86_OP_IMM:
+                  values.append(op.imm & 0xffffffff)
+                elif op.type==X86_OP_MEM and op.mem.base==0 and op.mem.index==0:
+                  values.append(op.mem.disp & 0xffffffff)
+              for value in values:
+                s=cstr(value)
+                if s:
+                  refs.append({'instructionHex':hex(ins.address),'addressHex':hex(value),'string':s})
+            report['functions'][name]={'vaHex':hex(va),'size':size,'bytesHex':code.hex(),'instructions':insns,'stringRefs':refs}
+
+          # Exact executable string census for likely table names and map UI metadata.
+          printable=re.compile(rb'[ -~]{4,}\x00')
+          for m in printable.finditer(raw):
+            s=m.group()[:-1].decode('ascii','ignore')
+            low=s.lower()
+            if '.csv' in low and any(k in low for k in ('map','ui','playlist','dlc','location')):
+              report['csvCandidates'].append({'fileOffsetHex':hex(m.start()),'string':s})
+
+          out=Path('/tmp/proof/T6_UI_MAP_TABLE_STATIC_PROBE_V1.json')
+          out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('FUNCTION STRING REFS')
+          for name,row in report['functions'].items():
+            if row['stringRefs']:
+              print(name,json.dumps(row['stringRefs'],ensure_ascii=False))
+          print('CSV CANDIDATES')
+          for row in report['csvCandidates']:
+            print(row['string'])
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: T6_UI_MAP_TABLE_STATIC_PROBE_V1
+          path: /tmp/proof/T6_UI_MAP_TABLE_STATIC_PROBE_V1.json
+          if-no-files-found: error
+          retention-days: 3
