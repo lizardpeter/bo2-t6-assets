@@ -55,6 +55,12 @@ jobs:
           SetupWeaponCamoRender	SetupWeaponCamoRender	weapon-camo-consumer
           SetupWeaponOptionsRender	SetupWeaponOptionsRender	weapon-camo-consumer
           BG_GetWeaponOptionSubIndex	BG_GetWeaponOptionSubIndex	weapon-option-index
+          BG_LoadWeaponOptions	BG_LoadWeaponOptions	weapon-option-table
+          InitWeaponOptions	InitWeaponOptions	weapon-option-table
+          DisplayRenderOption	DisplayRenderOption	weapon-option-table
+          IsValidRenderOption	IsValidRenderOption	weapon-option-table
+          CG_SetupWeaponOptionsRender	CG_SetupWeaponOptionsRender	weapon-option-consumer
+          G_UpdatePlayerWeaponOptions	G_UpdatePlayerWeaponOptions	weapon-option-consumer
           EOF
 
       - name: Export exact PDB-backed functions
