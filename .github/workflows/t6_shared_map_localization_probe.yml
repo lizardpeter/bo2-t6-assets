@@ -1,0 +1,62 @@
+name: T6 shared map localization probe
+
+on:
+  push:
+    branches:
+      - probe-t6-character-xassets
+    paths:
+      - ".github/workflows/t6_shared_map_localization_probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact FastFile expander
+        run: gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Select shared English layers
+        shell: bash
+        run: |
+          python - <<'PY' > /tmp/targets.tsv
+          import json
+          wanted={
+            'en_common.ff','en_patch.ff',
+            'en_code_post_gfx_mp.ff','en_common_mp.ff','en_ui_mp.ff','en_patch_ui_mp.ff','en_patch_mp.ff',
+            'en_code_post_gfx_zm.ff','en_common_zm.ff','en_ui_zm.ff','en_patch_ui_zm.ff','en_patch_zm.ff',
+          }
+          d=json.load(open('proof/xanim/T6_ALL_FASTFILE_XANIM_BRANCH_CORPUS_V1.json'))
+          for r in d['rows']:
+              if r['file'] in wanted:
+                  print(f"{r['file']}\t{r['fastFileSha256']}")
+          PY
+          cat /tmp/targets.tsv
+
+      - name: Download verify expand and scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-shared-localize/expanded /tmp/t6-shared-localize/strings
+          while IFS=$'\t' read -r file sha; do
+            curl -fL --retry 4 --retry-delay 2               -o "/tmp/$file"               "https://r2.houseofkublai.com/bo2/zone/english/$file"
+            echo "$sha  /tmp/$file" | sha256sum -c -
+            stem="${file%.ff}"
+            /tmp/t6_expand "/tmp/$file" "/tmp/t6-shared-localize/expanded/$stem.bin" "$stem"
+            strings -a -t x "/tmp/t6-shared-localize/expanded/$stem.bin" > "/tmp/t6-shared-localize/strings/$stem.txt"
+          done < /tmp/targets.tsv
+
+          grep -R -n -E             'MPUI_(RAID|NUKETOWN2025|HIJACKED)(_LOC)?|ZMUI_(PRISON|TOMB|BURIED|HIGHRISE|TRANSIT)(_LOC)?|MPUI_DESC_MAP_RAID|ZMUI_DESC_MAP_PRISON'             /tmp/t6-shared-localize/strings             | tee /tmp/t6-shared-localize/matches.txt || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: T6_SHARED_MAP_LOCALIZATION_PROBE
+          compression-level: 0
+          retention-days: 3
+          path: /tmp/t6-shared-localize
+          if-no-files-found: error
