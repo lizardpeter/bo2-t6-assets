@@ -1,0 +1,82 @@
+name: T6 calibrated structural cross-build match v1
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_structural_cross_build_match_v1.yml'
+      - 'tools/t6_structural_cross_build_match_v1.py'
+      - 'proof/current_client/structural_fingerprints_v1/**'
+      - 'proof/server_structural_fingerprints_v1/**'
+      - 'proof/server_structural_ranges_v1/**'
+      - 'proof/current_client/pdb_exact_hash_join_v2_graph353/join.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require both verified fingerprint ledgers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s proof/current_client/structural_fingerprints_v1/summary.json
+          test -s proof/server_structural_fingerprints_v1/summary.json
+          python3 - <<'PY'
+          import json
+          c=json.load(open('proof/current_client/structural_fingerprints_v1/summary.json'))
+          s=json.load(open('proof/server_structural_fingerprints_v1/summary.json'))
+          assert c['function_rows']==24617,c
+          assert c['build_sha256']=='770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf'
+          assert s['exe_sha256']=='f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d'
+          assert s['pdb_sha256']=='7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc'
+          assert s['function_rows']>20000,s
+          PY
+
+      - name: Run anchor-calibrated changed-byte matcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=proof/current_client/structural_cross_build_match_v1
+          rm -rf "$OUT"
+          python3 tools/t6_structural_cross_build_match_v1.py \
+            --client-dir proof/current_client/structural_fingerprints_v1 \
+            --server-dir proof/server_structural_fingerprints_v1 \
+            --server-ranges-dir proof/server_structural_ranges_v1 \
+            --anchors proof/current_client/pdb_exact_hash_join_v2_graph353/join.json \
+            --out-dir "$OUT" \
+            --min-anchor-tests 20 \
+            --min-instructions 8
+          python3 - <<'PY'
+          import json
+          s=json.load(open('proof/current_client/structural_cross_build_match_v1/summary.json'))
+          assert s['accepted_exact_anchor_count']==353,s
+          assert s['client_function_rows']==24617,s
+          # At least one zero-error calibrated structural scheme must survive.
+          assert s['safe_zero_error_schemes'],s
+          for name in s['safe_zero_error_schemes']:
+              c=s['calibration'][name]
+              assert c['tested_unique_anchors']>=20,(name,c)
+              assert c['wrong']==0,(name,c)
+          print(json.dumps(s,indent=2,sort_keys=True))
+          PY
+          git diff --check
+
+      - name: Commit candidate-only structural proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proof/current_client/structural_cross_build_match_v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "proof: add calibrated T6 changed-byte structural candidates"
+          git pull --rebase origin main
+          git push origin HEAD:main
