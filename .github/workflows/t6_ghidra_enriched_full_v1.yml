@@ -118,7 +118,7 @@ jobs:
               w.writerow(['function_id','requested_va','tier','reserved'])
               for r in part:
                   va=int(r['entry_va'],16)
-                  w.writerow([f'urn:ure:t6:occ:function:current-client:{va:08x}',r['entry_va'],'xbuild-enriched-full',''])
+                  w.writerow([f'urn:ure:t6:occ:function:current-client:{va:08x}',f'0x{va:08x}','xbuild-enriched-full',''])
           PY
 
       - name: Export enriched pseudocode shard
@@ -135,6 +135,14 @@ jobs:
               /tmp/t6-full/selection.tsv /tmp/t6-full/batch 15 \
             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
           test -s /tmp/t6-full/batch/results.tsv
+          python3 - <<'PY'
+          import csv,os,pathlib
+          p=pathlib.Path('/tmp/t6-full/batch/results.tsv')
+          rows=list(csv.DictReader(p.open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          expected=int(os.environ['SHARD_LIMIT'])
+          assert len(rows)==expected, f"Ghidra export produced {len(rows)} rows; expected {expected}"
+          assert all(r['found_exact']=='true' for r in rows), "Ghidra export lost exact retail entries"
+          PY
 
       - name: Package shard
         shell: bash
