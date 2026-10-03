@@ -123,6 +123,34 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("model_lighting_private_gap_summary.tsv"), gapSummary.toString(), StandardCharsets.UTF_8);
         Files.writeString(out.resolve("summary.tsv"), summary.toString(), StandardCharsets.UTF_8);
 
+        // Load_BuildVertexDecl proves s_streamSourceInfo is a contiguous
+        // [VERTDECL_COUNT][STREAM_SRC_COUNT] table of three bytes per entry:
+        // Stream, Offset and D3D11 input Type/DXGI format. Archive the raw
+        // table directly so model-lightmap auxiliary stream semantics are
+        // established from retail data rather than inferred from draw code.
+        final int vertexDeclCount = 20;
+        final int streamSourceCount = 11;
+        final int streamSourceStride = 3;
+        Address streamSourceBase = toAddr("00D0F0C8");
+        StringBuilder streamSources = new StringBuilder(
+            "vertex_decl_type\tsource\tstream\toffset\ttype\n");
+        for (int decl = 0; decl < vertexDeclCount; decl++) {
+            for (int source = 0; source < streamSourceCount; source++) {
+                Address row = streamSourceBase.add(
+                    (long)(decl * streamSourceCount + source) * streamSourceStride);
+                int stream = Byte.toUnsignedInt(currentProgram.getMemory().getByte(row));
+                int offset = Byte.toUnsignedInt(currentProgram.getMemory().getByte(row.add(1)));
+                int type = Byte.toUnsignedInt(currentProgram.getMemory().getByte(row.add(2)));
+                streamSources.append(decl).append("\t")
+                    .append(source).append("\t")
+                    .append(stream).append("\t")
+                    .append(offset).append("\t")
+                    .append(type).append("\n");
+            }
+        }
+        Files.writeString(out.resolve("stream_source_info.tsv"),
+            streamSources.toString(), StandardCharsets.UTF_8);
+
         // Follow the exact modelLightGlob image pointer rather than relying on
         // function-name guesses. 0x084F6EA4 is the GfxImage* loaded by
         // R_SetupDynamicModelLighting. Export every containing function that
