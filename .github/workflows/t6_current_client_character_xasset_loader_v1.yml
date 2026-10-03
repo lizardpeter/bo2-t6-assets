@@ -83,11 +83,11 @@ jobs:
           mkdir -p /tmp/t6-character-xasset/batch
           cat > /tmp/t6-character-xasset/selection.tsv <<'EOF'
           function_id	requested_va	tier	source
-          urn:ure:t6:character-xasset:DB_GetXAssetTypeSize	0x005230C0	target	current-client-pdb-address
-          urn:ure:t6:character-xasset:DB_GetXAssetName	0x004DCFE0	target	current-client-pdb-address
-          urn:ure:t6:character-xasset:DB_SetXAssetName	0x0046E4F0	target	current-client-pdb-address
-          urn:ure:t6:character-xasset:Load_XAssetHeader	0x005E43D0	target	current-client-pdb-address
-          urn:ure:t6:character-xasset:Load_XAsset	0x006EBE10	target	current-client-pdb-address
+          urn:ure:t6:character-xasset:DB_GetXAssetTypeSize	name:DB_GetXAssetTypeSize	target	current-client-pdb-symbol
+          urn:ure:t6:character-xasset:DB_GetXAssetName	name:DB_GetXAssetName	target	current-client-pdb-symbol
+          urn:ure:t6:character-xasset:DB_SetXAssetName	name:DB_SetXAssetName	target	current-client-pdb-symbol
+          urn:ure:t6:character-xasset:Load_XAssetHeader	name:Load_XAssetHeader	target	current-client-pdb-symbol
+          urn:ure:t6:character-xasset:Load_XAsset	name:Load_XAsset	target	current-client-pdb-symbol
           EOF
           sed -i 's/^          //' /tmp/t6-character-xasset/selection.tsv
 
