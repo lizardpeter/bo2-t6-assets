@@ -748,6 +748,52 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("R_AddDObjToScene_callers.tsv"),
             addDObjCallers.toString(), StandardCharsets.UTF_8);
 
+        // Archive the exact server DB_GetXAssetSizeHandler table. The dedicated
+        // server omits client-only character Load_*Ptr dispatch cases, but the
+        // size table is still the earliest exact test for whether asset types
+        // 35..40 retain serialization-size handlers in this build.
+        Address sizeHandlerBase = toAddr("00D98E78");
+        StringBuilder sizeHandlers = new StringBuilder(
+            "asset_type\thandler_address\tfunction_name\tconstant_return_size\n");
+        for (int assetType = 0; assetType < 60; assetType++) {
+            Address slot = sizeHandlerBase.add(assetType * 4L);
+            int raw = currentProgram.getMemory().getInt(slot);
+            long unsigned = Integer.toUnsignedLong(raw);
+            Address target = toAddr(unsigned);
+            Function fn = currentProgram.getFunctionManager().getFunctionAt(target);
+            String fnName = fn == null ? "" : fn.getName(true);
+            String constantSize = "";
+            if (fn != null) {
+                InstructionIterator fit = listing.getInstructions(fn.getBody(), true);
+                Integer immediate = null;
+                boolean unsupported = false;
+                while (fit.hasNext()) {
+                    Instruction ins = fit.next();
+                    String mnemonic = ins.getMnemonicString().toUpperCase();
+                    if ("MOV".equals(mnemonic)
+                            && ins.getNumOperands() >= 2
+                            && "EAX".equalsIgnoreCase(ins.getDefaultOperandRepresentation(0))) {
+                        Object[] objs = ins.getOpObjects(1);
+                        if (objs.length == 1 && objs[0] instanceof ghidra.program.model.scalar.Scalar) {
+                            immediate = (int)((ghidra.program.model.scalar.Scalar)objs[0]).getUnsignedValue();
+                        }
+                    } else if (!("RET".equals(mnemonic) || "PUSH".equals(mnemonic)
+                            || "POP".equals(mnemonic) || "MOV".equals(mnemonic)
+                            || "LEA".equals(mnemonic) || "XOR".equals(mnemonic)
+                            || "SUB".equals(mnemonic) || "ADD".equals(mnemonic))) {
+                        unsupported = true;
+                    }
+                }
+                if (immediate != null && !unsupported) constantSize = Integer.toString(immediate);
+            }
+            sizeHandlers.append(assetType).append("\t")
+                .append(String.format("0x%08X", unsigned)).append("\t")
+                .append(fnName).append("\t")
+                .append(constantSize).append("\n");
+        }
+        Files.writeString(out.resolve("xasset_size_handlers.tsv"),
+            sizeHandlers.toString(), StandardCharsets.UTF_8);
+
         // Archive PDB-imported field names for the runtime centity record
         // touched by CG_GetLightingOrigin. This keeps offset interpretation
         // independent from decompiler variable names.
