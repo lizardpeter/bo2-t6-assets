@@ -29,6 +29,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A70B20", "R_GetLightGridSampleEntryQuad_internal"},
         {"00A70F10", "R_IsValidLightGridSample_internal"},
         {"00A710B0", "R_LightGridLookup_internal"},
+        {"00776E60", "Dvar_RegisterBool"},
+        {"00776D80", "Dvar_RegisterVariant_internal"},
         {"00A7B6C0", "R_SetStaticModelLightingForSource"},
         {"00A7B7B0", "R_SetupDynamicModelLighting"},
         {"00A7BA50", "R_ResetModelLighting"},
