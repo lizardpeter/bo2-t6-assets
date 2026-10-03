@@ -687,6 +687,39 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("static_model_lighting_handle_callers.tsv"),
             staticHandleCallers.toString(), StandardCharsets.UTF_8);
 
+        // Trace the exact producer of R_AddDObjToScene's fifth argument
+        // (lightingOrigin). R_AddDObjToScene copies that vec3 verbatim into
+        // GfxSceneModel/GfxSceneDObj and R_AllocModelLighting later consumes it.
+        Address addDObj = toAddr("00A0F850");
+        StringBuilder addDObjCallers = new StringBuilder(
+            "callsite\tcaller_entry\tcaller_name\treference_type\n");
+        Set<Address> addDObjCallerFunctions = new TreeSet<>();
+        ReferenceIterator addDObjRefs = currentProgram.getReferenceManager().getReferencesTo(addDObj);
+        while (addDObjRefs.hasNext()) {
+            monitor.checkCancelled();
+            Reference ref = addDObjRefs.next();
+            Address from = ref.getFromAddress();
+            Function caller = currentProgram.getFunctionManager().getFunctionContaining(from);
+            addDObjCallers.append(from).append("\t")
+                .append(caller == null ? "" : caller.getEntryPoint()).append("\t")
+                .append(caller == null ? "" : caller.getName(true)).append("\t")
+                .append(ref.getReferenceType()).append("\n");
+            if (caller == null || !addDObjCallerFunctions.add(caller.getEntryPoint())) continue;
+            String stem = "add_dobj_to_scene_caller_" + caller.getEntryPoint().toString().toLowerCase();
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(caller.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(caller, 300, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+            Files.writeString(out.resolve(stem + ".c"),
+                ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+        }
+        Files.writeString(out.resolve("R_AddDObjToScene_callers.tsv"),
+            addDObjCallers.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
