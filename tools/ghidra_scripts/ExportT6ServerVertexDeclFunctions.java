@@ -9,6 +9,7 @@ import java.util.*;
 
 public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
     private static final String[][] TARGETS = {
+        {"00A7B040", "R_EncodeLightingSH_internal"},
         {"00A7B150", "R_DecodeLightingSH_internal"},
         {"00A7B890", "R_InitModelLightingGlobals"},
         {"00A7BC60", "R_InitStaticModelLighting"},
@@ -20,6 +21,9 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A7B7B0", "R_SetupDynamicModelLighting"},
         {"00A7BA50", "R_ResetModelLighting"},
         {"00A7BC70", "R_SetModelLightingForSource"},
+        {"00A7BCD0", "R_AllocStaticModelLighting"},
+        {"00A7C110", "R_SetAllStaticModelLighting"},
+        {"00A7C230", "R_AllocModelLighting"},
         {"00A8D770", "R_SetReflectionProbe"},
         {"00A24EC0", "R_SetCodeConstant"},
         {"00A3F600", "R_SetCodeConstantFromVec4"},
@@ -63,7 +67,40 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
                     .append(insnCount).append("\t").append(ok).append("\n");
             }
         } finally { di.dispose(); }
-        Files.writeString(out.resolve("summary.tsv"), summary.toString(), StandardCharsets.UTF_8);
+        // The MSVC MAP/PDB proves a private R_SetStaticModelLighting family
+        // between R_AllocStaticModelLighting and R_SetAllStaticModelLighting,
+        // but the private symbol is not part of the public export list above.
+        // Dump every Ghidra function in that exact address interval so the
+        // writer/quantizer chain can be identified from code rather than by
+        // guessing a function start.
+        Address gapStart = toAddr("00A7BEB2");
+        Address gapEnd = toAddr("00A7C110");
+        StringBuilder gapSummary = new StringBuilder("address\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        FunctionIterator gapFunctions = currentProgram.getFunctionManager().getFunctions(gapStart, true);
+        while (gapFunctions.hasNext()) {
+            monitor.checkCancelled();
+            Function f = gapFunctions.next();
+            Address entry = f.getEntryPoint();
+            if (entry.compareTo(gapEnd) >= 0) break;
+            if (entry.compareTo(gapStart) < 0) continue;
+            String stem = "model_lighting_gap_" + entry.toString().toLowerCase();
+            StringBuilder asm = new StringBuilder();
+            long insnCount = 0;
+            for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                insnCount++;
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(f, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+            String body = ok ? dr.getDecompiledFunction().getC() : "";
+            Files.writeString(out.resolve(stem + ".c"), body, StandardCharsets.UTF_8);
+            gapSummary.append(entry).append("\t").append(f.getName(true)).append("\t")
+                .append(f.getBody().getNumAddresses()).append("\t")
+                .append(insnCount).append("\t").append(ok).append("\n");
+        }
+        Files.writeString(out.resolve("model_lighting_private_gap_summary.tsv"), gapSummary.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
