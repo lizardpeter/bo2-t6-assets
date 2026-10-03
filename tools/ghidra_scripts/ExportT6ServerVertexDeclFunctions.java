@@ -837,6 +837,73 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("cpose_abs_bounds_users.tsv"),
             poseBoundsUsers.toString(), StandardCharsets.UTF_8);
 
+        // PDB field names do not always propagate into caller decompilation.
+        // Find concrete x86 writes to the six cpose_t absmin/absmax float
+        // offsets instead. Restrict to CG_/CEntity_ code and archive candidate
+        // functions with the matching instructions plus full decompilation.
+        StringBuilder poseBoundsWrites = new StringBuilder(
+            "name\taddress\toff44\toff48\toff4c\toff50\toff54\toff58\n");
+        FunctionIterator writeFunctions =
+            currentProgram.getFunctionManager().getFunctions(true);
+        while (writeFunctions.hasNext()) {
+            monitor.checkCancelled();
+            Function fn = writeFunctions.next();
+            String name = fn.getName();
+            if (!(name.startsWith("CG_") || name.startsWith("CEntity_"))) continue;
+            long off = fn.getEntryPoint().getOffset();
+            if (off < 0x00400000L || off >= 0x00600000L) continue;
+            boolean[] hits = new boolean[6];
+            StringBuilder matches = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                String line = insn.toString().toLowerCase();
+                // For x86 MOV/MOVSS/FSTP, a memory destination occurs before
+                // the first comma (or is the sole FSTP operand).
+                int comma = line.indexOf(',');
+                String dst = comma < 0 ? line : line.substring(0, comma);
+                String mnemonic = insn.getMnemonicString().toUpperCase();
+                if (!(mnemonic.startsWith("MOV") || mnemonic.startsWith("FST") ||
+                      mnemonic.startsWith("XOR") || mnemonic.startsWith("AND") ||
+                      mnemonic.startsWith("OR"))) continue;
+                String[] needles = {"+ 0x44]", "+ 0x48]", "+ 0x4c]",
+                                    "+ 0x50]", "+ 0x54]", "+ 0x58]"};
+                for (int i = 0; i < needles.length; i++) {
+                    if (dst.contains(needles[i])) {
+                        hits[i] = true;
+                        matches.append(insn.getAddress()).append("\t")
+                            .append(insn).append("\n");
+                    }
+                }
+            }
+            int hitCount = 0;
+            for (boolean hit : hits) if (hit) hitCount++;
+            if (hitCount < 3) continue;
+            poseBoundsWrites.append(name).append("\t")
+                .append(fn.getEntryPoint());
+            for (boolean hit : hits) poseBoundsWrites.append("\t").append(hit);
+            poseBoundsWrites.append("\n");
+            String safe = name.replaceAll("[^A-Za-z0-9_.-]", "_");
+            String stem = "pose_bounds_writer_" + safe + "_" +
+                fn.getEntryPoint().toString().toLowerCase();
+            Files.writeString(out.resolve(stem + ".writes.tsv"),
+                matches.toString(), StandardCharsets.UTF_8);
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t")
+                    .append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"),
+                asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(fn, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() &&
+                dr.getDecompiledFunction() != null;
+            Files.writeString(out.resolve(stem + ".c"),
+                ok ? dr.getDecompiledFunction().getC() : "",
+                StandardCharsets.UTF_8);
+        }
+        Files.writeString(out.resolve("cpose_abs_bounds_write_candidates.tsv"),
+            poseBoundsWrites.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
