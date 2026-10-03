@@ -59,7 +59,10 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A04560", "R_FindNearestReflectionProbeInCell"},
         {"00A0F850", "R_AddDObjToScene"},
         {"00A0F200", "R_AllocSceneModel"},
-        {"00442750", "CG_ScriptMover_LightingOriginProducer"}
+        {"00442750", "CG_ScriptMover_LightingOriginProducer"},
+        {"00448010", "CG_GetPoseAbsMinMax"},
+        {"007BBBF0", "XModelGetStaticBounds"},
+        {"006EC260", "SV_DObjGetBounds"}
     };
 
     @Override
