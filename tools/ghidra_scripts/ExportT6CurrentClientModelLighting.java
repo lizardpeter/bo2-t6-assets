@@ -484,6 +484,123 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("static_sample_helper_references.tsv"),
             helperRefs.toString(),StandardCharsets.UTF_8);
 
+        // Expand the complete sample-production chain. These helpers are the
+        // remaining semantic boundary between a static draw-instance/light-grid
+        // record and the 56 vec4 values copied into modelLightingPatchList.
+        String[][] sampleProducerChain = {
+            {"00758680","static_sample_basis_accumulate"},
+            {"0075A6A0","blend_static_grid_samples"},
+            {"0075B1B0","fallback_model_lighting_at_point"},
+            {"0075B860","lookup_model_light_grid_entries"},
+            {"00762060","accumulate_runtime_light_samples"},
+            {"00762280","finalize_runtime_light_samples"},
+            {"00762410","test_runtime_light_leaf"},
+            {"00762580","prepare_runtime_light_tree"},
+            {"00760BF0","submit_static_model_lighting_patches"},
+            {"00761200","alloc_static_model_lighting_client"},
+            {"007613F0","calc_model_lighting_client"},
+            {"007614C0","set_static_model_lighting_client"},
+            {"00761640","set_all_static_model_lighting_client"},
+            {"00761760","alloc_model_lighting_client"}
+        };
+        DecompInterface producerDi=new DecompInterface();
+        producerDi.openProgram(currentProgram);
+        StringBuilder producerSummary=new StringBuilder(
+            "label\tentry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        StringBuilder producerRefs=new StringBuilder(
+            "label\tentry\tfrom\ttype\ttarget\ttarget_function\n");
+        try{
+            for(String[] item:sampleProducerChain){
+                Address entry=toAddr(item[0]);
+                Function f=fm.getFunctionAt(entry);
+                if(f==null){
+                    producerSummary.append(item[1]).append("\t").append(entry)
+                        .append("\t<missing>\t0\t0\tfalse\n");
+                    continue;
+                }
+                String stem="sample_producer_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                    for(Reference ref:ins.getReferencesFrom()){
+                        Address target=ref.getToAddress();
+                        Function tf=fm.getFunctionAt(target);
+                        producerRefs.append(item[1]).append("\t").append(entry).append("\t")
+                            .append(ins.getAddress()).append("\t")
+                            .append(ref.getReferenceType()).append("\t")
+                            .append(target).append("\t")
+                            .append(tf==null?"":tf.getName(true)).append("\n");
+                    }
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                producerDi.flushCache();
+                DecompileResults dr=producerDi.decompileFunction(f,360,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                producerSummary.append(item[1]).append("\t").append(entry).append("\t")
+                    .append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            producerDi.dispose();
+        }
+        Files.writeString(out.resolve("sample_producer_functions.tsv"),
+            producerSummary.toString(),StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("sample_producer_references.tsv"),
+            producerRefs.toString(),StandardCharsets.UTF_8);
+
+        // Also preserve every direct caller of the two base sample builders so
+        // register-passed arguments hidden by Ghidra's current prototypes can
+        // be reconstructed from their callsites.
+        Address[] sampleBuilderEntries = {toAddr("00758720"),toAddr("007587F0")};
+        StringBuilder sampleBuilderCallers=new StringBuilder(
+            "callee\tcallsite\tcaller_entry\tcaller_name\n");
+        Set<Address> sampleBuilderCallerSet=new TreeSet<>();
+        for(Address target:sampleBuilderEntries){
+            for(Reference ref:currentProgram.getReferenceManager().getReferencesTo(target)){
+                if(!ref.getReferenceType().isCall()) continue;
+                Function caller=fm.getFunctionContaining(ref.getFromAddress());
+                sampleBuilderCallers.append(target).append("\t")
+                    .append(ref.getFromAddress()).append("\t")
+                    .append(caller==null?"":caller.getEntryPoint()).append("\t")
+                    .append(caller==null?"":caller.getName(true)).append("\n");
+                if(caller!=null) sampleBuilderCallerSet.add(caller.getEntryPoint());
+            }
+        }
+        DecompInterface builderCallerDi=new DecompInterface();
+        builderCallerDi.openProgram(currentProgram);
+        try{
+            for(Address entry:sampleBuilderCallerSet){
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="sample_builder_caller_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                builderCallerDi.flushCache();
+                DecompileResults dr=builderCallerDi.decompileFunction(f,360,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+            }
+        } finally {
+            builderCallerDi.dispose();
+        }
+        Files.writeString(out.resolve("sample_builder_callers.tsv"),
+            sampleBuilderCallers.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
