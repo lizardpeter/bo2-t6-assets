@@ -23,7 +23,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/smg-j3d
-          python tools/smg_rmge01_j3d_material_census_v1.py             --galaxy EggStarGalaxy             --max-objects 220             --out /tmp/smg-j3d/eggstar_j3d_material_census_v1.json
+          python tools/smg_rmge01_j3d_material_census_v1.py \
+            --galaxy EggStarGalaxy \
+            --max-objects 220 \
+            --out /tmp/smg-j3d/eggstar_j3d_material_census_v1.json
+          python tools/smg_rmge01_j3d_material_census_v1.py \
+            --galaxy AstroGalaxy \
+            --max-objects 400 \
+            --out /tmp/smg-j3d/astrogalaxy_j3d_material_census_v1.json
       - name: Commit structural retail census
         if: github.event_name == 'push'
         run: |
