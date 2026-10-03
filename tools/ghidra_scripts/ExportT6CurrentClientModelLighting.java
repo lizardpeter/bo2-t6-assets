@@ -233,6 +233,82 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("brick_writer_constants.tsv"),
             writerConstantReport.toString(),StandardCharsets.UTF_8);
 
+        // Trace the mapped-volume upload function and its CPU staging buffer.
+        // 0x00760D60 maps the source texture, calls the brick writer repeatedly,
+        // then memcpy's staging bytes into the mapped resource. The producer of
+        // 0x03A36ADC determines whether static bricks may be reconstructed
+        // directly from colorsIndex or require the same runtime SH/light-grid
+        // path, so export every caller/xref before promoting that assumption.
+        Address uploadAddress=toAddr("00760D60");
+        Function upload=fm.getFunctionAt(uploadAddress);
+        if(upload==null) throw new IllegalStateException("no function at 00760D60");
+        StringBuilder uploadCallers=new StringBuilder(
+            "from\ttype\tcaller_entry\tcaller_name\n");
+        Set<Address> uploadCallerTargets=new TreeSet<>();
+        for(Reference ref:currentProgram.getReferenceManager().getReferencesTo(uploadAddress)){
+            Function caller=fm.getFunctionContaining(ref.getFromAddress());
+            uploadCallers.append(ref.getFromAddress()).append("\t")
+                .append(ref.getReferenceType()).append("\t")
+                .append(caller==null?"":caller.getEntryPoint()).append("\t")
+                .append(caller==null?"":caller.getName(true)).append("\n");
+            if(caller!=null) uploadCallerTargets.add(caller.getEntryPoint());
+        }
+        Files.writeString(out.resolve("volume_upload_callers.tsv"),
+            uploadCallers.toString(),StandardCharsets.UTF_8);
+
+        Address stagingPtr=toAddr("03A36ADC");
+        StringBuilder stagingRefs=new StringBuilder(
+            "from\ttype\tfunction_entry\tfunction_name\n");
+        Set<Address> stagingFunctions=new TreeSet<>();
+        for(Reference ref:currentProgram.getReferenceManager().getReferencesTo(stagingPtr)){
+            Function f=fm.getFunctionContaining(ref.getFromAddress());
+            stagingRefs.append(ref.getFromAddress()).append("\t")
+                .append(ref.getReferenceType()).append("\t")
+                .append(f==null?"":f.getEntryPoint()).append("\t")
+                .append(f==null?"":f.getName(true)).append("\n");
+            if(f!=null) stagingFunctions.add(f.getEntryPoint());
+        }
+        Files.writeString(out.resolve("volume_staging_xrefs.tsv"),
+            stagingRefs.toString(),StandardCharsets.UTF_8);
+
+        Set<Address> volumeTraceTargets=new TreeSet<>();
+        volumeTraceTargets.addAll(uploadCallerTargets);
+        volumeTraceTargets.addAll(stagingFunctions);
+        DecompInterface volumeDi=new DecompInterface();
+        volumeDi.openProgram(currentProgram);
+        StringBuilder volumeSummary=new StringBuilder(
+            "entry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        try{
+            for(Address entry:volumeTraceTargets){
+                monitor.checkCancelled();
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="volume_trace_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                volumeDi.flushCache();
+                DecompileResults dr=volumeDi.decompileFunction(f,240,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                volumeSummary.append(entry).append("\t").append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            volumeDi.dispose();
+        }
+        Files.writeString(out.resolve("volume_trace_functions.tsv"),
+            volumeSummary.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
