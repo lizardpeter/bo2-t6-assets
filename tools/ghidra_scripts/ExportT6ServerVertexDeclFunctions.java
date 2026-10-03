@@ -264,6 +264,73 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_lifecycle_callers.tsv"), lifecycleRefs.toString(), StandardCharsets.UTF_8);
 
+        // Resolve generic image construction functions directly from the PDB
+        // by demangled Ghidra name, then export both the functions and every
+        // caller. The model-lighting 3D volume is runtime-created, so its owner
+        // is expected to call Image_Create3DTexture_PC and/or Image_Setup.
+        String[] imageFunctionNeedles = {
+            "Image_Create3DTexture_PC",
+            "Image_Create2DTexture_PC",
+            "Image_Setup"
+        };
+        StringBuilder imageFunctions = new StringBuilder("entry\tname\tbody_size\n");
+        StringBuilder imageCallers = new StringBuilder("callee_entry\tcallee_name\tcallsite\tcaller_entry\tcaller_name\n");
+        Set<Address> exportedImageFunctions = new TreeSet<>();
+        Set<Address> exportedImageCallers = new TreeSet<>();
+        FunctionIterator allFunctions = currentProgram.getFunctionManager().getFunctions(true);
+        while (allFunctions.hasNext()) {
+            monitor.checkCancelled();
+            Function f = allFunctions.next();
+            String functionName = f.getName(true);
+            boolean wanted = false;
+            for (String needle : imageFunctionNeedles) {
+                if (functionName.contains(needle)) {
+                    wanted = true;
+                    break;
+                }
+            }
+            if (!wanted) continue;
+            imageFunctions.append(f.getEntryPoint()).append("\t").append(functionName).append("\t")
+                .append(f.getBody().getNumAddresses()).append("\n");
+            if (exportedImageFunctions.add(f.getEntryPoint())) {
+                String stem = "image_runtime_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(f.getEntryPoint());
+            while (refs.hasNext()) {
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function caller = currentProgram.getFunctionManager().getFunctionContaining(from);
+                imageCallers.append(f.getEntryPoint()).append("\t").append(functionName).append("\t")
+                    .append(from).append("\t")
+                    .append(caller == null ? "" : caller.getEntryPoint().toString()).append("\t")
+                    .append(caller == null ? "" : caller.getName(true)).append("\n");
+                if (caller == null || !exportedImageCallers.add(caller.getEntryPoint())) continue;
+                String stem = "image_runtime_caller_" + caller.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(caller.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(caller, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("image_runtime_functions.tsv"), imageFunctions.toString(), StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("image_runtime_callers.tsv"), imageCallers.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
