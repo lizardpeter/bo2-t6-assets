@@ -147,6 +147,70 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("model_lighting_image_field_xrefs.tsv"),
             imageFieldRefs.toString(),StandardCharsets.UTF_8);
 
+        // Exact current-client per-brick model-lighting writer. FUN_00760D60
+        // computes the atlas destination for each handle and calls 0x00758B20
+        // before copying the CPU volume into the mapped 3D texture. Export this
+        // function and all direct callees so the retail float->RGBA8 transfer
+        // can be closed from t6mp.exe itself.
+        Address brickWriterAddress=toAddr("00758B20");
+        Function brickWriter=fm.getFunctionAt(brickWriterAddress);
+        if(brickWriter==null) throw new IllegalStateException("no function at 00758B20");
+        Set<Address> writerTargets=new TreeSet<>();
+        writerTargets.add(brickWriter.getEntryPoint());
+        StringBuilder writerRefs=new StringBuilder(
+            "function_entry\tfrom\ttype\ttarget\ttarget_function\tdelta_from_function\n");
+        for(Instruction ins:listing.getInstructions(brickWriter.getBody(),true)){
+            for(Reference ref:ins.getReferencesFrom()){
+                Address target=ref.getToAddress();
+                Function tf=fm.getFunctionAt(target);
+                writerRefs.append(brickWriter.getEntryPoint()).append("\t")
+                    .append(ins.getAddress()).append("\t")
+                    .append(ref.getReferenceType()).append("\t")
+                    .append(target).append("\t")
+                    .append(tf==null?"":tf.getName(true)).append("\t")
+                    .append(ins.getAddress().subtract(brickWriter.getEntryPoint())).append("\n");
+                if(ref.getReferenceType().isCall() && tf!=null){
+                    writerTargets.add(tf.getEntryPoint());
+                }
+            }
+        }
+        Files.writeString(out.resolve("brick_writer_references.tsv"),writerRefs.toString(),
+            StandardCharsets.UTF_8);
+        DecompInterface writerDi=new DecompInterface();
+        writerDi.openProgram(currentProgram);
+        StringBuilder writerSummary=new StringBuilder(
+            "entry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        try{
+            for(Address entry:writerTargets){
+                monitor.checkCancelled();
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="brick_writer_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                writerDi.flushCache();
+                DecompileResults dr=writerDi.decompileFunction(f,240,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                writerSummary.append(entry).append("\t").append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            writerDi.dispose();
+        }
+        Files.writeString(out.resolve("brick_writer_functions.tsv"),
+            writerSummary.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
