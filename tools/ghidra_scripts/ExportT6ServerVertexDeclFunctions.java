@@ -68,7 +68,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"007A2490", "CG_CalcWorldBounds_Helper_007A2490"},
         {"007A18A0", "CG_CalcWorldBounds_LocalBounds_007A18A0"},
         {"007684D0", "CG_CalcWorldBounds_Axis_007684D0"},
-        {"006440C0", "CG_CalcWorldBounds_Classify_006440C0"}
+        {"006440C0", "CG_CalcWorldBounds_Classify_006440C0"},
+        {"007B96D0", "XModelGetBounds"}
     };
 
     @Override
@@ -761,6 +762,25 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("centity_pdb_fields.tsv"),
             centityFields.toString(), StandardCharsets.UTF_8);
+
+        // Archive the PDB entityType_t values so the CG_CalcWorldBounds
+        // special-case set can be compared to the script-mover dispatch using
+        // named enum values rather than numeric folklore.
+        StringBuilder entityTypes = new StringBuilder("name\tvalue\n");
+        Iterator<DataType> enumTypes = dtm.getAllDataTypes();
+        boolean foundEntityType = false;
+        while (enumTypes.hasNext()) {
+            DataType dt = enumTypes.next();
+            if (!"entityType_t".equals(dt.getName()) || !(dt instanceof ghidra.program.model.data.Enum)) continue;
+            foundEntityType = true;
+            ghidra.program.model.data.Enum e = (ghidra.program.model.data.Enum)dt;
+            for (String name : e.getNames()) {
+                entityTypes.append(name).append("\t").append(e.getValue(name)).append("\n");
+            }
+        }
+        if (!foundEntityType) entityTypes.append("NOT_FOUND\t\n");
+        Files.writeString(out.resolve("entity_type_enum.tsv"),
+            entityTypes.toString(), StandardCharsets.UTF_8);
 
         // Export the small public/runtime flag API around the newly named
         // centity::overrideLightingOrigin bit without relying on pre-known VAs.
