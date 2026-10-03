@@ -787,6 +787,52 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("entity_type_enum.tsv"),
             entityTypes.toString(), StandardCharsets.UTF_8);
 
+        // Recover the retail default/registration of the named light-grid
+        // suppression dvar from PDB symbol xrefs. This decides whether
+        // R_LightGridLookup normally executes its CM_BoxSightTrace gate.
+        Symbol suppressionSymbol = null;
+        SymbolIterator suppressionSymbols = currentProgram.getSymbolTable().getAllSymbols(true);
+        while (suppressionSymbols.hasNext()) {
+            monitor.checkCancelled();
+            Symbol sym = suppressionSymbols.next();
+            if ("r_disableLightGridSuppresion".equals(sym.getName())) {
+                suppressionSymbol = sym;
+                break;
+            }
+        }
+        StringBuilder suppressionRefs = new StringBuilder(
+            "symbol_address\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
+        if (suppressionSymbol != null) {
+            Address suppressionAddress = suppressionSymbol.getAddress();
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(suppressionAddress);
+            Set<Address> functions = new TreeSet<>();
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function fn = currentProgram.getFunctionManager().getFunctionContaining(from);
+                suppressionRefs.append(suppressionAddress).append("\t")
+                    .append(from).append("\t")
+                    .append(fn == null ? "" : fn.getEntryPoint()).append("\t")
+                    .append(fn == null ? "" : fn.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (fn == null || !functions.add(fn.getEntryPoint())) continue;
+                String stem = "lightgrid_suppression_xref_" + fn.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(fn, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("lightgrid_suppression_xrefs.tsv"),
+            suppressionRefs.toString(), StandardCharsets.UTF_8);
+
         // Export the small public/runtime flag API around the newly named
         // centity::overrideLightingOrigin bit without relying on pre-known VAs.
         StringBuilder flagApi = new StringBuilder(
