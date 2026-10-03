@@ -1,0 +1,40 @@
+name: Validate Rust-test Hijacked universal IR
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/rust_test_hijacked_validate.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out Rust-test Hijacked branch
+        uses: actions/checkout@v4
+        with:
+          repository: lizardpeter/Rust-test
+          ref: fix/hijacked-universal-ir-closure
+          path: Rust-test
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Rust-test
+
+      - name: Check neutral scene IR
+        working-directory: Rust-test
+        run: cargo check --manifest-path asset_import/neutral_scene/Cargo.toml
+
+      - name: Check BO2 importer
+        working-directory: Rust-test
+        run: cargo check --manifest-path asset_import/importers/bo2/Cargo.toml
+
+      - name: Check BO2-enabled renderer integration
+        working-directory: Rust-test
+        run: cargo check --no-default-features --features import-bo2
