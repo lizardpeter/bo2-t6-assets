@@ -64,5 +64,27 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
             }
         } finally { di.dispose(); }
         Files.writeString(out.resolve("summary.tsv"), summary.toString(), StandardCharsets.UTF_8);
+
+        String[][] constants = {
+            {"00B8F520", "xm_mask", "16"},
+            {"00B8F590", "xm_flip", "16"},
+            {"00B8F570", "xm_fixup", "16"},
+            {"00C6D4B0", "xm_fixadd", "16"},
+            {"00D23B70", "lighting_decode_mul0", "16"},
+            {"00D23B80", "lighting_decode_mul1", "16"},
+            {"00D23B90", "lighting_decode_add", "16"}
+        };
+        StringBuilder data = new StringBuilder("name\taddress\thex\n");
+        for (String[] item : constants) {
+            Address address = toAddr(item[0]);
+            int len = Integer.parseInt(item[2]);
+            byte[] bytes = new byte[len];
+            int got = currentProgram.getMemory().getBytes(address, bytes);
+            if (got != len) throw new IllegalStateException("short read at "+item[0]+": "+got);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : bytes) hex.append(String.format("%02x", b & 0xff));
+            data.append(item[1]).append("\t").append(item[0]).append("\t").append(hex).append("\n");
+        }
+        Files.writeString(out.resolve("R_DecodeLightingSH_constants.tsv"), data.toString(), StandardCharsets.UTF_8);
     }
 }
