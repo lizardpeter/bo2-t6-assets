@@ -378,6 +378,67 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_strings.tsv"), modelLightStrings.toString(), StandardCharsets.UTF_8);
 
+        // "$model_lighting" is referenced by data at 0x010BF814. The GfxImage
+        // name field recovered from Image_Create3DTexture_PC is +0x48, making
+        // 0x010BF7CC the candidate static GfxImage base. Trace both the name
+        // field and the inferred object range to find its initialization and
+        // assignment into modelLightGlob.image.
+        Address modelLightingImageBase = toAddr("010BF7CC");
+        Address modelLightingImageNameField = toAddr("010BF814");
+        StringBuilder modelImage = new StringBuilder("target\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
+        Set<Address> modelImageFunctions = new TreeSet<>();
+        for (Address target = modelLightingImageBase;
+             target.compareTo(modelLightingImageBase.add(0x60)) < 0;
+             target = target.add(4)) {
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(target);
+            while (refs.hasNext()) {
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                modelImage.append(target).append("\t").append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (f == null || !modelImageFunctions.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_image_candidate_xref_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        StringBuilder modelImageMemory = new StringBuilder("address\tu32\n");
+        for (Address p = modelLightingImageBase;
+             p.compareTo(modelLightingImageBase.add(0x60)) < 0;
+             p = p.add(4)) {
+            int word = currentProgram.getMemory().getInt(p);
+            modelImageMemory.append(p).append("\t")
+                .append(String.format("0x%08X", word)).append("\n");
+        }
+        Files.writeString(out.resolve("model_lighting_image_candidate_xrefs.tsv"), modelImage.toString(), StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("model_lighting_image_candidate_memory.tsv"), modelImageMemory.toString(), StandardCharsets.UTF_8);
+
+        // Also trace the data slot containing the "$model_lighting" string
+        // pointer itself. References to the slot can reveal table/registration
+        // code even when nothing points to the inferred struct base.
+        StringBuilder modelNameSlotRefs = new StringBuilder("from_address\tfunction_entry\tfunction_name\treference_type\n");
+        ReferenceIterator nameSlotRefs = currentProgram.getReferenceManager().getReferencesTo(modelLightingImageNameField);
+        while (nameSlotRefs.hasNext()) {
+            Reference ref = nameSlotRefs.next();
+            Function f = currentProgram.getFunctionManager().getFunctionContaining(ref.getFromAddress());
+            modelNameSlotRefs.append(ref.getFromAddress()).append("\t")
+                .append(f == null ? "" : f.getEntryPoint()).append("\t")
+                .append(f == null ? "" : f.getName(true)).append("\t")
+                .append(ref.getReferenceType()).append("\n");
+        }
+        Files.writeString(out.resolve("model_lighting_name_slot_xrefs.tsv"), modelNameSlotRefs.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
