@@ -808,6 +808,43 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("gfx_scene_def_pdb_fields.tsv"),
             sceneDefFields.toString(), StandardCharsets.UTF_8);
 
+        // Enumerate every PDB-typed function whose signature names GfxSceneDef,
+        // and archive its decompiler output. This is bounded by the type name,
+        // avoiding an engine-wide decompile while exposing the original
+        // floatTime readers/writers and the source-level call contract.
+        StringBuilder sceneDefFunctions = new StringBuilder(
+            "name\taddress\tbody_size\tsignature\tmentions_floatTime\tmentions_time\n");
+        FunctionIterator sceneDefFunctionIt =
+            currentProgram.getFunctionManager().getFunctions(true);
+        while (sceneDefFunctionIt.hasNext()) {
+            monitor.checkCancelled();
+            Function fn = sceneDefFunctionIt.next();
+            String signature = fn.getSignature().getPrototypeString();
+            if (!signature.contains("GfxSceneDef")) continue;
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(fn, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() &&
+                dr.getDecompiledFunction() != null;
+            String body = ok ? dr.getDecompiledFunction().getC() : "";
+            String safe = fn.getName().replaceAll("[^A-Za-z0-9_.-]", "_");
+            String stem = "gfx_scene_def_user_" + safe + "_" +
+                fn.getEntryPoint().toString().toLowerCase();
+            Files.writeString(out.resolve(stem + ".c"), body, StandardCharsets.UTF_8);
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+            sceneDefFunctions.append(fn.getName(true)).append("\t")
+                .append(fn.getEntryPoint()).append("\t")
+                .append(fn.getBody().getNumAddresses()).append("\t")
+                .append(signature.replace("\t", " ")).append("\t")
+                .append(body.contains("floatTime")).append("\t")
+                .append(body.contains("->time") || body.contains(".time")).append("\n");
+        }
+        Files.writeString(out.resolve("gfx_scene_def_functions.tsv"),
+            sceneDefFunctions.toString(), StandardCharsets.UTF_8);
+
         // Archive the PDB entityType_t values so the CG_CalcWorldBounds
         // special-case set can be compared to the script-mover dispatch using
         // named enum values rather than numeric folklore.
