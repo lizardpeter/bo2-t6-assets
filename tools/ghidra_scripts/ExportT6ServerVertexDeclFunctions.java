@@ -11,6 +11,7 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
     private static final String[][] TARGETS = {
         {"00A9F200", "R_SetVertexDeclTypeWorldSurface"},
         {"00A9F270", "R_SetVertexDeclTypeModel"},
+        {"00AACBC0", "R_SetStreamsForXModelSurface"},
         {"00AA39E0", "R_UpdateVertexDecl"},
         {"00AA3C40", "R_SetVertexData"}
     };
