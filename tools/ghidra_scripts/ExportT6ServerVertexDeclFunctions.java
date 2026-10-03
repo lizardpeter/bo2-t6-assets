@@ -5,6 +5,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
+import ghidra.program.model.symbol.Symbol;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -146,6 +147,48 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
             }
         }
         Files.writeString(out.resolve("model_lighting_global_xrefs.tsv"), xrefSummary.toString(), StandardCharsets.UTF_8);
+
+        // modelLightGlob.image can itself be initialized as a data pointer,
+        // which produces no code write xref to the field. Resolve its exact
+        // stored pointer and then follow references to the pointed-to GfxImage
+        // object as well.
+        Address imageField = toAddr("084F6EA4");
+        int imagePointerWord = currentProgram.getMemory().getInt(imageField);
+        long imagePointer = Integer.toUnsignedLong(imagePointerWord);
+        Address imageObject = toAddr(String.format("%08X", imagePointer));
+        StringBuilder imageObjectReport = new StringBuilder();
+        imageObjectReport.append("field\t084F6EA4\n");
+        imageObjectReport.append("pointer\t").append(imageObject).append("\n");
+        Symbol primaryImageSymbol = currentProgram.getSymbolTable().getPrimarySymbol(imageObject);
+        imageObjectReport.append("symbol\t")
+            .append(primaryImageSymbol == null ? "" : primaryImageSymbol.getName(true))
+            .append("\n");
+        imageObjectReport.append("from_address\tfunction_entry\tfunction_name\treference_type\n");
+        ReferenceIterator imageRefs = currentProgram.getReferenceManager().getReferencesTo(imageObject);
+        Set<Address> imageObjectFunctions = new TreeSet<>();
+        while (imageRefs.hasNext()) {
+            monitor.checkCancelled();
+            Reference ref = imageRefs.next();
+            Address from = ref.getFromAddress();
+            Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+            imageObjectReport.append(from).append("\t")
+                .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                .append(f == null ? "" : f.getName(true)).append("\t")
+                .append(ref.getReferenceType()).append("\n");
+            if (f == null || !imageObjectFunctions.add(f.getEntryPoint())) continue;
+            String stem = "model_lighting_image_object_xref_" + f.getEntryPoint().toString().toLowerCase();
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(f, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+            Files.writeString(out.resolve(stem + ".c"),
+                ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+        }
+        Files.writeString(out.resolve("model_lighting_image_object_xrefs.tsv"), imageObjectReport.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
