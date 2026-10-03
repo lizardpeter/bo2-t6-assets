@@ -771,6 +771,43 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("centity_pdb_fields.tsv"),
             centityFields.toString(), StandardCharsets.UTF_8);
 
+        // Archive the exact PDB layout of GfxSceneDef and nearby named scene
+        // records. Current/gold client gameTime provider dataflow copies a
+        // 20-byte record rooted at scene-record +0x180, with scalar T at +0x184.
+        // This type census determines whether the source field has an original
+        // semantic name instead of inferring one from downstream arithmetic.
+        StringBuilder sceneDefFields = new StringBuilder(
+            "type\tlength\toffset\tfield\tfield_type\tfield_length\n");
+        Iterator<DataType> sceneTypes = dtm.getAllDataTypes();
+        boolean foundSceneDef = false;
+        while (sceneTypes.hasNext()) {
+            DataType dt = sceneTypes.next();
+            String typeName = dt.getName();
+            if (!(typeName.equals("GfxSceneDef")
+                    || typeName.equals("GfxViewInfo")
+                    || typeName.equals("GfxViewParms")
+                    || typeName.contains("SceneDef"))) {
+                continue;
+            }
+            if (!(dt instanceof Composite)) continue;
+            foundSceneDef |= typeName.equals("GfxSceneDef");
+            Composite comp = (Composite)dt;
+            for (DataTypeComponent component : comp.getComponents()) {
+                DataType fieldType = component.getDataType();
+                sceneDefFields.append(typeName).append("\t")
+                    .append(dt.getLength()).append("\t")
+                    .append(component.getOffset()).append("\t")
+                    .append(component.getFieldName() == null ? "" : component.getFieldName()).append("\t")
+                    .append(fieldType == null ? "" : fieldType.getDisplayName()).append("\t")
+                    .append(component.getLength()).append("\n");
+            }
+        }
+        if (!foundSceneDef) {
+            sceneDefFields.append("GfxSceneDef\tNOT_FOUND\t\t\t\t\n");
+        }
+        Files.writeString(out.resolve("gfx_scene_def_pdb_fields.tsv"),
+            sceneDefFields.toString(), StandardCharsets.UTF_8);
+
         // Archive the PDB entityType_t values so the CG_CalcWorldBounds
         // special-case set can be compared to the script-mover dispatch using
         // named enum values rather than numeric folklore.
