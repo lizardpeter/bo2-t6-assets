@@ -43,7 +43,9 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A9F270", "R_SetVertexDeclTypeModel"},
         {"00AA39E0", "R_UpdateVertexDecl"},
         {"00AA3C40", "R_SetVertexData"},
-        {"00AACBC0", "R_SetStreamsForXModelSurface"}
+        {"00AACBC0", "R_SetStreamsForXModelSurface"},
+        {"00AA4A10", "R_DrawStaticModelSurfLit"},
+        {"00AA5030", "R_DrawStaticModelSkinnedSurfLit"}
     };
 
     @Override
