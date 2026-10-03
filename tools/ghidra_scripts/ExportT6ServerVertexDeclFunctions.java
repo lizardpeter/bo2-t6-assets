@@ -9,6 +9,7 @@ import java.util.*;
 
 public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
     private static final String[][] TARGETS = {
+        {"00A7B150", "R_DecodeLightingSH_internal"},
         {"00A7B890", "R_InitModelLightingGlobals"},
         {"00A7BC60", "R_InitStaticModelLighting"},
         {"00A7B270", "R_SetModelLightingConsts_internal"},
