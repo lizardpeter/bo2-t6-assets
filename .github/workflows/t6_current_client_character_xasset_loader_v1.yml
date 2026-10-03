@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/t6_current_client_character_xasset_loader_v1.yml'
       - 'tools/ghidra_scripts/ExportT6CurrentClientBatch.java'
+      - 'tools/ghidra_scripts/FindT6CurrentClientCharacterXAssetRuntime.java'
       - 'tools/t6_current_client_fetch_exact_v1.py'
 
 permissions:
@@ -76,64 +77,44 @@ jobs:
           path: /tmp/t6-ghidra/projects
           key: ${{ env.GHIDRA_CACHE_KEY }}
 
-      - name: Select exact XAsset loader functions
+      - name: Find exact current-client XAsset size runtime by string xref
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/t6-character-xasset/batch
-          cat > /tmp/t6-character-xasset/selection.tsv <<'EOF'
-          function_id	requested_va	tier	source
-          urn:ure:t6:character-xasset:DB_GetXAssetTypeSize	name:DB_GetXAssetTypeSize	target	current-client-pdb-symbol
-          urn:ure:t6:character-xasset:DB_GetXAssetName	name:DB_GetXAssetName	target	current-client-pdb-symbol
-          urn:ure:t6:character-xasset:DB_SetXAssetName	name:DB_SetXAssetName	target	current-client-pdb-symbol
-          urn:ure:t6:character-xasset:Load_XAssetHeader	name:Load_XAssetHeader	target	current-client-pdb-symbol
-          urn:ure:t6:character-xasset:Load_XAsset	name:Load_XAsset	target	current-client-pdb-symbol
-          EOF
-          sed -i 's/^          //' /tmp/t6-character-xasset/selection.tsv
-
-      - name: Export exact current-client loader evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/t6-ghidra/config /tmp/t6-ghidra/cache
+          rm -rf /tmp/t6-character-xasset && mkdir -p /tmp/t6-character-xasset /tmp/t6-ghidra/config /tmp/t6-ghidra/cache
           export XDG_CONFIG_HOME=/tmp/t6-ghidra/config
           export XDG_CACHE_HOME=/tmp/t6-ghidra/cache
           export GHIDRA_HEADLESS_MAXMEM=8G
           "$GHIDRA_HOME/support/analyzeHeadless" \
             /tmp/t6-ghidra/projects t6-current-client \
             -process t6mp.exe -noanalysis -readOnly \
-            -postScript ExportT6CurrentClientBatch.java \
-              /tmp/t6-character-xasset/selection.tsv /tmp/t6-character-xasset/batch 120 \
+            -postScript FindT6CurrentClientCharacterXAssetRuntime.java /tmp/t6-character-xasset \
             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
-          cat /tmp/t6-character-xasset/batch/results.tsv
+          cat /tmp/t6-character-xasset/string_xrefs.tsv
 
-      - name: Retain source-closed proof boundary
+      - name: Retain exact current-client character DB anchor
         shell: bash
         run: |
           set -euo pipefail
-          OUT=proof/current_client/character_xasset_loader_v1
+          OUT=proof/current_client/character_xasset_loader_v2
           rm -rf "$OUT"
           mkdir -p "$OUT"
-          cp /tmp/t6-character-xasset/selection.tsv "$OUT/selection.tsv"
-          cp /tmp/t6-character-xasset/batch/results.tsv "$OUT/results.tsv"
-          cp /tmp/t6-character-xasset/batch/references.tsv "$OUT/references.tsv"
-          cp -a /tmp/t6-character-xasset/batch/unreviewed "$OUT/"
-          cp -a /tmp/t6-character-xasset/batch/disassembly "$OUT/"
+          cp -a /tmp/t6-character-xasset/. "$OUT/"
           python3 - <<'PY'
           import csv,json,pathlib
-          out=pathlib.Path('proof/current_client/character_xasset_loader_v1')
-          rows=list(csv.DictReader((out/'results.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          out=pathlib.Path('proof/current_client/character_xasset_loader_v2')
+          rows=list(csv.DictReader((out/'string_xrefs.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          functions=sorted({r['function_entry'] for r in rows if r.get('function_entry')})
           summary={
-            'format':'t6-current-client-character-xasset-loader-v1',
+            'format':'t6-current-client-character-xasset-loader-v2',
             'clientSha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
-            'targets':len(rows),
-            'foundExact':sum(r['found_exact']=='true' for r in rows),
-            'decompileCompleted':sum(r['decompile_completed']=='true' for r in rows),
-            'proofBoundary':'Exact current-client addresses and instruction listings. Ghidra C is generated/unreviewed evidence. Types 35-40 may be promoted only from the client loader/handler behavior actually present in this SHA-pinned executable.',
+            'stringXrefCount':len(rows),
+            'functionEntries':functions,
+            'proofBoundary':'Exact current-client string references to DB_GetXAssetSizeHandler[type]/db_assetnames.cpp and containing machine-code functions. Character types 35-40 remain fail-closed until their exact client size/load handlers are recovered from this anchor.',
           }
+          if not functions:
+              raise SystemExit('no exact current-client DB asset-size function anchor found')
           (out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
-          if summary['foundExact'] != summary['targets']:
-              raise SystemExit('one or more exact target functions were not present')
           print(json.dumps(summary,indent=2))
           PY
           git diff --check
@@ -141,7 +122,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add "$OUT"
           if ! git diff --cached --quiet; then
-            git commit -m 'Persist current-client character XAsset loader proof'
+            git commit -m 'Persist exact current-client character XAsset DB anchor'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
