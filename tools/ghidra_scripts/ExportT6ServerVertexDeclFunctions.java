@@ -23,6 +23,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A7B540", "R_AllocModelLightingPixel"},
         {"00A7B600", "R_ToggleModelLightingFrame"},
         {"00A6FAE0", "R_SetLightGridColorsFromIndex"},
+        {"00535590", "DB_GetXAssetTypeSize_server"},
+        {"0054D5C0", "Load_XAssetHeader_server"},
         {"00A714B0", "R_GetLightingAtPoint"},
         {"00A6FD40", "R_BlendAndSetLightGridColors_internal"},
         {"00A70760", "R_ExtrapolateLightingAtPoint_internal"},
