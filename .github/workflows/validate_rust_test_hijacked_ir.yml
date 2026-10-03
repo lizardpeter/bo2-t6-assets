@@ -1,0 +1,80 @@
+name: Validate Rust-test Hijacked universal IR branch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/validate_rust_test_hijacked_ir.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact Rust-test work branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch fix/hijacked-universal-ir-closure \
+            https://github.com/lizardpeter/Rust-test.git /tmp/rust-test
+          git -C /tmp/rust-test rev-parse HEAD | tee /tmp/rust-test-head.txt
+
+      - name: Compile BO2 importer and universal renderer
+        shell: bash
+        working-directory: /tmp/rust-test
+        run: |
+          set -euo pipefail
+          cargo check --manifest-path asset_import/importers/bo2/Cargo.toml --lib --bin t6_map_preview \
+            2>&1 | tee /tmp/hijacked-branch-cargo-check.txt
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml \
+            generic_fallback_never_darkens_unproven_color0_rgb \
+            2>&1 | tee /tmp/hijacked-branch-bo2-tests.txt
+          cargo test --manifest-path Cargo.toml \
+            source_baked_lightmap_scene_sample_compiles \
+            2>&1 | tee /tmp/hijacked-branch-renderer-tests.txt
+
+      - name: Fetch exact retail Hijacked FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/t6-ir-source
+          mkdir -p "$ROOT/zone/all" "$ROOT/zone/english"
+          curl -fL --retry 4 \
+            -o "$ROOT/zone/all/mp_hijacked.ff" \
+            https://r2.houseofkublai.com/bo2/zone/all/mp_hijacked.ff
+          sha256sum "$ROOT/zone/all/mp_hijacked.ff" | tee /tmp/mp_hijacked.sha256
+
+      - name: Run Hijacked IR census
+        shell: bash
+        working-directory: /tmp/rust-test
+        env:
+          FINDINST: __IR_CENSUS_NO_MATCH__
+          T6_VERTEX_COLOR_AUDIT: "1"
+        run: |
+          set -euo pipefail
+          cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml \
+            --bin t6_map_preview -- \
+            /tmp/t6-ir-source mp_hijacked /tmp/hijacked-unused.ppm \
+            2>&1 | tee /tmp/hijacked-branch-census.txt
+          grep -E '^(materials:|surface programs:|direct surface programs:|direct surface blocker details:|unresolved images)' \
+            /tmp/hijacked-branch-census.txt | tee /tmp/hijacked-branch-summary.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: RUST_TEST_HIJACKED_IR_VALIDATION
+          path: |
+            /tmp/rust-test-head.txt
+            /tmp/hijacked-branch-cargo-check.txt
+            /tmp/hijacked-branch-bo2-tests.txt
+            /tmp/hijacked-branch-renderer-tests.txt
+            /tmp/mp_hijacked.sha256
+            /tmp/hijacked-branch-census.txt
+            /tmp/hijacked-branch-summary.txt
+          if-no-files-found: warn
+          retention-days: 30
