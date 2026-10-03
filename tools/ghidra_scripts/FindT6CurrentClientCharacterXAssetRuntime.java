@@ -14,6 +14,7 @@ import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Instruction;
 import ghidra.program.model.listing.Listing;
@@ -64,26 +65,55 @@ public class FindT6CurrentClientCharacterXAssetRuntime extends GhidraScript {
             "needle\tstring_address\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
         Set<Address> exported = new TreeSet<>();
 
+        // First use ordinary defined strings when analysis created them.
+        Set<Address> stringHits = new TreeSet<>();
         for (Data d : listing.getDefinedData(true)) {
             monitor.checkCancelled();
             String value = scalarString(d);
             if (value == null) continue;
             for (String needle : needles) {
-                if (!value.contains(needle)) continue;
-                ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(d.getAddress());
-                while (refs.hasNext()) {
-                    Reference ref = refs.next();
-                    Address from = ref.getFromAddress();
-                    Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
-                    hits.append(needle).append("\t")
-                        .append(d.getAddress()).append("\t")
-                        .append(from).append("\t")
-                        .append(f == null ? "" : f.getEntryPoint()).append("\t")
-                        .append(f == null ? "" : f.getName(true)).append("\t")
-                        .append(ref.getReferenceType()).append("\n");
-                    if (f != null && exported.add(f.getEntryPoint())) {
-                        exportFunction(f, out, di, listing);
+                if (value.contains(needle)) stringHits.add(d.getAddress());
+            }
+        }
+
+        // The exact current-client cache is intentionally minimal and does not
+        // define every ASCII region as Data. Scan raw initialized memory too.
+        for (String needle : needles) {
+            byte[] pattern = needle.getBytes(StandardCharsets.US_ASCII);
+            for (MemoryBlock block : currentProgram.getMemory().getBlocks()) {
+                monitor.checkCancelled();
+                if (!block.isInitialized() || block.getSize() < pattern.length) continue;
+                long size = block.getSize();
+                if (size > Integer.MAX_VALUE) continue;
+                byte[] bytes = new byte[(int)size];
+                int read = currentProgram.getMemory().getBytes(block.getStart(), bytes);
+                if (read <= 0) continue;
+                int limit = read - pattern.length;
+                outer:
+                for (int offset = 0; offset <= limit; offset++) {
+                    for (int k = 0; k < pattern.length; k++) {
+                        if (bytes[offset + k] != pattern[k]) continue outer;
                     }
+                    stringHits.add(block.getStart().add(offset));
+                }
+            }
+        }
+
+        for (Address stringAddress : stringHits) {
+            String matched = "<raw-ascii>";
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(stringAddress);
+            while (refs.hasNext()) {
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                hits.append(matched).append("\t")
+                    .append(stringAddress).append("\t")
+                    .append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (f != null && exported.add(f.getEntryPoint())) {
+                    exportFunction(f, out, di, listing);
                 }
             }
         }
