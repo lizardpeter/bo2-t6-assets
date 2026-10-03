@@ -62,7 +62,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00442750", "CG_ScriptMover_LightingOriginProducer"},
         {"00448010", "CG_GetPoseAbsMinMax"},
         {"007BBBF0", "XModelGetStaticBounds"},
-        {"006EC260", "SV_DObjGetBounds"}
+        {"006EC260", "SV_DObjGetBounds"},
+        {"007A1AE0", "DObjGetBounds"}
     };
 
     @Override
