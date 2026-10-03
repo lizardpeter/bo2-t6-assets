@@ -396,6 +396,103 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_prog_table_dump.tsv"), progHex.toString(), StandardCharsets.UTF_8);
 
+        // Program image 25 ($model_lighting) lives at
+        // 0x084E38A0 + 25 * sizeof(GfxImage=0x50) = 0x084E4070.
+        // Follow exact references to this object and also inspect every caller
+        // of Image_GetProg/Image_AllocProg for a literal 25 argument.
+        Address modelLightingImageObject = toAddr("084E4070");
+        StringBuilder modelImageObjectRefs = new StringBuilder("from_address\tfunction_entry\tfunction_name\treference_type\n");
+        Set<Address> modelImageObjectFunctions = new TreeSet<>();
+        ReferenceIterator modelImageRefs = currentProgram.getReferenceManager().getReferencesTo(modelLightingImageObject);
+        while (modelImageRefs.hasNext()) {
+            monitor.checkCancelled();
+            Reference ref = modelImageRefs.next();
+            Address from = ref.getFromAddress();
+            Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+            modelImageObjectRefs.append(from).append("\t")
+                .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                .append(f == null ? "" : f.getName(true)).append("\t")
+                .append(ref.getReferenceType()).append("\n");
+            if (f == null || !modelImageObjectFunctions.add(f.getEntryPoint())) continue;
+            String stem = "model_lighting_image25_xref_" + f.getEntryPoint().toString().toLowerCase();
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(f, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+            Files.writeString(out.resolve(stem + ".c"),
+                ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+        }
+        Files.writeString(out.resolve("model_lighting_image25_xrefs.tsv"), modelImageObjectRefs.toString(), StandardCharsets.UTF_8);
+
+        Address imageAllocProgEntry = toAddr("00A603C0");
+        Address imageGetProgEntry = toAddr("00A60450");
+        StringBuilder image25Calls = new StringBuilder("callee\tcallsite\tcaller_entry\tcaller_name\tprev1\tprev2\tprev3\tprev4\n");
+        Address[] imageProgCallees = { imageAllocProgEntry, imageGetProgEntry };
+        String[] imageProgNames = { "Image_AllocProg", "Image_GetProg" };
+        for (int ci = 0; ci < imageProgCallees.length; ci++) {
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(imageProgCallees[ci]);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address callsite = ref.getFromAddress();
+                Function caller = currentProgram.getFunctionManager().getFunctionContaining(callsite);
+                Instruction callInsn = listing.getInstructionAt(callsite);
+                Instruction p1 = callInsn == null ? null : callInsn.getPrevious();
+                Instruction p2 = p1 == null ? null : p1.getPrevious();
+                Instruction p3 = p2 == null ? null : p2.getPrevious();
+                Instruction p4 = p3 == null ? null : p3.getPrevious();
+                String window = (p4 == null ? "" : p4.toString()) + " | "
+                    + (p3 == null ? "" : p3.toString()) + " | "
+                    + (p2 == null ? "" : p2.toString()) + " | "
+                    + (p1 == null ? "" : p1.toString());
+                String lowerWindow = window.toLowerCase();
+                if (!(lowerWindow.contains("0x19") || lowerWindow.contains(",19h") || lowerWindow.contains(" 19"))) continue;
+                image25Calls.append(imageProgNames[ci]).append("\t").append(callsite).append("\t")
+                    .append(caller == null ? "" : caller.getEntryPoint().toString()).append("\t")
+                    .append(caller == null ? "" : caller.getName(true)).append("\t")
+                    .append(p1 == null ? "" : p1.toString()).append("\t")
+                    .append(p2 == null ? "" : p2.toString()).append("\t")
+                    .append(p3 == null ? "" : p3.toString()).append("\t")
+                    .append(p4 == null ? "" : p4.toString()).append("\n");
+                if (caller != null) {
+                    String stem = "model_lighting_image25_call_" + caller.getEntryPoint().toString().toLowerCase();
+                    StringBuilder asm = new StringBuilder();
+                    for (Instruction insn : listing.getInstructions(caller.getBody(), true)) {
+                        asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                    }
+                    Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                    di.flushCache();
+                    DecompileResults dr = di.decompileFunction(caller, 180, monitor);
+                    boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                    Files.writeString(out.resolve(stem + ".c"),
+                        ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+                }
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_image25_calls.tsv"), image25Calls.toString(), StandardCharsets.UTF_8);
+
+        // Also find all exact references to the g_imageProgNames table itself.
+        Address progNamesBase = toAddr("010BF7B0");
+        StringBuilder progNamesRefs = new StringBuilder("target\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
+        for (long off = 0; off < 0x100; off += 4) {
+            Address target = progNamesBase.add(off);
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(target);
+            while (refs.hasNext()) {
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                progNamesRefs.append(target).append("\t").append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+            }
+        }
+        Files.writeString(out.resolve("image_prog_names_xrefs.tsv"), progNamesRefs.toString(), StandardCharsets.UTF_8);
+
         // Find resource/debug strings tying model lighting to generic image
         // registration. Dump refs and containing functions for any defined
         // string that contains both "model" and "light".
