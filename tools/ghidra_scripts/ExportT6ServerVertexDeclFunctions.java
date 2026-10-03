@@ -776,6 +776,48 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("centity_pdb_fields.tsv"),
             centityFields.toString(), StandardCharsets.UTF_8);
 
+        // Archive PDB-imported layouts for the six T6 character-ownership
+        // XAsset classes that OpenAssetTools enumerates but does not define.
+        // These records are the hard gate for typed character/body/head/model
+        // ownership traversal in the native BO2 importer.
+        Set<String> characterAssetTypeNames = new TreeSet<>(Arrays.asList(
+            "AiType", "AIType", "MpType", "MPType", "MpBody", "MPBody",
+            "MpHead", "MPHead", "Character", "XModelAlias"
+        ));
+        StringBuilder characterAssetFields = new StringBuilder(
+            "type\tlength\toffset\tfield\tfield_type\tfield_length\n");
+        Iterator<DataType> characterTypes = dtm.getAllDataTypes();
+        Set<String> foundCharacterTypes = new TreeSet<>();
+        while (characterTypes.hasNext()) {
+            DataType dt = characterTypes.next();
+            String typeName = dt.getName();
+            if (!characterAssetTypeNames.contains(typeName) || !(dt instanceof Composite)) continue;
+            foundCharacterTypes.add(typeName);
+            Composite comp = (Composite)dt;
+            for (DataTypeComponent component : comp.getComponents()) {
+                DataType fieldType = component.getDataType();
+                characterAssetFields.append(typeName).append("\t")
+                    .append(dt.getLength()).append("\t")
+                    .append(component.getOffset()).append("\t")
+                    .append(component.getFieldName() == null ? "" : component.getFieldName()).append("\t")
+                    .append(fieldType == null ? "" : fieldType.getDisplayName()).append("\t")
+                    .append(component.getLength()).append("\n");
+            }
+        }
+        for (String requested : Arrays.asList(
+            "AiType", "MpType", "MpBody", "MpHead", "Character", "XModelAlias")) {
+            boolean present = foundCharacterTypes.contains(requested)
+                || ("AiType".equals(requested) && foundCharacterTypes.contains("AIType"))
+                || ("MpType".equals(requested) && foundCharacterTypes.contains("MPType"))
+                || ("MpBody".equals(requested) && foundCharacterTypes.contains("MPBody"))
+                || ("MpHead".equals(requested) && foundCharacterTypes.contains("MPHead"));
+            if (!present) {
+                characterAssetFields.append(requested).append("\tNOT_FOUND\t\t\t\t\n");
+            }
+        }
+        Files.writeString(out.resolve("character_xasset_pdb_fields.tsv"),
+            characterAssetFields.toString(), StandardCharsets.UTF_8);
+
         // Archive the exact PDB layout of GfxSceneDef and nearby named scene
         // records. Current/gold client gameTime provider dataflow copies a
         // 20-byte record rooted at scene-record +0x180, with scalar T at +0x184.
