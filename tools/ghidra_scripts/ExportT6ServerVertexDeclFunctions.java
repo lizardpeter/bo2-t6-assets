@@ -6,7 +6,6 @@ import ghidra.program.model.listing.*;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.Symbol;
-import ghidra.program.util.DefinedDataIterator;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -337,7 +336,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         // string that contains both "model" and "light".
         StringBuilder modelLightStrings = new StringBuilder("string_address\tvalue\tfrom_address\tfunction_entry\tfunction_name\n");
         Set<Address> modelLightStringFunctions = new TreeSet<>();
-        for (Data data : DefinedDataIterator.definedStrings(currentProgram)) {
+        for (DataIterator dataIt = listing.getDefinedData(true); dataIt.hasNext(); ) {
+            Data data = dataIt.next();
             monitor.checkCancelled();
             Object valueObject = data.getValue();
             if (!(valueObject instanceof String)) continue;
