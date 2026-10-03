@@ -28,7 +28,7 @@ jobs:
 
       - name: Census exact character-ownership XAsset classes
         env:
-          SHARD: \${{ matrix.shard }}
+          SHARD: ${{ matrix.shard }}
           SHARDS: '8'
           ZIP_URL: https://cdn.jordanlindsay.com.au/pluto_t6_full_game.zip
           PYTHONPATH: tools
@@ -117,7 +117,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: T6_CHARACTER_OWNERSHIP_XASSET_CENSUS_SHARD_\${{ matrix.shard }}_V1
+          name: T6_CHARACTER_OWNERSHIP_XASSET_CENSUS_SHARD_${{ matrix.shard }}_V1
           path: /tmp/proof
           if-no-files-found: error
           compression-level: 9
