@@ -1,0 +1,45 @@
+{
+  "format": "t6-fog-frame-writer-reviewed-contract-v1",
+  "status": "reviewed-cross-build-semantic-contract",
+  "server": {
+    "build": "pc-server-2013-03-11",
+    "exe_sha256": "f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d",
+    "pdb_sha256": "7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc",
+    "R_SetFogFromServer": "0x00A5C260",
+    "R_SetFrameFog": "0x00A8A9A0"
+  },
+  "current_client": {
+    "sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
+    "frame_fog_writer": "0x0076EC70",
+    "evidence": "Exact Ghidra function independently writes code-constant destinations +0x2f0..+0x34c with matching clamp/log/exp/cos dataflow."
+  },
+  "proven_contract": {
+    "max_density": "clamp(authored maxDensity, density, density*100); R_SetFogFromServer assigns density*100",
+    "fogConsts": [
+      "ln(density/maxDensity) - heightDensity*(eyeSourceZ-baseHeight)*ln(2)",
+      "heightDensity > 0 ? -maxDensity*ln(2) : -maxDensity",
+      "fogStart*density",
+      "-heightDensity*ln(2)"
+    ],
+    "fogConsts2": [
+      "x >= 0 ? x+1 : exp(x)",
+      "0",
+      "0",
+      "0"
+    ],
+    "fogColor": "authored RGBA unchanged",
+    "sunFog": "[-cos(end)*slope, slope, 0, 0], slope=1/(cos(start)-cos(end)), 1e7 fallback",
+    "sunFogDir": "authored direction xyz, w=0",
+    "sunFogColor": "authored RGBA unchanged"
+  },
+  "correction": "Supersedes the earlier retained claim that positive-height-density fogConsts.y omits ln(2). Exact T6 server assembly and current-client 0x0076EC70 prove the ln(2) multiplier.",
+  "implementation_commits": [
+    "af8c785d981b687c403e90397d134f260ba28e0f",
+    "131115977a994f60c193a1ffe0f4a07d527904dc",
+    "cc605d4870f0d899bc0185f0b54d6636110fd381",
+    "e232786026266918136b0a9b05fff52e958272c4",
+    "08233de7db103a61577af456423acd088383db7a",
+    "f5053c5db6af6d9a5256e5dfda82da722ee3844b"
+  ],
+  "proof_boundary": "This establishes the fog constant writer semantics for the exact current client and corroborating named server build. Map-authored fog values remain source data; coordinate conversion is handled separately by the importer."
+}
