@@ -1,0 +1,114 @@
+name: T6 Hijacked XFile dependencies v1
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_hijacked_xfile_dependencies_v1.yml'
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build exact T6 FastFile expander
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc libssl-dev zlib1g-dev >/dev/null
+          gcc -O2 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+
+      - name: Fetch and expand exact Hijacked FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2             -o /tmp/mp_hijacked.ff             https://r2.houseofkublai.com/bo2/zone/all/mp_hijacked.ff
+          echo '2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037  /tmp/mp_hijacked.ff' | sha256sum -c -
+          /tmp/t6_expand /tmp/mp_hijacked.ff /tmp/mp_hijacked.expanded.bin mp_hijacked
+          echo '8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b  /tmp/mp_hijacked.expanded.bin' | sha256sum -c -
+
+      - name: Decode serialized XFile dependency strings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/xfile
+          python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          FOLLOW=0xffffffff
+          p=Path('/tmp/mp_hijacked.expanded.bin')
+          d=p.read_bytes()
+          if len(d)<64:
+              raise SystemExit('expanded XFile too short')
+          blocks=list(struct.unpack_from('<8I',d,8))
+          sc,sp,dc,dp,ac,ap=struct.unpack_from('<6I',d,40)
+          if (sc and sp!=FOLLOW) or (dc and dp!=FOLLOW) or (ac and ap!=FOLLOW):
+              raise SystemExit(f'front pointer contract drift: sc={sc} sp=0x{sp:08x} dc={dc} dp=0x{dp:08x} ac={ac} ap=0x{ap:08x}')
+          cursor=64
+          def parse_xstring_array(count,label):
+              global cursor
+              if not count:
+                  return []
+              ptrs=list(struct.unpack_from(f'<{count}I',d,cursor))
+              cursor += 4*count
+              out=[]
+              for i,raw in enumerate(ptrs):
+                  if raw != FOLLOW:
+                      raise SystemExit(f'{label}[{i}] pointer 0x{raw:08x} is not inline FOLLOWING; proof intentionally fails closed')
+                  end=d.index(b'\0',cursor)
+                  raw_name=d[cursor:end]
+                  try:
+                      name=raw_name.decode('ascii')
+                  except UnicodeDecodeError as exc:
+                      raise SystemExit(f'{label}[{i}] is not ASCII: {exc}')
+                  if not name or any(ord(c)<32 or ord(c)>126 for c in name):
+                      raise SystemExit(f'{label}[{i}] invalid printable name {name!r}')
+                  out.append(name)
+                  cursor=end+1
+              return out
+          script_strings=parse_xstring_array(sc,'scriptString')
+          dependencies=parse_xstring_array(dc,'dependency')
+          out={
+              'format':'t6-hijacked-xfile-dependencies-v1',
+              'zone':'mp_hijacked',
+              'source':{
+                  'rawSha256':'2e5f9b87af64645e6d2e3678bca46d458890efa9a19eb8afea4cda6e8dab4037',
+                  'expandedSha256':hashlib.sha256(d).hexdigest(),
+                  'expandedBytes':len(d),
+              },
+              'xfileFront':{
+                  'blockSizes':blocks,
+                  'scriptStringCount':sc,
+                  'dependencyCount':dc,
+                  'assetCount':ac,
+              },
+              'dependencies':dependencies,
+              'scriptStringCountDecoded':len(script_strings),
+              'assetTableStreamOffset':cursor,
+              'proofBoundary':'Direct decode of the dependency XString array at the front of the SHA-pinned expanded retail mp_hijacked XFile. Every non-empty dependency pointer is required to be the source FOLLOWING form and every dependency is read as its exact inline ASCII C string. No runtime load-order inference or filename guessing participates.'
+          }
+          if out['source']['expandedSha256']!='8bae6fdafd459f3fa6794a093a895c3c12ad3ca3f37ab83170a966884d54d42b':
+              raise SystemExit('expanded SHA drift')
+          Path('proof/xfile/T6_HIJACKED_XFILE_DEPENDENCIES_V1.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,indent=2,sort_keys=True))
+          PY
+
+      - name: Commit proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add proof/xfile/T6_HIJACKED_XFILE_DEPENDENCIES_V1.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'proof: archive Hijacked XFile dependencies'
+          git pull --rebase origin main
+          git push origin HEAD:main
