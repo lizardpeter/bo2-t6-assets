@@ -73,7 +73,12 @@ jobs:
               out=[]
               for i,raw in enumerate(ptrs):
                   if raw==FOLLOW:
-                      out.append(read_inline_name('scriptString',i))
+                      # Script-string contents are outside this proof. Match the
+                      # retained ff_front() parser exactly: consume through the
+                      # next NUL, including the legal empty-string case.
+                      end=d.index(b'\0',cursor)
+                      out.append({'inlineBytes':end-cursor})
+                      cursor=end+1
                   elif raw==0:
                       out.append(None)
                   else:
