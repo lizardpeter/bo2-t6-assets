@@ -31,6 +31,7 @@ jobs:
           OUT=smg/rmge01/derived/j3d_material_census_v1
           mkdir -p "$OUT"
           cp /tmp/smg-j3d/eggstar_j3d_material_census_v1.json "$OUT/"
+          cp /tmp/smg-j3d/astrogalaxy_j3d_material_census_v1.json "$OUT/"
           sha256sum "$OUT"/*.json > "$OUT/CHECKSUMS.sha256"
           git config user.name 'smg-re-bot'
           git config user.email 'smg-re-bot@users.noreply.github.com'
