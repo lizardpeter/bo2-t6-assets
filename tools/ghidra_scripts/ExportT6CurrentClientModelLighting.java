@@ -309,6 +309,68 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("volume_trace_functions.tsv"),
             volumeSummary.toString(),StandardCharsets.UTF_8);
 
+        // Global caller/xref census for the static-lighting update, image
+        // constructor, upload routine and scalar brick writer. This separates
+        // one-time static initialization from per-frame dynamic updates.
+        String[][] modelLightingAnchors = {
+            {"00760BF0","static_update_candidate"},
+            {"00761110","model_lighting_image_constructor"},
+            {"00760D60","volume_upload"},
+            {"00758B20","brick_writer"}
+        };
+        StringBuilder anchorRefs=new StringBuilder(
+            "anchor\tanchor_address\tfrom\ttype\tcaller_entry\tcaller_name\n");
+        Set<Address> anchorCallers=new TreeSet<>();
+        for(String[] item:modelLightingAnchors){
+            Address target=toAddr(item[0]);
+            for(Reference ref:currentProgram.getReferenceManager().getReferencesTo(target)){
+                Function caller=fm.getFunctionContaining(ref.getFromAddress());
+                anchorRefs.append(item[1]).append("\t").append(target).append("\t")
+                    .append(ref.getFromAddress()).append("\t")
+                    .append(ref.getReferenceType()).append("\t")
+                    .append(caller==null?"":caller.getEntryPoint()).append("\t")
+                    .append(caller==null?"":caller.getName(true)).append("\n");
+                if(caller!=null) anchorCallers.add(caller.getEntryPoint());
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_anchor_callers.tsv"),
+            anchorRefs.toString(),StandardCharsets.UTF_8);
+
+        DecompInterface callerDi=new DecompInterface();
+        callerDi.openProgram(currentProgram);
+        StringBuilder callerSummary=new StringBuilder(
+            "entry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        try{
+            for(Address entry:anchorCallers){
+                monitor.checkCancelled();
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="anchor_caller_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                callerDi.flushCache();
+                DecompileResults dr=callerDi.decompileFunction(f,240,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                callerSummary.append(entry).append("\t").append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            callerDi.dispose();
+        }
+        Files.writeString(out.resolve("model_lighting_anchor_caller_functions.tsv"),
+            callerSummary.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
