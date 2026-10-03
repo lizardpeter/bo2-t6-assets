@@ -63,7 +63,12 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00448010", "CG_GetPoseAbsMinMax"},
         {"007BBBF0", "XModelGetStaticBounds"},
         {"006EC260", "SV_DObjGetBounds"},
-        {"007A1AE0", "DObjGetBounds"}
+        {"007A1AE0", "DObjGetBounds"},
+        {"004E5890", "CG_CalcWorldBounds"},
+        {"007A2490", "CG_CalcWorldBounds_Helper_007A2490"},
+        {"007A18A0", "CG_CalcWorldBounds_LocalBounds_007A18A0"},
+        {"007684D0", "CG_CalcWorldBounds_Axis_007684D0"},
+        {"006440C0", "CG_CalcWorldBounds_Classify_006440C0"}
     };
 
     @Override
