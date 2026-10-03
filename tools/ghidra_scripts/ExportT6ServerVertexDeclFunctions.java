@@ -101,6 +101,7 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
                 .append(insnCount).append("\t").append(ok).append("\n");
         }
         Files.writeString(out.resolve("model_lighting_private_gap_summary.tsv"), gapSummary.toString(), StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("summary.tsv"), summary.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
