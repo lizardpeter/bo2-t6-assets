@@ -69,11 +69,13 @@ public class ExportT6CurrentClientBatch extends GhidraScript {
 
             for(Row row:rows){
                 monitor.checkCancelled();
-                Address requested=toAddr(Long.decode(row.va));
-                Function f=fm.getFunctionAt(requested);
+                Function f=resolveFunction(fm,row.va);
                 if(f==null){
                     writeResult(results,row,false,"","","",0,0,"",false,
-                        "No exact Ghidra function at requested address",0,0,0,0,0);
+                        row.va.startsWith("name:")
+                            ? "No unique exact Ghidra function with requested name"
+                            : "No exact Ghidra function at requested address",
+                        0,0,0,0,0);
                     continue;
                 }
 
@@ -110,6 +112,21 @@ public class ExportT6CurrentClientBatch extends GhidraScript {
         }
         dc.dispose();
         println("Exported "+rows.size()+" current-client Ghidra batch rows with timeout "+decompileTimeout+"s");
+    }
+
+    private Function resolveFunction(FunctionManager fm,String selector){
+        if(selector.startsWith("name:")){
+            String wanted=selector.substring("name:".length());
+            Function found=null;
+            for(Function candidate:fm.getFunctions(true)){
+                if(!(wanted.equals(candidate.getName()) || wanted.equals(candidate.getName(true)))) continue;
+                if(found!=null && !found.getEntryPoint().equals(candidate.getEntryPoint())) return null;
+                found=candidate;
+            }
+            return found;
+        }
+        Address requested=toAddr(Long.decode(selector));
+        return fm.getFunctionAt(requested);
     }
 
     private List<Row> readRows(Path p) throws Exception {
