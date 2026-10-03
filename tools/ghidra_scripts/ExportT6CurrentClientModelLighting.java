@@ -211,6 +211,28 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("brick_writer_functions.tsv"),
             writerSummary.toString(),StandardCharsets.UTF_8);
 
+        // Exact scalar constants read by the brick writer. Preserve raw bits
+        // and decoded float values so the native reimplementation can match
+        // CVTTSS2SI/truncation semantics without decimal-rounding ambiguity.
+        String[][] writerConstants = {
+            {"00BFA448","clamp_max"},
+            {"00C6982C","pre_sqrt_scale"},
+            {"00C0FAEC","post_sqrt_scale"},
+            {"00BD8A88","interior_rgb_source"}
+        };
+        StringBuilder writerConstantReport = new StringBuilder(
+            "name\taddress\tu32_bits\tf32\n");
+        for(String[] item:writerConstants){
+            Address address=toAddr(item[0]);
+            int bits=currentProgram.getMemory().getInt(address);
+            float value=Float.intBitsToFloat(bits);
+            writerConstantReport.append(item[1]).append("\t").append(address).append("\t")
+                .append(String.format("0x%08X",bits)).append("\t")
+                .append(Float.toString(value)).append("\n");
+        }
+        Files.writeString(out.resolve("brick_writer_constants.tsv"),
+            writerConstantReport.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
