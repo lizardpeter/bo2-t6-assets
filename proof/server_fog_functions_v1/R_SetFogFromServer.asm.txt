@@ -1,0 +1,60 @@
+00a5c260	PUSH EBP
+00a5c261	MOV EBP,ESP
+00a5c263	PUSH ESI
+00a5c264	MOV ESI,dword ptr [EBP + 0x8]
+00a5c267	CMP ESI,0x4
+00a5c26a	JC 0x00a5c28f
+00a5c26c	PUSH 0x4
+00a5c26e	PUSH ESI
+00a5c26f	PUSH 0xd06a08
+00a5c274	PUSH 0xd06960
+00a5c279	PUSH 0x0
+00a5c27b	PUSH 0x20
+00a5c27d	PUSH 0xd1e8cc
+00a5c282	CALL 0x0073e590
+00a5c287	ADD ESP,0x1c
+00a5c28a	TEST AL,AL
+00a5c28c	JNZ 0x00a5c28f
+00a5c28e	INT3
+00a5c28f	MOVSS XMM0,dword ptr [EBP + 0xc]
+00a5c294	IMUL ESI,ESI,0x1e4
+00a5c29a	MOVSS XMM1,dword ptr [EBP + 0x24]
+00a5c29f	ADD ESI,0x8424d34
+00a5c2a5	MOV EAX,ESI
+00a5c2a7	MOVSS dword ptr [EAX + 0x74],XMM1
+00a5c2ac	MOVSS XMM1,dword ptr [EBP + 0x10]
+00a5c2b1	MOVSS dword ptr [EAX + 0x68],XMM0
+00a5c2b6	MOVSS XMM0,dword ptr [EBP + 0x20]
+00a5c2bb	MOVSS dword ptr [EAX + 0x70],XMM0
+00a5c2c0	MOVSS XMM0,dword ptr [EBP + 0x1c]
+00a5c2c5	MOVSS dword ptr [EAX + 0x6c],XMM0
+00a5c2ca	MOVSS dword ptr [EAX + 0x58],XMM1
+00a5c2cf	MOVSS XMM1,dword ptr [EBP + 0x14]
+00a5c2d4	MOVSS dword ptr [EAX + 0x5c],XMM1
+00a5c2d9	MOVSS XMM1,dword ptr [EBP + 0x18]
+00a5c2de	MULSS XMM0,dword ptr [0x00b90298]
+00a5c2e6	MOVSS dword ptr [EAX + 0x60],XMM1
+00a5c2eb	MOVSS XMM1,dword ptr [EBP + 0x28]
+00a5c2f0	MOVSS dword ptr [EAX + 0x64],XMM1
+00a5c2f5	MOVSS XMM1,dword ptr [EBP + 0x2c]
+00a5c2fa	MOVSS dword ptr [EAX + 0x78],XMM1
+00a5c2ff	MOVSS XMM1,dword ptr [EBP + 0x30]
+00a5c304	MOVSS dword ptr [EAX + 0x7c],XMM1
+00a5c309	MOVSS XMM1,dword ptr [EBP + 0x34]
+00a5c30e	MOVSS dword ptr [EAX + 0x80],XMM1
+00a5c316	MOVSS XMM1,dword ptr [EBP + 0x4c]
+00a5c31b	MOVSS dword ptr [EAX + 0x84],XMM1
+00a5c323	MOVSS XMM1,dword ptr [EBP + 0x38]
+00a5c328	MOVSS dword ptr [EAX + 0x88],XMM1
+00a5c330	MOVSS XMM1,dword ptr [EBP + 0x3c]
+00a5c335	MOVSS dword ptr [EAX + 0x8c],XMM1
+00a5c33d	MOVSS XMM1,dword ptr [EBP + 0x40]
+00a5c342	MOVSS dword ptr [EAX + 0x90],XMM1
+00a5c34a	MOVSS XMM1,dword ptr [EBP + 0x48]
+00a5c34f	MOVSS dword ptr [EAX + 0x98],XMM1
+00a5c357	MOVSS XMM1,dword ptr [EBP + 0x44]
+00a5c35c	MOVSS dword ptr [EAX + 0x94],XMM1
+00a5c364	MOVSS dword ptr [EAX + 0x9c],XMM0
+00a5c36c	POP ESI
+00a5c36d	POP EBP
+00a5c36e	RET
