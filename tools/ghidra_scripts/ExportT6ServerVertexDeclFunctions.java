@@ -792,6 +792,51 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("centity_flag_api.tsv"),
             flagApi.toString(), StandardCharsets.UTF_8);
 
+        // Locate the actual client pose-bound writers/readers from PDB-typed
+        // decompiler output instead of guessing function names. Restrict to
+        // CG_* functions, and archive only bodies that mention the named
+        // cpose_t absmin/absmax fields recovered above.
+        StringBuilder poseBoundsUsers = new StringBuilder(
+            "name\taddress\tbody_size\tmentions_absmin\tmentions_absmax\n");
+        FunctionIterator poseFunctions = currentProgram.getFunctionManager().getFunctions(true);
+        while (poseFunctions.hasNext()) {
+            monitor.checkCancelled();
+            Function fn = poseFunctions.next();
+            String name = fn.getName();
+            if (!(name.startsWith("CG_") || name.startsWith("CEntity_"))) continue;
+            Address entry = fn.getEntryPoint();
+            long off = entry.getOffset();
+            if (off < 0x00400000L || off >= 0x00600000L) continue;
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(fn, 120, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() &&
+                dr.getDecompiledFunction() != null;
+            if (!ok) continue;
+            String body = dr.getDecompiledFunction().getC();
+            boolean hasMin = body.contains("absmin");
+            boolean hasMax = body.contains("absmax");
+            if (!(hasMin || hasMax)) continue;
+            poseBoundsUsers.append(name).append("\t")
+                .append(entry).append("\t")
+                .append(fn.getBody().getNumAddresses()).append("\t")
+                .append(hasMin).append("\t")
+                .append(hasMax).append("\n");
+            String safe = name.replaceAll("[^A-Za-z0-9_.-]", "_");
+            String stem = "pose_bounds_user_" + safe + "_" +
+                entry.toString().toLowerCase();
+            Files.writeString(out.resolve(stem + ".c"), body,
+                StandardCharsets.UTF_8);
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t")
+                    .append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(),
+                StandardCharsets.UTF_8);
+        }
+        Files.writeString(out.resolve("cpose_abs_bounds_users.tsv"),
+            poseBoundsUsers.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
