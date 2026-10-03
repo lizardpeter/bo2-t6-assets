@@ -1,0 +1,19 @@
+007b96d0	PUSH EBP
+007b96d1	MOV EBP,ESP
+007b96d3	MOV EAX,dword ptr [EBP + 0x8]
+007b96d6	FLD float ptr [EAX + 0xac]
+007b96dc	MOV ECX,dword ptr [EBP + 0xc]
+007b96df	FSTP float ptr [ECX]
+007b96e1	FLD float ptr [EAX + 0xb0]
+007b96e7	FSTP float ptr [ECX + 0x4]
+007b96ea	FLD float ptr [EAX + 0xb4]
+007b96f0	FSTP float ptr [ECX + 0x8]
+007b96f3	MOV ECX,dword ptr [EBP + 0x10]
+007b96f6	FLD float ptr [EAX + 0xb8]
+007b96fc	FSTP float ptr [ECX]
+007b96fe	FLD float ptr [EAX + 0xbc]
+007b9704	FSTP float ptr [ECX + 0x4]
+007b9707	FLD float ptr [EAX + 0xc0]
+007b970d	FSTP float ptr [ECX + 0x8]
+007b9710	POP EBP
+007b9711	RET
