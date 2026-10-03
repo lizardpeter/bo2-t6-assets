@@ -81,6 +81,72 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("functions.tsv"),summary.toString(),StandardCharsets.UTF_8);
         Files.writeString(out.resolve("references.tsv"),refs.toString(),StandardCharsets.UTF_8);
 
+        // Export the generic image setup routine invoked by the exact
+        // _model_lighting initializer, plus every direct callee. This closes
+        // the width/height/depth/format/usage argument contract without
+        // interpreting numeric enums by guesswork.
+        Address imageSetupAddress=toAddr("00780AD0");
+        Function imageSetup=fm.getFunctionAt(imageSetupAddress);
+        if(imageSetup==null) throw new IllegalStateException("no function at 00780AD0");
+        Set<Address> setupTargets=new TreeSet<>();
+        setupTargets.add(imageSetup.getEntryPoint());
+        for(Instruction ins:listing.getInstructions(imageSetup.getBody(),true)){
+            for(Reference ref:ins.getReferencesFrom()){
+                if(!ref.getReferenceType().isCall()) continue;
+                Function callee=fm.getFunctionAt(ref.getToAddress());
+                if(callee!=null) setupTargets.add(callee.getEntryPoint());
+            }
+        }
+        DecompInterface imageDi=new DecompInterface();
+        imageDi.openProgram(currentProgram);
+        StringBuilder imageSummary=new StringBuilder(
+            "entry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        try {
+            for(Address entry:setupTargets){
+                monitor.checkCancelled();
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="image_setup_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                imageDi.flushCache();
+                DecompileResults dr=imageDi.decompileFunction(f,120,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                imageSummary.append(entry).append("\t").append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            imageDi.dispose();
+        }
+        Files.writeString(out.resolve("image_setup_functions.tsv"),
+            imageSummary.toString(),StandardCharsets.UTF_8);
+
+        // Trace exact references to the retail modelLightGlob.image field
+        // established by the accepted R_ToggleModelLightingFrame field map.
+        Address imageField=toAddr("03A36A9C");
+        StringBuilder imageFieldRefs=new StringBuilder(
+            "from\ttype\tfunction_entry\tfunction_name\n");
+        for(Reference ref:currentProgram.getReferenceManager().getReferencesTo(imageField)){
+            Function f=fm.getFunctionContaining(ref.getFromAddress());
+            imageFieldRefs.append(ref.getFromAddress()).append("\t")
+                .append(ref.getReferenceType()).append("\t")
+                .append(f==null?"":f.getEntryPoint()).append("\t")
+                .append(f==null?"":f.getName(true)).append("\n");
+        }
+        Files.writeString(out.resolve("model_lighting_image_field_xrefs.tsv"),
+            imageFieldRefs.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
