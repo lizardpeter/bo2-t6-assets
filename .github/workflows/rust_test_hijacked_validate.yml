@@ -9,15 +9,16 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
-      - name: Check out Rust-test Hijacked branch
-        uses: actions/checkout@v4
-        with:
-          repository: lizardpeter/Rust-test
-          ref: fix/hijacked-universal-ir-closure
-          path: Rust-test
-          fetch-depth: 1
+      - name: Clone public Rust-test main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/lizardpeter/Rust-test.git Rust-test
+          cd Rust-test
+          git rev-parse HEAD
+          test "$(git rev-parse HEAD)" = "b391b465accb6526c6c85acc6bf0ee348af994ed"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,8 +34,48 @@ jobs:
 
       - name: Check BO2 importer
         working-directory: Rust-test
-        run: cargo check --manifest-path asset_import/importers/bo2/Cargo.toml
+        run: cargo check --manifest-path asset_import/importers/bo2/Cargo.toml --lib --bin t6_map_preview
+
+      - name: Test exact T6 light-grid and model-lighting routines
+        working-directory: Rust-test
+        run: |
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml             retail_basis_has_exact_count_endpoints_and_float32_hash
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml             coefficient_endpoints_match_retail_scale_bias
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml             exact_model_lighting_writer_keeps_zero_interior_and_opaque_shell
+          cargo test --manifest-path asset_import/importers/bo2/Cargo.toml             model_lighting_writer_clamps_32_to_full_scale
+
+      - name: Fetch exact retail Hijacked FastFile
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/t6-ir-source
+          mkdir -p "$ROOT/zone/all" "$ROOT/zone/english"
+          curl -fL --retry 4             -o "$ROOT/zone/all/mp_hijacked.ff"             https://r2.houseofkublai.com/bo2/zone/all/mp_hijacked.ff
+          stat "$ROOT/zone/all/mp_hijacked.ff"
+
+      - name: Run Hijacked IR census
+        working-directory: Rust-test
+        shell: bash
+        env:
+          FINDINST: __IR_CENSUS_NO_MATCH__
+          T6_VERTEX_COLOR_AUDIT: "1"
+        run: |
+          set -euo pipefail
+          cargo run --release --manifest-path asset_import/importers/bo2/Cargo.toml             --bin t6_map_preview --             /tmp/t6-ir-source mp_hijacked /tmp/hijacked-unused.ppm             2>&1 | tee /tmp/t6_hijacked_ir_census.txt
+          {
+            echo "=== KEY CENSUS ==="
+            grep -E '^(materials:|surface programs:|direct surface programs:|direct surface blocker details:|T6 vertex-color audit:|model lighting volume:)'               /tmp/t6_hijacked_ir_census.txt || true
+          } | tee /tmp/t6_hijacked_ir_key.txt
 
       - name: Check BO2-enabled renderer integration
         working-directory: Rust-test
         run: cargo check --no-default-features --features import-bo2
+
+      - name: Upload Hijacked validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-test-hijacked-main-validation
+          path: |
+            /tmp/t6_hijacked_ir_census.txt
+            /tmp/t6_hijacked_ir_key.txt
+          if-no-files-found: error
