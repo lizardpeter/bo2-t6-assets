@@ -48,7 +48,9 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00AA5030", "R_DrawStaticModelSkinnedSurfLit"},
         {"00AA4850", "R_DrawStaticModelsLit_internal"},
         {"00AA4D20", "R_DrawStaticModelsSkinnedDrawSurfLighting_internal"},
-        {"00AA43E0", "R_DrawStaticModelLitLightmapVCNoPrepass"}
+        {"00AA43E0", "R_DrawStaticModelLitLightmapVCNoPrepass"},
+        {"00A28E10", "Load_BuildVertexDecl"},
+        {"00A47FB0", "Material_StreamSourceForName"}
     };
 
     @Override
