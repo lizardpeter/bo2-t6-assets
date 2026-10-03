@@ -9,9 +9,17 @@ import java.util.*;
 
 public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
     private static final String[][] TARGETS = {
+        {"00A6FAE0", "R_SetLightGridColorsFromIndex"},
+        {"00A714B0", "R_GetLightingAtPoint"},
+        {"00A7B6C0", "R_SetStaticModelLightingForSource"},
+        {"00A7B7B0", "R_SetupDynamicModelLighting"},
+        {"00A7BA50", "R_ResetModelLighting"},
+        {"00A7BC70", "R_SetModelLightingForSource"},
+        {"00A8D770", "R_SetReflectionProbe"},
+        {"00A24EC0", "R_SetCodeConstant"},
+        {"00A3F600", "R_SetCodeConstantFromVec4"},
         {"00A9F200", "R_SetVertexDeclTypeWorldSurface"},
         {"00A9F270", "R_SetVertexDeclTypeModel"},
-        {"00AACBC0", "R_SetStreamsForXModelSurface"},
         {"00AA39E0", "R_UpdateVertexDecl"},
         {"00AA3C40", "R_SetVertexData"}
     };
