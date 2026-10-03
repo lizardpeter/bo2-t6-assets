@@ -1,0 +1,24 @@
+00a7bc70	PUSH EBP
+00a7bc71	MOV EBP,ESP
+00a7bc73	PUSH ESI
+00a7bc74	MOV ESI,dword ptr [EBP + 0xc]
+00a7bc77	LEA EAX,[ESI + 0xc80]
+00a7bc7d	PUSH EAX
+00a7bc7e	LEA ECX,[ESI + 0xc70]
+00a7bc84	PUSH ECX
+00a7bc85	MOV ECX,dword ptr [EBP + 0x8]
+00a7bc88	LEA EDX,[ESI + 0xc60]
+00a7bc8e	PUSH EDX
+00a7bc8f	LEA EAX,[ESI + 0xc50]
+00a7bc95	PUSH EAX
+00a7bc96	PUSH ECX
+00a7bc97	CALL 0x00a7b270
+00a7bc9c	MOV EAX,0x1
+00a7bca1	ADD word ptr [ESI + 0x186a],AX
+00a7bca8	ADD word ptr [ESI + 0x186c],AX
+00a7bcaf	ADD word ptr [ESI + 0x186e],AX
+00a7bcb6	ADD ESP,0x14
+00a7bcb9	ADD word ptr [ESI + 0x1870],AX
+00a7bcc0	POP ESI
+00a7bcc1	POP EBP
+00a7bcc2	RET
