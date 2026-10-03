@@ -1,0 +1,73 @@
+type	length	offset	field	field_type	field_length
+GfxSceneDef	20	0	time	int	4
+GfxSceneDef	20	4	floatTime	float	4
+GfxSceneDef	20	8	viewOffset	vec3_t	12
+GfxViewInfo	3136	0	viewParms	GfxViewParms	336
+GfxViewInfo	3136	336	sceneViewport	GfxViewport	16
+GfxViewInfo	3136	352	displayViewport	GfxViewport	16
+GfxViewInfo	3136	368	scissorViewport	GfxViewport	16
+GfxViewInfo	3136	384	sceneDef	GfxSceneDef	20
+GfxViewInfo	3136	404	dynamicShadowType	ShadowType	4
+GfxViewInfo	3136	408	localClientNum	LocalClientNum_t	4
+GfxViewInfo	3136	412	viewInfoIndex	int	4
+GfxViewInfo	3136	416	isRenderingFullScreen	int	4
+GfxViewInfo	3136	420	playerTeleported	int	4
+GfxViewInfo	3136	424	_padding_	int	4
+GfxViewInfo	3136	428	_padding_	int	4
+GfxViewInfo	3136	432	visibleLights	GfxLight[4]	1408
+GfxViewInfo	3136	1840	visibleLightCount	int	4
+GfxViewInfo	3136	1844	frustumPlanes	vec4_t[4]	64
+GfxViewInfo	3136	1908	charPrimaryLightScale	GfxLightScale	8
+GfxViewInfo	3136	1916	postFxInfo	GfxPostFxInfo *	4
+GfxViewInfo	3136	1920	cmds	void *	4
+GfxViewInfo	3136	1924	sunVisibility	float	4
+GfxViewInfo	3136	1928	adsZScale	float	4
+GfxViewInfo	3136	1932	fullSceneViewMesh	GfxQuadMeshData *	4
+GfxViewInfo	3136	1936	drawList	GfxDrawSurfListInfo *	4
+GfxViewInfo	3136	1940	input	GfxCmdBufInput *	4
+GfxViewInfo	3136	1944	hdrRenderingMode	uchar	1
+GfxViewInfo	3136	1948	sceneComposition	GfxViewRenderControl	16
+GfxViewInfo	3136	1964	rbUI3D	GfxUI3DBackend	252
+GfxViewInfo	3136	2216	rbQRCode	GfxQRCodeBackend	192
+GfxViewInfo	3136	2408	isExtraCamera	bool	1
+GfxViewInfo	3136	2412	noLodCullOut	int	4
+GfxViewInfo	3136	2416	lodScaleRigid	float	4
+GfxViewInfo	3136	2420	lodScaleSkinned	float	4
+GfxViewInfo	3136	2424	postEmissiveBrightening	float	4
+GfxViewInfo	3136	2428	_padding_	int	4
+GfxViewInfo	3136	2432	weaponViewParms	GfxViewParms	336
+GfxViewInfo	3136	2768	sonarRenderTargetInUse	bool	1
+GfxViewInfo	3136	2772	sonarBlur	float	4
+GfxViewInfo	3136	2776	_padding_	int	4
+GfxViewInfo	3136	2780	_padding_	int	4
+GfxViewInfo	3136	2784	sonarViewParms	GfxViewParms	336
+GfxViewInfo	3136	3120	sonarUseThermalMaterial	bool	1
+GfxViewInfo	3136	3121	sonarOverrideBlend	bool	1
+GfxViewInfo	3136	3122	drawInfrared	bool	1
+GfxViewInfo	3136	3123	drawPostBlur	bool	1
+GfxViewInfo	3136	3124	drawWaypointsPostBloom	bool	1
+GfxViewInfo	3136	3128	splitscreenBlurEdges	int	4
+GfxViewInfo	3136	3132	needResolveOpaque	bool	1
+GfxViewInfo	3136	3134	lutScriptIndex	short	2
+GfxViewParms	336	0	viewMatrix	GfxMatrix	64
+GfxViewParms	336	64	projectionMatrix	GfxMatrix	64
+GfxViewParms	336	128	viewProjectionMatrix	GfxMatrix	64
+GfxViewParms	336	192	inverseViewProjectionMatrix	GfxMatrix	64
+GfxViewParms	336	256	origin	vec4_t	16
+GfxViewParms	336	272	axis	vec3_t[3]	36
+GfxViewParms	336	308	depthHackNearClip	float	4
+GfxViewParms	336	312	zNear	float	4
+GfxViewParms	336	316	zFar	float	4
+GfxViewParms	336	320	bspCellIndex	int	4
+GfxViewParms	336	324		undefined	1
+GfxViewParms	336	325		undefined	1
+GfxViewParms	336	326		undefined	1
+GfxViewParms	336	327		undefined	1
+GfxViewParms	336	328		undefined	1
+GfxViewParms	336	329		undefined	1
+GfxViewParms	336	330		undefined	1
+GfxViewParms	336	331		undefined	1
+GfxViewParms	336	332		undefined	1
+GfxViewParms	336	333		undefined	1
+GfxViewParms	336	334		undefined	1
+GfxViewParms	336	335		undefined	1
