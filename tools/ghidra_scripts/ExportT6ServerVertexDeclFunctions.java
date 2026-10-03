@@ -733,7 +733,7 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         while (allTypes.hasNext()) {
             DataType dt = allTypes.next();
             String typeName = dt.getName();
-            if (!("centity_t".equals(typeName) || "cpose_t".equals(typeName) || "centity_t_u_888".equals(typeName))) continue;
+            if (!("centity_t".equals(typeName) || "cpose_t".equals(typeName) || "centity_t_u_888".equals(typeName) || "centity_t_u_888_s_1".equals(typeName))) continue;
             if (!(dt instanceof Composite)) continue;
             foundCentity |= "centity_t".equals(typeName);
             Composite comp = (Composite)dt;
