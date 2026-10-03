@@ -3,6 +3,8 @@ import ghidra.app.decompiler.*;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.*;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -15,6 +17,8 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A7BC60", "R_InitStaticModelLighting"},
         {"00A7B270", "R_SetModelLightingConsts_internal"},
         {"00A7B3D0", "R_SetStaticModelLightingConsts_internal"},
+        {"00A7B540", "R_AllocModelLightingPixel"},
+        {"00A7B600", "R_ToggleModelLightingFrame"},
         {"00A6FAE0", "R_SetLightGridColorsFromIndex"},
         {"00A714B0", "R_GetLightingAtPoint"},
         {"00A7B6C0", "R_SetStaticModelLightingForSource"},
@@ -102,6 +106,46 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_private_gap_summary.tsv"), gapSummary.toString(), StandardCharsets.UTF_8);
         Files.writeString(out.resolve("summary.tsv"), summary.toString(), StandardCharsets.UTF_8);
+
+        // Follow the exact modelLightGlob image pointer rather than relying on
+        // function-name guesses. 0x084F6EA4 is the GfxImage* loaded by
+        // R_SetupDynamicModelLighting. Export every containing function that
+        // references it, plus invImageHeight as a useful cross-check.
+        String[][] modelLightGlobals = {
+            {"084F6EA4", "modelLightGlob_image"},
+            {"084F6E88", "modelLightGlob_invImageHeight"}
+        };
+        StringBuilder xrefSummary = new StringBuilder("global\tglobal_address\tfrom_address\tfunction_entry\tfunction_name\n");
+        Set<Address> exportedXrefFunctions = new TreeSet<>();
+        for (String[] item : modelLightGlobals) {
+            Address global = toAddr(item[0]);
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(global);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                if (f == null) continue;
+                xrefSummary.append(item[1]).append("\t").append(global).append("\t")
+                    .append(from).append("\t").append(f.getEntryPoint()).append("\t")
+                    .append(f.getName(true)).append("\n");
+                if (!exportedXrefFunctions.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_xref_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                long insnCount = 0;
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                    insnCount++;
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_global_xrefs.tsv"), xrefSummary.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
