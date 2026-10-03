@@ -29,6 +29,7 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A7BCD0", "R_AllocStaticModelLighting"},
         {"00A7C110", "R_SetAllStaticModelLighting"},
         {"00A7C230", "R_AllocModelLighting"},
+        {"00A98020", "R_InitRenderCommands_PreModelLighting"},
         {"00A8D770", "R_SetReflectionProbe"},
         {"00A24EC0", "R_SetCodeConstant"},
         {"00A3F600", "R_SetCodeConstantFromVec4"},
