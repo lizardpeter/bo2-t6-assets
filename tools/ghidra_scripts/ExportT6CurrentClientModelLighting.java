@@ -371,6 +371,63 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("model_lighting_anchor_caller_functions.tsv"),
             callerSummary.toString(),StandardCharsets.UTF_8);
 
+        // Export the exact light-grid routines feeding static and dynamic
+        // model-lighting allocation. These may also append the 56-direction
+        // 0x384 update records as a side effect.
+        String[][] lightingFeeders = {
+            {"0075AEE0","static_grid_no_dynamic_lights"},
+            {"0075A3F0","static_grid_with_dynamic_lights"},
+            {"0075BB80","dynamic_model_lighting_at_point"}
+        };
+        DecompInterface feederDi=new DecompInterface();
+        feederDi.openProgram(currentProgram);
+        StringBuilder feederSummary=new StringBuilder(
+            "label\tentry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        StringBuilder feederRefs=new StringBuilder(
+            "label\tentry\tfrom\ttype\ttarget\ttarget_function\n");
+        try{
+            for(String[] item:lightingFeeders){
+                Address entry=toAddr(item[0]);
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="lighting_feeder_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                    for(Reference ref:ins.getReferencesFrom()){
+                        Address target=ref.getToAddress();
+                        Function tf=fm.getFunctionAt(target);
+                        feederRefs.append(item[1]).append("\t").append(entry).append("\t")
+                            .append(ins.getAddress()).append("\t")
+                            .append(ref.getReferenceType()).append("\t")
+                            .append(target).append("\t")
+                            .append(tf==null?"":tf.getName(true)).append("\n");
+                    }
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                feederDi.flushCache();
+                DecompileResults dr=feederDi.decompileFunction(f,300,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                feederSummary.append(item[1]).append("\t").append(entry).append("\t")
+                    .append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            feederDi.dispose();
+        }
+        Files.writeString(out.resolve("lighting_feeder_functions.tsv"),
+            feederSummary.toString(),StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("lighting_feeder_references.tsv"),
+            feederRefs.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
