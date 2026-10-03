@@ -7,6 +7,7 @@ on:
       - '.github/workflows/t6_current_client_character_xasset_loader_v1.yml'
       - 'tools/ghidra_scripts/ExportT6CurrentClientBatch.java'
       - 'tools/ghidra_scripts/FindT6CurrentClientCharacterXAssetRuntime.java'
+      - 'tools/ghidra_scripts/FindT6CurrentClientXAssetSizeTable.java'
       - 'tools/t6_current_client_fetch_exact_v1.py'
 
 permissions:
@@ -77,7 +78,7 @@ jobs:
           path: /tmp/t6-ghidra/projects
           key: ${{ env.GHIDRA_CACHE_KEY }}
 
-      - name: Find exact current-client XAsset size runtime by string xref
+      - name: Fingerprint exact current-client XAsset size table
         shell: bash
         run: |
           set -euo pipefail
@@ -88,32 +89,36 @@ jobs:
           "$GHIDRA_HOME/support/analyzeHeadless" \
             /tmp/t6-ghidra/projects t6-current-client \
             -process t6mp.exe -noanalysis -readOnly \
-            -postScript FindT6CurrentClientCharacterXAssetRuntime.java /tmp/t6-character-xasset \
+            -postScript FindT6CurrentClientXAssetSizeTable.java /tmp/t6-character-xasset \
             -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
-          cat /tmp/t6-character-xasset/string_xrefs.tsv
+          cat /tmp/t6-character-xasset/xasset_size_handlers.tsv
 
-      - name: Retain exact current-client character DB anchor
+      - name: Retain exact current-client character XAsset sizes
         shell: bash
         run: |
           set -euo pipefail
-          OUT=proof/current_client/character_xasset_loader_v2
+          OUT=proof/current_client/character_xasset_loader_v3
           rm -rf "$OUT"
           mkdir -p "$OUT"
           cp -a /tmp/t6-character-xasset/. "$OUT/"
           python3 - <<'PY'
           import csv,json,pathlib
-          out=pathlib.Path('proof/current_client/character_xasset_loader_v2')
-          rows=list(csv.DictReader((out/'string_xrefs.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
-          functions=sorted({r['function_entry'] for r in rows if r.get('function_entry')})
+          out=pathlib.Path('proof/current_client/character_xasset_loader_v3')
+          rows=list(csv.DictReader((out/'xasset_size_handlers.tsv').open(encoding='utf-8',newline=''),dialect='excel-tab'))
+          by={int(r['asset_type']):r for r in rows}
+          character={str(i):{
+              'handlerAddress':by[i]['handler_address'],
+              'size':int(by[i]['constant_return_size']) if by[i]['constant_return_size'] else None,
+          } for i in range(35,41)}
           summary={
-            'format':'t6-current-client-character-xasset-loader-v2',
+            'format':'t6-current-client-character-xasset-loader-v3',
             'clientSha256':'770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf',
-            'stringXrefCount':len(rows),
-            'functionEntries':functions,
-            'proofBoundary':'Exact current-client string references to DB_GetXAssetSizeHandler[type]/db_assetnames.cpp and containing machine-code functions. Character types 35-40 remain fail-closed until their exact client size/load handlers are recovered from this anchor.',
+            'tableAddress':(out/'table_address.txt').read_text().strip(),
+            'characterAssetTypes35To40':character,
+            'proofBoundary':'Exact SHA-pinned current-client size-handler table identified by shared T6 size-function fingerprint. These are exact serialized header sizes only; field meanings and nested load semantics remain fail-closed until the client Load_XAssetHeader branches/loaders are recovered.',
           }
-          if not functions:
-              raise SystemExit('no exact current-client DB asset-size function anchor found')
+          if any(v['size'] is None for v in character.values()):
+              raise SystemExit('one or more current-client character asset size handlers were not constant-return functions')
           (out/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
           print(json.dumps(summary,indent=2))
           PY
@@ -122,7 +127,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add "$OUT"
           if ! git diff --cached --quiet; then
-            git commit -m 'Persist exact current-client character XAsset DB anchor'
+            git commit -m 'Persist exact current-client character XAsset sizes'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
