@@ -276,7 +276,11 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         String[] imageFunctionNeedles = {
             "Image_Create3DTexture_PC",
             "Image_Create2DTexture_PC",
-            "Image_Setup"
+            "Image_Setup",
+            "Image_AllocProg",
+            "Image_GetProg",
+            "Image_Register",
+            "Image_Alloc"
         };
         StringBuilder imageFunctions = new StringBuilder("entry\tname\tbody_size\n");
         StringBuilder imageCallers = new StringBuilder("callee_entry\tcallee_name\tcallsite\tcaller_entry\tcaller_name\n");
@@ -335,6 +339,62 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("image_runtime_functions.tsv"), imageFunctions.toString(), StandardCharsets.UTF_8);
         Files.writeString(out.resolve("image_runtime_callers.tsv"), imageCallers.toString(), StandardCharsets.UTF_8);
+
+        // $model_lighting is not code-referenced directly: the string is held
+        // by the program-image metadata table at 0x010BF814. Follow that table
+        // slot and its surrounding words back into code, and dump the raw table
+        // bytes so the exact program-image index/flags can be reconstructed.
+        Address modelLightingNameSlot = toAddr("010BF814");
+        StringBuilder progTableRefs = new StringBuilder("target\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
+        Set<Address> progTableFunctions = new TreeSet<>();
+        for (long off = -0x80; off <= 0x80; off += 4) {
+            Address target = modelLightingNameSlot.add(off);
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(target);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                progTableRefs.append(target).append("\t").append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (f == null || !progTableFunctions.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_prog_table_xref_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_prog_table_xrefs.tsv"), progTableRefs.toString(), StandardCharsets.UTF_8);
+
+        Address progDumpStart = toAddr("010BF780");
+        int progDumpSize = 0x180;
+        byte[] progDump = new byte[progDumpSize];
+        currentProgram.getMemory().getBytes(progDumpStart, progDump);
+        StringBuilder progHex = new StringBuilder("address\tbytes\tu32_le\tprimary_symbol\n");
+        for (int off = 0; off < progDumpSize; off += 4) {
+            Address a = progDumpStart.add(off);
+            int word = (progDump[off] & 0xff)
+                | ((progDump[off + 1] & 0xff) << 8)
+                | ((progDump[off + 2] & 0xff) << 16)
+                | ((progDump[off + 3] & 0xff) << 24);
+            Symbol sym = currentProgram.getSymbolTable().getPrimarySymbol(a);
+            progHex.append(a).append("\t")
+                .append(String.format("%02x %02x %02x %02x",
+                    progDump[off] & 0xff, progDump[off+1] & 0xff,
+                    progDump[off+2] & 0xff, progDump[off+3] & 0xff))
+                .append("\t").append(String.format("0x%08x", word)).append("\t")
+                .append(sym == null ? "" : sym.getName(true)).append("\n");
+        }
+        Files.writeString(out.resolve("model_lighting_prog_table_dump.tsv"), progHex.toString(), StandardCharsets.UTF_8);
 
         // Find resource/debug strings tying model lighting to generic image
         // registration. Dump refs and containing functions for any defined
