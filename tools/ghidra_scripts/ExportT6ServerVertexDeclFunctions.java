@@ -3,6 +3,7 @@ import ghidra.app.decompiler.*;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.*;
+import ghidra.program.model.data.*;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.Symbol;
@@ -720,6 +721,37 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("R_AddDObjToScene_callers.tsv"),
             addDObjCallers.toString(), StandardCharsets.UTF_8);
+
+        // Archive PDB-imported field names for the runtime centity record
+        // touched by CG_GetLightingOrigin. This keeps offset interpretation
+        // independent from decompiler variable names.
+        StringBuilder centityFields = new StringBuilder(
+            "type\tlength\toffset\tfield\tfield_type\tfield_length\n");
+        DataTypeManager dtm = currentProgram.getDataTypeManager();
+        Iterator<DataType> allTypes = dtm.getAllDataTypes();
+        boolean foundCentity = false;
+        while (allTypes.hasNext()) {
+            DataType dt = allTypes.next();
+            String typeName = dt.getName();
+            if (!("centity_t".equals(typeName) || "cpose_t".equals(typeName))) continue;
+            if (!(dt instanceof Composite)) continue;
+            foundCentity |= "centity_t".equals(typeName);
+            Composite comp = (Composite)dt;
+            for (DataTypeComponent component : comp.getComponents()) {
+                DataType fieldType = component.getDataType();
+                centityFields.append(typeName).append("\t")
+                    .append(dt.getLength()).append("\t")
+                    .append(component.getOffset()).append("\t")
+                    .append(component.getFieldName() == null ? "" : component.getFieldName()).append("\t")
+                    .append(fieldType == null ? "" : fieldType.getDisplayName()).append("\t")
+                    .append(component.getLength()).append("\n");
+            }
+        }
+        if (!foundCentity) {
+            centityFields.append("centity_t\tNOT_FOUND\t\t\t\t\n");
+        }
+        Files.writeString(out.resolve("centity_pdb_fields.tsv"),
+            centityFields.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
