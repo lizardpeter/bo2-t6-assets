@@ -39,6 +39,7 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A24EC0", "R_SetCodeConstant"},
         {"00A3F600", "R_SetCodeConstantFromVec4"},
         {"00A9F200", "R_SetVertexDeclTypeWorldSurface"},
+        {"00A9F240", "R_SetVertexDeclTypeModelLit"},
         {"00A9F270", "R_SetVertexDeclTypeModel"},
         {"00AA39E0", "R_UpdateVertexDecl"},
         {"00AA3C40", "R_SetVertexData"}
