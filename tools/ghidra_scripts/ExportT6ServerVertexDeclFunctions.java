@@ -55,7 +55,9 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         {"00A04950", "R_FindProbeFromVolume"},
         {"00A04170", "R_CellForPoint"},
         {"00A04820", "R_FindNearestReflectionProbe"},
-        {"00A04560", "R_FindNearestReflectionProbeInCell"}
+        {"00A04560", "R_FindNearestReflectionProbeInCell"},
+        {"00A0F850", "R_AddDObjToScene"},
+        {"00A0F200", "R_AllocSceneModel"}
     };
 
     @Override
