@@ -7,6 +7,7 @@ import ghidra.program.model.data.*;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.Symbol;
+import ghidra.program.model.symbol.SymbolIterator;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
