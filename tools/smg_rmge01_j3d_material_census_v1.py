@@ -437,8 +437,8 @@ def neutral_tev_v3_blocker(m, texture_lookup):
             return "unsupported_filter"
         if tex["max_anisotropy"] not in (0,1,2):
             return "unsupported_anisotropy"
-        if tex["min_filter"] in (2,3,4,5) and (tex["mip_count"] > 1 or tex["max_lod"] > 0.0):
-            return "mip_chain_not_decoded"
+        # Rust importer now preserves authored TEX1 mip chains, so mipmapped
+        # minification is source-closed when the BTI header itself is valid.
     return None
 
 def main():
