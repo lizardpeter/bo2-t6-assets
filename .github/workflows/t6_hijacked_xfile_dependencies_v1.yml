@@ -52,7 +52,36 @@ jobs:
           if (sc and sp!=FOLLOW) or (dc and dp!=FOLLOW) or (ac and ap!=FOLLOW):
               raise SystemExit(f'front pointer contract drift: sc={sc} sp=0x{sp:08x} dc={dc} dp=0x{dp:08x} ac={ac} ap=0x{ap:08x}')
           cursor=64
-          def parse_xstring_array(count,label):
+          def read_inline_name(label,i):
+              global cursor
+              end=d.index(b'\0',cursor)
+              raw_name=d[cursor:end]
+              try:
+                  name=raw_name.decode('ascii')
+              except UnicodeDecodeError as exc:
+                  raise SystemExit(f'{label}[{i}] is not ASCII: {exc}')
+              if not name or any(ord(c)<32 or ord(c)>126 for c in name):
+                  raise SystemExit(f'{label}[{i}] invalid printable name {name!r}')
+              cursor=end+1
+              return name
+          def parse_script_strings(count):
+              global cursor
+              if not count:
+                  return []
+              ptrs=list(struct.unpack_from(f'<{count}I',d,cursor))
+              cursor += 4*count
+              out=[]
+              for i,raw in enumerate(ptrs):
+                  if raw==FOLLOW:
+                      out.append(read_inline_name('scriptString',i))
+                  elif raw==0:
+                      out.append(None)
+                  else:
+                      # Packed script-string references consume no inline bytes.
+                      # Their textual identity is irrelevant to dependency proof.
+                      out.append({'packedRaw':f'0x{raw:08x}'})
+              return out
+          def parse_dependencies(count):
               global cursor
               if not count:
                   return []
@@ -61,20 +90,11 @@ jobs:
               out=[]
               for i,raw in enumerate(ptrs):
                   if raw != FOLLOW:
-                      raise SystemExit(f'{label}[{i}] pointer 0x{raw:08x} is not inline FOLLOWING; proof intentionally fails closed')
-                  end=d.index(b'\0',cursor)
-                  raw_name=d[cursor:end]
-                  try:
-                      name=raw_name.decode('ascii')
-                  except UnicodeDecodeError as exc:
-                      raise SystemExit(f'{label}[{i}] is not ASCII: {exc}')
-                  if not name or any(ord(c)<32 or ord(c)>126 for c in name):
-                      raise SystemExit(f'{label}[{i}] invalid printable name {name!r}')
-                  out.append(name)
-                  cursor=end+1
+                      raise SystemExit(f'dependency[{i}] pointer 0x{raw:08x} is not inline FOLLOWING; dependency proof intentionally fails closed')
+                  out.append(read_inline_name('dependency',i))
               return out
-          script_strings=parse_xstring_array(sc,'scriptString')
-          dependencies=parse_xstring_array(dc,'dependency')
+          script_strings=parse_script_strings(sc)
+          dependencies=parse_dependencies(dc)
           out={
               'format':'t6-hijacked-xfile-dependencies-v1',
               'zone':'mp_hijacked',
