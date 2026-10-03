@@ -190,6 +190,79 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_image_object_xrefs.tsv"), imageObjectReport.toString(), StandardCharsets.UTF_8);
 
+        // Scan every aligned address across the modelLightGlob neighbourhood.
+        // Generic helpers often receive &modelLightGlob or &oneSubobject and
+        // then reach image through a field offset, so an xref to the exact
+        // 0x084F6EA4 field is not sufficient.
+        Address globStart = toAddr("084F6E80");
+        Address globEnd = toAddr("084F6F20");
+        StringBuilder rangeRefs = new StringBuilder("target\tfrom_address\tfunction_entry\tfunction_name\treference_type\n");
+        Set<Address> rangeFunctions = new TreeSet<>();
+        for (Address target = globStart; target.compareTo(globEnd) < 0; target = target.add(4)) {
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(target);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                rangeRefs.append(target).append("\t").append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (f == null || !rangeFunctions.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_range_xref_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_struct_range_xrefs.tsv"), rangeRefs.toString(), StandardCharsets.UTF_8);
+
+        // Export callers of the two renderer-lifecycle anchors as well. Image
+        // creation commonly lives next to R_InitModelLightingGlobals in a
+        // higher-level init function rather than in r_model_lighting.obj.
+        String[][] lifecycleTargets = {
+            {"00A7B890", "R_InitModelLightingGlobals"},
+            {"00A7B600", "R_ToggleModelLightingFrame"},
+            {"00A7B7B0", "R_SetupDynamicModelLighting"}
+        };
+        StringBuilder lifecycleRefs = new StringBuilder("callee\tcallee_address\tcallsite\tcaller_entry\tcaller_name\n");
+        Set<Address> lifecycleCallers = new TreeSet<>();
+        for (String[] item : lifecycleTargets) {
+            Address callee = toAddr(item[0]);
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(callee);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                lifecycleRefs.append(item[1]).append("\t").append(callee).append("\t")
+                    .append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\n");
+                if (f == null || !lifecycleCallers.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_lifecycle_caller_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_lifecycle_callers.tsv"), lifecycleRefs.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
