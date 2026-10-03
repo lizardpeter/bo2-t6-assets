@@ -428,6 +428,62 @@ public class ExportT6CurrentClientModelLighting extends GhidraScript {
         Files.writeString(out.resolve("lighting_feeder_references.tsv"),
             feederRefs.toString(),StandardCharsets.UTF_8);
 
+        // Export the helper chain that constructs/modifies the 56-direction
+        // static-model sample array before the feeder appends its 0x384 patch.
+        String[][] staticSampleHelpers = {
+            {"00758720","build_static_directional_samples"},
+            {"007587F0","build_empty_or_fallback_static_samples"},
+            {"00762770","apply_static_sample_runtime_lights"}
+        };
+        DecompInterface helperDi=new DecompInterface();
+        helperDi.openProgram(currentProgram);
+        StringBuilder helperSummary=new StringBuilder(
+            "label\tentry\tname\tbody_size\tinstructions\tdecompile_completed\n");
+        StringBuilder helperRefs=new StringBuilder(
+            "label\tentry\tfrom\ttype\ttarget\ttarget_function\n");
+        try{
+            for(String[] item:staticSampleHelpers){
+                Address entry=toAddr(item[0]);
+                Function f=fm.getFunctionAt(entry);
+                if(f==null) continue;
+                String stem="static_sample_helper_"+entry.toString().toLowerCase();
+                StringBuilder asm=new StringBuilder();
+                long count=0;
+                for(Instruction ins:listing.getInstructions(f.getBody(),true)){
+                    asm.append(ins.getAddress()).append("\t").append(ins).append("\n");
+                    count++;
+                    for(Reference ref:ins.getReferencesFrom()){
+                        Address target=ref.getToAddress();
+                        Function tf=fm.getFunctionAt(target);
+                        helperRefs.append(item[1]).append("\t").append(entry).append("\t")
+                            .append(ins.getAddress()).append("\t")
+                            .append(ref.getReferenceType()).append("\t")
+                            .append(target).append("\t")
+                            .append(tf==null?"":tf.getName(true)).append("\n");
+                    }
+                }
+                Files.writeString(out.resolve(stem+".asm.txt"),asm.toString(),
+                    StandardCharsets.UTF_8);
+                helperDi.flushCache();
+                DecompileResults dr=helperDi.decompileFunction(f,300,monitor);
+                boolean ok=dr!=null && dr.decompileCompleted() &&
+                    dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem+".c"),
+                    ok?dr.getDecompiledFunction().getC():"",
+                    StandardCharsets.UTF_8);
+                helperSummary.append(item[1]).append("\t").append(entry).append("\t")
+                    .append(f.getName(true)).append("\t")
+                    .append(f.getBody().getNumAddresses()).append("\t")
+                    .append(count).append("\t").append(ok).append("\n");
+            }
+        } finally {
+            helperDi.dispose();
+        }
+        Files.writeString(out.resolve("static_sample_helper_functions.tsv"),
+            helperSummary.toString(),StandardCharsets.UTF_8);
+        Files.writeString(out.resolve("static_sample_helper_references.tsv"),
+            helperRefs.toString(),StandardCharsets.UTF_8);
+
         // Explicitly record the already-accepted anchor and the object-local
         // address-delta hypotheses it suggests. This file is not identity proof.
         String hypotheses=
