@@ -601,6 +601,48 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("model_lighting_name_slot_xrefs.tsv"), modelNameSlotRefs.toString(), StandardCharsets.UTF_8);
 
+        // Recover exact runtime static-model lighting handle allocation.
+        // FastFile draw instances serialize lightingHandle=0, so replay needs
+        // the same allocation order before modelLightingSampler coordinates
+        // can be considered source-closed.
+        String[][] staticHandleAnchors = {
+            {"00A7BCD0", "R_AllocStaticModelLighting"},
+            {"00A7BC60", "R_InitStaticModelLighting"},
+            {"00A7BA50", "R_ResetModelLighting"}
+        };
+        StringBuilder staticHandleCallers = new StringBuilder(
+            "callee\tcallee_address\tcallsite\tcaller_entry\tcaller_name\treference_type\n");
+        Set<Address> staticHandleCallerFunctions = new TreeSet<>();
+        for (String[] item : staticHandleAnchors) {
+            Address target = toAddr(item[0]);
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(target);
+            while (refs.hasNext()) {
+                monitor.checkCancelled();
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function caller = currentProgram.getFunctionManager().getFunctionContaining(from);
+                staticHandleCallers.append(item[1]).append("\t").append(target).append("\t")
+                    .append(from).append("\t")
+                    .append(caller == null ? "" : caller.getEntryPoint()).append("\t")
+                    .append(caller == null ? "" : caller.getName(true)).append("\t")
+                    .append(ref.getReferenceType()).append("\n");
+                if (caller == null || !staticHandleCallerFunctions.add(caller.getEntryPoint())) continue;
+                String stem = "static_handle_caller_" + caller.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(caller.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(caller, 240, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+        }
+        Files.writeString(out.resolve("static_model_lighting_handle_callers.tsv"),
+            staticHandleCallers.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
