@@ -790,6 +790,29 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("entity_type_enum.tsv"),
             entityTypes.toString(), StandardCharsets.UTF_8);
 
+        // Archive exact scalar constants used by R_LightGridLookup and
+        // R_IsValidLightGridSample so the source port preserves float32
+        // arithmetic rather than replacing it with decimal guesses.
+        String[][] lightGridConstants = {
+            {"00BB6638", "grid_world_bias"},
+            {"00BE0958", "inv_grid_xy_step"},
+            {"00BE0954", "inv_grid_z_step"},
+            {"00B90F6C", "sample_weight_threshold"},
+            {"00B964A4", "trace_endpoint_epsilon"}
+        };
+        StringBuilder lightGridConstantRows = new StringBuilder(
+            "name\taddress\thex_u32\tfloat\n");
+        for (String[] item : lightGridConstants) {
+            Address address = toAddr(item[0]);
+            int bits = currentProgram.getMemory().getInt(address);
+            lightGridConstantRows.append(item[1]).append("\t")
+                .append(address).append("\t")
+                .append(String.format("0x%08x", bits)).append("\t")
+                .append(Float.intBitsToFloat(bits)).append("\n");
+        }
+        Files.writeString(out.resolve("lightgrid_constants.tsv"),
+            lightGridConstantRows.toString(), StandardCharsets.UTF_8);
+
         // Recover the retail default/registration of the named light-grid
         // suppression dvar from PDB symbol xrefs. This decides whether
         // R_LightGridLookup normally executes its CM_BoxSightTrace gate.
