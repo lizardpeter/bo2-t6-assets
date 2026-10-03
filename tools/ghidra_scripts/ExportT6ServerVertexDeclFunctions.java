@@ -6,6 +6,7 @@ import ghidra.program.model.listing.*;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.Symbol;
+import ghidra.program.util.DefinedDataIterator;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -330,6 +331,52 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         }
         Files.writeString(out.resolve("image_runtime_functions.tsv"), imageFunctions.toString(), StandardCharsets.UTF_8);
         Files.writeString(out.resolve("image_runtime_callers.tsv"), imageCallers.toString(), StandardCharsets.UTF_8);
+
+        // Find resource/debug strings tying model lighting to generic image
+        // registration. Dump refs and containing functions for any defined
+        // string that contains both "model" and "light".
+        StringBuilder modelLightStrings = new StringBuilder("string_address\tvalue\tfrom_address\tfunction_entry\tfunction_name\n");
+        Set<Address> modelLightStringFunctions = new TreeSet<>();
+        for (Data data : DefinedDataIterator.definedStrings(currentProgram)) {
+            monitor.checkCancelled();
+            Object valueObject = data.getValue();
+            if (!(valueObject instanceof String)) continue;
+            String value = (String)valueObject;
+            String lower = value.toLowerCase();
+            if (!(lower.contains("model") && lower.contains("light"))) continue;
+            Address stringAddress = data.getAddress();
+            ReferenceIterator refs = currentProgram.getReferenceManager().getReferencesTo(stringAddress);
+            boolean any = false;
+            while (refs.hasNext()) {
+                any = true;
+                Reference ref = refs.next();
+                Address from = ref.getFromAddress();
+                Function f = currentProgram.getFunctionManager().getFunctionContaining(from);
+                modelLightStrings.append(stringAddress).append("\t")
+                    .append(value.replace("\t","\\t").replace("\n","\\n")).append("\t")
+                    .append(from).append("\t")
+                    .append(f == null ? "" : f.getEntryPoint().toString()).append("\t")
+                    .append(f == null ? "" : f.getName(true)).append("\n");
+                if (f == null || !modelLightStringFunctions.add(f.getEntryPoint())) continue;
+                String stem = "model_lighting_string_xref_" + f.getEntryPoint().toString().toLowerCase();
+                StringBuilder asm = new StringBuilder();
+                for (Instruction insn : listing.getInstructions(f.getBody(), true)) {
+                    asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+                }
+                Files.writeString(out.resolve(stem + ".asm.txt"), asm.toString(), StandardCharsets.UTF_8);
+                di.flushCache();
+                DecompileResults dr = di.decompileFunction(f, 180, monitor);
+                boolean ok = dr != null && dr.decompileCompleted() && dr.getDecompiledFunction()!=null;
+                Files.writeString(out.resolve(stem + ".c"),
+                    ok ? dr.getDecompiledFunction().getC() : "", StandardCharsets.UTF_8);
+            }
+            if (!any) {
+                modelLightStrings.append(stringAddress).append("\t")
+                    .append(value.replace("\t","\\t").replace("\n","\\n"))
+                    .append("\t\t\t\n");
+            }
+        }
+        Files.writeString(out.resolve("model_lighting_strings.tsv"), modelLightStrings.toString(), StandardCharsets.UTF_8);
 
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
