@@ -753,6 +753,41 @@ public class ExportT6ServerVertexDeclFunctions extends GhidraScript {
         Files.writeString(out.resolve("centity_pdb_fields.tsv"),
             centityFields.toString(), StandardCharsets.UTF_8);
 
+        // Export the small public/runtime flag API around the newly named
+        // centity::overrideLightingOrigin bit without relying on pre-known VAs.
+        StringBuilder flagApi = new StringBuilder(
+            "name\taddress\tbody_size\tdecompile_completed\n");
+        FunctionIterator allFunctionsForFlags =
+            currentProgram.getFunctionManager().getFunctions(true);
+        while (allFunctionsForFlags.hasNext()) {
+            monitor.checkCancelled();
+            Function fn = allFunctionsForFlags.next();
+            String name = fn.getName();
+            if (!(name.contains("ClientFlag") || name.contains("LightingOrigin"))) continue;
+            String safe = name.replaceAll("[^A-Za-z0-9_.-]", "_");
+            String stem = "flag_api_" + safe + "_" +
+                fn.getEntryPoint().toString().toLowerCase();
+            StringBuilder asm = new StringBuilder();
+            for (Instruction insn : listing.getInstructions(fn.getBody(), true)) {
+                asm.append(insn.getAddress()).append("\t").append(insn).append("\n");
+            }
+            Files.writeString(out.resolve(stem + ".asm.txt"),
+                asm.toString(), StandardCharsets.UTF_8);
+            di.flushCache();
+            DecompileResults dr = di.decompileFunction(fn, 180, monitor);
+            boolean ok = dr != null && dr.decompileCompleted() &&
+                dr.getDecompiledFunction() != null;
+            Files.writeString(out.resolve(stem + ".c"),
+                ok ? dr.getDecompiledFunction().getC() : "",
+                StandardCharsets.UTF_8);
+            flagApi.append(name).append("\t")
+                .append(fn.getEntryPoint()).append("\t")
+                .append(fn.getBody().getNumAddresses()).append("\t")
+                .append(ok).append("\n");
+        }
+        Files.writeString(out.resolve("centity_flag_api.tsv"),
+            flagApi.toString(), StandardCharsets.UTF_8);
+
         String[][] constants = {
             {"00B8F520", "xm_mask", "16"},
             {"00B8F590", "xm_flip", "16"},
