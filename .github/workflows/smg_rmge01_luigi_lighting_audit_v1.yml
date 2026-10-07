@@ -1,0 +1,49 @@
+name: SMG RMGE01 Luigi lighting audit v1
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/smg_rmge01_luigi_lighting_audit_v1.yml'
+      - 'tools/smg_rmge01_luigi_lighting_audit_v1.py'
+      - 'tools/smg_rmge01_j3d_material_census_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit exact retail Luigi lighting and skin state
+        run: |
+          mkdir -p /tmp/smg-luigi
+          python tools/smg_rmge01_luigi_lighting_audit_v1.py             --out /tmp/smg-luigi/luigi_lighting_audit_v1.json
+
+      - name: Upload exact structural audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMG_RMGE01_LUIGI_LIGHTING_AUDIT_V1
+          path: /tmp/smg-luigi/luigi_lighting_audit_v1.json
+          retention-days: 30
+
+      - name: Commit derived structural evidence
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p smg/rmge01/derived/luigi_lighting_audit_v1
+          cp /tmp/smg-luigi/luigi_lighting_audit_v1.json             smg/rmge01/derived/luigi_lighting_audit_v1/
+          git config user.name 'smg-re-bot'
+          git config user.email 'smg-re-bot@users.noreply.github.com'
+          git add smg/rmge01/derived/luigi_lighting_audit_v1/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'SMG: derive exact Luigi lighting audit'
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 2
+          done
+          exit 1
