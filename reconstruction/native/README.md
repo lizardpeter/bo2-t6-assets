@@ -60,13 +60,16 @@ The Windows GitHub Actions runner uses the Visual Studio 2026 generator (`Visual
 
 Linux/GCC 14 is tested with the explicit C++26 dialect. Windows MSVC 19.51 (VS 2026, x86) uses `/std:c++latest` because the current MSVC/CMake pairing does not expose a named `CXX26` feature; CMake therefore uses its recognized C++23 baseline only for project generation, while the actual MSVC compile uses the explicit latest-mode switch. This is not a claim that every final C++26 proposal is implemented by MSVC.
 
-## Generated C evidence retention and staging
+## Generated C evidence retention and staging (corrected)
 
-`tools/t6_native_decompile_availability_v1.py` cross-references the unique exact-byte PDB witness list with selection indexes beside **8 retained Ghidra `bundle.tar.zst` archives**. It finds **57 indexed exact-matched functions**; the other **212 have no indexed body in those retained archives in this repository**. This is an evidence-retention gap, not proof that the source was never previously exported or stored externally.
+The early v1 and v2 Ghidra bundles were stored as split `bundle.tar.zst.part-000` files rather than as monolithic `bundle.tar.zst`. The source-availability audit now handles **both formats**, validates the compressed SHA-256 receipts, checks exact per-function instruction-byte hashes, and reconstructs split archive streams before extracting pseudocode.
 
-On Linux CI, the script checks each recorded instruction-byte SHA against the archive selection, then streams matching generated `unreviewed/<VA>.c` members into a **separate, uncompiled** staging artifact for manual analysis. Every staged file retains its build identity and exact symbol provenance. Neither extracted Ghidra C nor a matching PDB symbol is automatically added to CMake or marked as retail-valid source.
+All **269/269 accepted unique client↔server PDB exact-byte matches** are indexed in the **10 retained archive groups** (8 monolithic plus 2 split). The first version's 57/269 count was an archive-discovery error, not a missing-source conclusion.
+
+`tools/t6_native_decompile_availability_v1.py` stages only the corresponding generated Ghidra `unreviewed/<VA>.c` bodies and writes per-function provenance + SHA-256 into a separate CI artifact. This is *not* an automatic promotion to compilable or retail-equivalent C++.
 
 ```sh
 python3 tools/test_t6_native_decompile_availability_v1.py
 python3 tools/t6_native_decompile_availability_v1.py --output build/t6-decompile-availability.json --stage-dir build/t6-native-ghidra-staging
 ```
+

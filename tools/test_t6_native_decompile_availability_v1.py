@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned T6 archive index census. Does not promote Ghidra bodies into native source."""
+"""Pinned evidence-retention census including v1/v2 split tar.zst bundles."""
 from __future__ import annotations
 import importlib.util
 from pathlib import Path
@@ -15,12 +15,14 @@ def main() -> None:
     spec.loader.exec_module(mod)
     report = mod.audit(repo)
     assert report["total_unique_exact_hash_matches"] == 269
-    assert report["indexed_in_retained_archives"] == 57
-    assert report["not_indexed_in_retained_archives"] == 212
-    assert report["retained_archive_count"] == 8
+    assert report["indexed_in_retained_archives"] == 269
+    assert report["not_indexed_in_retained_archives"] == 0
+    assert report["retained_archive_count"] == 10
+    assert report["verified_compressed_archive_count"] == 10
+    assert report["indexed_decompiler_completed"] == 269
     assert all(not x["native_admitted"] for x in report["entries"])
     assert all(x["source_status"] == "generated-unreviewed-ghidra-C" for x in report["entries"])
-    print("PASS: 57 indexed archive functions / 212 absent / 0 native bodies promoted")
+    print("PASS: 269/269 uniquely matched functions indexed in 10 hash-verified archives; 0 automatically promoted")
 
 if __name__ == "__main__":
     main()
