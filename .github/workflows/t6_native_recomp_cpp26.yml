@@ -5,12 +5,16 @@ on:
       - "reconstruction/native/**"
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
+      - "tools/t6_native_pdb_queue_v1.py"
+      - "tools/test_t6_native_pdb_queue_v1.py"
       - ".github/workflows/t6_native_recomp_cpp26.yml"
   pull_request:
     paths:
       - "reconstruction/native/**"
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
+      - "tools/t6_native_pdb_queue_v1.py"
+      - "tools/test_t6_native_pdb_queue_v1.py"
       - ".github/workflows/t6_native_recomp_cpp26.yml"
   workflow_dispatch:
 
@@ -27,6 +31,10 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Audit exact-build native source manifest
         run: python3 tools/t6_native_manifest_audit_v1.py
+      - name: Check exact-byte PDB-derived native source queue
+        run: |
+          python3 tools/test_t6_native_pdb_queue_v1.py
+          python3 tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
       - name: Configure recovered native leaf library
         run: cmake -S reconstruction/native -B build/t6-native -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_BUILD_TYPE=Debug
       - name: Build recovered native leaf library
@@ -42,8 +50,12 @@ jobs:
         run: python -m pip install "cmake>=3.31,<5"
       - name: Audit recovered native manifest
         run: python tools/t6_native_manifest_audit_v1.py
+      - name: Validate exact-byte PDB source queue
+        run: |
+          python tools/test_t6_native_pdb_queue_v1.py
+          python tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
       - name: Configure with MSVC x86
-        run: cmake -S reconstruction/native -B build/t6-native-win -G "Visual Studio 17 2022" -A Win32 -DBUILD_TESTING=ON
+        run: cmake -S reconstruction/native -B build/t6-native-win -G "Visual Studio 18 2026" -A Win32 -DBUILD_TESTING=ON
       - name: Compile and link native leaf-test executables
         run: cmake --build build/t6-native-win --config Release --parallel
       - name: Run native Windows x86 candidate tests

@@ -44,3 +44,14 @@ The parallel universal Rust renderer and importers remain separate consumers of 
 - Recovery provenance for the two newly compiled candidates is stored as native graph `source:c` representations and listed explicitly in `manifest.json`. They remain structural candidates until differential retail tests.
 
 This does **not** satisfy milestone M2 (real BO2 engine shell); it provides the earliest verifiable multi-unit link and exposes what still needs actual reconstruction.
+
+## Next-source inventory: exact-byte PDB matches
+
+`tools/t6_native_pdb_queue_v1.py` deterministically produces a separate **symbol-identity queue** from `proof/current_client/pdb_exact_hash_join_v1_strict/join.json`, rejecting all cross-build matches with ambiguous instruction-byte hashes. The pinned V1 proof contains **269 unique exact-byte correspondences** and **580 ambiguous match rows (excluded)**. Of the accepted entries, **15 have unprefixed object-file identities** (not automatically proof of first-party game source); the other 254 carry library or other object categories. None is claimed to be a rebuilt source unit simply because a symbol matches. The queue prioritizes larger unprefixed-object candidates for manual type/body recovery while preventing generated pseudocode from being auto-linked.
+
+```sh
+python3 tools/test_t6_native_pdb_queue_v1.py
+python3 tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
+```
+
+The Windows GitHub Actions runner uses the Visual Studio 2026 generator (`Visual Studio 18 2026 -A Win32`), rather than assuming a VS 2022 instance exists on `windows-2025`.
