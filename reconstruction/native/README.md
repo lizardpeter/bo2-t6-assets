@@ -79,3 +79,12 @@ python3 tools/t6_native_decompile_availability_v1.py --output build/t6-decompile
 The exact-hash PDB archive audit produced readable Ghidra C for all 269 matching functions. Nine small functions have now been manually translated into a third C++26 translation unit: Actor_ClearMoveHistory, cCurve::Reinit, Actor_ClearScriptOrient, Actor_ClearPileUp, XAnimClientNotifyList initialization, mover previous-origin selection, GJK OBB type, session QoS payload-size, and hunk default-buffer offset. Their exact client addresses, the source Ghidra SHA-256s, unique PDB instruction-byte witness hashes, and explicit non-retail-validated states are recorded in `manifest.json`.
 
 These nine are **host-callable semantic candidates**. Their C wrappers are *not* proof of correct MSVC `__fastcall`/member-function ABI or source-level names in the original binary. The new test validates field writes, guard bytes, both orientation branches, pointer offsets, and constant returns. Future production admission requires recovered true layouts/signatures, linkage and retail differential tests.
+
+
+## ABI-focused x86 recovery wave
+
+The T6 current-client PDB archive also contains the byte-identical SHA-1 initialisation function in db_auth_sha1.obj at 0x00622F10. We now compile its seven 32-bit state writes in a standalone C++26 source file and test all IV values, both zero counters, and unchanged guard bytes. This is candidate behavioral reconstruction, not SHA-1 subsystem completeness.
+
+The **separate** t6_native_msvc_pdb_abi Win32/MSVC library exposes the server-PDB symbol names for **five previously recovered functions**: Actor_ClearMoveHistory, Actor_ClearScriptOrient, Actor_ClearPileUp, Session_GetQosPayloadBufferSize, and offsetOfBufInHunkUserDefault. The first three use the __fastcall signature encoded by their PDB names; the latter two use __cdecl. CI checks COFF link-member decorations with MSVC dumpbin and links a Win32 calling-convention smoke test.
+
+**Important:** These are *ABI bridges*, not five additional independently recovered game functions. Matching mangled symbols plus smoke tests does **not** prove exact retail object layouts, prologue, instruction bytes, or full gameplay behavior. Full executable integration remains open.

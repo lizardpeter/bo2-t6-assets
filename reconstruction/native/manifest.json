@@ -3,7 +3,7 @@
   "target_build": "current-client",
   "target_sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
   "compile_target": "t6_native_recovered_leafs",
-  "scope": "13 explicitly-admitted structural source functions across three translation units; not a whole-engine link",
+  "scope": "14 separately compiled structural source candidates; five separately compiled true-name x86 ABI shims; NOT game engine",
   "functions": [
     {
       "entry_va": "0x009F6C0F",
@@ -174,6 +174,21 @@
       "cross_build_pdb_symbol": "?offsetOfBufInHunkUserDefault@@YAHXZ",
       "cross_build_witness": "accepted-exact-byte-identity-witness",
       "abi_state": "unverified-host-callable-explicit-pointer-candidate",
+      "admission": "candidate-structural-reconstruction",
+      "compiled": true,
+      "synthetic_invariant_tests": true,
+      "retail_differential_verified": false
+    },
+    {
+      "entry_va": "0x00622F10",
+      "symbol": "t6_sub_00622f10",
+      "source": "reconstruction/native/current_client/sha1_init_candidate_v1.cpp",
+      "origin_ghidra_generated_sha256": "7e855a325b4c7ba17570fb3547beca1163f9f134dcc6da568b6a46e6d2f01e09",
+      "instruction_bytes_sha256": "5a4e9f2f29ef413b42f58cb26166a47a590683a517f2a42416ec93097b1112cf",
+      "cross_build_pdb_symbol": "_SHA1_Init",
+      "cross_build_pdb_object": "db_auth_sha1.obj",
+      "cross_build_witness": "accepted-exact-byte-identity-witness",
+      "abi_state": "unverified-host-callable-pointer-candidate",
       "admission": "candidate-structural-reconstruction",
       "compiled": true,
       "synthetic_invariant_tests": true,

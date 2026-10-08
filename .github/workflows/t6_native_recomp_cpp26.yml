@@ -5,6 +5,7 @@ on:
       - "reconstruction/native/**"
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
+      - "tools/t6_verify_msvc_pdb_coff_symbols_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
       - "tools/t6_native_decompile_availability_v1.py"
@@ -15,6 +16,7 @@ on:
       - "reconstruction/native/**"
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
+      - "tools/t6_verify_msvc_pdb_coff_symbols_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
       - "tools/t6_native_decompile_availability_v1.py"
@@ -76,5 +78,7 @@ jobs:
         run: cmake -S reconstruction/native -B build/t6-native-win -G "Visual Studio 18 2026" -A Win32 -DBUILD_TESTING=ON
       - name: Compile and link native leaf-test executables
         run: cmake --build build/t6-native-win --config Release --parallel
+      - name: Verify PDB decorated COFF ABI names
+        run: python tools/t6_verify_msvc_pdb_coff_symbols_v1.py build/t6-native-win/Release/t6_native_msvc_pdb_abi.lib
       - name: Run native Windows x86 candidate tests
         run: ctest --test-dir build/t6-native-win -C Release --output-on-failure

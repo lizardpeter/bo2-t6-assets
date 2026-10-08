@@ -21,6 +21,7 @@ add_library(t6_native_recovered_leafs STATIC
     ../current_client/simd_candidates_v1.cpp
     current_client/stream_buffer_candidates_v1.cpp
     current_client/pdb_exact_game_candidates_v1.cpp
+    current_client/sha1_init_candidate_v1.cpp
 )
 
 if(MSVC)
@@ -44,4 +45,23 @@ if(BUILD_TESTING)
     add_executable(t6_native_pdb_game_tests tests/pdb_exact_game_candidates_v1_test.cpp)
     target_link_libraries(t6_native_pdb_game_tests PRIVATE t6_native_recovered_leafs)
     add_test(NAME t6_native_pdb_game_source_invariants COMMAND t6_native_pdb_game_tests)
+
+    add_executable(t6_native_sha1_init_tests tests/sha1_init_candidate_v1_test.cpp)
+    target_link_libraries(t6_native_sha1_init_tests PRIVATE t6_native_recovered_leafs)
+    add_test(NAME t6_native_sha1_context_initialization COMMAND t6_native_sha1_init_tests)
+endif()
+
+
+# This is intentionally a different library: only a 32-bit MSVC compiler
+# can establish the decorated server-PDB ABI for these current-client matches.
+# Portable source candidates remain free of native Windows ABI claims.
+if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+    add_library(t6_native_msvc_pdb_abi STATIC current_client/msvc_pdb_abi_v1.cpp)
+    target_link_libraries(t6_native_msvc_pdb_abi PRIVATE t6_native_recovered_leafs)
+    target_compile_options(t6_native_msvc_pdb_abi PRIVATE /W4)
+    if(BUILD_TESTING)
+        add_executable(t6_native_msvc_pdb_abi_tests tests/msvc_pdb_abi_v1_test.cpp)
+        target_link_libraries(t6_native_msvc_pdb_abi_tests PRIVATE t6_native_msvc_pdb_abi)
+        add_test(NAME t6_native_msvc_pdb_abi_smoke COMMAND t6_native_msvc_pdb_abi_tests)
+    endif()
 endif()
