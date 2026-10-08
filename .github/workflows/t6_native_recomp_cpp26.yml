@@ -1,0 +1,35 @@
+name: T6 native recompilation C++26 leaf admission
+on:
+  push:
+    paths:
+      - "reconstruction/native/**"
+      - "reconstruction/current_client/simd_candidates_v1.cpp"
+      - "tools/t6_native_manifest_audit_v1.py"
+      - ".github/workflows/t6_native_recomp_cpp26.yml"
+  pull_request:
+    paths:
+      - "reconstruction/native/**"
+      - "reconstruction/current_client/simd_candidates_v1.cpp"
+      - "tools/t6_native_manifest_audit_v1.py"
+      - ".github/workflows/t6_native_recomp_cpp26.yml"
+  workflow_dispatch:
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install C++26 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+          python3 -m pip install --user "cmake>=3.31,<4"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Audit exact-build native source manifest
+        run: python3 tools/t6_native_manifest_audit_v1.py
+      - name: Configure recovered native leaf library
+        run: cmake -S reconstruction/native -B build/t6-native -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_BUILD_TYPE=Debug
+      - name: Build recovered native leaf library
+        run: cmake --build build/t6-native --parallel
+      - name: Run deterministic candidate invariants
+        run: ctest --test-dir build/t6-native --output-on-failure
