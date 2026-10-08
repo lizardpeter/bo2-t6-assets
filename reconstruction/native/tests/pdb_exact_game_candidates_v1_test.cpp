@@ -69,7 +69,7 @@ int main() {
     for (auto at : {0x2a40,0x2a48,0x2a4c,0x2a68,0x2a6c})
         require(read<std::uint32_t>(curve,at)==0, "curve cleared fields");
     require(read<std::uint8_t>(curve,0x2a38)==0, "curve initial byte");
-    require(curve[0x2a2f]==0xa5 && curve[0x2a71]==0xa5, "curve guard bytes");
+    require(curve[0x2a2f]==0xa5 && curve[0x2a74]==0xa5, "curve guard bytes");
 
     std::array<std::uint8_t,0x504> notify{};
     notify.fill(0xa5);
