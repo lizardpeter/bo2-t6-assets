@@ -1,0 +1,147 @@
+name: Temporary Webkinz game-code acquisition
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/webkinz-game-reversal-capture.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  original-gamecode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Fetch Flash gameplay modules and classify original build hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/input work/meta work/source work/pcode
+          python3 - <<'PY'
+          import hashlib, json, pathlib, urllib.request, urllib.error
+          root=pathlib.Path('work/input')
+          target=[
+            ('Webkinz','https://play.webkinz.com/Webkinz.swf?v=v390_249','a7dfedca2f5153ff10e7052f8428ce9c4630a513a12c4c0513bebb7fc50c5ff3'),
+            ('main2','https://play.webkinz.com/SWF/main2.swf?v=v390_249','c1abd9b17b6fc3bdd06bfd822c8e38f4d24fbcb3b76e8aad4b783271af41dce8'),
+            ('petclasses','https://play.webkinz.com/SWF/PETS/petclasses.swf?v=v390_249','d5f58866aa49f228186e94741f97a7077a1fb42c9a631a146d7d1b8c423fb059'),
+            ('crossAccess','https://play.webkinz.com/SWF/PETS/crossAccess.swf?v=v390_249','ee133c49a6dfd549d9b4939a625aad97f08374957b6013c506e5f1948d6056f0'),
+            ('host','https://play.webkinz.com/SWF/host.swf',''),
+            ('hostControlServices','https://play.webkinz.com/SWF/hostControlServices.swf',''),
+            ('hostControl_wrapper','https://play.webkinz.com/SWF/hostControl_wrapper.swf',''),
+            ('webkinz_house','https://play.webkinz.com/subApplications/webkinz-house/webkinz-house.swf',''),
+            ('RoomSession','https://play.webkinz.com/SWF/VIEWS/Room/RoomSession.swf',''),
+            ('RoomSession1','https://play.webkinz.com/SWF/VIEWS/Room/RoomSession1.swf',''),
+            ('RoomSession2','https://play.webkinz.com/SWF/VIEWS/Room/RoomSession2.swf',''),
+            ('room_buildmap1024','https://play.webkinz.com/SWF/ROOM/buildmap1024.swf',''),
+            ('as3bridgeService','https://play.webkinz.com/SWF/server/as3bridgeService.swf?v=v390_249','16998de434e36e17cfa2c1b79399dea63bdc9e2ecea8f5666c40c75066bf295d'),
+            ('views','https://play.webkinz.com/SWF/staticdata/views.swf?v=v390_249','c543b3c567dbc870e9f0ff5424bc9c9ab54f61cc6bb84972eeba278d0096e606')
+          ]
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+          rows=[]
+          for name,url,sha in target:
+            row=dict(name=name,url=url,expected_historical_sha256=sha or None,hash_classification='unavailable')
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':ua})
+              with urllib.request.urlopen(req,timeout=55) as r:
+                body=r.read(24_000_000+1)
+                row.update(status=r.status,content_type=r.headers.get('Content-Type',''),redirect_url=r.url)
+              row.update(size=len(body),signature=body[:3].decode('ascii','replace'),sha256=hashlib.sha256(body).hexdigest())
+              if len(body)>24_000_000 or body[:3] not in (b'FWS',b'CWS',b'ZWS'):
+                row['error']='non-SWF or over size limit; not saved as Flash'
+              else:
+                (root/(name+'.swf')).write_bytes(body)
+                row['hash_classification']=('exact-v390_249' if sha and row['sha256']==sha else 'different-from-v390_249' if sha else 'live-unpinned')
+            except Exception as exc:
+              row['error']=str(type(exc).__name__)+': '+str(exc)[:500]
+            rows.append(row)
+            print(json.dumps(row),flush=True)
+          pathlib.Path('work/meta/fetch.json').write_text(json.dumps({'schema':'webkinz-original-client-gamecode-acquisition-v1','files':rows},indent=2))
+          PY
+
+      - name: Obtain Flash bytecode decompiler
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ffdec
+          curl --fail -L --retry 2 --connect-timeout 20 --max-time 240 \
+            -o ffdec.zip https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip
+          unzip -q ffdec.zip -d ffdec
+          test -f ffdec/ffdec.jar
+          java -jar ffdec/ffdec.jar -help > work/meta/ffdec-version.txt 2>&1 || true
+
+      - name: Export real ActionScript and P-code
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          if [ ! -f ffdec/ffdec.jar ]; then
+            echo "FFDec unavailable" > work/meta/export-error.txt
+            exit 0
+          fi
+          shopt -s nullglob
+          for swf in work/input/*.swf; do
+            name="$(basename "$swf" .swf)"
+            mkdir -p "work/source/$name" "work/pcode/$name"
+            timeout 210 java -Xmx4g -jar ffdec/ffdec.jar -cli -format script:as \
+              -export script "work/source/$name" "$swf" \
+              > "work/meta/$name.as.log" 2>&1 || true
+            timeout 210 java -Xmx4g -jar ffdec/ffdec.jar -cli -format script:pcode \
+              -export script "work/pcode/$name" "$swf" \
+              > "work/meta/$name.pcode.log" 2>&1 || true
+            echo "$name AS $(find "work/source/$name" -type f | wc -l) PCODE $(find "work/pcode/$name" -type f | wc -l)" | tee -a work/meta/export-counts.txt
+          done
+
+      - name: Extract game-method evidence, not just a file census
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib,re,hashlib
+          roots=[pathlib.Path('work/source'),pathlib.Path('work/pcode')]
+          target=[
+            'ModelService.interact','RoomService.placeItem','WInteractiveItem','WPetHolderItem',
+            'WItemHolderItem','stackOrder','rotationState','sw.png','ne.png',
+            'BridgeListener','getViewLauncherDetails','petclasses','setActive',
+            'getActions','MovieClip','addChild','sortOn','depth','room'
+          ]
+          hits=[]
+          for root in roots:
+            for f in root.rglob('*'):
+              if not f.is_file() or f.stat().st_size>2_000_000:continue
+              try:s=f.read_text(encoding='utf-8',errors='replace')
+              except Exception:continue
+              for line_no,line in enumerate(s.splitlines(),1):
+                which=[t for t in target if t.lower() in line.lower()]
+                if which and len(hits)<15000:
+                  hits.append({'path':str(f),'line':line_no,'needles':which,
+                               'text':line.strip()[:400],
+                               'source_file_sha256':hashlib.sha256(f.read_bytes()).hexdigest()})
+          out=pathlib.Path('work/meta/gamecode-hits.json')
+          out.write_text(json.dumps({'schema':'webkinz-flash-gamecode-hits-v1','hits':hits,
+             'hitCount':len(hits),'truncated':len(hits)>=15000},indent=2))
+          print('game-code line hits:',len(hits))
+          PY
+
+      - name: Preserve captured game binaries and source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkinz-gamecode-evidence-temporary
+          path: work/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 30
