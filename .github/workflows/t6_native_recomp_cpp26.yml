@@ -1,4 +1,4 @@
-name: T6 native recompilation C++26 leaf admission
+name: T6 native recompilation C++26 multi-unit admission
 on:
   push:
     paths:
@@ -33,3 +33,18 @@ jobs:
         run: cmake --build build/t6-native --parallel
       - name: Run deterministic candidate invariants
         run: ctest --test-dir build/t6-native --output-on-failure
+
+  native-msvc-x86:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install modern CMake
+        run: python -m pip install "cmake>=3.31,<5"
+      - name: Audit recovered native manifest
+        run: python tools/t6_native_manifest_audit_v1.py
+      - name: Configure with MSVC x86
+        run: cmake -S reconstruction/native -B build/t6-native-win -G "Visual Studio 17 2022" -A Win32 -DBUILD_TESTING=ON
+      - name: Compile and link native leaf-test executables
+        run: cmake --build build/t6-native-win --config Release --parallel
+      - name: Run native Windows x86 candidate tests
+        run: ctest --test-dir build/t6-native-win -C Release --output-on-failure

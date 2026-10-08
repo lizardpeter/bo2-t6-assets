@@ -3,7 +3,7 @@
   "target_build": "current-client",
   "target_sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
   "compile_target": "t6_native_recovered_leafs",
-  "scope": "standalone-recovered-leaf-candidates; not engine-link readiness",
+  "scope": "explicitly-admitted, separate recovered leaf translation units; no retail engine executable",
   "functions": [
     {
       "entry_va": "0x009F6C0F",
@@ -18,6 +18,36 @@
       "entry_va": "0x009F6D72",
       "symbol": "t6_sub_009f6d72",
       "source": "reconstruction/current_client/simd_candidates_v1.cpp",
+      "admission": "candidate-structural-reconstruction",
+      "compiled": true,
+      "synthetic_invariant_tests": true,
+      "retail_differential_verified": false
+    },
+    {
+      "entry_va": "0x009A7D00",
+      "symbol": "t6_sub_009a7d00",
+      "source": "reconstruction/native/current_client/stream_buffer_candidates_v1.cpp",
+      "origin_uregraph_representation": "urn:ure:t6:representation:source-c:current-client:009a7d00:3137fb02074ca24d",
+      "evidence_witness": "fa0cf584261bb99137ebb734c3371119404800d3",
+      "unresolved_external_functions": [
+        "0x00A72BF0"
+      ],
+      "test_dependency_policy": "test-only-virtual-address-copy-adapter-not-a-retail-implementation",
+      "admission": "candidate-structural-reconstruction",
+      "compiled": true,
+      "synthetic_invariant_tests": true,
+      "retail_differential_verified": false
+    },
+    {
+      "entry_va": "0x009A7D60",
+      "symbol": "t6_sub_009a7d60",
+      "source": "reconstruction/native/current_client/stream_buffer_candidates_v1.cpp",
+      "origin_uregraph_representation": "urn:ure:t6:representation:source-c:current-client:009a7d60:ee7f625775740b95",
+      "evidence_witness": "fa0cf584261bb99137ebb734c3371119404800d3",
+      "unresolved_external_functions": [
+        "0x00A72BF0"
+      ],
+      "test_dependency_policy": "test-only-virtual-address-copy-adapter-not-a-retail-implementation",
       "admission": "candidate-structural-reconstruction",
       "compiled": true,
       "synthetic_invariant_tests": true,

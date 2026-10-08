@@ -4,7 +4,7 @@ This is **not** a replacement for the universal Rust engine or renderer. It is a
 
 ## First runnable milestone
 
-`CMakeLists.txt` compiles the two previously recovered, source-addressed `current_client/simd_candidates_v1.cpp` leaf candidates into a static library and tests their 16x16 predictions/stride boundaries. The source already existed in this repository; this lane turns it into an independently buildable target with a named test. Passing the test **does not** prove binary equivalence or a working game. It does not link any BO2 subsystem or produce a BO2 executable.
+`CMakeLists.txt` compiles the previously recovered, source-addressed `current_client/simd_candidates_v1.cpp` leaf candidates into a static library and tests their 16x16 predictions/stride boundaries. A second source file reconstructs two buffer-state functions at 0x009A7D00 and 0x009A7D60 from preserved graph evidence; a **test-only** fake for their unresolved 0x00A72BF0 copy dependency permits checking state changes and short/refill/empty paths. This is a multi-file native library and multi-executable link, **not** an integrated game-runtime link. The source already existed in this repository; this lane turns it into an independently buildable target with a named test. Passing the test **does not** prove binary equivalence or a working game. It does not link any BO2 subsystem or produce a BO2 executable.
 
 From repository root, using CMake 3.31+ and a compiler with a C++26 switch:
 
@@ -34,3 +34,13 @@ On Windows use an up-to-date Visual Studio/MSVC toolchain and select x86 as need
 - **M4:** Build and run a playable native T6 subsystem, followed by broader MP/Zombies/SP coverage.
 
 The parallel universal Rust renderer and importers remain separate consumers of recovered knowledge. The eventual Rust rewrite is validated against retail/native execution, not mistaken for a recompilation.
+
+## Multi-unit checkpoint (2026-10-07)
+
+- Source 1: `reconstruction/current_client/simd_candidates_v1.cpp` — two predictor candidate functions.
+- Source 2: `reconstruction/native/current_client/stream_buffer_candidates_v1.cpp` — two recovered state-machine candidates with the exact retail call address `0x00A72BF0` retained as an **unresolved production dependency**.
+- `t6_native_stream_tests` supplies that missing dependency with a synthetic virtual-source-memory adapter. This is test scaffolding, not recovered BO2 gameplay or a production copy-helper implementation.
+- CI compiles/links and tests on GCC C++26/Linux, and separately on **MSVC x86/Windows**. Passing cannot establish parity with retail bytes, calling conventions or actual engine initialization.
+- Recovery provenance for the two newly compiled candidates is stored as native graph `source:c` representations and listed explicitly in `manifest.json`. They remain structural candidates until differential retail tests.
+
+This does **not** satisfy milestone M2 (real BO2 engine shell); it provides the earliest verifiable multi-unit link and exposes what still needs actual reconstruction.

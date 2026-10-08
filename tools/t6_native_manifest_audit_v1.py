@@ -18,7 +18,8 @@ def audit(root: Path) -> dict:
     assert manifest["target_sha256"] == EXPECTED_SHA
     functions = manifest["functions"]
     seen_addresses, seen_symbols = set(), set()
-    counts = {"admitted": 0, "compiled": 0, "retail_validated": 0}
+    counts = {"admitted": 0, "compiled": 0, "retail_validated": 0, "unresolved_external_dependent": 0}
+    cmake = (root / "reconstruction/native/CMakeLists.txt").read_text(encoding="utf-8")
     for f in functions:
         address, symbol = f["entry_va"], f["symbol"]
         assert re.fullmatch(r"0x[0-9A-F]{8}", address), address
@@ -32,7 +33,20 @@ def audit(root: Path) -> dict:
         assert source.is_relative_to(root.resolve()), f["source"]
         assert source.is_file(), f["source"]
         content = source.read_text(encoding="utf-8")
-        assert re.search(r'extern\s+"C"\s+void\s+' + re.escape(symbol) + r'\s*\(', content), symbol
+        assert re.search(r'extern\s+"C"\s+(?:void\s*\*|void|bool)\s+' +
+                         re.escape(symbol) + r'\s*\(', content), symbol
+        assert source.name in cmake, (symbol, "source not admitted to CMake target")
+        unresolved = f.get("unresolved_external_functions", [])
+        assert isinstance(unresolved, list), symbol
+        if unresolved:
+            assert f.get("origin_uregraph_representation"), symbol
+            assert f.get("test_dependency_policy") == (
+                "test-only-virtual-address-copy-adapter-not-a-retail-implementation"
+            ), symbol
+            for external in unresolved:
+                assert re.fullmatch(r"0x[0-9A-F]{8}", external), symbol
+                assert "t6_sub_" + external[2:].lower() in content, symbol
+            counts["unresolved_external_dependent"] += 1
         if f["retail_differential_verified"]:
             assert f["admission"] == "retail-validated", symbol
             assert f.get("retail_evidence_id"), symbol

@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # is not link-ready source and must never be globbed into this target.
 add_library(t6_native_recovered_leafs STATIC
     ../current_client/simd_candidates_v1.cpp
+    current_client/stream_buffer_candidates_v1.cpp
 )
 
 if(MSVC)
@@ -23,4 +24,10 @@ if(BUILD_TESTING)
     add_executable(t6_native_leaf_tests tests/simd_candidates_v1_test.cpp)
     target_link_libraries(t6_native_leaf_tests PRIVATE t6_native_recovered_leafs)
     add_test(NAME t6_native_leaf_invariants COMMAND t6_native_leaf_tests)
+
+    # Links a second recovered T6 translation unit into a real executable.
+    # Its unimplemented retail copy helper is supplied ONLY by the test target.
+    add_executable(t6_native_stream_tests tests/stream_buffer_candidates_v1_test.cpp)
+    target_link_libraries(t6_native_stream_tests PRIVATE t6_native_recovered_leafs)
+    add_test(NAME t6_native_stream_state_machine COMMAND t6_native_stream_tests)
 endif()
