@@ -3,7 +3,7 @@
   "target_build": "current-client",
   "target_sha256": "770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf",
   "compile_target": "t6_native_recovered_leafs",
-  "scope": "14 separately compiled structural source candidates; five separately compiled true-name x86 ABI shims; NOT game engine",
+  "scope": "14 portable structural functions plus one MSVC x86 glass allocator constructor; independent ABI shims do not add recovered-function count",
   "functions": [
     {
       "entry_va": "0x009F6C0F",
@@ -189,6 +189,24 @@
       "cross_build_pdb_object": "db_auth_sha1.obj",
       "cross_build_witness": "accepted-exact-byte-identity-witness",
       "abi_state": "unverified-host-callable-pointer-candidate",
+      "admission": "candidate-structural-reconstruction",
+      "compiled": true,
+      "synthetic_invariant_tests": true,
+      "retail_differential_verified": false
+    },
+    {
+      "entry_va": "0x005F2550",
+      "symbol": "t6_sub_005f2550",
+      "source": "reconstruction/native/current_client/glass_allocator_msvc_x86_v1.cpp",
+      "source_declaration": "msvc-x86-native-template-constructor",
+      "native_pdb_constructor": "??0?$StaticFixedSizeAllocator@UTempPackedOutline@@$0BFO@@@QAE@XZ",
+      "msvc_x86_only": true,
+      "origin_ghidra_generated_sha256": "726155dae153755459827397c816d72afe8012bbfcb38f75541ffaf4894045a8",
+      "instruction_bytes_sha256": "1b54ce3f688e910b31ed9bd7beceba1f965b2868c748defecc89f24a8326bcc9",
+      "cross_build_pdb_symbol": "??0?$StaticFixedSizeAllocator@UTempPackedOutline@@$0BFO@@@QAE@XZ",
+      "cross_build_pdb_object": "glass_client.obj",
+      "cross_build_witness": "accepted-exact-byte-identity-witness",
+      "abi_state": "msvc-x86-decorated-native-constructor-candidate",
       "admission": "candidate-structural-reconstruction",
       "compiled": true,
       "synthetic_invariant_tests": true,

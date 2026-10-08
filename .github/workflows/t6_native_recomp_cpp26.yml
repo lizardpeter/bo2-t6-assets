@@ -80,5 +80,7 @@ jobs:
         run: cmake --build build/t6-native-win --config Release --parallel
       - name: Verify PDB decorated COFF ABI names
         run: python tools/t6_verify_msvc_pdb_coff_symbols_v1.py build/t6-native-win/Release/t6_native_msvc_pdb_abi.lib
+      - name: Verify original glass allocator constructor COFF name
+        run: python tools/t6_verify_msvc_pdb_coff_symbols_v1.py build/t6-native-win/Release/t6_native_msvc_glass_allocator.lib --spec reconstruction/native/msvc_glass_allocator_symbols_v1.json
       - name: Run native Windows x86 candidate tests
         run: ctest --test-dir build/t6-native-win -C Release --output-on-failure

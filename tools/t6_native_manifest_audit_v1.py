@@ -18,7 +18,8 @@ def audit(root: Path) -> dict:
     assert manifest["target_sha256"] == EXPECTED_SHA
     functions = manifest["functions"]
     seen_addresses, seen_symbols = set(), set()
-    counts = {"admitted": 0, "compiled": 0, "retail_validated": 0, "unresolved_external_dependent": 0}
+    counts = {"admitted": 0, "portable_compiled": 0, "msvc_x86_only_compiled": 0,
+              "retail_validated": 0, "unresolved_external_dependent": 0}
     cmake = (root / "reconstruction/native/CMakeLists.txt").read_text(encoding="utf-8")
     for f in functions:
         address, symbol = f["entry_va"], f["symbol"]
@@ -33,7 +34,13 @@ def audit(root: Path) -> dict:
         assert source.is_relative_to(root.resolve()), f["source"]
         assert source.is_file(), f["source"]
         content = source.read_text(encoding="utf-8")
-        assert re.search(r'extern\s+"C"\s+[^;\n]+?\b' + re.escape(symbol) + r'\s*\(', content), symbol
+        if f.get("source_declaration") == "msvc-x86-native-template-constructor":
+            assert f.get("msvc_x86_only") is True, symbol
+            assert f.get("native_pdb_constructor") == f.get("cross_build_pdb_symbol"), symbol
+            assert re.search(r'StaticFixedSizeAllocator<TempPackedOutline,\s*350>\s*::\s*StaticFixedSizeAllocator\s*\(',content),symbol
+            assert "glass_allocator_msvc_x86_v1.cpp" in cmake, symbol
+        else:
+            assert re.search(r'extern\s+"C"\s+[^;\n]+?\b' + re.escape(symbol) + r'\s*\(', content), symbol
         assert source.name in cmake, (symbol, "source not admitted to CMake target")
         unresolved = f.get("unresolved_external_functions", [])
         assert isinstance(unresolved, list), symbol
@@ -52,7 +59,10 @@ def audit(root: Path) -> dict:
         if f["admission"] == "retail-validated":
             assert f["retail_differential_verified"], symbol
         counts["admitted"] += 1
-        counts["compiled"] += bool(f["compiled"])
+        if f.get("msvc_x86_only"):
+            counts["msvc_x86_only_compiled"] += bool(f["compiled"])
+        else:
+            counts["portable_compiled"] += bool(f["compiled"])
         counts["retail_validated"] += bool(f["retail_differential_verified"])
     return counts
 
