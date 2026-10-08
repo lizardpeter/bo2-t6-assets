@@ -7,6 +7,8 @@ on:
       - "tools/t6_native_manifest_audit_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
+      - "tools/t6_native_decompile_availability_v1.py"
+      - "tools/test_t6_native_decompile_availability_v1.py"
       - ".github/workflows/t6_native_recomp_cpp26.yml"
   pull_request:
     paths:
@@ -15,6 +17,8 @@ on:
       - "tools/t6_native_manifest_audit_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
+      - "tools/t6_native_decompile_availability_v1.py"
+      - "tools/test_t6_native_decompile_availability_v1.py"
       - ".github/workflows/t6_native_recomp_cpp26.yml"
   workflow_dispatch:
 
@@ -26,7 +30,7 @@ jobs:
       - name: Install C++26 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14
+          sudo apt-get install -y g++-14 zstd
           python3 -m pip install --user "cmake>=3.31,<4"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Audit exact-build native source manifest
@@ -35,6 +39,18 @@ jobs:
         run: |
           python3 tools/test_t6_native_pdb_queue_v1.py
           python3 tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
+      - name: Audit and stage generated PDB-matched Ghidra evidence
+        run: |
+          python3 tools/test_t6_native_decompile_availability_v1.py
+          python3 tools/t6_native_decompile_availability_v1.py --output build/t6-decompile-availability.json --stage-dir build/t6-native-ghidra-staging
+      - name: Preserve unreviewed Ghidra staging for source review
+        uses: actions/upload-artifact@v4
+        with:
+          name: t6-pdb-ghidra-unreviewed
+          path: |
+            build/t6-native-ghidra-staging/
+            build/t6-decompile-availability.json
+          retention-days: 30
       - name: Configure recovered native leaf library
         run: cmake -S reconstruction/native -B build/t6-native -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_BUILD_TYPE=Debug
       - name: Build recovered native leaf library
@@ -54,6 +70,8 @@ jobs:
         run: |
           python tools/test_t6_native_pdb_queue_v1.py
           python tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
+      - name: Audit retained decompilation archives
+        run: python tools/test_t6_native_decompile_availability_v1.py
       - name: Configure with MSVC x86
         run: cmake -S reconstruction/native -B build/t6-native-win -G "Visual Studio 18 2026" -A Win32 -DBUILD_TESTING=ON
       - name: Compile and link native leaf-test executables
