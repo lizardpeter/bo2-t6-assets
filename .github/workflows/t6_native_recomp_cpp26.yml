@@ -6,6 +6,7 @@ on:
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
       - "tools/t6_native_callgraph_frontier_v1.py"
+      - "tools/t6_native_stage_exact_callers_v1.py"
       - "tools/t6_verify_msvc_pdb_coff_symbols_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
@@ -18,6 +19,7 @@ on:
       - "reconstruction/current_client/simd_candidates_v1.cpp"
       - "tools/t6_native_manifest_audit_v1.py"
       - "tools/t6_native_callgraph_frontier_v1.py"
+      - "tools/t6_native_stage_exact_callers_v1.py"
       - "tools/t6_verify_msvc_pdb_coff_symbols_v1.py"
       - "tools/t6_native_pdb_queue_v1.py"
       - "tools/test_t6_native_pdb_queue_v1.py"
@@ -62,6 +64,14 @@ jobs:
         with:
           name: t6-native-recovery-callgraph-frontier
           path: build/t6-native-callgraph-frontier.json
+          retention-days: 30
+      - name: Stage three exact callgraph-derived decompiler bodies
+        run: python3 tools/t6_native_stage_exact_callers_v1.py --out-dir build/t6-callgraph-caller-bodies
+      - name: Preserve original callers for reconstruction
+        uses: actions/upload-artifact@v4
+        with:
+          name: t6-native-exact-caller-bodies
+          path: build/t6-callgraph-caller-bodies/
           retention-days: 30
       - name: Configure recovered native leaf library
         run: cmake -S reconstruction/native -B build/t6-native -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_BUILD_TYPE=Debug
