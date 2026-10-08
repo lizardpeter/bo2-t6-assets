@@ -33,8 +33,7 @@ def audit(root: Path) -> dict:
         assert source.is_relative_to(root.resolve()), f["source"]
         assert source.is_file(), f["source"]
         content = source.read_text(encoding="utf-8")
-        assert re.search(r'extern\s+"C"\s+(?:void\s*\*|void|bool)\s+' +
-                         re.escape(symbol) + r'\s*\(', content), symbol
+        assert re.search(r'extern\s+"C"\s+[^;\n]+?\b' + re.escape(symbol) + r'\s*\(', content), symbol
         assert source.name in cmake, (symbol, "source not admitted to CMake target")
         unresolved = f.get("unresolved_external_functions", [])
         assert isinstance(unresolved, list), symbol

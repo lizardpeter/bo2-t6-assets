@@ -73,3 +73,9 @@ python3 tools/test_t6_native_decompile_availability_v1.py
 python3 tools/t6_native_decompile_availability_v1.py --output build/t6-decompile-availability.json --stage-dir build/t6-native-ghidra-staging
 ```
 
+
+## First named-function source wave
+
+The exact-hash PDB archive audit produced readable Ghidra C for all 269 matching functions. Nine small functions have now been manually translated into a third C++26 translation unit: Actor_ClearMoveHistory, cCurve::Reinit, Actor_ClearScriptOrient, Actor_ClearPileUp, XAnimClientNotifyList initialization, mover previous-origin selection, GJK OBB type, session QoS payload-size, and hunk default-buffer offset. Their exact client addresses, the source Ghidra SHA-256s, unique PDB instruction-byte witness hashes, and explicit non-retail-validated states are recorded in `manifest.json`.
+
+These nine are **host-callable semantic candidates**. Their C wrappers are *not* proof of correct MSVC `__fastcall`/member-function ABI or source-level names in the original binary. The new test validates field writes, guard bytes, both orientation branches, pointer offsets, and constant returns. Future production admission requires recovered true layouts/signatures, linkage and retail differential tests.

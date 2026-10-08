@@ -20,6 +20,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(t6_native_recovered_leafs STATIC
     ../current_client/simd_candidates_v1.cpp
     current_client/stream_buffer_candidates_v1.cpp
+    current_client/pdb_exact_game_candidates_v1.cpp
 )
 
 if(MSVC)
@@ -39,4 +40,8 @@ if(BUILD_TESTING)
     add_executable(t6_native_stream_tests tests/stream_buffer_candidates_v1_test.cpp)
     target_link_libraries(t6_native_stream_tests PRIVATE t6_native_recovered_leafs)
     add_test(NAME t6_native_stream_state_machine COMMAND t6_native_stream_tests)
+
+    add_executable(t6_native_pdb_game_tests tests/pdb_exact_game_candidates_v1_test.cpp)
+    target_link_libraries(t6_native_pdb_game_tests PRIVATE t6_native_recovered_leafs)
+    add_test(NAME t6_native_pdb_game_source_invariants COMMAND t6_native_pdb_game_tests)
 endif()
