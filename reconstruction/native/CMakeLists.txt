@@ -2,7 +2,16 @@ cmake_minimum_required(VERSION 3.31)
 project(t6_native_recomp LANGUAGES CXX)
 
 # C++26 is the selected source target. It is not evidence of retail ABI parity.
-set(CMAKE_CXX_STANDARD 26)
+# GCC/Clang have an explicit C++26 dialect selector. MSVC 19.51 supports
+# /std:c++latest, but CMake 4.4 cannot enable the named CXX26 feature for MSVC.
+# Use a CMake-known baseline and explicitly select MSVC's latest C++ dialect.
+# Never silently downgrade compiler modes on either target.
+if(MSVC)
+    set(CMAKE_CXX_STANDARD 23)
+    add_compile_options(/std:c++latest)
+else()
+    set(CMAKE_CXX_STANDARD 26)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

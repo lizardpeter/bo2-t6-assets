@@ -55,3 +55,7 @@ python3 tools/t6_native_pdb_queue_v1.py --output build/t6-native-pdb-queue.json
 ```
 
 The Windows GitHub Actions runner uses the Visual Studio 2026 generator (`Visual Studio 18 2026 -A Win32`), rather than assuming a VS 2022 instance exists on `windows-2025`.
+
+### C++26 toolchain selection
+
+Linux/GCC 14 is tested with the explicit C++26 dialect. Windows MSVC 19.51 (VS 2026, x86) uses `/std:c++latest` because the current MSVC/CMake pairing does not expose a named `CXX26` feature; CMake therefore uses its recognized C++23 baseline only for project generation, while the actual MSVC compile uses the explicit latest-mode switch. This is not a claim that every final C++26 proposal is implemented by MSVC.
