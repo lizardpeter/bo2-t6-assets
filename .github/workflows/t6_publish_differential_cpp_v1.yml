@@ -1,0 +1,51 @@
+name: Publish differential-tested original BO2 C++ source
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_publish_differential_cpp_v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37949066368
+          github-token: ${{ github.token }}
+          name: t6-full-original-PC-differentially-tested-native-CPP-scalar-candidates
+          path: /tmp/verified-original-CPP
+      - name: Check evidence identities and publish compiler-tested C++ source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('/tmp/verified-original-CPP')
+          summary=json.loads((root/'summary.json').read_text())
+          good=json.loads((root/'verified_candidates.json').read_text())
+          assert summary['passed_limited_original_x86_differential']==len(good)==34
+          assert summary['differential_inputs_executed']==1140
+          assert len({x['entry'] for x in good})==len(good)
+          assert all(len(x['original_sha256'])==64 for x in good)
+          assert (root/'verified_candidates.cpp').stat().st_size>0
+          output=pathlib.Path('proof/server/native_x86_differential_v1')
+          output.mkdir(parents=True,exist_ok=True)
+          for filename in ('verified_candidates.cpp','verified_candidates.json'):
+            (output/filename).write_bytes((root/filename).read_bytes())
+          print('PUBLISHED',len(good),'original-x86 differential-tested native C++ source candidates')
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/native_x86_differential_v1/verified_candidates.*
+          git diff --cached --quiet && exit 0
+          git commit -m 'Publish 34 original BO2 PC x86 differential-tested native C++ function bodies'
+          git pull --rebase origin main
+          git push origin HEAD:main
