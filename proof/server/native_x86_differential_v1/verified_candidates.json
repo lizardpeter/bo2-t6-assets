@@ -1,0 +1,352 @@
+[
+  {
+    "entry": "0x0040de00",
+    "original_name": "I_max",
+    "return_type": "int",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ],
+      [
+        "int",
+        "param_2"
+      ]
+    ],
+    "body": "\n  if (param_1 < param_2) {\n    param_1 = param_2;\n  }\n  return param_1;\n",
+    "original_sha256": "410aae7e5da307ef55fd534d1c28652361e5129e454eef9a359f7a4e5c6e0b8a"
+  },
+  {
+    "entry": "0x0040de20",
+    "original_name": "I_min",
+    "return_type": "int",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ],
+      [
+        "int",
+        "param_2"
+      ]
+    ],
+    "body": "\n  if (param_1 <= param_2) {\n    param_2 = param_1;\n  }\n  return param_2;\n",
+    "original_sha256": "b6bbdc93b5b4a1f424a93bfee48def779c4e1ad2656b7d0cfd680e270156ea43"
+  },
+  {
+    "entry": "0x0045bf40",
+    "original_name": "G_IsSpeciesDog",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if ((param_1 != 0) && (param_1 != 3)) {\n    return false;\n  }\n  return true;\n",
+    "original_sha256": "9319eafe4f820e8a051f9a0c435e2febcd338f0adff545ea37eacde5626f4d65"
+  },
+  {
+    "entry": "0x00552f80",
+    "original_name": "DB_GetImagePoolSize",
+    "return_type": "uint",
+    "arguments": [],
+    "body": "\n  return 0x13e0;\n",
+    "original_sha256": "4c89a92a8ca0972432bec065d982bfac229795d9a6b8edcbe9d64b981dac2d34"
+  },
+  {
+    "entry": "0x005623d0",
+    "original_name": "LUI_CoD_DoesChecksumMatch",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "uint",
+        "param_1"
+      ]
+    ],
+    "body": "\n  return true;\n",
+    "original_sha256": "e18aacce29affcdddaa5f641ac1ec12552e0fe9d066e6408941b1792818b8619"
+  },
+  {
+    "entry": "0x005e7ae0",
+    "original_name": "G_GetClientSize",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x5808;\n",
+    "original_sha256": "691e986dd504b921d2c4f1b502dfb0de18aa01ee0112ca18c19dec69e2ee060c"
+  },
+  {
+    "entry": "0x005e7af0",
+    "original_name": "G_GetActorSize",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x2720;\n",
+    "original_sha256": "d79a77d1ff92a93e12ccce03a3314f3f0d0e25ec89361dfb517112ad1bb7269d"
+  },
+  {
+    "entry": "0x006440c0",
+    "original_name": "G_IsSpeciesBigDog",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  return param_1 == 1;\n",
+    "original_sha256": "3f0e09aafdc87654dc4ba55b5d2b53b3ee663aca0ae97a2b67a53d8673718ec5"
+  },
+  {
+    "entry": "0x006440d0",
+    "original_name": "G_SpeciesUsesNonGenericAnimtree",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if (((param_1 != 0) && (param_1 != 3)) && (param_1 != 1)) {\n    return false;\n  }\n  return true;\n",
+    "original_sha256": "7c0f0d920429f6b3dbc9235ffa90be1c13773294362540373d038a103b308448"
+  },
+  {
+    "entry": "0x006440f0",
+    "original_name": "G_SpeciesCanUseNegotiations",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  return param_1 != 1;\n",
+    "original_sha256": "6f1ebbc7bb70db7040452c3607f8988e56e746d4d3bbee315e08b5cdeef5fac4"
+  },
+  {
+    "entry": "0x006c1930",
+    "original_name": "Live_HowManyPlayersCanWeHost",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x12;\n",
+    "original_sha256": "8e3e785d41dddc521601c78e6b419295110be69e63907076843ba16e092e98c9"
+  },
+  {
+    "entry": "0x006c1a40",
+    "original_name": "Content_GetKnownContentPackCount",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 10;\n",
+    "original_sha256": "07297dca94be1b975a5dc696b5976f205b84057995fa3d3fbb157101b1ae8098"
+  },
+  {
+    "entry": "0x0078db60",
+    "original_name": "ColorIndex",
+    "return_type": "uchar",
+    "arguments": [
+      [
+        "uchar",
+        "param_1"
+      ]
+    ],
+    "body": "\n  byte bVar1;\n  \n  bVar1 = param_1 - 0x30;\n  if (9 < bVar1) {\n    bVar1 = 7;\n  }\n  return bVar1;\n",
+    "original_sha256": "d37a0456b795e9128566c288ec2cba2c9b74c794f90d8013c6cd85e22b646ccc"
+  },
+  {
+    "entry": "0x0078dce0",
+    "original_name": "ShortNoSwap",
+    "return_type": "short",
+    "arguments": [
+      [
+        "short",
+        "param_1"
+      ]
+    ],
+    "body": "\n  return param_1;\n",
+    "original_sha256": "ea539c55d9aa7549817663318d1dbd69feafdf1d0feea7755c3d519fabde6202"
+  },
+  {
+    "entry": "0x0078df60",
+    "original_name": "I_isalnum",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if ((((param_1 < 0x61) || (0x7a < param_1)) && (0x19 < param_1 - 0x41U)) && (9 < param_1 - 0x30U))\n  {\n    return false;\n  }\n  return true;\n",
+    "original_sha256": "2294a11233a953db1420ccce3c1ed5bdad861c9c44d38dd464ec1e4390865263"
+  },
+  {
+    "entry": "0x0078df90",
+    "original_name": "I_isforfilename",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if ((((param_1 < 0x61) || (0x7a < param_1)) && (0x19 < param_1 - 0x41U)) &&\n     (((9 < param_1 - 0x30U && (param_1 != 0x5f)) && (param_1 != 0x2d)))) {\n    return false;\n  }\n  return true;\n",
+    "original_sha256": "d68dd5ad9aa87bfe1ba492972e65a2a15ff72569e7349fdab8c2ca38dd070d95"
+  },
+  {
+    "entry": "0x0078e720",
+    "original_name": "I_CleanChar",
+    "return_type": "char",
+    "arguments": [
+      [
+        "char",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if (param_1 == -0x6e) {\n    param_1 = '\\'';\n  }\n  return param_1;\n",
+    "original_sha256": "e499ba55b14c34fe0dc459bd5168a938633f17f73425cd278767decf7f244776"
+  },
+  {
+    "entry": "0x007910b0",
+    "original_name": "Com_SurfaceFloats",
+    "return_type": "bool",
+    "arguments": [
+      [
+        "int",
+        "param_1"
+      ]
+    ],
+    "body": "\n  if ((param_1 != 0x15) && ((param_1 < 0x18 || (0x1b < param_1)))) {\n    return false;\n  }\n  return true;\n",
+    "original_sha256": "7e7ea297d2025f0b89f36fc5edd685c678ad853a559bb9bc676ffa9b06782e37"
+  },
+  {
+    "entry": "0x0080bbd0",
+    "original_name": "CL_SplitscreenEnabled",
+    "return_type": "bool",
+    "arguments": [],
+    "body": "\n  return false;\n",
+    "original_sha256": "01cb47d078b4841b8408ec4fe278efa83115c6f6e101972987507d2b2b57dcf0"
+  },
+  {
+    "entry": "0x008d2960",
+    "original_name": "Live_GetMapCount",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x19;\n",
+    "original_sha256": "49284e5a57f3a3975d45904142e135f007e997b81a88671e86fdbff4313ea7e3"
+  },
+  {
+    "entry": "0x008e6790",
+    "original_name": "LiveStorage_GetDWDownloadBufferSize",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x20000;\n",
+    "original_sha256": "b262f5e01308f835d3757273cce6a09eaebbb1b8fb79610cc3d9e86bb0f16a93"
+  },
+  {
+    "entry": "0x0090c720",
+    "original_name": "Demo_GetMaxBufferSize",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x80000;\n",
+    "original_sha256": "ece74a3abf7f9404faefe63cbc71943f536077bf8a3d712a3753215e02027948"
+  },
+  {
+    "entry": "0x0097fbf0",
+    "original_name": "LUI_CoD_GetChecksum",
+    "return_type": "uint",
+    "arguments": [],
+    "body": "\n  return 0x30a5f3;\n",
+    "original_sha256": "1aa42e74dfa50fe6c344ec353fae5bcedeabf9394b230c71cb5128b048100047"
+  },
+  {
+    "entry": "0x00982f90",
+    "original_name": "CL_SplitscreenPlayerCount",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 1;\n",
+    "original_sha256": "2db31f4e09597946e56e859813bfdad7046d457c32332c3a882654d1e3ffdf67"
+  },
+  {
+    "entry": "0x00983a90",
+    "original_name": "tlGetVersion",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x10400;\n",
+    "original_sha256": "257670d719f1b740ce38e4b08b9f763e61e474c9e5d30b7755546bb267ff813c"
+  },
+  {
+    "entry": "0x00984f00",
+    "original_name": "jqGetMemAvailable",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0;\n",
+    "original_sha256": "4bc724f3b1d0caf4fe369c18cba3102e6c4ea057f63fe1587e3973134a7f755e"
+  },
+  {
+    "entry": "0x009ac150",
+    "original_name": "le_int",
+    "return_type": "uint",
+    "arguments": [
+      [
+        "uint",
+        "param_1"
+      ]
+    ],
+    "body": "\n  return param_1;\n",
+    "original_sha256": "d5a2b635b0bbb254914f2641e4508361a0c95686c0422dcebeb3abbcca7f1d2b"
+  },
+  {
+    "entry": "0x009d5f90",
+    "original_name": "offsetOfBufInHunkUserDefault",
+    "return_type": "int",
+    "arguments": [],
+    "body": "\n  return 0x28;\n",
+    "original_sha256": "2ae904b3a6bc4ca2b742b13a6b4372b0110f2731cdf29edd795459ef1845e802"
+  },
+  {
+    "entry": "0x00a29ab0",
+    "original_name": "GetCodeConst_GenericParam0",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xa9;\n",
+    "original_sha256": "bea22c7d3db84fcff8868764d5e5ca75c7b0ca12a7a9ae5a7873114681d29129"
+  },
+  {
+    "entry": "0x00a29ac0",
+    "original_name": "GetCodeConst_GenericParam1",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xaa;\n",
+    "original_sha256": "d0275b82a58d4bdae4094f6afcce3ea816299097f01173b82ea4c54ad485db1d"
+  },
+  {
+    "entry": "0x00a29ad0",
+    "original_name": "GetCodeConst_GenericParam2",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xab;\n",
+    "original_sha256": "16f525f431016e5590caa0937a351d3b88d727796e29812cd9de0c44661da038"
+  },
+  {
+    "entry": "0x00a29ae0",
+    "original_name": "GetCodeConst_GenericParam3",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xac;\n",
+    "original_sha256": "274784402d2caa6a9c22ccfb5027613cb906b262acdf2be65d6366437dfb013c"
+  },
+  {
+    "entry": "0x00a29af0",
+    "original_name": "GetCodeConst_GenericParamA",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xa5;\n",
+    "original_sha256": "448d506f1666ebb40c827fca225d1647898e9e755f10af3c919748a2b689e876"
+  },
+  {
+    "entry": "0x00a29b00",
+    "original_name": "GetCodeConst_GenericParamB",
+    "return_type": "ushort",
+    "arguments": [],
+    "body": "\n  return 0xa6;\n",
+    "original_sha256": "e109cfa316c38893f79e58ad1fb725baf7eadbb493f3e68de2f083b5fea9c136"
+  }
+]
