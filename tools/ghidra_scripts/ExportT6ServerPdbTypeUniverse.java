@@ -5,6 +5,7 @@
 //@category T6 PC Server
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.data.*;
+import ghidra.program.model.data.Enum;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.symbol.SourceType;
 import java.io.BufferedWriter;
