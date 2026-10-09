@@ -150,10 +150,10 @@ def emit_type(t:dict, fields:list[dict], stats:collections.Counter):
                 "size":length,"representation":"typed" if scalar else "opaque_bytes",
             })
             pad=offset+length
-        if pad<size:
-            head.append(f"    std::uint8_t __tail[{size-pad}];")
         if not ordered:
             head.append(f"    std::uint8_t __storage[{size}];")
+        elif pad<size:
+            head.append(f"    std::uint8_t __tail[{size-pad}];")
     else:
         head.append(f"    std::uint8_t __storage[{size}];")
         for i,f in enumerate(ordered):
