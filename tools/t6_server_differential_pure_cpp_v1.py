@@ -23,6 +23,7 @@ import csv
 import ctypes
 import hashlib
 import json
+import faulthandler
 import random
 import re
 import subprocess
@@ -222,6 +223,7 @@ def verify_one(lib,candidate,code,count):
     return True,tests,None
 
 def run(root:Path,out:Path,limit:int=0,random_cases:int=64):
+    faulthandler.enable()
     records=[]
     stats=collections.Counter()
     shards=sorted(root.glob("t6-full-pc-ghidra-decompile-*"))
@@ -273,6 +275,7 @@ def run(root:Path,out:Path,limit:int=0,random_cases:int=64):
       "using ushort=std::uint16_t;\n\n"+
       "\n".join(cpp(data) for data,code in records),encoding="utf8")
     stats["native_cpp_candidates_generated"]=len(records)
+    print("DIFFERENTIAL: candidates from full original-image scan",len(records),flush=True)
     compile_result=subprocess.run(
         ["g++","-std=c++17","-O2","-fwrapv","-fPIC","-shared",
          "-x","c++",str(out/"candidates.hpp"),"-o",str(out/"candidate_shared.so")],
@@ -290,7 +293,9 @@ def run(root:Path,out:Path,limit:int=0,random_cases:int=64):
     lib=ctypes.CDLL(str(out/"candidate_shared.so"))
     verified=[]
     rejected=[]
-    for candidate,code in records:
+    for index,(candidate,code) in enumerate(records):
+        if index%20==0:
+            print("DIFFERENTIAL: testing",index,len(records),candidate["entry"],candidate["original_name"],flush=True)
         try:
             ok,count,detail=verify_one(lib,candidate,code,random_cases)
             stats["differential_inputs_executed"]+=count
