@@ -26,8 +26,10 @@ import json
 import random
 import re
 import subprocess
+import sys
 from pathlib import Path
 
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 from t6_server_bulk_cpp_candidates_v1 import FUNC_RE, PARAM_RE, extract_balanced_body
 
 TYPES={"bool":"bool","char":"char","uchar":"std::uint8_t","byte":"std::uint8_t",
