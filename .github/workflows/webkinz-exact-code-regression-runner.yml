@@ -492,4 +492,11 @@ jobs:
               assert server_award_action({'iconURL':'url','prizeType':'thing'})=='dock-item'
           WX_SOURCE_4_END_caae6058
           python -m pip install -q pytest
+          curl --fail -L --retry 2 --max-time 75 -o /tmp/original-wordlist.swf https://play.webkinz.com/SWF/ARCADE/GAMES/wordlist.swf
+          echo '1017fe68483d4bf76d71a39bffa068f45dd4aaa8bcc0950c52df01ec654d1ee7  /tmp/original-wordlist.swf' | sha256sum -c -
+          curl --fail -L --retry 2 --max-time 150 -o /tmp/ffdec.zip https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip
+          mkdir -p /tmp/ffdec /tmp/wordlist-as
+          unzip -q /tmp/ffdec.zip -d /tmp/ffdec
+          java -Xmx3g -jar /tmp/ffdec/ffdec.jar -cli -format script:as -export script /tmp/wordlist-as /tmp/original-wordlist.swf
+          export WEBKINZ_EAGER_WORDLIST_AS=/tmp/wordlist-as/scripts/frame_3/DoAction.as
           python -m pytest -q tests/test_eager_beaver_original_logic.py tests/test_prize_klaw_gameplay.py
