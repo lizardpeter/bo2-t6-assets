@@ -1,0 +1,63 @@
+name: T6 original PC PDB type aliases and global symbols v2
+
+on:
+  push:
+    paths: ['.github/workflows/t6_server_pdb_semantics_universe_v2.yml', 'tools/ghidra_scripts/ExportT6ServerPdbSemanticsUniverseV2.java']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache/restore@v4
+        with:
+          path: /tmp/ghidra-full
+          key: t6-ghidra-12.1.3-93a5d11a-full
+          fail-on-cache-miss: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: t6-server-ghidra-12.1.3-f67eb68a-7874efc2-pdb-v1
+          fail-on-cache-miss: true
+      - name: Export full x86 server Ghidra symbols and PDB recovered types
+        run: |
+          set -euo pipefail
+          GHIDRA_HOME="$(find /tmp/ghidra-full -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          export GHIDRA_HEADLESS_MAXMEM=6G
+          mkdir -p /tmp/t6-pdb-type-universe /tmp/t6-pdb-config /tmp/t6-pdb-cache
+          export XDG_CONFIG_HOME=/tmp/t6-pdb-config
+          export XDG_CACHE_HOME=/tmp/t6-pdb-cache
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -process CoDMPServer_PC.exe -noanalysis -readOnly \
+            -postScript ExportT6ServerPdbSemanticsUniverseV2.java /tmp/t6-pdb-type-universe \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+          cat /tmp/t6-pdb-type-universe/summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-original-pc-PDB-complete-type-aliases-global-data-v2
+          path: /tmp/t6-pdb-type-universe/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Persist Ghidra/PDB type system census
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/pdb_semantics_universe_v2
+          cp /tmp/t6-pdb-type-universe/summary.json proof/server/pdb_semantics_universe_v2/summary.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/pdb_semantics_universe_v2/summary.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record full original BO2 PC Server Ghidra PDB type and field census'
+          git pull --rebase origin main
+          git push origin HEAD:main
