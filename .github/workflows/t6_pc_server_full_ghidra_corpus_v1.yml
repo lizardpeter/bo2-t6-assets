@@ -1,0 +1,229 @@
+name: T6 PC Server complete Ghidra corpus v1
+
+on:
+  push:
+    paths: ['.github/workflows/t6_pc_server_full_ghidra_corpus_v1.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GHIDRA_SHA: 93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54
+  EXE_SHA: f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d
+  PDB_SHA: 7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc
+  PROJECT_KEY: t6-server-ghidra-12.1.3-f67eb68a-7874efc2-pdb-v1
+  BINARY_KEY: t6-ghidra-12.1.3-93a5d11a-full
+
+jobs:
+  index:
+    name: Full original PC Server PDB-backed executable inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/cache/restore@v4
+        id: ghidra
+        with:
+          path: /tmp/ghidra-full
+          key: ${{ env.BINARY_KEY }}
+      - name: Download Ghidra 12.1.3 if uncached
+        if: steps.ghidra.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ghidra-full
+          curl -fL --retry 5 --retry-all-errors -o /tmp/ghidra.zip \
+            https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.3_build/ghidra_12.1.3_PUBLIC_20260817.zip
+          echo "$GHIDRA_SHA  /tmp/ghidra.zip" | sha256sum --check
+          unzip -q /tmp/ghidra.zip -d /tmp/ghidra-full
+      - uses: actions/cache/save@v4
+        if: steps.ghidra.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/ghidra-full
+          key: ${{ env.BINARY_KEY }}
+      - name: Configure Ghidra, download original EXE/PDB, verify both
+        run: |
+          set -euo pipefail
+          GHIDRA_HOME="$(find /tmp/ghidra-full -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+          mkdir -p /tmp/t6server-ref
+          curl -fL --retry 5 --retry-all-errors -o /tmp/t6server-ref/CoDMPServer_PC.exe \
+            'https://drive.usercontent.google.com/download?id=1NhLTmevZ5HPKRByj1ok8BpwbvX_5rc1n&export=download&confirm=t'
+          curl -fL --retry 5 --retry-all-errors -o /tmp/t6server-ref/CoDMPServer_PC.pdb \
+            'https://drive.usercontent.google.com/download?id=1HLGAl3Pbeyv7FDx39vSncy-iRHa4-oCR&export=download&confirm=t'
+          echo "$EXE_SHA  /tmp/t6server-ref/CoDMPServer_PC.exe" | sha256sum --check
+          echo "$PDB_SHA  /tmp/t6server-ref/CoDMPServer_PC.pdb" | sha256sum --check
+      - uses: actions/cache/restore@v4
+        id: project
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: ${{ env.PROJECT_KEY }}
+      - name: Import/analyze original image if project not cached
+        if: steps.project.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-ghidra/{projects,config,cache}
+          export XDG_CONFIG_HOME=/tmp/t6-server-ghidra/config
+          export XDG_CACHE_HOME=/tmp/t6-server-ghidra/cache
+          export GHIDRA_HEADLESS_MAXMEM=6G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -import /tmp/t6server-ref/CoDMPServer_PC.exe -overwrite \
+            -preScript ConfigureT6ServerPdbAnalysis.java \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" \
+            -analysisTimeoutPerFile 3600 -max-cpu 4
+      - uses: actions/cache/save@v4
+        if: steps.project.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: ${{ env.PROJECT_KEY }}
+      - name: Inventory every executable original function and partition into 8
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-full /tmp/t6-server-ghidra/config-index /tmp/t6-server-ghidra/cache-index
+          export XDG_CONFIG_HOME=/tmp/t6-server-ghidra/config-index
+          export XDG_CACHE_HOME=/tmp/t6-server-ghidra/cache-index
+          export GHIDRA_HEADLESS_MAXMEM=6G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -process CoDMPServer_PC.exe -noanalysis -readOnly \
+            -postScript ExportFullProgramFunctionIndex.java /tmp/t6-server-full/full-index.tsv \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+          python3 tools/select_t6_server_full_ghidra_shards_v1.py \
+            --index /tmp/t6-server-full/full-index.tsv --output /tmp/t6-server-full \
+            --shards 8 --min-functions 10000
+          cat /tmp/t6-server-full/summary.json
+          rm -rf /tmp/t6server-ref
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-full-original-pc-ghidra-index
+          path: /tmp/t6-server-full/
+          retention-days: 90
+          if-no-files-found: error
+
+  decompile:
+    needs: index
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      max-parallel: 8
+      fail-fast: false
+      matrix:
+        shard: ['00','01','02','03','04','05','06','07']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: t6-full-original-pc-ghidra-index
+          path: /tmp/t6-server-full
+      - uses: actions/cache/restore@v4
+        with:
+          path: /tmp/ghidra-full
+          key: ${{ env.BINARY_KEY }}
+          fail-on-cache-miss: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: /tmp/t6-server-ghidra/projects
+          key: ${{ env.PROJECT_KEY }}
+          fail-on-cache-miss: true
+      - name: Verify original Ghidra project, catalog, and shard hash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          GHIDRA_HOME="$(find /tmp/ghidra-full -maxdepth 1 -type d -name 'ghidra_12.1.3_PUBLIC*' | head -1)"
+          test -x "$GHIDRA_HOME/support/analyzeHeadless"
+          echo "GHIDRA_HOME=$GHIDRA_HOME" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import os,json,pathlib,hashlib
+          name='shard-'+os.environ['SHARD']+'.tsv'
+          root=pathlib.Path('/tmp/t6-server-full')
+          entry=next(x for x in json.loads((root/'summary.json').read_text())['shards'] if x['selection']==name)
+          assert entry['executable_functions']>0
+          assert entry['selection_sha256']==hashlib.sha256((root/name).read_bytes()).hexdigest()
+          PY
+      - name: Export every original function in this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-server-full-config /tmp/t6-server-full-cache
+          export XDG_CONFIG_HOME=/tmp/t6-server-full-config
+          export XDG_CACHE_HOME=/tmp/t6-server-full-cache
+          export GHIDRA_HEADLESS_MAXMEM=6G
+          "$GHIDRA_HOME/support/analyzeHeadless" \
+            /tmp/t6-server-ghidra/projects t6-server-pdb \
+            -process CoDMPServer_PC.exe -noanalysis -readOnly \
+            -postScript ExportT6ServerFullBatch.java \
+            /tmp/t6-server-full/shard-$SHARD.tsv /tmp/t6-server-export-$SHARD 20 \
+            -scriptPath "$GITHUB_WORKSPACE/tools/ghidra_scripts" -max-cpu 4
+          python3 - <<'PY'
+          import csv,json,pathlib,os
+          s=os.environ['SHARD']; out=pathlib.Path('/tmp/t6-server-export-'+s)
+          results=list(csv.DictReader((out/'results.tsv').open(),dialect='excel-tab'))
+          expected=next(x['executable_functions'] for x in json.load(open('/tmp/t6-server-full/summary.json'))['shards'] if x['selection']=='shard-'+s+'.tsv')
+          assert len(results)==expected,(len(results),expected)
+          d={'schema':'t6-pc-server-full-original-ghidra-shard-v1','shard':s,
+             'selected':expected,'found_exact':sum(r['found_exact']=='true' for r in results),
+             'decompile_completed':sum(r['decompile_completed']=='true' for r in results),
+             'failed_or_timed_out':sum(r['decompile_completed']!='true' for r in results),
+             'semantically_reconstructed_cpp':0}
+          (out/'summary.json').write_text(json.dumps(d,indent=2)+'\n')
+          print(json.dumps(d,indent=2))
+          assert d['found_exact']==expected
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t6-full-pc-ghidra-decompile-${{ matrix.shard }}
+          path: /tmp/t6-server-export-${{ matrix.shard }}/
+          retention-days: 90
+          if-no-files-found: warn
+
+  collect:
+    needs: [index, decompile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: t6-full-pc-ghidra-decompile-*
+          path: /tmp/t6-server-collect
+      - name: Commit durable whole-executable Ghidra census
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('/tmp/t6-server-collect')
+          summaries=[json.load(open(root/f't6-full-pc-ghidra-decompile-{i:02d}'/'summary.json')) for i in range(8)]
+          d={'schema':'t6-full-pc-server-ghidra-corpus-v1','shards':8,
+             'original_functions_selected':sum(x['selected'] for x in summaries),
+             'exact_original_functions_found':sum(x['found_exact'] for x in summaries),
+             'generated_ghidra_decompilations_completed':sum(x['decompile_completed'] for x in summaries),
+             'ghidra_decompile_failures':sum(x['failed_or_timed_out'] for x in summaries),
+             'shard_summaries':summaries,'accepted_reconstructed_cpp':0,
+             'scope':'All Ghidra-discovered original PC executable functions, decompiled output unreviewed.'}
+          out=pathlib.Path('proof/server/full_ghidra_v1')
+          out.mkdir(parents=True,exist_ok=True)
+          (out/'summary.json').write_text(json.dumps(d,indent=2)+'\n')
+          print(json.dumps(d,indent=2))
+          assert d['original_functions_selected']==d['exact_original_functions_found']
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/full_ghidra_v1/summary.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Record entire original BO2 PC server Ghidra decompilation census'
+          git pull --rebase origin main
+          git push origin HEAD:main
