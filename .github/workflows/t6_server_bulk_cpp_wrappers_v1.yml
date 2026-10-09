@@ -1,0 +1,61 @@
+name: T6 original x86/PDB-based bulk C++ wrappers
+
+on:
+  push:
+    paths: ['.github/workflows/t6_server_bulk_cpp_wrappers_v1.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: t6-original-x86-verified-cpp-wrappers
+  cancel-in-progress: false
+
+jobs:
+  typed_wrappers:
+    name: Reconstruct native C++ one-call wrappers across full original BO2 image
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37870574869
+          github-token: ${{ github.token }}
+          pattern: t6-full-pc-ghidra-decompile-*
+          path: /tmp/t6-original-pc-corpus
+      - name: Run exact call-target and type-gate regression tests
+        run: python3 -m unittest discover -s tests -p 't6_server_scalar_wrappers_v1_test.py' -v
+      - name: Generate executable-image-call-target matched C++ bodies
+        run: |
+          set -euo pipefail
+          python3 tools/t6_server_scalar_wrappers_v1.py \
+            --input-root /tmp/t6-original-pc-corpus \
+            --output /tmp/t6-cpp-wrappers
+          cat /tmp/t6-cpp-wrappers/summary.json
+      - name: Compile generated typed wrappers with real host C++ compiler
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wno-unused-parameter \
+            -fsyntax-only /tmp/t6-cpp-wrappers/pdb_call_target_wrappers.cpp
+          echo CXX_ORIGINAL_X86_DIRECT_CALL_WRAPPERS_SYNTAX_OK
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-original-full-executable-pdb-x86-typed-cpp-wrappers
+          path: /tmp/t6-cpp-wrappers
+          retention-days: 90
+          if-no-files-found: error
+      - name: Preserve truthful entire-executable wrapper conversion census
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/bulk_cpp_wrappers_v1
+          cp /tmp/t6-cpp-wrappers/summary.json proof/server/bulk_cpp_wrappers_v1/summary.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/bulk_cpp_wrappers_v1/summary.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Record full original PC Server exact-call wrapper C++ candidate count'
+          git pull --rebase origin main
+          git push origin HEAD:main
