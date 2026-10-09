@@ -1,0 +1,70 @@
+name: Temporary Webkinz Eager Beaver dependencies
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/webkinz-eager-dependencies.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '21'}
+      - name: Acquire wordlist and instructions as real SWFs only
+        shell: bash
+        run: |
+          mkdir -p out/raw out/meta out/source out/pcode
+          python3 - <<'PY'
+          import pathlib,urllib.request,hashlib,json
+          names={
+          'wordlist':['/SWF/ARCADE/GAMES/wordlist.swf','/SWF/ARCADE/GAMES/wordList.swf'],
+          'EBAP_Instructions':['/SWF/ARCADE/GAMES/EBAP_Instructions.swf'],
+          'EagerBeaverAP':['/SWF/ARCADE/GAMES/EagerBeaverAP.swf']}
+          rows=[]
+          for name,paths in names.items():
+            for i,path in enumerate(paths):
+              row={'name':name,'request':'https://play.webkinz.com'+path,'classification':'live-unpinned'}
+              try:
+                with urllib.request.urlopen(urllib.request.Request(row['request'],headers={'User-Agent':'Mozilla/5.0'}),timeout=40) as r:
+                  data=r.read(15000001)
+                  row['httpStatus']=r.status
+                  row['contentType']=r.headers.get('Content-Type','')
+                row.update(length=len(data),sha256=hashlib.sha256(data).hexdigest(),signature=data[:3].decode('ascii','replace'))
+                row['validSwf']=data[:3] in (b'FWS',b'CWS',b'ZWS') and len(data)<=15000000
+                if row['validSwf']:
+                  (pathlib.Path('out/raw')/(name+str(i)+'.swf')).write_bytes(data)
+              except Exception as e:row['error']=str(e)[:200]
+              rows.append(row)
+              print(json.dumps(row),flush=True)
+          pathlib.Path('out/meta/acquisition.json').write_text(json.dumps(rows,indent=2))
+          PY
+      - name: FFDec
+        shell: bash
+        continue-on-error: true
+        run: |
+          curl -fL --retry 2 --max-time 180 -o /tmp/ffdec.zip https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip
+          mkdir /tmp/ffdec && unzip -q /tmp/ffdec.zip -d /tmp/ffdec
+      - name: Export source and P-code
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for f in out/raw/*.swf; do
+            name="$(basename "$f" .swf)"
+            mkdir -p "out/source/$name" "out/pcode/$name"
+            if [ -f /tmp/ffdec/ffdec.jar ]; then
+              timeout 120 java -Xmx3g -jar /tmp/ffdec/ffdec.jar -cli -format script:as -export script "out/source/$name" "$f" >"out/meta/$name.as.log" 2>&1 || true
+              timeout 120 java -Xmx3g -jar /tmp/ffdec/ffdec.jar -cli -format script:pcode -export script "out/pcode/$name" "$f" >"out/meta/$name.pcode.log" 2>&1 || true
+            fi
+            echo "$name AS=$(find "out/source/$name" -type f | wc -l) PCode=$(find "out/pcode/$name" -type f | wc -l)"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkinz-eager-dictionary-original-code
+          path: out/
+          retention-days: 30
+          if-no-files-found: warn
