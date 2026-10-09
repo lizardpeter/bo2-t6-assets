@@ -24,6 +24,8 @@ import ctypes
 import hashlib
 import json
 import faulthandler
+import multiprocessing
+import queue
 import random
 import re
 import subprocess
@@ -79,6 +81,8 @@ def parse_source(text:str,entry:str):
         fixed=body.replace("{","").replace("}","")
         if BAD_BODY.search(fixed):
             return None,"effectful_or_complex_body"
+    if "*" in body or re.search(r"\b(?:reinterpret_cast|static_cast|const_cast)\b",body):
+        return None,"potential_host_pointer_or_dereference"
     if not re.search(r"\breturn\b",body):
         return None,"no_explicit_return"
     # Exclude functions that branch into returns of unresolved or missing
@@ -179,6 +183,32 @@ def emulator_eval(code:bytes,va:int,args:list[int]):
     if cpu.reg_read(UC_X86_REG_EIP)!=SENTINEL:
         raise RuntimeError("Original x86 did not return within deterministic budget")
     return cpu.reg_read(UC_X86_REG_EAX)&0xffffffff
+
+def isolate_candidate_in_process(lib,candidate,code,random_cases):
+    # Ghidra-generated native C++ is untrusted reconstruction evidence.
+    # Its undefined behavior or invalid casts must not terminate the runner.
+    ctx=multiprocessing.get_context("fork")
+    result_queue=ctx.Queue()
+    def worker():
+        try:
+            ok,count,diagnostic=verify_one(lib,candidate,code,random_cases)
+            result_queue.put((ok,count,diagnostic))
+        except BaseException as error:
+            result_queue.put((False,0,{"kind":type(error).__name__,
+                                        "message":str(error)[:240]}))
+    process=ctx.Process(target=worker)
+    process.start()
+    process.join(6.0)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        return False,0,{"kind":"candidate_execution_timeout"}
+    if process.exitcode != 0:
+        return False,0,{"kind":"native_or_emulator_crash","exitcode":process.exitcode}
+    try:
+        return result_queue.get_nowait()
+    except queue.Empty:
+        return False,0,{"kind":"missing_subprocess_receipt"}
 
 def normalized_x86_return(value:int,rtype:str):
     if rtype=="bool":
@@ -297,13 +327,13 @@ def run(root:Path,out:Path,limit:int=0,random_cases:int=64):
         if index%20==0:
             print("DIFFERENTIAL: testing",index,len(records),candidate["entry"],candidate["original_name"],flush=True)
         try:
-            ok,count,detail=verify_one(lib,candidate,code,random_cases)
+            ok,count,detail=isolate_candidate_in_process(lib,candidate,code,random_cases)
             stats["differential_inputs_executed"]+=count
             if ok:
                 verified.append(candidate)
             else:
                 rejected.append({"function":candidate["original_name"],
-                                 "entry":candidate["entry"],"reason":"x86_output_mismatch",
+                                 "entry":candidate["entry"],"reason":"x86_or_native_differential_rejected",
                                  "first_differential_counterexample":detail})
         except Exception as error:
             rejected.append({"function":candidate["original_name"],
