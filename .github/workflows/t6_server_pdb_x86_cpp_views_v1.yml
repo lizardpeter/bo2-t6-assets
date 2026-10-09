@@ -1,0 +1,76 @@
+name: BO2 original PC PDB x86 C++ type system audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_server_pdb_x86_cpp_views_v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  layout:
+    name: Reconstruct compiler-verified PDB structs for entire PC executable
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37944783184
+          github-token: ${{ github.token }}
+          name: t6-pc-server-complete-original-pdb-types-fields-and-signatures
+          path: /tmp/pc-pdb-universe
+      - name: Test type identity, x86 offsets, struct overlap and pointer widths
+        run: python3 -m unittest discover -s tests -p 't6_server_pdb_x86_cpp_views_v1_test.py' -v
+      - name: Build complete namespaced x86 PDB C++ layout library
+        run: |
+          set -euo pipefail
+          python3 tools/t6_server_pdb_x86_cpp_views_v1.py \
+            --input /tmp/pc-pdb-universe --output /tmp/bo2-pdb-abi --shards 16
+          cat /tmp/bo2-pdb-abi/summary.json
+      - name: Compile ALL generated PDB layout C++ shards with real host GCC
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor
+          import pathlib,subprocess,time
+          paths=sorted(pathlib.Path('/tmp/bo2-pdb-abi').glob('pdb_types_*.hpp'))
+          assert len(paths)==16
+          def run(header):
+            t=time.monotonic()
+            result=subprocess.run(['g++','-std=c++17','-O0','-x','c++',
+                                   '-fsyntax-only',str(header)],capture_output=True,text=True)
+            return header.name, result.returncode,result.stderr,time.monotonic()-t
+          with ThreadPoolExecutor(max_workers=8) as pool:
+            results=list(pool.map(run,paths))
+          failed=[]
+          for name,code,err,elapsed in results:
+            print(f'{name} code={code} seconds={elapsed:.1f}',flush=True)
+            if code:
+              print(err[-7000:],flush=True)
+              failed.append(name)
+          if failed:
+            raise SystemExit('Compiler rejected PDB ABI header shards: '+', '.join(failed))
+          print('CXX_ALL_16_ORIGINAL_PDB_TYPE_HEADER_SHARDS_COMPILED_SUCCESSFULLY')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-original-PC-complete-compiler-audited-x86-pdb-type-system
+          path: /tmp/bo2-pdb-abi/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Commit ABI layout coverage and conflict summary
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/pdb_cpp_abi_v1
+          cp /tmp/bo2-pdb-abi/summary.json proof/server/pdb_cpp_abi_v1/summary.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/pdb_cpp_abi_v1/summary.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Record original BO2 PC full PDB C++ ABI layout compiler census'
+          git pull --rebase origin main
+          git push origin HEAD:main
