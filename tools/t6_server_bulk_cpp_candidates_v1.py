@@ -189,8 +189,9 @@ def build(input_root: Path, output: Path):
     ]
     manifest = []
     for candidate in sorted(unique, key=lambda x:(x["name"], x["original_pc_va"])):
+        ns = "bo2_pc_va_" + candidate["original_pc_va"].lower().removeprefix("0x")
         lines.extend([f"// Original PC {candidate['original_pc_va']}; {candidate['ghidra_function_id']}",
-                      candidate["cpp"]])
+                      f"namespace {ns} {{", candidate["cpp"], "}"])
         manifest.append({key:val for key,val in candidate.items() if key!="cpp"})
     (output/"pure_scalar_candidates.cpp").write_text("\n".join(lines),encoding="utf8")
     with (output/"pure_scalar_candidates.json").open("w",encoding="utf8") as f:
