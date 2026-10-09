@@ -1,0 +1,80 @@
+name: BO2 original x86 vs generated C++ differential validation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_server_differential_pure_cpp_v1.yml'
+      - 'tools/t6_server_differential_pure_cpp_v1.py'
+      - 'tests/t6_server_differential_pure_cpp_v1_test.py'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  emulator:
+    name: Bulk native C++ compile and original x86 CPU differential
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37870574869
+          github-token: ${{ github.token }}
+          pattern: t6-full-pc-ghidra-decompile-*
+          path: /tmp/bo2-original-ghidra
+      - name: Install original x86 CPU emulator
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'unicorn==2.1.4'
+      - name: Unit tests for disassembly evidence, source purity and native x86 execution
+        run: python3 -m unittest discover -s tests -p 't6_server_differential_pure_cpp_v1_test.py' -v
+      - name: Compile entire eligible pure-scalar C++ set and test against retail x86 byte sequences
+        run: |
+          set -euo pipefail
+          python3 tools/t6_server_differential_pure_cpp_v1.py \
+            --input-root /tmp/bo2-original-ghidra \
+            --output /tmp/bo2-native-original-x86-differential \
+            --random-cases 64
+          cat /tmp/bo2-native-original-x86-differential/summary.json
+      - name: Verify all source candidates have original instruction evidence
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('/tmp/bo2-native-original-x86-differential')
+          verified=json.loads((root/'verified_candidates.json').read_text())
+          summary=json.loads((root/'summary.json').read_text())
+          assert summary['passed_limited_original_x86_differential']==len(verified)
+          assert summary['ghidra_completed']==27730
+          assert len({x['entry'] for x in verified})==len(verified)
+          assert all(len(x['original_sha256'])==64 for x in verified)
+          print("ORIGINAL_PC_X86_DIFFERENTIAL_PROVENANCE_CHECKS_PASS")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: t6-full-original-PC-differentially-tested-native-CPP-scalar-candidates
+          path: |
+            /tmp/bo2-native-original-x86-differential/summary.json
+            /tmp/bo2-native-original-x86-differential/verified_candidates.json
+            /tmp/bo2-native-original-x86-differential/rejected_candidates.json
+            /tmp/bo2-native-original-x86-differential/verified_candidates.cpp
+          if-no-files-found: error
+          retention-days: 90
+      - name: Persist exact x86 differential verification census
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/native_x86_differential_v1
+          cp /tmp/bo2-native-original-x86-differential/summary.json proof/server/native_x86_differential_v1/summary.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/native_x86_differential_v1/summary.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Record verified native C++ to original BO2 PC x86 differential checks'
+          git pull --rebase origin main
+          git push origin HEAD:main
