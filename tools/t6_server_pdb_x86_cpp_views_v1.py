@@ -210,7 +210,7 @@ def generate(input_dir:Path, out:Path, shards:int=16):
     shard_lines=[
         ["// Generated original BO2 PC x86 PDB ABI views; no synthetic gameplay logic.",
          "#pragma once","#include <cstddef>","#include <cstdint>",
-         "namespace bo2_pdb_x86 {", ""]
+         "namespace bo2_pdb_x86 {", "#pragma pack(push,1)", ""]
         for _ in range(shards)
     ]
     exported=[]
@@ -228,6 +228,7 @@ def generate(input_dir:Path, out:Path, shards:int=16):
             "shard":index,"fields":field_map,"layout":meta,
         })
     for i,lines in enumerate(shard_lines):
+        lines.append("#pragma pack(pop)")
         lines.append("} // namespace bo2_pdb_x86")
         (out/f"pdb_types_{i:02d}.hpp").write_text("\n".join(lines)+"\n")
     (out/"pdb_layout_map.json").write_text(json.dumps(exported,indent=2)+"\n")
