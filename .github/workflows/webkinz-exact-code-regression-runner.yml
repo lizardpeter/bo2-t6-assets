@@ -1,0 +1,495 @@
+name: Temporary Webkinz source-regression verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/webkinz-exact-code-regression-runner.yml"
+permissions:
+  contents: read
+jobs:
+  actual-source-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test exact current Webkinz reverse source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools tests
+          cat > 'tools/eager_beaver_wordlist.py' <<'WX_SOURCE_0_END_c2b2ab74'
+          """Recover explicit dictionary entries from original Eager Beaver AS2 wordlist.
+          
+          Input must be FFDec-exported frame_3/DoAction.as from validated SWF.
+          Only literal assignments are parsed. Array prototype lookup is *not*
+          reconstructed: Flash checks wa[w] != undefined, and inherited keys may
+          also be accepted by the original runtime.
+          """
+          from collections import Counter
+          from dataclasses import dataclass
+          import re
+          
+          _DOT = re.compile(r'^wa\.([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*1;$')
+          _BRACKET = re.compile(r'^wa\["([A-Za-z_$][A-Za-z0-9_$]*)"\]\s*=\s*1;$')
+          
+          
+          @dataclass(frozen=True)
+          class Dictionary:
+              words: frozenset[str]
+              assignments: int
+              duplicates: dict[str, int]
+          
+              def explicit_lookup(self, word: str) -> bool:
+                  return word.lower() in self.words
+          
+          
+          def parse_wordlist(source: str) -> Dictionary:
+              """Reject unknown source lines rather than quietly dropping words."""
+              words = []
+              for i, line in enumerate(source.splitlines(), 1):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  m = _DOT.fullmatch(line) or _BRACKET.fullmatch(line)
+                  if m is None:
+                      raise ValueError(f'Unrecognized Flash dictionary assignment at line {i}')
+                  words.append(m.group(1))
+              counts = Counter(words)
+              return Dictionary(frozenset(words), len(words),
+                                {word: num for word, num in counts.items() if num > 1})
+          
+          
+          EXPECTED_SOURCE_SHA256 = 'd4d5ed8e521b0472f951939257091f0e2962a5f37653a4a28877acaa292534b0'
+          EXPECTED_SWF_SHA256 = '1017fe68483d4bf76d71a39bffa068f45dd4aaa8bcc0950c52df01ec654d1ee7'
+          
+          
+          def main() -> int:
+              """Create exact explicit membership text only from verified source bytes."""
+              import argparse
+              from hashlib import sha256
+              from pathlib import Path
+              p = argparse.ArgumentParser(description=__doc__)
+              p.add_argument('original_frame_3_as', type=Path)
+              p.add_argument('--out', type=Path, required=True)
+              p.add_argument('--other-build', action='store_true',
+                             help='Permit different source hash; label output as unpinned')
+              args = p.parse_args()
+              raw = args.original_frame_3_as.read_bytes()
+              digest = sha256(raw).hexdigest()
+              if not args.other_build and digest != EXPECTED_SOURCE_SHA256:
+                  raise SystemExit('Source does not match acquired original wordlist.swf export: ' + digest)
+              result = parse_wordlist(raw.decode('utf-8'))
+              if not args.other_build and (result.assignments != 79108 or len(result.words) != 79104):
+                  raise SystemExit('Original dictionary assignment census mismatch')
+              args.out.parent.mkdir(parents=True, exist_ok=True)
+              args.out.write_text('\n'.join(sorted(result.words)) + '\n', encoding='utf-8')
+              print(f'{result.assignments} assignments, {len(result.words)} distinct entries; SHA256 {digest}')
+              return 0
+          
+          
+          if __name__ == '__main__':
+              raise SystemExit(main())
+          WX_SOURCE_0_END_c2b2ab74
+          cat > 'tools/eager_beaver_scoring.py' <<'WX_SOURCE_1_END_ad4ac620'
+          """Source-derived Eager Beaver tile/word score and level rules, AS2 live SWF.
+          
+          Do not replace the wordlist.swf dictionary with an ordinary English
+          dictionary. This module models deterministic methods only; Flash
+          MovieClip event order, online rewards, and animation remain separate.
+          """
+          from dataclasses import dataclass
+          from math import floor
+          
+          LETTER_POINTS = dict(zip(
+              ('A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Qu','R','S','T','U','V','W','X','Y','Z'),
+              (15,40,25,25,15,45,40,30,20,80,55,25,30,20,20,30,80,20,15,20,25,55,45,80,45,80)
+          ))
+          LETTER_FREQUENCY = 'AAAAAAAAABBBCCCCCDDDDDDEEEEEEEEEEEFFFGGGGHHHHIIIIIJKKLLLLLMMMMNNNNNNOOOOOOPPPPQRRRRRRRSSSSSSSSTTTTTTUUUUUVWWXYYYZ'
+          LEVEL_TARGETS = (0,7,8,9,9,10,10,11,11,12,12,13,13,14,15,18)
+          HAZARD_STRENGTH_INTERVAL = (0,5,5,4,4,4,3,3,6,6,5,5,5,4,4,3)
+          INITIAL_HAZARD_STRENGTH = (0,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2)
+          BONUS_EXCLUDED = frozenset(('J','Qu','X','Z'))
+          HAZARD_EXCLUDED = frozenset(('J','K','Qu','V','W','X','Y','Z'))
+          BONUS_POINTS = {0:0,1:100,2:200,3:300}
+          
+          
+          @dataclass(frozen=True)
+          class Tile:
+              letter: str
+              point_value: int
+              bonus_level: int = 0
+              hazard_level: int | None = None
+          
+          
+          def board_tiles() -> list[tuple[int,int,int,int,int]]:
+              """TileManager.initializeTiles: col,row,offset,x,settled_y."""
+              return [(col,row,30 if col%2==0 else 0,
+                       col*62,row*62+(30 if col%2==0 else 0))
+                      for col in range(7)
+                      for row in range(7 if col%2==0 else 8)]
+          
+          
+          def generated_letter(selected_frequency_char: str) -> str:
+              """A single Q from weighted distribution turns into a Qu tile."""
+              return 'Qu' if selected_frequency_char=='Q' else selected_frequency_char
+          
+          
+          def word_points(tiles: list[Tile], level: int) -> int:
+              """TileManager.calculateWordValue, length bonus applies PER TILE."""
+              if len(''.join(x.letter for x in tiles)) < 3:
+                  return 0
+              if not (1<=level<=15):
+                  raise ValueError('original game levels are 1 through 15')
+              word_size_bonus=(len(tiles)-3)*20
+              level_base=(level-1)*5+5
+              bonus_level_add=(level-1)*20
+              return sum(tile.point_value+word_size_bonus+level_base+
+                         (BONUS_POINTS.get(tile.bonus_level,0)+bonus_level_add if tile.bonus_level>0 else 0)
+                         for tile in tiles)
+          
+          
+          def hazard_prevents_submission(tiles: list[Tile]) -> bool:
+              """Selected highest hazard level requires word chars >= level+2."""
+              levels=[tile.hazard_level for tile in tiles if tile.hazard_level is not None]
+              return bool(levels) and len(''.join(t.letter for t in tiles))<max(levels)+2
+          
+          
+          def progress_increment(tile_count: int) -> float:
+              return {3:1.,4:1.5,5:2.,6:3.,7:3.,8:4.}.get(tile_count,0.)
+          
+          
+          def level_percent(level_score: float, level: int) -> float:
+              return level_score/LEVEL_TARGETS[level]*100
+          
+          
+          def kinzcash(score: float) -> int:
+              return floor(score/150)
+          
+          
+          def next_hazard_level(current: int, created: int, level: int) -> tuple[int,int]:
+              """TileManager.createHazardTile: update counter before creating a new tile."""
+              interval=HAZARD_STRENGTH_INTERVAL[level]
+              if created<interval:
+                  return current,created+1
+              return min(current+1,3),1
+          
+          
+          
+          def hazard_warning_stage(hazard_positions: list[tuple[int,int]]) -> int:
+              """GameBoard.checkIfHazardsAreAtBottom warning and loss geometry.
+          
+              Returns 0=no bottom danger, 1=slow debris, 2=medium debris,
+              3=fast debris AND lose-game gate. Staggered even/odd columns differ.
+              """
+              stage=0
+              for column,row in hazard_positions:
+                  base=4 if column%2==0 else 5
+                  if row==base:
+                      stage=max(stage,1)
+                  elif row==base+1:
+                      stage=max(stage,2)
+                  elif row==base+2:
+                      stage=3
+              return stage
+          WX_SOURCE_1_END_ad4ac620
+          cat > 'tools/prize_klaw_gameplay.py' <<'WX_SOURCE_2_END_8b0be7c7'
+          """Prize Klaw AS2 live SWF: server and physical drop lifecycle reference.
+          
+          The logic below is from decompiled PrizeKlaw, ClawController and
+          GameVariables. It does not simulate Flash MovieClip animation or
+          guarantee server behavior. SWF has no pinned v390_249 hash.
+          """
+          from dataclasses import dataclass
+          
+          FIRM=(190.,340.)
+          MEDIUM=(340.,600.)
+          LIGHT=(600.,760.)
+          CHUTE=(100.,125.)
+          SERVER_CHECK='PrizeKlaw::checkGame'
+          SERVER_START='PrizeKlaw::startGame'
+          SERVER_RESULT='PrizeKlaw::submitResult'
+          
+          
+          def region(x: float) -> int:
+              """PrizeKlaw.closestFrontCapsules; x is claw bounds midpoint."""
+              if x<=FIRM[1]:
+                  return 2
+              if x<=MEDIUM[1]:
+                  return 1
+              return 0
+          
+          
+          @dataclass(frozen=True)
+          class DropDecision:
+              operation: str
+              zone: int | None = None
+              color: int | None = None
+              callback: str | None = None
+          
+          
+          def drop_action(x: float, has_capsule: bool, grip: tuple[float,float,float],
+                          red: tuple[float,float,float], yellow: tuple[float,float,float],
+                          rng_grip: float = 1., rng_color: float = 1.) -> DropDecision:
+              """PrizeKlaw.dropClaw; begins 1000ms timer before checking early return.
+          
+              Caller must handle input/time and movieclip animations independently.
+              """
+              if x<FIRM[0] and not has_capsule:
+                  return DropDecision('refuse-drop',callback='clock-was-started')
+              if x>=FIRM[0]:
+                  z=region(x)
+                  if has_capsule:
+                      return DropDecision('drop-held-capsule',z,callback='startOriginate')
+                  if rng_grip<=grip[z]:
+                      c=1 if rng_color<=red[z] else (2 if rng_color<=red[z]+yellow[z] else 3)
+                      return DropDecision('grab-capsule',z,c,'enableControls')
+                  return DropDecision('miss-capsule',z,callback='startOriginate')
+              if CHUTE[0]<=x<=CHUTE[1]:
+                  return DropDecision('submit-success',callback='gamesuccess')
+              return DropDecision('bounce-capsule',callback='startOriginate')
+          
+          
+          def server_odds_from_response(grip_pct: tuple[float,float,float],
+                                        prize_pct: tuple[float,...]) -> tuple[tuple[float,float,float],...]:
+              """PrizeKlaw.serverInitCallback indexing grip[i], prize[i,i+3,i+6]."""
+              if len(grip_pct)!=3 or len(prize_pct)!=9:
+                  raise ValueError('expected 3 grip and 9 prize percentage entries')
+              return tuple((grip_pct[i]*.01,prize_pct[i]*.01,
+                            prize_pct[i+3]*.01,prize_pct[i+6]*.01)
+                           for i in range(3))
+          
+          
+          def elapsed_second(text: str, control_enabled: bool) -> tuple[str,str|None,bool]:
+              """PrizeKlaw.updateTimer one-second callback, including source zero edge."""
+              minutes,seconds=(int(x) for x in text.split(':'))
+              if seconds>0:
+                  seconds-=1
+              else:
+                  minutes-=1
+                  seconds=59
+              action=None
+              if minutes==0 and seconds==0:
+                  action='gameover' if control_enabled else 'defer-gameover-after-claw'
+              return f'{minutes}:{seconds:02d}',action,(minutes==0 and seconds<=5)
+          
+          
+          def submit_result_fields(pet_id: str, game_id: str,
+                                   zone: int=0, color: int=0) -> dict[str,str]:
+              """Exact field names sent by successful, timed-out or exited game."""
+              return dict(pet_DbId=str(pet_id),zone=str(zone),color=str(color),gameID=str(game_id))
+          
+          
+          def server_award_action(prize: dict) -> str:
+              """PrizeKlaw.serverWinCallback: iconURL plus prizeType branch."""
+              if 'iconURL' not in prize:
+                  return 'time-is-up'
+              return 'cash' if 'prizeType' not in prize else 'dock-item'
+          WX_SOURCE_2_END_8b0be7c7
+          cat > 'tests/test_eager_beaver_original_logic.py' <<'WX_SOURCE_3_END_0967763f'
+          """Deterministic Webkinz Eager Beaver original AS2 source tests."""
+          import os
+          from pathlib import Path
+          import pytest
+          from tools.eager_beaver_wordlist import parse_wordlist
+          from tools.eager_beaver_scoring import (
+              LETTER_POINTS,LETTER_FREQUENCY,LEVEL_TARGETS,
+              HAZARD_STRENGTH_INTERVAL,INITIAL_HAZARD_STRENGTH,
+              BONUS_EXCLUDED,HAZARD_EXCLUDED,Tile,board_tiles,
+              generated_letter,word_points,hazard_prevents_submission,
+              progress_increment,level_percent,kinzcash,next_hazard_level,hazard_warning_stage,
+          )
+          
+          
+          def test_dictionary_literal_and_bracket_keyword_entries():
+              d=parse_wordlist('wa.webkinz = 1;\nwa["break"] = 1;\nwa.webkinz = 1;\n')
+              assert d.assignments==3 and len(d.words)==2
+              assert d.duplicates=={'webkinz':2}
+              assert d.explicit_lookup('WEBKINZ') and d.explicit_lookup('break')
+              assert not d.explicit_lookup('brand_new_fabricated_word')
+          
+          
+          def test_dictionary_strict_no_silent_loss():
+              with pytest.raises(ValueError):
+                  parse_wordlist('wa.aardvark = 1;\nwa[varname] = 1;')
+          
+          
+          def test_full_recovered_dictionary_when_mounted():
+              path=os.environ.get('WEBKINZ_EAGER_WORDLIST_AS')
+              if not path:
+                  pytest.skip('Set WEBKINZ_EAGER_WORDLIST_AS to original FFDec frame_3/DoAction.as')
+              d=parse_wordlist(Path(path).read_text(encoding='utf-8'))
+              assert d.assignments==79108
+              assert len(d.words)==79104
+              assert d.duplicates=={'realtor':2,'march':2,'may':2,'august':2}
+              assert d.explicit_lookup('webkinz') and d.explicit_lookup('kinzcash')
+              assert d.explicit_lookup('september')
+              assert not d.explicit_lookup('xylophone')
+          
+          
+          def test_board_52_staggered_source_order():
+              p=board_tiles()
+              assert len(p)==52
+              assert p[0]==(0,0,30,0,30)
+              assert p[6]==(0,6,30,0,402)
+              assert p[7]==(1,0,0,62,0)
+              assert p[14]==(1,7,0,62,434)
+              assert p[-1]==(6,6,30,372,402)
+          
+          
+          def test_letter_bag_and_two_character_qu():
+              assert LETTER_POINTS['Qu']==80
+              assert generated_letter('Q')=='Qu'
+              assert generated_letter('K')=='K'
+              assert LETTER_FREQUENCY.count('Q')==1
+              assert sum(LETTER_FREQUENCY.count(x) for x in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')==len(LETTER_FREQUENCY)
+          
+          
+          def test_level_arrays_and_hazard_exclusions():
+              assert len(LEVEL_TARGETS)==16
+              assert LEVEL_TARGETS[1:]==(7,8,9,9,10,10,11,11,12,12,13,13,14,15,18)
+              assert HAZARD_STRENGTH_INTERVAL[1:8]==(5,5,4,4,4,3,3)
+              assert INITIAL_HAZARD_STRENGTH[7]==1 and INITIAL_HAZARD_STRENGTH[8]==2
+              assert 'Qu' in BONUS_EXCLUDED and 'Qu' in HAZARD_EXCLUDED
+              assert 'K' not in BONUS_EXCLUDED and 'K' in HAZARD_EXCLUDED
+          
+          
+          def test_score_three_tile_word():
+              tiles=[Tile('C',25),Tile('A',15),Tile('T',20)]
+              assert word_points(tiles,1)==75
+          
+          
+          def test_score_five_tiles_level_three_bonus():
+              tiles=[Tile('C',25,bonus_level=2),Tile('A',15),Tile('T',20),Tile('E',15),Tile('R',20)]
+              # letters 95 + length bonus 200 + level base 75 + bonus 240
+              assert word_points(tiles,3)==610
+          
+          
+          def test_qu_word_character_count_distinct_from_tile_count():
+              tiles=[Tile('Qu',80),Tile('A',15)]
+              assert word_points(tiles,1)==80+15+(-20*2)+(5*2)
+          
+          
+          def test_short_word_worth_zero():
+              assert word_points([Tile('A',15),Tile('B',40)],1)==0
+              with pytest.raises(ValueError):
+                  word_points([Tile('C',25),Tile('A',15),Tile('T',20)],16)
+          
+          
+          def test_hazard_checks_character_count():
+              assert hazard_prevents_submission([Tile('C',25, hazard_level=2),Tile('A',15),Tile('T',20)])
+              assert not hazard_prevents_submission([Tile('Qu',80,hazard_level=2),Tile('A',15),Tile('T',20)])
+              assert not hazard_prevents_submission([Tile('C',25),Tile('A',15),Tile('T',20)])
+          
+          
+          def test_progress_is_fraction_and_cash_floor():
+              assert [progress_increment(x) for x in range(2,10)]==[0,1,1.5,2,3,3,4,0]
+              assert level_percent(7,1)==100
+              assert level_percent(1,15)==100/18
+              assert kinzcash(149)==0 and kinzcash(150)==1
+          
+          
+          def test_hazard_strength_cycle_and_cap():
+              assert next_hazard_level(1,4,1)==(1,5)
+              assert next_hazard_level(1,5,1)==(2,1)
+              assert next_hazard_level(3,5,1)==(3,1)
+              assert next_hazard_level(2,5,8)==(2,6)
+              assert next_hazard_level(2,6,8)==(3,1)
+          
+          
+          
+          def test_bottom_row_hazard_stage_differs_by_column_parity():
+              assert hazard_warning_stage([])==0
+              assert hazard_warning_stage([(0,3),(1,4)])==0
+              assert hazard_warning_stage([(0,4),(1,5)])==1
+              assert hazard_warning_stage([(0,5),(1,6)])==2
+              assert hazard_warning_stage([(0,6),(1,6)])==3
+              assert hazard_warning_stage([(1,7)])==3
+          
+          
+          def test_hazard_stage_is_max_of_selected_tiles():
+              assert hazard_warning_stage([(0,4),(3,7),(5,5)])==3
+              assert hazard_warning_stage([(0,4),(1,6)])==2
+          WX_SOURCE_3_END_0967763f
+          cat > 'tests/test_prize_klaw_gameplay.py' <<'WX_SOURCE_4_END_caae6058'
+          """Prize Klaw original AS2 source-derived state/odds boundary tests."""
+          import pytest
+          from tools.prize_klaw_gameplay import (
+              region,drop_action,server_odds_from_response,elapsed_second,
+              submit_result_fields,server_award_action,
+          )
+          
+          
+          def test_zone_order_reversed_from_left_to_right():
+              assert [region(x) for x in (100,190,340,340.001,600,600.001,760)]==[2,2,2,1,1,0,0]
+          
+          
+          def test_drop_without_capsule_before_firm_is_refused_after_timer_starts():
+              result=drop_action(120,False,(1,1,1),(0,0,0),(0,0,0))
+              assert result.operation=='refuse-drop' and result.callback=='clock-was-started'
+          
+          
+          def test_unladen_firm_zone_grip_miss():
+              result=drop_action(200,False,(0,0,.25),(1,1,1),(0,0,0),rng_grip=.2501)
+              assert result.operation=='miss-capsule' and result.zone==2
+          
+          
+          def test_grab_equality_success_and_red_green_colors():
+              a=drop_action(200,False,(0,0,.25),(0,0,.2),(0,0,.3),rng_grip=.25,rng_color=.2)
+              assert (a.operation,a.zone,a.color)==('grab-capsule',2,1)
+              b=drop_action(200,False,(0,0,.25),(0,0,.2),(0,0,.3),rng_grip=.2,rng_color=.50001)
+              assert b.color==3
+          
+          
+          def test_drop_capsule_over_lanes_is_not_award():
+              x=drop_action(340,True,(1,1,1),(1,1,1),(0,0,0))
+              assert x.operation=='drop-held-capsule' and x.callback=='startOriginate'
+          
+          
+          def test_prize_chute_only_with_capsule():
+              a=drop_action(110,True,(0,0,0),(0,0,0),(0,0,0))
+              assert a.operation=='submit-success' and a.callback=='gamesuccess'
+              b=drop_action(110,False,(0,0,0),(0,0,0),(0,0,0))
+              assert b.operation=='refuse-drop'
+          
+          
+          def test_prize_chute_bounds_and_bounce():
+              odds=(0,0,0)
+              assert drop_action(100,True,odds,odds,odds).operation=='submit-success'
+              assert drop_action(125,True,odds,odds,odds).operation=='submit-success'
+              assert drop_action(125.001,True,odds,odds,odds).operation=='bounce-capsule'
+              assert drop_action(99,True,odds,odds,odds).operation=='bounce-capsule'
+          
+          
+          def test_server_three_zone_odds_noncontiguous_prize_index():
+              out=server_odds_from_response((10,20,30),(1,2,3,11,12,13,21,22,23))
+              assert out[2]==pytest.approx((.3,.03,.13,.23))
+              assert out[0]==pytest.approx((.1,.01,.11,.21))
+              with pytest.raises(ValueError):
+                  server_odds_from_response((1,2,3),(1,2,3))
+          
+          
+          def test_timer_from_one_to_zero_and_deferred_gameover():
+              assert elapsed_second('0:01',True)==('0:00','gameover',True)
+              assert elapsed_second('0:01',False)==('0:00','defer-gameover-after-claw',True)
+          
+          
+          def test_timer_source_zero_not_clamped():
+              assert elapsed_second('0:00',True)==('-1:59',None,False)
+              assert elapsed_second('1:00',True)==('0:59',None,False)
+              assert elapsed_second('0:06',True)==('0:05',None,True)
+          
+          
+          def test_server_submission_exact_keys_and_zero_on_timeout():
+              assert submit_result_fields('pet','game')=={'pet_DbId':'pet','zone':'0','color':'0','gameID':'game'}
+              assert submit_result_fields('pet','game',3,2)['color']=='2'
+          
+          
+          def test_server_award_branch():
+              assert server_award_action({})=='time-is-up'
+              assert server_award_action({'iconURL':'url','prizeCash':100})=='cash'
+              assert server_award_action({'iconURL':'url','prizeType':'thing'})=='dock-item'
+          WX_SOURCE_4_END_caae6058
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_eager_beaver_original_logic.py tests/test_prize_klaw_gameplay.py
