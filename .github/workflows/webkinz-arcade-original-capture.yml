@@ -1,0 +1,126 @@
+name: Temporary Webkinz arcade/game SWF recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/webkinz-arcade-original-capture.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gamecode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Acquire independent Flash gameplay SWFs (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/raw out/metadata out/decompiled out/pcode
+          python3 - <<'PY'
+          import urllib.request,hashlib,json,pathlib
+          base='https://play.webkinz.com'
+          targets={
+            'WebkinzRally':'/SWF/ARCADE/GAMES/WebkinzRally.swf',
+            'Atomicolicious':'/SWF/ARCADE/GAMES/Atomicolicious.swf',
+            'EagerBeaverAP':'/SWF/ARCADE/GAMES/EagerBeaverAP.swf',
+            'SoccerChallenge':'/SWF/DTB/SoccerChallenge/soccer.swf',
+            'PrizeKlaw':'/SWF/DTB/PrizeKlaw/Prize-Klaw.swf',
+            'KinzvilleMain':'/SWF/VIEWS/KINZVILLE/Kinzville.swf',
+            'TopBar':'/SWF/TopBar.swf?v=v390_249',
+            'webkinz-house':'/subApplications/webkinz-house/webkinz-house.swf',
+          }
+          rows=[]
+          for name,path in targets.items():
+            url=base+path
+            row={'name':name,'url':url,'original_build_hash_verified':False,'classification':'live-unpinned'}
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0','Accept':'application/x-shockwave-flash,*/*'})
+              with urllib.request.urlopen(req,timeout=50) as r:
+                data=r.read(12000001)
+                row.update(http_status=r.status,content_type=r.headers.get('Content-Type'),resolved_url=r.url)
+              row.update(length=len(data),signature=data[:3].decode('latin1'),sha256=hashlib.sha256(data).hexdigest())
+              if data[:3] in (b'FWS',b'CWS',b'ZWS') and len(data)<=12000000:
+                (pathlib.Path('out/raw')/(name+'.swf')).write_bytes(data)
+                row['valid_swf']=True
+              else:
+                row['valid_swf']=False
+                row['error']='Not an SWF; fail closed'
+            except Exception as e:
+              row.update(valid_swf=False,error=type(e).__name__+': '+str(e)[:200])
+            rows.append(row)
+            print(json.dumps(row),flush=True)
+          pathlib.Path('out/metadata/acquisition.json').write_text(json.dumps({'schema':'webkinz-arcade-game-swfs-20261008','rows':rows},indent=2))
+          PY
+
+      - name: Install FFDec source and P-code exporter
+        shell: bash
+        continue-on-error: true
+        run: |
+          curl -L -f --retry 2 --max-time 180 -o /tmp/ffdec.zip https://github.com/jindrapetrik/jpexs-decompiler/releases/download/version26.3.0/ffdec_26.3.0.zip
+          mkdir -p /tmp/ffdec
+          unzip -q /tmp/ffdec.zip -d /tmp/ffdec
+          test -f /tmp/ffdec/ffdec.jar
+
+      - name: Decompile actual independent game code
+        if: always()
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -u
+          shopt -s nullglob
+          for f in out/raw/*.swf; do
+            name="$(basename "$f" .swf)"
+            mkdir -p "out/decompiled/$name" "out/pcode/$name"
+            if [ -f /tmp/ffdec/ffdec.jar ]; then
+              timeout 120 java -Xmx3g -jar /tmp/ffdec/ffdec.jar -cli -format script:as -export script "out/decompiled/$name" "$f" > "out/metadata/$name.as.log" 2>&1 || true
+              timeout 120 java -Xmx3g -jar /tmp/ffdec/ffdec.jar -cli -format script:pcode -export script "out/pcode/$name" "$f" > "out/metadata/$name.pcode.log" 2>&1 || true
+            fi
+            printf '%s AS=%s PCode=%s\n' "$name" "$(find "out/decompiled/$name" -type f | wc -l)" "$(find "out/pcode/$name" -type f | wc -l)" | tee -a out/metadata/counts.txt
+          done
+
+      - name: Evidence catalogue and exact method hashes
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,hashlib,re
+          root=pathlib.Path('out')
+          rows=[]
+          for f in sorted((root/'decompiled').rglob('*.as')):
+            rel=f.relative_to(root/'decompiled')
+            pcode=root/'pcode'/rel.with_suffix('.pcode')
+            src=f.read_bytes()
+            pcode_bytes=pcode.read_bytes() if pcode.exists() else b''
+            methods=re.findall(rb'\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)',src)
+            rows.append({
+                'path':str(rel),
+                'source_sha256':hashlib.sha256(src).hexdigest(),
+                'pcode_sha256':hashlib.sha256(pcode_bytes).hexdigest() if pcode_bytes else None,
+                'methods':[m.decode('ascii') for m in methods][:100],
+                'method_declarations':len(methods),
+                'pcode_method_names_matched':sum(m in pcode_bytes for m in methods)
+            })
+          (root/'metadata'/'source_index.json').write_text(json.dumps({
+             'schema':'webkinz-independent-game-decompilation-index-v1',
+             'files':rows,'count':len(rows)
+          },indent=2))
+          print('Source file count',len(rows))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkinz-independent-gameplay-source
+          path: out/
+          retention-days: 30
+          compression-level: 6
+          if-no-files-found: warn
