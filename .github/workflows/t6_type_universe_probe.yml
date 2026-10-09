@@ -1,0 +1,40 @@
+name: Inspect original BO2 PDB type corpus layout
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/t6_type_universe_probe.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37944783184
+          github-token: ${{ github.token }}
+          name: t6-pc-server-complete-original-pdb-types-fields-and-signatures
+          path: /tmp/pdb
+      - name: Print sample typed structures, field records, and function prototypes
+        run: |
+          set -euo pipefail
+          head -n 14 /tmp/pdb/types.tsv
+          head -n 28 /tmp/pdb/fields.tsv
+          head -n 14 /tmp/pdb/functions.tsv
+          grep -m 6 -E 'WeaponDef|PartyData_s|playerState_s|dvar_t' /tmp/pdb/types.tsv || true
+          grep -m 15 -E 'WeaponDef|PartyData_s|playerState_s' /tmp/pdb/fields.tsv || true
+          python3 - <<'PY'
+          import csv,collections
+          with open('/tmp/pdb/types.tsv') as f:
+            types=list(csv.DictReader(f,delimiter='\t'))
+          with open('/tmp/pdb/fields.tsv') as f:
+            fields=list(csv.DictReader(f,delimiter='\t'))
+          print("TYPES_BY_KIND",dict(collections.Counter(x['kind'] for x in types)))
+          print("BIGGEST", sorted([(int(x['length']),x['path']) for x in types],reverse=True)[:10])
+          print("FIELD_TYPES",collections.Counter(x['field_type_path'] for x in fields if x['type_kind']!='enum_value').most_common(30))
+          PY
