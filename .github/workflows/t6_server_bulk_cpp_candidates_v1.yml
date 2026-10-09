@@ -1,0 +1,71 @@
+name: T6 full Ghidra corpus to compiled C++ source candidates
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/t6_server_bulk_cpp_candidates_v1.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: t6-original-whole-image-cpp-candidate-generator
+  cancel-in-progress: false
+
+jobs:
+  bulk_cpp:
+    name: Classify 27k original x86 functions and compile strict C++ candidates
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 37870574869
+          github-token: ${{ github.token }}
+          pattern: t6-full-pc-ghidra-decompile-*
+          path: /tmp/t6-full-decompilation-corpus
+      - name: Inspect original Ghidra corpus and require eight nonempty shards
+        run: |
+          set -euo pipefail
+          find /tmp/t6-full-decompilation-corpus -maxdepth 2 -name results.tsv -print
+          test "$(find /tmp/t6-full-decompilation-corpus -maxdepth 2 -name results.tsv | wc -l)" -eq 8
+      - name: Regression-check conservative C++ candidate selection logic
+        run: python3 -m unittest discover -s tests -p 't6_server_bulk_cpp_candidates_v1_test.py' -v
+      - name: Reconstruct conservative pure scalar function candidate set
+        run: |
+          set -euo pipefail
+          python3 tools/t6_server_bulk_cpp_candidates_v1.py \
+            --input-root /tmp/t6-full-decompilation-corpus \
+            --output /tmp/t6-cpp-candidates
+          test -s /tmp/t6-cpp-candidates/pure_scalar_candidates.cpp
+          cat /tmp/t6-cpp-candidates/summary.json
+      - name: Verify every generated C++ candidate can compile as a native translation unit
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Wno-unused-parameter \
+            -fsyntax-only /tmp/t6-cpp-candidates/pure_scalar_candidates.cpp
+          echo CXX_ALL_GENERATED_SCALAR_CANDIDATES_COMPILE_OK
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bo2-full-original-compiled-cpp-leaf-candidates-v1
+          path: /tmp/t6-cpp-candidates/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Commit machine-verified full-image candidate classification census
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/bulk_cpp_candidates_v1
+          cp /tmp/t6-cpp-candidates/summary.json \
+            proof/server/bulk_cpp_candidates_v1/summary.json
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/bulk_cpp_candidates_v1/summary.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record full Ghidra corpus conservative compiled C++ candidate census'
+          git pull --rebase origin main
+          git push origin HEAD:main
