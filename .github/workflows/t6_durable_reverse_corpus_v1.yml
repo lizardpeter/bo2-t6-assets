@@ -82,6 +82,18 @@ jobs:
           cp proof/current_client/anchor_delta_map_propagation_v3_graph353/map_parse_summary.json /tmp/t6-sidecar/map/map-parse-summary.json
           cp proof/current_client/pdb_exact_hash_join_v1_strict/summary.json /tmp/t6-sidecar/provenance/exact-byte-matches.json
           cp proof/server/pdb_cpp_abi_v1/summary.json /tmp/t6-sidecar/provenance/cpp-abi-summary.json
+      - name: Recover and SHA-verify ORIGINAL linker MAP and symbol table
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet 'gdown==5.2.0'
+          gdown 'https://drive.google.com/uc?id=1kcCFEDP-gubgUyN6R_WjlJpFGoeZNEmd' -O /tmp/t6-sidecar/map/CoDMPServer_PC.map
+          echo '34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf  /tmp/t6-sidecar/map/CoDMPServer_PC.map' | sha256sum --check
+          python3 tools/t6_parse_msvc_map_function_symbols_v1.py \
+            --map /tmp/t6-sidecar/map/CoDMPServer_PC.map \
+            --out /tmp/t6-sidecar/map/CoDMPServer_PC.symbols.csv.gz \
+            --summary /tmp/t6-sidecar/map/original-map-parse-summary.json \
+            --expected-sha256 34e16e517072031629307ffa0520d59f3c586539b943d081f60c59ee9ce1c3bf
+          gzip -t /tmp/t6-sidecar/map/CoDMPServer_PC.symbols.csv.gz
       - name: Verify and package both complete function corpora
         run: |
           set -euo pipefail
