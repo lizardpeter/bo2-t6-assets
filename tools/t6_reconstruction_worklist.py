@@ -6,7 +6,7 @@ Consumes the functions.jsonl emitted by t6_preserve_ghidra_corpus.py and the
 per-shard references.tsv inside the permanent archives.
 """
 from __future__ import annotations
-import argparse, collections, csv, hashlib, io, json, re, subprocess, tarfile
+import argparse, collections, csv, gzip, hashlib, io, json, re, subprocess, tarfile
 from pathlib import Path
 
 def normalize_address(value):
@@ -42,11 +42,36 @@ def owner(name):
         return name.split("_",1)[0]
     return "unclassified"
 
-def plan(corpus, output, batch_size, type_revision):
+def plan(corpus, output, batch_size, type_revision, per_shard_ids):
     manifest=json.loads((corpus/"manifest.json").read_text())
     rows=[json.loads(line) for line in (corpus/"functions.jsonl").read_text().splitlines()]
     if len(rows)!=manifest["functions"]:
         raise ValueError("Function count does not match archive manifest")
+    if manifest["build"]=="server":
+        sidecar=corpus/manifest["sidecar"]["archive"]
+        pdb=read_tar_member(sidecar,"pdb/functions.tsv")
+        symbols=read_tar_member(sidecar,"map/CoDMPServer_PC.symbols.csv.gz")
+        if pdb is None or symbols is None:
+            raise ValueError("Complete PDB/MAP data required for server reconstruction")
+        pdb_by_va={}
+        for item in csv.DictReader(io.StringIO(pdb.decode("utf-8")),delimiter="\\t"):
+            pdb_by_va[normalize_address(item["entry_va"])]=item
+        map_by_va={}
+        for item in csv.DictReader(io.StringIO(gzip.decompress(symbols).decode("utf-8"))):
+            if item["is_function"]!="True":
+                continue
+            va=int(item["va"])
+            if va not in map_by_va or (item.get("object") and not map_by_va[va].get("object")):
+                map_by_va[va]=item
+        for row in rows:
+            va=normalize_address(row["address"])
+            pdb_row=pdb_by_va.get(va,{})
+            map_row=map_by_va.get(va,{})
+            row["pdb_name"]=pdb_row.get("qualified_name","")
+            row["pdb_signature"]=pdb_row.get("function_signature","")
+            row["pdb_source"]=pdb_row.get("symbol_source","")
+            row["map_object"]=map_row.get("object","")
+            row["map_library"]=map_row.get("library","")
     by_id={r["id"]:r for r in rows}
     if len(by_id)!=len(rows):
         raise ValueError("Duplicated function IDs")
@@ -78,7 +103,7 @@ def plan(corpus, output, batch_size, type_revision):
     for row in rows:
         if not row["decompiled"]:
             continue
-        row["owner"]=owner(row["ghidra_name"])
+        row["owner"]=row.get("map_object") or owner(row.get("pdb_name") or row["ghidra_name"])
         groups[row["owner"]].append(row)
     tasks=[]
     for subsystem,functions in groups.items():
@@ -88,7 +113,7 @@ def plan(corpus, output, batch_size, type_revision):
             ids={r["id"] for r in chunk}
             external=sorted(set().union(*(callees.get(r["id"],set()) for r in chunk))-ids)
             inputs=[{"id":r["id"],"address":r["address"],"pseudocode_sha256":r["sha256"],
-                     "ghidra_name":r["ghidra_name"],"bytes":r["bytes"],
+                     "ghidra_name":r["ghidra_name"],"bytes":r["bytes"],\n                     "pdb_name":r.get("pdb_name",""),"pdb_signature":r.get("pdb_signature",""),\n                     "pdb_source":r.get("pdb_source",""),"map_object":r.get("map_object",""),
                      "source_archive":next(s["archive"] for s in manifest["shards"]
                          if r["id"] in per_shard_ids[s["archive"]])}
                     for r in chunk]
@@ -134,4 +159,4 @@ if __name__=="__main__":
         if contents is None: raise ValueError("Missing shard function inventory")
         per_shard_ids[shard["archive"]]={r["function_id"] for r in
              csv.DictReader(io.StringIO(contents.decode("utf-8")),delimiter="\t")}
-    plan(args.corpus,args.output,args.batch_size,args.type_revision)
+    plan(args.corpus,args.output,args.batch_size,args.type_revision,per_shard_ids)
