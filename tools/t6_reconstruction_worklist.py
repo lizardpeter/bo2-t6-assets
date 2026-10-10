@@ -54,7 +54,7 @@ def plan(corpus, output, batch_size, type_revision, per_shard_ids):
         if pdb is None or symbols is None:
             raise ValueError("Complete PDB/MAP data required for server reconstruction")
         pdb_by_va={}
-        for item in csv.DictReader(io.StringIO(pdb.decode("utf-8")),delimiter="\\t"):
+        for item in csv.DictReader(io.StringIO(pdb.decode("utf-8")),delimiter="\t"):
             pdb_by_va[normalize_address(item["entry_va"])]=item
         map_by_va={}
         for item in csv.DictReader(io.StringIO(gzip.decompress(symbols).decode("utf-8"))):
@@ -113,7 +113,9 @@ def plan(corpus, output, batch_size, type_revision, per_shard_ids):
             ids={r["id"] for r in chunk}
             external=sorted(set().union(*(callees.get(r["id"],set()) for r in chunk))-ids)
             inputs=[{"id":r["id"],"address":r["address"],"pseudocode_sha256":r["sha256"],
-                     "ghidra_name":r["ghidra_name"],"bytes":r["bytes"],\n                     "pdb_name":r.get("pdb_name",""),"pdb_signature":r.get("pdb_signature",""),\n                     "pdb_source":r.get("pdb_source",""),"map_object":r.get("map_object",""),
+                     "ghidra_name":r["ghidra_name"],"bytes":r["bytes"],
+                     "pdb_name":r.get("pdb_name",""),"pdb_signature":r.get("pdb_signature",""),
+                     "pdb_source":r.get("pdb_source",""),"map_object":r.get("map_object",""),
                      "source_archive":next(s["archive"] for s in manifest["shards"]
                          if r["id"] in per_shard_ids[s["archive"]])}
                     for r in chunk]
