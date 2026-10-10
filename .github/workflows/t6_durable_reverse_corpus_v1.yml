@@ -1,0 +1,126 @@
+name: Preserve full T6 Ghidra pseudocode + PDB/MAP in private Git
+
+on:
+  workflow_dispatch:
+    inputs:
+      retail_run_id:
+        description: Eight-shard enriched retail Ghidra run
+        type: string
+        required: true
+        default: '36988725442'
+      server_run_id:
+        description: Eight-shard original server Ghidra run (empty = latest successful)
+        type: string
+        required: false
+      pdb_run_id:
+        description: Complete server PDB semantics run (empty = latest successful)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve evidence run IDs
+        env:
+          RETAIL_RUN: ${{ inputs.retail_run_id }}
+          SERVER_RUN: ${{ inputs.server_run_id }}
+          PDB_RUN: ${{ inputs.pdb_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SERVER_RUN" ]]; then
+            SERVER_RUN="$(gh run list -R "$GITHUB_REPOSITORY" --workflow t6_pc_server_full_ghidra_corpus_v1.yml --status success --limit 30 --json databaseId --jq '.[0].databaseId')"
+          fi
+          if [[ -z "$PDB_RUN" ]]; then
+            PDB_RUN="$(gh run list -R "$GITHUB_REPOSITORY" --workflow t6_server_pdb_semantics_universe_v2.yml --status success --limit 30 --json databaseId --jq '.[0].databaseId')"
+          fi
+          for key in RETAIL_RUN SERVER_RUN PDB_RUN; do
+            value="${!key}"
+            [[ "$value" =~ ^[0-9]+$ ]] || { echo "Unresolved $key" >&2; exit 1; }
+            echo "$key=$value" >> "$GITHUB_ENV"
+          done
+      - name: Recover existing original Ghidra bodies, without re-decompiling
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-download/retail /tmp/t6-download/server /tmp/t6-retail /tmp/t6-server
+          gh run download "$RETAIL_RUN" -R "$GITHUB_REPOSITORY" -p 't6-enriched-full-v1-shard-*' -D /tmp/t6-download/retail
+          gh run download "$SERVER_RUN" -R "$GITHUB_REPOSITORY" -p 't6-full-pc-ghidra-decompile-*' -D /tmp/t6-download/server
+          for i in {0..7}; do
+            src="/tmp/t6-download/retail/t6-enriched-full-v1-shard-$i"
+            dst="/tmp/t6-retail/shard-$i"
+            test -s "$src/bundle.tar.zst"
+            mkdir -p "$dst"
+            tar -I zstd -xf "$src/bundle.tar.zst" -C "$dst"
+            test -d "$dst/batch/unreviewed"
+            mv "$dst/batch/"* "$dst/"
+            rmdir "$dst/batch"
+            cp "$src/summary.json" "$dst/summary.json"
+            cp "$src/selection.tsv" "$dst/selection.tsv"
+          done
+          for i in {00..07}; do
+            src="/tmp/t6-download/server/t6-full-pc-ghidra-decompile-$i"
+            test -s "$src/results.tsv"
+            test -d "$src/unreviewed"
+            mkdir -p "/tmp/t6-server/shard-$i"
+            cp -a "$src/." "/tmp/t6-server/shard-$i/"
+          done
+      - name: Recover complete Ghidra/PDB types, named globals and MAP evidence
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6-sidecar/pdb /tmp/t6-sidecar/map /tmp/t6-sidecar/provenance
+          gh run download "$PDB_RUN" -R "$GITHUB_REPOSITORY" -n t6-original-pc-PDB-complete-type-aliases-global-data-v2 -D /tmp/t6-sidecar/pdb
+          test -s /tmp/t6-sidecar/pdb/summary.json
+          cp proof/current_client/anchor_delta_map_propagation_v3_graph353/result.json /tmp/t6-sidecar/map/retail-server-map-propagation.json
+          cp proof/current_client/anchor_delta_map_propagation_v3_graph353/map_parse_summary.json /tmp/t6-sidecar/map/map-parse-summary.json
+          cp proof/current_client/pdb_exact_hash_join_v1_strict/summary.json /tmp/t6-sidecar/provenance/exact-byte-matches.json
+          cp proof/server/pdb_cpp_abi_v1/summary.json /tmp/t6-sidecar/provenance/cpp-abi-summary.json
+      - name: Verify and package both complete function corpora
+        run: |
+          set -euo pipefail
+          python3 tools/t6_preserve_ghidra_corpus.py \
+            --input-root /tmp/t6-retail --output-root /tmp/t6-output --build retail \
+            --binary-sha256 770318175f0161aa7a1ff0f9a5530336836a99e72900d7608a63973e56004adf \
+            --expected-functions 24617 --expected-completed 24612
+          python3 tools/t6_preserve_ghidra_corpus.py \
+            --input-root /tmp/t6-server --output-root /tmp/t6-output --build server \
+            --binary-sha256 f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d \
+            --expected-functions 27734 --expected-completed 27730 \
+            --sidecar-root /tmp/t6-sidecar
+      - name: Refuse to send bulk executable-derived source to a public repository
+        env:
+          GH_TOKEN: ${{ secrets.T6_CORPUS_TOKEN }}
+          TARGET_REPO: ${{ vars.T6_PRIVATE_CORPUS_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Set T6_CORPUS_TOKEN with access to the private destination.' >&2; exit 1; }
+          test -n "$TARGET_REPO" || { echo 'Set T6_PRIVATE_CORPUS_REPOSITORY to owner/private-repo.' >&2; exit 1; }
+          test "$(gh repo view "$TARGET_REPO" --json isPrivate --jq '.isPrivate')" = true ||
+            { echo 'Destination must be private.' >&2; exit 1; }
+      - name: Check out private corpus repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.T6_PRIVATE_CORPUS_REPOSITORY }}
+          token: ${{ secrets.T6_CORPUS_TOKEN }}
+          path: private-corpus
+      - name: Commit pseudocode, full PDB/MAP evidence and checksums to private Git
+        run: |
+          set -euo pipefail
+          mkdir -p private-corpus/t6/ghidra-12.1.3/retail-77031817 private-corpus/t6/ghidra-12.1.3/server-f67eb68a
+          cp -a /tmp/t6-output/retail/. private-corpus/t6/ghidra-12.1.3/retail-77031817/
+          cp -a /tmp/t6-output/server/. private-corpus/t6/ghidra-12.1.3/server-f67eb68a/
+          cd private-corpus
+          git config user.name t6-corpus-archive-bot
+          git config user.email t6-corpus-archive-bot@users.noreply.github.com
+          git add t6/ghidra-12.1.3
+          git diff --cached --quiet && { echo 'No corpus changes'; exit 0; }
+          git commit -m 'Preserve complete T6 retail/server Ghidra pseudocode with PDB/MAP'
+          git pull --rebase
+          git push
