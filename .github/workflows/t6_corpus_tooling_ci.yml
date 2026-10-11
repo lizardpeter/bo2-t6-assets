@@ -1,0 +1,42 @@
+name: T6 durable corpus tooling smoke tests
+
+on:
+  push:
+    paths:
+      - 'tools/t6_preserve_ghidra_corpus.py'
+      - 'tools/test_t6_preserve_ghidra_corpus.py'
+      - 'tools/t6_reconstruction_worklist.py'
+      - 'tools/t6_complete_ghidra_graph_projection.py'
+      - 'tools/t6_retrieve_ghidra_function.py'
+      - '.github/workflows/t6_corpus_tooling_ci.yml'
+  pull_request:
+    paths:
+      - 'tools/t6_preserve_ghidra_corpus.py'
+      - 'tools/test_t6_preserve_ghidra_corpus.py'
+      - 'tools/t6_reconstruction_worklist.py'
+      - 'tools/t6_complete_ghidra_graph_projection.py'
+      - 'tools/t6_retrieve_ghidra_function.py'
+      - '.github/workflows/t6_corpus_tooling_ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify zstd
+        run: |
+          command -v zstd || (sudo apt-get update && sudo apt-get install -y zstd)
+      - name: Python syntax validation
+        run: |
+          python3 -m py_compile \
+            tools/t6_preserve_ghidra_corpus.py \
+            tools/t6_reconstruction_worklist.py \
+            tools/t6_complete_ghidra_graph_projection.py \
+            tools/t6_retrieve_ghidra_function.py \
+            tools/test_t6_preserve_ghidra_corpus.py
+      - name: Corpus-to-C++-queue-to-graph synthetic integration
+        run: python3 tools/test_t6_preserve_ghidra_corpus.py
