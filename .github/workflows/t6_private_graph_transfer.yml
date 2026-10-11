@@ -1,0 +1,105 @@
+name: T6 full Ghidra source private graph transfer
+on:
+  push:
+    paths:
+      - '.github/workflows/t6_private_graph_transfer.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: t6-private-graph-transfer
+  cancel-in-progress: true
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SESSION_PUBLIC_KEY_B64: 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUExSUFoZTg3NXF1ZWpqSURJemw2cApKUWJ3YnkzMmZ1UG0xSmJpcTJpLzdxZzBXdVVMV3RmdWd3dUk1TmcrUkVSdlUrLzltQyszOGxnR3BwZUxhUDZICkNGTXNtdTRkQlgrT2pDSmRzeXc5YTJWUG1mYitzVVpyRFJwTkIxY2N1Nm0yVmRralhYZ2JDWEtTY0Z4K1BRcTgKL1pMMjNxQndwZmY3emFZQ3ptVVp6SVBpZjg4TDZMbzRkc2FlMnY1WDl4aGhGQ1VGZjJaRU95NC9IOVB4STZiSgppdWtQWVBBbElVOFhpN0l2Y0hDdWFrejlhV1dNNEpzdWRwTlNhbWJlNjJ6aGU3TzFFVjlBZlRVTFNRZi8rUGowCmFxZS9aQmJwZ3piT3dIaFUzL1RoOFRqdy84QXk2VkJEODdMVE1Eajg4d2JKM3dIZnF0Wm1tT1A2dE9EMEsxWW4KZHdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=='
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install transport and recover original saved Ghidra artifacts
+        run: |
+          set -euo pipefail
+          command -v zstd || (sudo apt-get update && sudo apt-get install -y zstd)
+          curl -fLsS --retry 4 --retry-all-errors \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            -o /tmp/cloudflared
+          chmod 755 /tmp/cloudflared
+          mkdir -p /tmp/t6-retail /tmp/t6-server /tmp/t6-private-csv
+          gh run download 36988725442 -R "${GITHUB_REPOSITORY}" \
+            -p 't6-enriched-full-v1-shard-*' -D /tmp/t6-retail
+          gh run download 37870574869 -R "${GITHUB_REPOSITORY}" \
+            -p 't6-full-pc-ghidra-decompile-*' -D /tmp/t6-server
+          python3 tools/t6_ephemeral_source_csv.py \
+            --retail /tmp/t6-retail --server /tmp/t6-server \
+            --out /tmp/t6-private-csv --rows-per-file 150
+          test -s /tmp/t6-private-csv/index.csv
+      - name: Serve with short-lived encrypted session capability
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 32)"
+          printf '%s' "$SESSION_PUBLIC_KEY_B64" | base64 -d >/tmp/t6-import-public.pem
+          ENCRYPTED_TOKEN="$(printf '%s' "$TOKEN" | \
+            openssl pkeyutl -encrypt -pubin -inkey /tmp/t6-import-public.pem \
+              -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
+          python3 tools/t6_ephemeral_graph_csv_server.py \
+            --root /tmp/t6-private-csv --token "$TOKEN" --port 8765 \
+            --ttl-seconds 2400 >/tmp/t6-private-http.log 2>&1 &
+          SERVER_PID=$!
+          for i in {1..30}; do
+            test -s /tmp/t6-private-csv/server_ready.marker && break
+            sleep 1
+          done
+          test -s /tmp/t6-private-csv/server_ready.marker
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 \
+            >/tmp/t6-cloudflared.log 2>&1 &
+          TUNNEL_PID=$!
+          for i in {1..120}; do
+            HOST="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/t6-cloudflared.log | head -1 || true)"
+            if [[ -n "$HOST" ]]; then break; fi
+            if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+              cat /tmp/t6-cloudflared.log
+              exit 1
+            fi
+            sleep 1
+          done
+          test -n "${HOST:-}"
+          export HOST ENCRYPTED_TOKEN
+          mkdir -p proof/graph_transfer
+          python3 - <<'PY'
+          import json,os,time,pathlib
+          s={'format':'t6-temporary-private-graph-transfer-v1',
+             'state':'active','host':os.environ['HOST'],
+             'encrypted_token_base64':os.environ['ENCRYPTED_TOKEN'],
+             'cipher':'RSA-OAEP-SHA256','expires_unix':int(time.time())+2400,
+             'index_path':'index.csv','plaintext_capability_committed':False,
+             'source_artifacts':['36988725442','37870574869']}
+          pathlib.Path('proof/graph_transfer/active_session.json').write_text(json.dumps(s,indent=2)+'\n')
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/graph_transfer/active_session.json
+          git commit -m 'Open short-lived encrypted Ghidra CSV session for private graph import'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "Temporary Graph transfer session active with encrypted capability."
+          for i in {1..480}; do
+            kill -0 "$SERVER_PID" 2>/dev/null || break
+            sleep 5
+          done
+          kill "$SERVER_PID" "$TUNNEL_PID" 2>/dev/null || true
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('proof/graph_transfer/active_session.json')
+          s=json.loads(p.read_text());s['state']='closed'
+          s.pop('encrypted_token_base64',None)
+          p.write_text(json.dumps(s,indent=2)+'\n')
+          PY
+          git add proof/graph_transfer/active_session.json
+          git commit -m 'Close temporary Ghidra graph import session'
+          git pull --rebase origin main
+          git push origin HEAD:main
