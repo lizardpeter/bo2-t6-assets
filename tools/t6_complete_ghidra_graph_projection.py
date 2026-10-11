@@ -68,7 +68,7 @@ SET f.build_id=row.build_id,
     f.ghidra_evidence_state=CASE WHEN row.success THEN 'generated-unreviewed-completed' ELSE 'generated-unreviewed-failed' END,
     f.ghidra_pseudocode_sha256=CASE WHEN row.success THEN row.source_sha256 ELSE f.ghidra_pseudocode_sha256 END
 WITH f,row
-MATCH (b:KGNode {id:row.build_id})
+MATCH (b:KGNode {{id:row.build_id}})
 MERGE (b)-[:HAS_OCCURRENCE]->(f)
 FOREACH (_ IN CASE WHEN row.success THEN [1] ELSE [] END |
     MERGE (r:KGNode {{id:row.rep_id}})
@@ -88,7 +88,7 @@ FOREACH (_ IN CASE WHEN row.success THEN [1] ELSE [] END |
         r.git_archive_member=row.archive_member,
         r.generated_unreviewed=true
     MERGE (f)-[:\x60core:HAS_REPRESENTATION\x60]->(r)
-    MERGE (e:KGNode {id:row.evidence_id})
+    MERGE (e:KGNode {{id:row.evidence_id}})
     ON CREATE SET e.kind='re:Evidence', e.namespace='t6'
     MERGE (e)-[:EVIDENCE_FOR]->(r)
 )
