@@ -97,6 +97,8 @@ def main():
             raise ValueError(f"Duplicate function across shards: {shard}")
         seen.update(row["id"] for row in rows)
         summaries.append(summary)
+        for row in rows:
+            row["source_archive"]=summary["archive"]
         indexes.extend(rows)
     completed=sum(s["completed"] for s in summaries)
     if len(indexes)!=a.expected_functions or completed!=a.expected_completed:
