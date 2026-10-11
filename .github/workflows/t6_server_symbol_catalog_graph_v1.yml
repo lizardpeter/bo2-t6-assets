@@ -1,0 +1,63 @@
+name: Persist T6 server symbol/function catalog for uregraph
+on:
+  push:
+    paths:
+      - .github/workflows/t6_server_symbol_catalog_graph_v1.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  persist-server-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download previously validated complete PDB symbol analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/t6pdb
+          gh run download 37947588396 -R "${GITHUB_REPOSITORY}" \
+             -n t6-original-pc-PDB-complete-type-aliases-global-data-v2 -D /tmp/t6pdb
+          test -s /tmp/t6pdb/functions.tsv
+          test -s /tmp/t6pdb/summary.json
+      - name: Publish function symbol metadata (not pseudocode or raw binaries)
+        run: |
+          set -euo pipefail
+          mkdir -p proof/server/graph_function_catalog_v1
+          python3 - <<'PY'
+          import csv,hashlib,json,pathlib
+          src=pathlib.Path('/tmp/t6pdb/functions.tsv')
+          dst=pathlib.Path('proof/server/graph_function_catalog_v1/functions.tsv')
+          rows=list(csv.DictReader(src.open(encoding='utf-8',newline=''),delimiter='\t'))
+          assert len(rows)==27734,len(rows)
+          seen=set()
+          with dst.open('w',encoding='utf-8',newline='') as f:
+              writer=csv.writer(f,delimiter='\t',lineterminator='\n')
+              writer.writerow(['function_id','address_start','ghidra_name','prototype','calling_convention','is_thunk','symbol_source'])
+              for row in rows:
+                  va=row['entry_va'].lower().removeprefix('0x').zfill(8)
+                  assert len(va)==8 and va not in seen
+                  seen.add(va)
+                  writer.writerow(['urn:ure:t6:occ:function:server-2013-03-11:'+va,
+                       '0x'+va,row['qualified_name'],row['function_signature'],
+                       row['calling_convention'],row['is_thunk'],row['symbol_source']])
+          manifest={'format':'t6-server-graph-function-catalog-v1',
+             'original_exe_sha256':'f67eb68a494b93b5b229985205bdc94e26fdfe677663410e2207c25f6f27a55d',
+             'original_pdb_sha256':'7874efc2c9992467a72dbf48cc6f66d8cfa3c9a701275e41df1f8483a3d971fc',
+             'total':len(rows),'pseudocode_included':False,'source_run_id':37947588396,
+             'source_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),
+             'catalog_sha256':hashlib.sha256(dst.read_bytes()).hexdigest()}
+          (dst.parent/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add proof/server/graph_function_catalog_v1
+          git diff --cached --quiet && exit 0
+          git commit -m 'Preserve 27734 exact server PDB function entries for graph import'
+          git pull --rebase origin main
+          git push origin HEAD:main
