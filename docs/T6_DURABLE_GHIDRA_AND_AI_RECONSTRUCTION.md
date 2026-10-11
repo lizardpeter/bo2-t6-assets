@@ -34,3 +34,18 @@ Do not conflate decompilation success with reconstructed/accepted C++:
 **5. Verify behavior before accepting.** Differential-test selected routines using original execution traces when possible. Count separately: cataloged, pseudocode exported, typed, C++ emitted, compiling, linkable, and behaviorally verified. Compiler success alone is not equivalence.
 
 A useful first batch is high-confidence PDB-backed server leaf and utility code, followed by shared high-fan-out core subsystems, then retail-only code and gameplay logic. The existing `tools/t6_server_bulk_cpp_candidates_v1.py` and `tools/t6_server_pdb_x86_cpp_views_v1.py` can be reused as part of the deterministic front end.
+
+
+## Deterministic AI work queue (added to this branch)
+
+Run after recovering the private corpus:
+
+```bash
+python3 tools/t6_reconstruction_worklist.py \
+  --corpus /path/to/private-corpus/t6/ghidra-12.1.3/server-f67eb68a \
+  --output /path/to/private-corpus/server-ai-jobs.jsonl \
+  --batch-size 32 \
+  --type-revision <SHA256-of-the-frozen-PDB-type-revision>
+```
+
+The worklist generator reads the actual archived reference TSVs, validates archive hashes, joins *server* function addresses to the original PDB prototypes and the verified linker MAP object-file ownership, and emits JSONL tasks grouped by source-object/subsystem with shared dependencies. The retail corpus can use the same planner, **without** assigning server PDB names to retail functions from unverified similarity. These work items are a queue, **not yet executed AI jobs or compiled source**. A production model adapter should consume the immutable task IDs with bounded concurrency, append results and compiler failures, and avoid reprocessing identical input/type revisions. Route dependencies and large functions to smaller batches when needed.
