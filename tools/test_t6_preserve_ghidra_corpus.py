@@ -16,7 +16,7 @@ def main():
             (p/"unreviewed"/f"{i+1:08x}.c").write_text(
                 "/* GENERATED/UNREVIEWED GHIDRA OUTPUT\n"
                 " * decompile_completed: true\n */\nvoid f() {}\n")
-            (p/"references.tsv").write_text("function_id\\tfrom_address\\tmnemonic\\toperand_index\\treference_type\\tto_address\\ttarget_symbol\\ttarget_data_type\\n")
+            (p/"references.tsv").write_text("function_id\tfrom_address\tmnemonic\toperand_index\treference_type\tto_address\ttarget_symbol\ttarget_data_type\n")
             with (p/"results.tsv").open("w",newline="") as f:
                 fields = ["function_id","requested_va","decompile_completed","c_bytes","ghidra_name"]
                 writer=csv.DictWriter(f,fieldnames=fields,delimiter="\t")
