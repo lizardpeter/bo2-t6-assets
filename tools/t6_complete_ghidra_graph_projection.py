@@ -171,7 +171,7 @@ def generate(corpus,out,git_repo,git_prefix,source_char_limit,byte_budget):
                 "source_text":"" if chunked or not success_flag else text,
                 "chunked":chunked,
                 "git_repo":git_repo,
-                "archive_path":git_prefix+"/"+build+"/"+shard["archive"],
+                "archive_path":git_prefix+"/"+shard["archive"],
                 "archive_member":name
             }
             encoded=len(cmap(row).encode("utf-8"))
