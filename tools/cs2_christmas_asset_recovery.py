@@ -270,6 +270,79 @@ def build_plan(args):
           f"{len(ordered)} physical segments for discovered targets")
     print("Priority segments:", ", ".join(f"pak01_{i:03}.vpk" for i in ordered[:30]))
 
+def extend_plan(args):
+    """Walk original VMAT RERL/RED2 texture dependencies recovered in stage 1.
+
+    Unlike the initial Workshop-only scan, this follows hundreds of compiled
+    base VMATs. Source2 compiled VMATs retain their exact .vtex paths in the
+    RERL/RED2 resource blocks, even when DATA/KV3 is compressed. No guessed
+    texture names, synthesized pixels or original game shaders are needed.
+    """
+    base = Vpk(args.index)
+    report_path = pathlib.Path(args.plan)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    root = pathlib.Path(args.output)
+    sources = {}
+    for fname in args.workshop_plans:
+        item = json.loads(pathlib.Path(fname).read_text(encoding="utf-8"))
+        sources[item["workshop_id"]] = set(item["available_from_workshop"])
+    new_by_map = collections.Counter()
+    new_refs = collections.defaultdict(list)
+    for wid, statuses in report["statuses"].items():
+        folder = root / f"cs2-workshop-{wid}-vpk" / "cs2-base-resources"
+        if not folder.is_dir():
+            continue
+        for material_file in folder.rglob("*.vmat_c"):
+            data = material_file.read_bytes()
+            for match in RESOURCE_RX.findall(data):
+                candidate = compiled(match.decode("utf-8", "replace"))
+                if not candidate or candidate in statuses:
+                    continue
+                if candidate in sources.get(wid,set()):
+                    location = "WORKSHOP"
+                elif candidate not in base.entries:
+                    location = "NOT_IN_BASE_INDEX"
+                else:
+                    idx = base.entries[candidate][2]
+                    location = ("BASE_INLINE" if idx == 0x7fff
+                                else f"pak01_{idx:03}.vpk")
+                statuses[candidate] = location
+                new_by_map[wid] += 1
+                new_refs[wid].append(candidate)
+    archive_resources = collections.defaultdict(list)
+    for wid, statuses in report["statuses"].items():
+        for name, source in statuses.items():
+            if source.startswith("pak01_"):
+                archive_resources[source].append(f"{wid}|{name}")
+    report["archive_resources"] = {
+        archive: sorted(refs) for archive, refs in sorted(archive_resources.items())
+    }
+    def ranking(pair):
+        name, refs = pair
+        seed_count = sum(1 for encoded in refs
+            if encoded.split("|",1)[1] in SEEDS.get(encoded.split("|",1)[0], []))
+        return (-seed_count,-len(refs),name)
+    report["archive_priority"] = [
+        int(archive.removeprefix("pak01_").removesuffix(".vpk"))
+        for archive,refs in sorted(archive_resources.items(),key=ranking)
+    ]
+    report["not_in_base"] = {
+        wid: sorted(name for name,value in statuses.items()
+                    if value == "NOT_IN_BASE_INDEX")
+        for wid,statuses in report["statuses"].items()
+    }
+    report["original_vmat_texture_dependency_expansion"] = {
+        "new_paths_per_map": dict(new_by_map),
+        "new_reference_samples": {
+            wid: sorted(refs)[:35] for wid,refs in new_refs.items()
+        },
+        "extraction_method": "Original VMAT RERL/RED2 resource strings",
+        "limitation": "Only already-recovered original VMAT dependencies are included",
+    }
+    report_path.write_text(json.dumps(report,indent=2),encoding="utf-8")
+    print(f"Original VMAT dependency expansion: {dict(new_by_map)} new source "
+          f"paths, {len(report['archive_priority'])} total referenced VPK chunks")
+
 def extract(args):
     report = json.loads(pathlib.Path(args.plan).read_text(encoding="utf-8"))
     base = Vpk(args.index)
@@ -318,6 +391,12 @@ def main():
     a.add_argument("--plans", required=True, nargs="+")
     a.add_argument("--output", required=True)
     a.set_defaults(func=build_plan)
+    a = subs.add_parser("extend")
+    a.add_argument("--index", required=True)
+    a.add_argument("--plan", required=True)
+    a.add_argument("--output", required=True)
+    a.add_argument("--workshop-plans", required=True, nargs="+")
+    a.set_defaults(func=extend_plan)
     a = subs.add_parser("extract")
     a.add_argument("--index", required=True)
     a.add_argument("--plan", required=True)
