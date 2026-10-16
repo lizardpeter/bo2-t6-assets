@@ -1,7 +1,7 @@
 # Public GitHub-hosted, anonymous Steam source recovery.
 # No PAT, private Rust-test checkout, paid GitHub-hosted private minutes,
 # third-party runner, or privileged GitHub secrets.
-param([ValidateRange(1,100)][int]$MaxSegments=20)
+param([ValidateRange(1,200)][int]$MaxSegments=120)
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP 'cs2-source-recovery'
 $ready = Join-Path $root 'ready-to-extract'
@@ -65,49 +65,85 @@ try {
     Run-Python -argv (@('plan','--index',$index,'--plans') + $plans +
         @('--output',$combined))
     Run-Python -argv @('extract','--index',$index,'--plan',$combined,'--output',$ready)
-    $census = Get-Content -LiteralPath $combined -Raw | ConvertFrom-Json
-    $archiveList = @($census.archive_priority | Select-Object -First $MaxSegments)
-    Log "Found $(@($census.archive_priority).Count) original numbered archive segments; attempting $($archiveList.Count)."
-    $success = [Collections.Generic.List[int]]::new()
     $failure = [Collections.Generic.List[string]]::new()
-    foreach ($idx in $archiveList) {
-        $number = [int]$idx
-        $name = 'pak01_{0:D3}.vpk' -f $number
-        $filelist = Join-Path $root 'one-segment.txt'
-        ('game/csgo/' + $name) | Set-Content -LiteralPath $filelist -Encoding ascii
-        Log "Anonymous Steam base asset segment: $name"
-        try {
-            Steam -argv @('-app','730','-depot','2347770',
-                '-filelist',$filelist,'-dir',$base,'-max-downloads','4')
-            Run-Python -argv @('extract','--index',$index,'--plan',$combined,
-                '--output',$ready,'--segment',"$number")
-            [void]$success.Add($number)
-        } catch {
-            $errorMessage = "$name : $($_.Exception.Message)"
-            $failure.Add($errorMessage)
-            Log "Original segment NOT RECOVERED: $errorMessage"
+    $success = [Collections.Generic.List[int]]::new()
+    $totalAttempts = 0
+    function Still-Missing([int]$archiveIndex,$report) {
+        $key = 'pak01_{0:D3}.vpk' -f $archiveIndex
+        $property = $report.archive_resources.PSObject.Properties[$key]
+        if (-not $property) { return $false }
+        foreach ($identity in @($property.Value)) {
+            $parts = $identity -split '\|', 2
+            if ($parts.Count -ne 2) { continue }
+            $relative = 'cs2-workshop-' + $parts[0] +
+                '-vpk/cs2-base-resources/' + $parts[1]
+            if (-not (Test-Path -LiteralPath (Join-Path $ready $relative))) {
+                return $true
+            }
         }
-        # Keep the public runner under disk quota; the artifact contains
-        # only the verified compiled source resources needed by the maps.
-        $segment = Join-Path (Split-Path -Parent $index) $name
-        if (Test-Path -LiteralPath $segment) {
-            Remove-Item -LiteralPath $segment -Force
-        }
+        return $false
     }
+    # First pass recovers source VMAT definitions from the Workshop's
+    # original authored material names; then scan their RERL/RED2 original
+    # texture references for hundreds of required *VTEX* source files.
+    for ($phase=0;$phase -lt 3;$phase++) {
+        Run-Python -argv (@('extend','--index',$index,'--plan',$combined,
+            '--output',$ready,'--workshop-plans') + $plans)
+        Run-Python -argv @('extract','--index',$index,'--plan',$combined,'--output',$ready)
+        $census = Get-Content -LiteralPath $combined -Raw | ConvertFrom-Json
+        $archiveList = @($census.archive_priority)
+        Log "Source closure phase $phase: $($archiveList.Count) original archive indices; used $totalAttempts/$MaxSegments downloads"
+        foreach ($idx in $archiveList) {
+            if ($totalAttempts -ge $MaxSegments) { break }
+            $number = [int]$idx
+            if (-not (Still-Missing $number $census)) { continue }
+            $totalAttempts++
+            $name = 'pak01_{0:D3}.vpk' -f $number
+            $filelist = Join-Path $root 'one-segment.txt'
+            ('game/csgo/' + $name) | Set-Content -LiteralPath $filelist -Encoding ascii
+            Log "Anonymous Steam base original source segment $totalAttempts/$MaxSegments: $name"
+            try {
+                Steam -argv @('-app','730','-depot','2347770',
+                    '-filelist',$filelist,'-dir',$base,'-max-downloads','4')
+                Run-Python -argv @('extract','--index',$index,'--plan',$combined,
+                    '--output',$ready,'--segment',"$number")
+                [void]$success.Add($number)
+            } catch {
+                $errorMessage = "$name : $($_.Exception.Message)"
+                [void]$failure.Add($errorMessage)
+                Log "Original segment NOT RECOVERED: $errorMessage"
+            }
+            # The runner stores original source resources in a small overlay
+            # and removes large physical VPK chunks after CRC verification.
+            $segment = Join-Path (Split-Path -Parent $index) $name
+            if (Test-Path -LiteralPath $segment) {
+                Remove-Item -LiteralPath $segment -Force
+            }
+        }
+        if ($totalAttempts -ge $MaxSegments) { break }
+    }
+    $census = Get-Content -LiteralPath $combined -Raw | ConvertFrom-Json
     $remaining = @($census.archive_priority | Where-Object {
-        [int]$_ -notin @($success.ToArray())
+        Still-Missing ([int]$_) $census
     } | ForEach-Object { 'pak01_{0:D3}.vpk' -f [int]$_ })
     $remaining | Set-Content -LiteralPath (Join-Path $audit 'remaining-original-base-archives.txt')
     $failure | Set-Content -LiteralPath (Join-Path $audit 'anonymous-steam-failures.txt')
+    $originals = @(Get-ChildItem -LiteralPath $ready -Recurse -File |
+        Where-Object { $_.FullName -like '*cs2-base-resources*' })
+    $textures = @($originals | Where-Object Name -like '*.vtex_c')
+    $materials = @($originals | Where-Object Name -like '*.vmat_c')
     $summary = @(
         'Public hosted GitHub Actions original Source2 asset recovery',
         'Workshop IDs: 3620630831 / 3620635379',
         "Anonymous source segments downloaded and checked: $($success.Count)",
         "Anonymous source segments failed: $($failure.Count)",
         "Source segments still unresolved: $($remaining.Count)",
+        "Original compiled VMATs recovered: $($materials.Count)",
+        "Original compiled VTEXs recovered: $($textures.Count)",
         'Files under cs2-workshop-<id>-vpk/cs2-base-resources/ are original compiled assets',
         'These original compiled resources passed the current Steam pak01_dir.vpk CRC',
         'Source-material coverage is partial: compressed KV3 references may not be scanned',
+        'All recovered VTEX dependencies were read from real source VMAT metadata',
         'Extract artifact folders into Windows Downloads; original Workshop VPKs are untouched',
         'The _CS2-SOURCE-AUDIT folder includes exact per-source names and missing paths'
     )
