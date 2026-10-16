@@ -13,11 +13,11 @@ foreach ($dir in @($root,$ready,$audit,$tools,$base)) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 function Log([string]$s) {
-    $s | Tee-Object -LiteralPath $log -Append
+    $s | Tee-Object -FilePath $log -Append
 }
 function Run-Python([string[]]$argv) {
     & python 'tools/cs2_christmas_asset_recovery.py' @argv 2>&1 |
-        Tee-Object -LiteralPath $log -Append
+        Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) {
         throw "Original Source2 resource inventory failed ($LASTEXITCODE): $($argv -join ' ')"
     }
@@ -32,7 +32,7 @@ try {
     function Steam([string[]]$argv) {
         # Deliberately no username or password: Steam determines anonymous
         # entitlement. If denied, fail and retain only diagnostics.
-        & $exe @argv 2>&1 | Tee-Object -LiteralPath $log -Append
+        & $exe @argv 2>&1 | Tee-Object -FilePath $log -Append
         if ($LASTEXITCODE -ne 0) { throw "Steam anonymous download returned $LASTEXITCODE" }
     }
     $plans = @()
