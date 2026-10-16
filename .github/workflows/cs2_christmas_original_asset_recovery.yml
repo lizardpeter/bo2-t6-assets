@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       max_segments:
-        description: 'Maximum original CS2 base archive segments to recover (1-200)'
+        description: 'Maximum original CS2 base archive segments to recover (1-240)'
         type: number
-        default: 120
+        default: 200
         required: false
   pull_request:
     paths:
@@ -40,7 +40,7 @@ jobs:
       - name: Run anonymous Steam recovery for Dust2 and Mirage
         shell: pwsh
         run: |
-          $limit = "${{ inputs.max_segments || '120' }}"
+          $limit = "${{ inputs.max_segments || '200' }}"
           ./tools/cs2_christmas_asset_recovery.ps1 -MaxSegments ([int]$limit)
       - name: Publish source-backed, ready-to-extract assets and exact missing list
         if: always()
