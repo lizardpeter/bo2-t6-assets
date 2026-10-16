@@ -92,7 +92,7 @@ try {
         Run-Python -argv @('extract','--index',$index,'--plan',$combined,'--output',$ready)
         $census = Get-Content -LiteralPath $combined -Raw | ConvertFrom-Json
         $archiveList = @($census.archive_priority)
-        Log "Source closure phase $phase: $($archiveList.Count) original archive indices; used $totalAttempts/$MaxSegments downloads"
+        Log "Source closure phase ${phase}: $($archiveList.Count) original archive indices; used $totalAttempts/$MaxSegments downloads"
         foreach ($idx in $archiveList) {
             if ($totalAttempts -ge $MaxSegments) { break }
             $number = [int]$idx
