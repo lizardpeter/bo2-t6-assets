@@ -1,0 +1,53 @@
+name: CS2 Christmas original Steam asset recovery (public runner)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cs2_christmas_original_asset_recovery.yml
+      - tools/cs2_christmas_asset_recovery.py
+      - tools/cs2_christmas_asset_recovery.ps1
+  workflow_dispatch:
+    inputs:
+      max_segments:
+        description: 'Maximum original CS2 base archive segments to recover (1-100)'
+        type: number
+        default: 20
+        required: false
+  pull_request:
+    paths:
+      - .github/workflows/cs2_christmas_original_asset_recovery.yml
+      - tools/cs2_christmas_asset_recovery.py
+      - tools/cs2_christmas_asset_recovery.ps1
+permissions:
+  contents: read
+jobs:
+  source-parser-smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate standalone Source2 VPK inventory code without Steam
+        run: |
+          python3 -m py_compile tools/cs2_christmas_asset_recovery.py
+          python3 tools/cs2_christmas_asset_recovery.py --help
+  public-original-source-recovery:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run anonymous Steam recovery for Dust2 and Mirage
+        shell: pwsh
+        run: |
+          $limit = "${{ inputs.max_segments || '20' }}"
+          ./tools/cs2_christmas_asset_recovery.ps1 -MaxSegments ([int]$limit)
+      - name: Publish source-backed, ready-to-extract assets and exact missing list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs2-christmas-dust2-mirage-original-assets
+          path: ${{ runner.temp }}/cs2-source-recovery/ready-to-extract/**
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 1
