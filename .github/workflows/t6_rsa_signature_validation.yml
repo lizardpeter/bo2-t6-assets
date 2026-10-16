@@ -1,0 +1,40 @@
+name: T6 retail RSA signature validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - t6-rsa-signature-validation
+    paths:
+      - 'tools/t6_fastfile_expand_pc_v1.c'
+      - 'tools/t6_signature_verify_rs/**'
+      - '.github/workflows/t6_rsa_signature_validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned retail Nuketown FastFile
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 -o /tmp/mp_nuketown_2020.ff https://r2.houseofkublai.com/bo2/zone/all/mp_nuketown_2020.ff
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/mp_nuketown_2020.ff' | sha256sum -c -
+
+      - name: Reproduce final signed hash table with C oracle
+        run: |
+          set -euo pipefail
+          gcc -O3 -Wall -Wextra tools/t6_fastfile_expand_pc_v1.c -o /tmp/t6_expand -lcrypto -lz
+          /tmp/t6_expand /tmp/mp_nuketown_2020.ff /tmp/nuketown.expanded mp_nuketown_2020 /tmp/final_hash_table.bin
+          test "$(stat -c '%s' /tmp/final_hash_table.bin)" = 16000
+
+      - name: Verify retail signature in Rust
+        run: |
+          set -euo pipefail
+          cargo run --quiet --release --manifest-path tools/t6_signature_verify_rs/Cargo.toml -- /tmp/mp_nuketown_2020.ff /tmp/final_hash_table.bin | tee /tmp/rsa_result.txt
+          grep -q '^T6_RSA_SIGNATURE_VALID ' /tmp/rsa_result.txt
