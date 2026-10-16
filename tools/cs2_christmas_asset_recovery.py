@@ -42,17 +42,17 @@ SEEDS = {
 }
 RESOURCE_RX = re.compile(
     rb"(?:materials|models|maps)/[a-zA-Z0-9_.+/\-]{4,250}\."
-    rb"(?:vmat|vtex)(?:_c)?\b", re.I
+    rb"(?:vmat|vtex|vmdl|vmesh)(?:_c)?\b", re.I
 )
 
 def compiled(value):
     name = value.replace("\\", "/").strip().lower()
-    if name.endswith((".vmat", ".vtex")):
+    if name.endswith((".vmat", ".vtex", ".vmdl", ".vmesh")):
         name += "_c"
     if (not name or name.startswith("/") or ":" in name or
             any(p in ("", ".", "..") for p in name.split("/"))):
         return None
-    if not name.endswith((".vmat_c", ".vtex_c")):
+    if not name.endswith((".vmat_c", ".vtex_c", ".vmdl_c", ".vmesh_c")):
         return None
     return name
 
@@ -171,7 +171,7 @@ def scan_workshop(args):
     source_packages = []
     diagnostics = []
     for path in original.entries:
-        if path.endswith((".vmat_c", ".vtex_c")):
+        if path.endswith((".vmat_c", ".vtex_c", ".vmdl_c", ".vmesh_c")):
             seen_present.add(path)
             if path.endswith(".vmat_c"):
                 targets.add(path)
@@ -187,7 +187,7 @@ def scan_workshop(args):
             diagnostics.append(f"{name}: {e}")
             continue
         for entry in nested.entries:
-            if entry.endswith((".vmat_c", ".vtex_c")):
+            if entry.endswith((".vmat_c", ".vtex_c", ".vmdl_c", ".vmesh_c")):
                 seen_present.add(entry)
             if entry.endswith(".vmat_c"):
                 targets.add(entry)
@@ -292,7 +292,16 @@ def extend_plan(args):
         folder = root / f"cs2-workshop-{wid}-vpk" / "cs2-base-resources"
         if not folder.is_dir():
             continue
-        for material_file in folder.rglob("*.vmat_c"):
+        # A Source2 model can reference external VMESH as well as VMAT.
+        # Original Christmas decoration dependencies must be discovered from
+        # authored RERL/RED2 bytes, not guessed from "santa" filenames.
+        for material_file in folder.rglob("*"):
+            if not material_file.is_file() or not material_file.name.endswith(
+                (".vmat_c", ".vmdl_c", ".vmesh_c")
+            ):
+                continue
+            if material_file.stat().st_size > MAX_READ:
+                continue
             data = material_file.read_bytes()
             for match in RESOURCE_RX.findall(data):
                 candidate = compiled(match.decode("utf-8", "replace"))
@@ -336,11 +345,11 @@ def extend_plan(args):
         "new_reference_samples": {
             wid: sorted(refs)[:35] for wid,refs in new_refs.items()
         },
-        "extraction_method": "Original VMAT RERL/RED2 resource strings",
-        "limitation": "Only already-recovered original VMAT dependencies are included",
+        "extraction_method": "Original VMAT/VMDL/VMESH RERL/RED2 resource strings",
+        "limitation": "Only recovered original VMAT/VMDL/VMESH references are scanned; compressed KV3-only strings may remain",
     }
     report_path.write_text(json.dumps(report,indent=2),encoding="utf-8")
-    print(f"Original VMAT dependency expansion: {dict(new_by_map)} new source "
+    print(f"Original VMAT/VMDL/VMESH dependency expansion: {dict(new_by_map)} new source "
           f"paths, {len(report['archive_priority'])} total referenced VPK chunks")
 
 def extract(args):
