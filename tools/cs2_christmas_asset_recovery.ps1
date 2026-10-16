@@ -101,7 +101,7 @@ try {
             $name = 'pak01_{0:D3}.vpk' -f $number
             $filelist = Join-Path $root 'one-segment.txt'
             ('game/csgo/' + $name) | Set-Content -LiteralPath $filelist -Encoding ascii
-            Log "Anonymous Steam base original source segment $totalAttempts/$MaxSegments: $name"
+            Log "Anonymous Steam base original source segment $totalAttempts/${MaxSegments}: $name"
             try {
                 Steam -argv @('-app','730','-depot','2347770',
                     '-filelist',$filelist,'-dir',$base,'-max-downloads','4')
