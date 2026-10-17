@@ -29,6 +29,28 @@ def classify_owner_payload(owners: list[tuple[str, str]]) -> tuple[str, str | No
     return ("unique" if len(owners) == 1 else "identical-duplicates"), next(iter(hashes))
 
 
+# Source-owned zone priorities, reversed from the retail PC executable.
+# Unsupported/unknown owners must not be assigned an ordering.
+# Runtime authority: Rust-test/t6_map.rs retail_dependency_zone_priority.
+ZONE_PRIORITY = {"patch_mp": 65, "mp_nuketown_2020": 57,
+                 "common_mp": 54, "code_post_gfx_mp": 52}
+
+
+def choose_retail_owner(
+    owners: list[tuple[str, str]]
+) -> tuple[str, str | None, str | None]:
+    status, digest = classify_owner_payload(owners)
+    if status != "divergent":
+        return status, (owners[0][0] if owners else None), digest
+    if any(zone not in ZONE_PRIORITY for zone, _ in owners):
+        return "unknown-zone-priority", None, None
+    highest = max(ZONE_PRIORITY[zone] for zone, _ in owners)
+    winners = [(zone, h) for zone, h in owners if ZONE_PRIORITY[zone] == highest]
+    if len({h for _,h in winners}) != 1:
+        return "equal-priority-divergence", None, None
+    return "retail-priority-selected", winners[0][0], winners[0][1]
+
+
 def evidence(material_root: Path, roots: list[Path]) -> dict:
     materials, generated = v3._ordinary_materials(material_root)
     techset_cache: dict[str, dict] = {}
@@ -40,6 +62,7 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
     techniques_per_type = Counter()
     shader_shas: dict[str, set[str]] = defaultdict(set)
     successes = 0
+    priority_closed = 0
 
     def techset_status(name: str) -> dict:
         if name in techset_cache:
@@ -47,12 +70,13 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
         locs = [(root.name, root / "techsets" / f"{name}.techset")
                 for root in roots if (root / "techsets" / f"{name}.techset").is_file()]
         found = [(owner, v3._sha(p)) for owner, p in locs]
-        status, digest = classify_owner_payload(found)
-        outcome = {"identity": name, "status": status,
-                   "owners": [{"zone": o, "sha256": h} for o, h in found],
+        status, chosen, digest = choose_retail_owner(found)
+        outcome = {"identity": name, "status": status, "selectedZone": chosen,
+                   "owners": [{"zone": o, "sha256": h, "priority": ZONE_PRIORITY.get(o)}
+                              for o, h in found],
                    "sha256": digest, "bindings": []}
         if digest is not None:
-            p = locs[0][1]
+            p = next(path for zone, path in locs if zone == chosen)
             parsed, errs = v1.oat.parse_techset(p.read_text(encoding="utf-8"))
             if errs or not parsed:
                 outcome["status"] = "invalid"
@@ -78,13 +102,14 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
                 parsed_by_zone[owner.name] = passes
             except Exception as exc:
                 errors.append(f"{owner.name}: {type(exc).__name__}: {exc}")
-        status, digest = classify_owner_payload(found)
+        status, chosen, digest = choose_retail_owner(found)
         if errors:
             status = "invalid"
-        outcome = {"identity": name, "status": status,
-                   "owners": [{"zone": o, "passSha256": h} for o, h in found],
+        outcome = {"identity": name, "status": status, "selectedZone": chosen,
+                   "owners": [{"zone": o, "passSha256": h, "priority": ZONE_PRIORITY.get(o)}
+                              for o, h in found],
                    "passSha256": digest, "errors": errors,
-                   "passes": parsed_by_zone[found[0][0]] if digest is not None else []}
+                   "passes": parsed_by_zone[chosen] if digest is not None and chosen is not None else []}
         technique_cache[name] = outcome
         return outcome
 
@@ -95,7 +120,7 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
         reasons = []
         shader_refs = []
         type_names = set()
-        if ts["status"] not in {"unique", "identical-duplicates"}:
+        if ts["status"] not in {"unique", "identical-duplicates", "retail-priority-selected"}:
             reasons.append(f"techset:{ts_name}:{ts['status']}")
             impacts[("techset", ts_name)].add(material_name)
         else:
@@ -104,7 +129,7 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
                 t = technique_status(tech)
                 names = [str(v) for v in binding.get("types", [])]
                 type_names.update(names)
-                if t["status"] not in {"unique", "identical-duplicates"}:
+                if t["status"] not in {"unique", "identical-duplicates", "retail-priority-selected"}:
                     reasons.append(f"technique:{tech}:{t['status']}")
                     impacts[("technique", tech)].add(material_name)
                     continue
@@ -120,6 +145,11 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
                 blocked[r.split(":")[-1]] += 1
         else:
             successes += 1
+            if ts["status"] == "retail-priority-selected" or any(
+                technique_status(str(b.get("technique") or ""))["status"] == "retail-priority-selected"
+                for b in ts["bindings"]
+            ):
+                priority_closed += 1
         rows.append({"material": material_name, "techniqueSet": ts_name,
                      "techsetStatus": ts["status"], "techniqueTypes": sorted(type_names),
                      "sourceIdentityClosed": not reasons,
@@ -137,11 +167,13 @@ def evidence(material_root: Path, roots: list[Path]) -> dict:
     impact_rows.sort(key=lambda r: (-r["materialCount"], r["kind"], r["name"]))
     return {
         "format": "t6-retail-nuketown-source-ownership-audit-v1",
-        "proofBoundary": "Only exact OAT source Material to TechniqueSet to Technique to emitted shader SHA-256. Divergent owners and missing source dependencies remain blocked; no guessed precedence or source-compatible code execution asserted.",
+        "proofBoundary": "Only exact OAT source Material -> TechniqueSet -> Technique -> emitted shader SHA-256. Divergent owners are source-selected only under recovered zone priorities (patch_mp=65, world map=57, common_mp=54, code_post_gfx_mp=52); owners such as common_patch_mp with unknown priority remain withheld. No executable shader/lighting parity asserted.",
+        "retailZonePriority": ZONE_PRIORITY,
         "summary": {
             "ordinaryMaterials": len(materials),
             "generatedMaterialsExcluded": len(generated),
-            "ordinaryWithUnambiguousShaderIdentity": successes,
+            "ordinaryWithSourceSelectedShaderIdentity": successes,
+            "ordinaryRequiringRetailZonePriority": priority_closed,
             "ordinaryBlockedByOwnershipOrMissingPayload": len(materials) - successes,
             "blockerKinds": dict(sorted(blocked.items())),
             "distinctReferencedTechniqueSets": len(techset_cache),
