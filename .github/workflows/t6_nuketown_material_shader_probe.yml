@@ -1,0 +1,140 @@
+name: Nuketown retail material and shader closure probe
+
+on:
+  push:
+    branches:
+      - research/nuketown-retail-material-shader-closure-20261017
+    paths:
+      - .github/workflows/t6_nuketown_material_shader_probe.yml
+      - tools/t6_nuketown_source_owner_audit_v1.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shader-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Obtain published T6 asset parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/oat-bin /tmp/game/zone/all /tmp/proof
+          curl -fsSL --retry 4 \
+            https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz \
+            -o /tmp/oat.tgz
+          tar -xzf /tmp/oat.tgz -C /tmp/oat-bin
+          BIN="$(find /tmp/oat-bin -type f \( -name Unlinker -o -name OAT.Unlinker \) -print -quit)"
+          test -n "$BIN"
+          chmod +x "$BIN"
+          echo "UNLINKER=$BIN" >> "$GITHUB_ENV"
+          "$BIN" --version
+
+      - name: Download hash-pinned original retail Nuketown and shared zones
+        shell: bash
+        run: |
+          set -euo pipefail
+          for zone in mp_nuketown_2020 common_mp common_patch_mp patch_mp code_post_gfx_mp; do
+            curl --fail --location --retry 4 --retry-delay 2 \
+              "https://r2.houseofkublai.com/bo2/zone/all/$zone.ff" \
+              -o "/tmp/game/zone/all/$zone.ff"
+            sha256sum "/tmp/game/zone/all/$zone.ff" >> /tmp/proof/source-sha256.txt
+          done
+          echo '6c026322a713c461a03de9815bf6eef0e959fb2ab5d82299b029b775fa1ab1e0  /tmp/game/zone/all/mp_nuketown_2020.ff' | sha256sum --check -
+
+      - name: Extract original materials, TechniqueSets and shader stage identities
+        shell: bash
+        run: |
+          set -uo pipefail
+          for zone in mp_nuketown_2020 common_mp common_patch_mp patch_mp code_post_gfx_mp; do
+            echo "::group::Unlink $zone"
+            mkdir -p "/tmp/oat/$zone"
+            "$UNLINKER" --no-color --skip-obj \
+              --include-assets material,techniqueset \
+              --search-path /tmp/game/zone/all \
+              --output-folder "/tmp/oat/$zone" \
+              "/tmp/game/zone/all/$zone.ff" >"/tmp/proof/$zone.log" 2>&1
+            rc=$?
+            printf '%s\t%d\n' "$zone" "$rc" >> /tmp/proof/unlink-exit.tsv
+            tail -n 12 "/tmp/proof/$zone.log"
+            echo "::endgroup::"
+          done
+          find /tmp/oat -type f | sed -E 's#^/tmp/oat/([^/]+)/.*#\1#' | sort | uniq -c > /tmp/proof/zone-file-counts.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import json
+          root=Path('/tmp/oat')
+          summary={}
+          for zone in sorted(root.iterdir()):
+              if not zone.is_dir(): continue
+              files=[p.relative_to(zone).as_posix() for p in zone.rglob('*') if p.is_file()]
+              types=Counter(p.split('/')[0] for p in files)
+              summary[zone.name]={"files":len(files),"topLevelTypes":dict(sorted(types.items())),
+                                  "representativePaths":sorted(files)[:18]}
+          Path('/tmp/proof/oat-material-shader-export-summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          PY
+
+      - name: Run exact ordinary shader linkage with explicit zone-owner scopes
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/proof/owner-scopes.tsv
+          for scope in map-only map-common all-strict; do
+            case "$scope" in
+              map-only) roots=(--shader-root /tmp/oat/mp_nuketown_2020) ;;
+              map-common) roots=(--shader-root /tmp/oat/mp_nuketown_2020 --shader-root /tmp/oat/common_mp) ;;
+              all-strict) roots=(--shader-root /tmp/oat/mp_nuketown_2020 --shader-root /tmp/oat/common_mp --shader-root /tmp/oat/common_patch_mp --shader-root /tmp/oat/patch_mp --shader-root /tmp/oat/code_post_gfx_mp) ;;
+            esac
+            PYTHONPATH=tools python3 tools/t6_oat_material_shader_census_v3.py \
+              --material-root /tmp/oat/mp_nuketown_2020 "${roots[@]}" \
+              --out "/tmp/proof/$scope-shader-census.json" \
+              > "/tmp/proof/$scope-census.log" 2>&1
+            rc=$?
+            printf '%s\t%d\n' "$scope" "$rc" | tee -a /tmp/proof/owner-scopes.tsv
+            tail -n 12 "/tmp/proof/$scope-census.log"
+          done
+          exit 0
+
+      - name: Full fail-closed source ownership census, including ambiguous patch shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_source_owner_audit_v1.py \
+            --map-root /tmp/oat/mp_nuketown_2020 \
+            --shader-root /tmp/oat/mp_nuketown_2020 \
+            --shader-root /tmp/oat/common_mp \
+            --shader-root /tmp/oat/common_patch_mp \
+            --shader-root /tmp/oat/patch_mp \
+            --shader-root /tmp/oat/code_post_gfx_mp \
+            --out /tmp/proof/nuketown-all-original-material-source-owner-audit.json \
+            | tee /tmp/proof/full-ownership-summary.txt
+
+      - name: Upload only source-linked reports; never original game binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuketown-original-material-shader-evidence
+          retention-days: 7
+          if-no-files-found: warn
+          path: /tmp/proof
+
+      - name: Require original retail shader sources to have exported
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('/tmp/proof/oat-material-shader-export-summary.json').read_text())
+          nuketown=report['mp_nuketown_2020']['topLevelTypes']
+          assert nuketown.get('materials',0)>500,nuketown
+          assert nuketown.get('shader_bin',0)>0,nuketown
+          assert nuketown.get('techsets',0)>0,nuketown
+          print('Verified original retail Nuketown materials, TechniqueSets and shader files; owner ambiguity reported independently.')
+          PY
