@@ -6,6 +6,7 @@ on:
       - research/nuketown-retail-material-shader-closure-20261017
     paths:
       - .github/workflows/t6_nuketown_material_shader_probe.yml
+      - tools/t6_nuketown_source_owner_audit_v1.py
   workflow_dispatch:
 
 permissions:
@@ -99,6 +100,20 @@ jobs:
             tail -n 12 "/tmp/proof/$scope-census.log"
           done
           exit 0
+
+      - name: Full fail-closed source ownership census, including ambiguous patch shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools python3 tools/t6_nuketown_source_owner_audit_v1.py \
+            --map-root /tmp/oat/mp_nuketown_2020 \
+            --shader-root /tmp/oat/mp_nuketown_2020 \
+            --shader-root /tmp/oat/common_mp \
+            --shader-root /tmp/oat/common_patch_mp \
+            --shader-root /tmp/oat/patch_mp \
+            --shader-root /tmp/oat/code_post_gfx_mp \
+            --out /tmp/proof/nuketown-all-original-material-source-owner-audit.json \
+            | tee /tmp/proof/full-ownership-summary.txt
 
       - name: Upload only source-linked reports; never original game binaries
         if: always()
